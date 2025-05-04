@@ -26,13 +26,16 @@ export function UserAvatar({ user, size = "md" }: UserAvatarProps) {
     );
   }
 
+  // ใช้ avatar.url (จากรุ่นพี่) หรือ profile.avatar (โครงสร้างของคุณ)
+  const avatarSrc = user.avatar?.url || user.profile?.avatar;
+
   return (
     <div
       className={`rounded-full overflow-hidden bg-primary/10 flex items-center justify-center ${avatarSize}`}
     >
-      {user.image ? (
+      {avatarSrc ? (
         <img
-          src={user.image}
+          src={avatarSrc}
           alt={user.username || user.email || "User Avatar"}
           className="w-full h-full object-cover"
           onError={(e) => (e.currentTarget.src = "/placeholder.jpg")}
