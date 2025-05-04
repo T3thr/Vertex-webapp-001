@@ -21,16 +21,18 @@ import LineUserModelFactory, { ILineUser } from "@/backend/models/LineUser";
 
 // กำหนดประเภทสำหรับผู้ใช้ในเซสชัน
 export type SessionUser = {
-  id: string;
-  email: string;
-  username: string;
-  role: "Reader" | "Writer" | "Admin";
-  profile: {
-    avatar?: string;
-    bio?: string;
-    displayName?: string;
+    id: string;
+    email: string;
+    username: string;
+    role: "Reader" | "Writer" | "Admin";
+    profile: {
+      avatar?: string;
+      bio?: string;
+      displayName?: string;
+    };
+    avatar?: { url: string }; // เพิ่มเพื่อรองรับโครงสร้าง avatar จาก UserAvatar
   };
-};
+  
 
 // ฟังก์ชันตรวจสอบว่าเป็นอีเมลแอดมินหรือไม่
 const isAdminEmail = (email: string): boolean => {
