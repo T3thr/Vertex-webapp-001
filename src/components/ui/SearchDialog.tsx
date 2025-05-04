@@ -132,7 +132,7 @@ export const SearchDialog = ({ open, onClose }: SearchDialogProps) => {
               </div>
             ) : searchQuery ? (
               <div className="p-8 text-center">
-                <p className="text-muted-foreground">No results found for "{searchQuery}"</p>
+                <p className="text-muted-foreground">No results found for &quot;{searchQuery}&quot;</p>
               </div>
             ) : (
               <div className="py-2">
