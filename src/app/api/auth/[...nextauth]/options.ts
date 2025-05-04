@@ -7,6 +7,7 @@ import TwitterProvider from "next-auth/providers/twitter";
 import FacebookProvider from "next-auth/providers/facebook";
 import AppleProvider from "next-auth/providers/apple";
 import LineProvider from "next-auth/providers/line";
+import mongoose from "mongoose";
 import { compare } from "bcryptjs";
 import dbConnect from "@/backend/lib/mongodb";
 

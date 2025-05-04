@@ -14,7 +14,8 @@ const eslintConfig = [
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "off", // Disable any type detection
-      "@typescript-eslint/no-unused-vars": "off", // Disable unuse
+      "@typescript-eslint/no-unused-vars": "off", // Disable unused variable detection
+      "@typescript-eslint/no-require-imports": "off", // Disable `require()` import style detection
     },
   },
 ];

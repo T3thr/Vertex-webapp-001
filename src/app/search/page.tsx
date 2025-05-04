@@ -55,7 +55,7 @@ export default function SearchPage() {
       
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          ผลการค้นหาสำหรับ: <span className="text-primary">"{query}"</span>
+          ผลการค้นหาสำหรับ: <span className="text-primary">&quot;{query}&quot;</span>
         </h1>
         
         <div className="text-sm text-muted-foreground mb-8">

@@ -4,8 +4,6 @@ export interface IUser {
   email: string;
   username: string;
   password?: string;
-  provider?: string;
-  providerId?: string;
   role: "Reader" | "Writer" | "Admin";
   profile: {
     displayName?: string;
@@ -25,6 +23,7 @@ const UserSchema = new Schema<IUser>(
     email: {
       type: String,
       required: true,
+      unique: true,
       trim: true,
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"],
@@ -40,16 +39,9 @@ const UserSchema = new Schema<IUser>(
     password: {
       type: String,
       required: function () {
-        return !this.provider; // Password required only for non-OAuth users
+        return !this.isEmailVerified;
       },
       minlength: 8,
-    },
-    provider: {
-      type: String,
-      enum: ["credentials", "google", "twitter", "facebook", "apple", "line"],
-    },
-    providerId: {
-      type: String,
     },
     role: {
       type: String,
@@ -61,25 +53,19 @@ const UserSchema = new Schema<IUser>(
       avatar: { type: String, trim: true },
       bio: { type: String, trim: true, maxlength: 500 },
     },
-    novels: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Novel",
-        default: [],
-      },
-    ],
-    purchases: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Purchase",
-        default: [],
-      },
-    ],
+    novels: [{
+      type: Schema.Types.ObjectId,
+      ref: "Novel",
+      default: [],
+    }],
+    purchases: [{
+      type: Schema.Types.ObjectId,
+      ref: "Purchase",
+      default: [],
+    }],
     isEmailVerified: {
       type: Boolean,
-      default: function () {
-        return !!this.provider; // OAuth users are verified by default
-      },
+      default: false,
     },
     lastLogin: {
       type: Date,
@@ -93,6 +79,6 @@ const UserSchema = new Schema<IUser>(
   }
 );
 
-UserSchema.index({ email: 1, provider: 1 }, { unique: true });
+UserSchema.index({ email: 1, username: 1 });
 
 export default () => models.User || model<IUser>("User", UserSchema);
