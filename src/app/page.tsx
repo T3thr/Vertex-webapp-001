@@ -1,4 +1,4 @@
-import { ImageSlider } from "@/components/ImageSlider";
+// src/app/page.tsx
 import { NovelCard } from "@/components/NovelCard";
 import Link from "next/link";
 
@@ -18,111 +18,44 @@ async function getNovels() {
 export default async function HomePage() {
   const { novels }: { novels: Novel[] } = await getNovels();
 
-  const demoSlides = [
-    {
-      id: "1",
-      title: "ACT PHEC",
-      imageUrl: "/images/slider/slide1.jpg",
-      link: "/novels/act-phec"
-    },
-    {
-      id: "2",
-      title: "SINISTER",
-      imageUrl: "/images/slider/slide2.jpg",
-      link: "/novels/sinister"
-    },
-    {
-      id: "3",
-      title: "BLOOD MOON",
-      imageUrl: "/images/slider/slide3.jpg",
-      link: "/novels/blood-moon"
-    }
-  ];
-
   return (
-    <div>
-      <div className="overflow-x-auto mb-6 px-4 md:px-6 lg:px-8">
-        <div className="flex gap-4 pb-4">
-          <div className="shrink-0 w-25" />
-          <div className="shrink-0 w-[1300px]">
-            <ImageSlider slides={demoSlides} />
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-accent py-4">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="text-2xl font-bold text-foreground">
+              NovelVerse
+            </Link>
+            <nav className="space-x-4">
+              <Link href="/novels" className="text-muted-foreground hover:text-primary">
+                Browse
+              </Link>
+              <Link href="/create" className="text-muted-foreground hover:text-primary">
+                Create
+              </Link>
+            </nav>
           </div>
-          <div className="shrink-0 w-5" />
         </div>
-      </div> <br/>
+      </header>
 
-      <div className="flex items-center gap-4 px-4 md:px-6 lg:px-8 mt-10 mb-10">
-        <div className="shrink-0 w-[100px]" />
-        <h1 className="font-bold text-2xl">ผลงานยอดนิยม</h1>
-        <div className="shrink-0 w-5" />
-      </div> <br/>
+      <main className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-foreground mb-8">Featured Novels</h1>
+        {novels.length === 0 ? (
+          <p className="text-muted-foreground text-center">No novels found.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {novels.map((novel) => (
+              <NovelCard key={novel._id} novel={novel} />
+            ))}
+          </div>
+        )}
+      </main>
 
-      <div className="px-4 md:px-6 lg:px-8 pt-20">
-        <div className="flex gap-4 pb-4">
-          <div className="shrink-0 w-25" />
-          {novels.map((novel) => (
-            <div key={novel._id} className="shrink-0 w-[160px]">
-              <NovelCard novel={novel} />
-            </div>
-          ))}
-          <Link
-            href="/novels"
-            className="flex items-center justify-center px-4 text-sm text-blue-600 font-semibold whitespace-nowrap shrink-0"
-          >
-            ดูทั้งหมด &rarr;
-          </Link>
-          <div className="shrink-0 w-5" />
+      <footer className="border-t border-accent py-4 mt-8">
+        <div className="container mx-auto px-4 text-center text-muted-foreground">
+          © 2025 NovelVerse. All rights reserved.
         </div>
-      </div> <br/>
-
-      <div className="flex items-center gap-4 px-4 md:px-6 lg:px-8 mt-10 mb-10">
-        <div className="shrink-0 w-[100px]" />
-        <h1 className="font-bold text-2xl">ส่วนลด</h1>
-        <div className="shrink-0 w-5" />
-      </div> <br/>
-      
-      <div className="px-4 md:px-6 lg:px-8 pt-20">
-        <div className="flex gap-4 pb-4">
-          <div className="shrink-0 w-25" />
-          {novels.map((novel) => (
-            <div key={novel._id} className="shrink-0 w-[160px]">
-              <NovelCard novel={novel} />
-            </div>
-          ))}
-          <Link
-            href="/novels"
-            className="flex items-center justify-center px-4 text-sm text-blue-600 font-semibold whitespace-nowrap shrink-0"
-          >
-            ดูทั้งหมด &rarr;
-          </Link>
-          <div className="shrink-0 w-5" />
-        </div>
-      </div> <br/>
-
-      <div className="flex items-center gap-4 px-4 md:px-6 lg:px-8 mt-10 mb-10">
-        <div className="shrink-0 w-[100px]" />
-        <h1 className="font-bold text-2xl">จบบริบูรณ์</h1>
-        <div className="shrink-0 w-5" />
-      </div> <br/>
-      
-      <div className="px-4 md:px-6 lg:px-8 pt-20">
-        <div className="flex gap-4 pb-4">
-          <div className="shrink-0 w-25" />
-          {novels.map((novel) => (
-            <div key={novel._id} className="shrink-0 w-[160px]">
-              <NovelCard novel={novel} />
-            </div>
-          ))}
-          <Link
-            href="/novels"
-            className="flex items-center justify-center px-4 text-sm text-blue-600 font-semibold whitespace-nowrap shrink-0"
-          >
-            ดูทั้งหมด &rarr;
-          </Link>
-          <div className="shrink-0 w-5" />
-        </div>
-      </div>
+      </footer>
     </div>
-
   );
 }
