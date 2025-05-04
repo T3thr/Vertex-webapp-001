@@ -2,13 +2,13 @@
 
 import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
 import {
-    Bell,
-    BookMarked,
-    BookOpen,
-    Heart,
-    LogOut,
-    Settings,
-    User
+  Bell,
+  BookMarked,
+  BookOpen,
+  Heart,
+  LogOut,
+  Settings,
+  User,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
@@ -51,6 +51,9 @@ export default function UserMenu({ user, onSignOut, onClose }: UserMenuProps) {
     onClose();
   };
 
+  // ใช้ avatar.url หรือ profile.avatar สำหรับรูปโปรไฟล์
+  const avatarSrc = user.avatar?.url || user.profile?.avatar;
+
   return (
     <div
       ref={menuRef}
@@ -61,11 +64,12 @@ export default function UserMenu({ user, onSignOut, onClose }: UserMenuProps) {
       <div className="px-4 py-3 border-b border-accent">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden">
-            {user.image ? (
+            {avatarSrc ? (
               <img
-                src={user.image}
+                src={avatarSrc}
                 alt={user.username || user.email || "User Avatar"}
                 className="w-full h-full rounded-full object-cover"
+                onError={(e) => (e.currentTarget.src = "/placeholder.jpg")}
               />
             ) : (
               <User className="w-5 h-5 text-primary" />
