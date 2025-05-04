@@ -1,4 +1,5 @@
 // src/app/page.tsx
+import { Novel } from "@/backend/types/novel";
 import { NovelCard } from "@/components/NovelCard";
 import Link from "next/link";
 

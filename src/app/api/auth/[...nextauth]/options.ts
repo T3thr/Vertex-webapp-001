@@ -1,10 +1,15 @@
+// src/app/auth/[...nextauth]/options.ts
+// นำเข้าโมดูลที่จำเป็นสำหรับ NextAuth และการจัดการฐานข้อมูล
 import { NextAuthOptions } from "next-auth";
-import AppleProvider from "next-auth/providers/apple";
 import CredentialsProvider from "next-auth/providers/credentials";
-import FacebookProvider from "next-auth/providers/facebook";
 import GoogleProvider from "next-auth/providers/google";
-import LineProvider from "next-auth/providers/line";
 import TwitterProvider from "next-auth/providers/twitter";
+import FacebookProvider from "next-auth/providers/facebook";
+import AppleProvider from "next-auth/providers/apple";
+import LineProvider from "next-auth/providers/line";
+import mongoose from "mongoose";
+import { compare } from "bcryptjs";
+import dbConnect from "@/backend/lib/mongodb";
 
 // นำเข้าโมเดลทั้งหมด
 import UserModelFactory, { IUser } from "@/backend/models/User";
@@ -16,7 +21,6 @@ import LineUserModelFactory, { ILineUser } from "@/backend/models/LineUser";
 
 // กำหนดประเภทสำหรับผู้ใช้ในเซสชัน
 export type SessionUser = {
-  image: any;
   id: string;
   email: string;
   username: string;
