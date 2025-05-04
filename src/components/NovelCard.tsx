@@ -1,6 +1,9 @@
+// src/components/NovelCard.tsx
+
 import { Novel } from "@/backend/types/novel";
 import Image from "next/image";
 import Link from "next/link";
+import { Heart, Eye, BookOpen } from "lucide-react";
 
 interface NovelCardProps {
   novel: Novel;
@@ -8,26 +11,26 @@ interface NovelCardProps {
 
 export function NovelCard({ novel }: NovelCardProps) {
   return (
-    <Link href={`/novels/${novel._id}`} className="block group">
-      <div className="bg-card rounded-lg shadow-md overflow-hidden transition-transform group-hover:scale-105">
-        <div className="relative h-64">
+    <Link href={`/novels/${novel._id}`} className="w-[180px] shrink-0 group">
+      <div className="bg-white dark:bg-card rounded-xl shadow-md overflow-hidden transition-transform group-hover:scale-105">
+        {/* ปกนิยาย */}
+        <div className="relative h-48 w-full">
           <Image
             src={novel.coverImage}
             alt={novel.title}
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
         </div>
-        <div className="p-4">
-          <h2 className="text-xl font-semibold text-card-foreground line-clamp-2">
-            {novel.title}
-          </h2>
-          <p className="text-muted-foreground line-clamp-3 mt-2">
-            {novel.description}
+
+        {/* เนื้อหาในการ์ด */}
+        <div className="p-2">
+          <h2 className="text-sm font-semibold truncate">{novel.title}</h2>
+          <p className="text-xs text-muted-foreground truncate">
+            Descriptio: {novel.description}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {novel.tags.slice(0, 3).map((tag) => (
+            {novel.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
                 className="text-xs bg-secondary text-secondary-foreground px-2 py-1 rounded"
@@ -36,9 +39,28 @@ export function NovelCard({ novel }: NovelCardProps) {
               </span>
             ))}
           </div>
-          <span className="inline-block mt-2 text-sm text-muted-foreground">
-            Status: {novel.status}
-          </span>
+          <p className="text-xs text-muted-foreground truncate">
+            By: {novel.author}
+          </p>
+          <p className="text-xs text-muted-foreground truncate">
+            By: {novel.status}
+          </p>
+
+          {/* สถิติ (สมมุติค่าทดสอบ) */}
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2">
+            <div className="flex items-center gap-1">
+              <BookOpen size={12} />
+              <span>{novel.episodes.length}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Eye size={12} />
+              <span>2,532</span> {/* เปลี่ยนเป็น novel.views ได้ถ้ามี field */}
+            </div>
+            <div className="flex items-center gap-1">
+              <Heart size={12} />
+              <span>564</span> {/* เปลี่ยนเป็น novel.likes ได้ถ้ามี field */}
+            </div>
+          </div>
         </div>
       </div>
     </Link>
