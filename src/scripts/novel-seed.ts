@@ -49,6 +49,131 @@ const sampleNovels: Omit<INovel, "_id" | "createdAt" | "updatedAt">[] = [
     episodes: [new Types.ObjectId(), new Types.ObjectId()],
     author: new Types.ObjectId("507f1f77bcf86cd799439011"),
   },
+  {
+    title: "Crimson Skies",
+    description:
+      "In a world ruled by airships and floating kingdoms, a disgraced pilot seeks redemption by uncovering a skybound conspiracy.",
+    coverImage: "https://example.com/images/crimson-skies.jpg",
+    tags: ["Steampunk", "Adventure", "Redemption"],
+    status: "Published",
+    config: { theme: "steampunk", engineLogic: "chaptered" },
+    episodes: [],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 2
+  {
+    title: "Echoes of the Deep",
+    description:
+      "Beneath the ocean’s surface lies a hidden civilization guarding secrets that could reshape the world — until a deep-sea diver stumbles upon them.",
+    coverImage: "https://example.com/images/echoes-deep.jpg",
+    tags: ["Mystery", "Ocean", "Sci-Fi"],
+    status: "Draft",
+    config: { theme: "aqua", engineLogic: "progressive" },
+    episodes: [new Types.ObjectId()],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+  {
+    title: "Moonlight Requiem",
+    description:
+      "A cursed violinist roams the cities under moonlight, playing melodies that summon memories of lost souls — and sometimes something darker.",
+    coverImage: "https://example.com/images/moonlight-requiem.jpg",
+    tags: ["Fantasy", "Horror", "Music"],
+    status: "Published",
+    config: { theme: "dark", engineLogic: "episodic" },
+    episodes: [],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 4
+  {
+    title: "Digital Prophet",
+    description:
+      "In a future where algorithms predict every move, a rogue mathematician writes a formula that can defy fate itself.",
+    coverImage: "https://example.com/images/digital-prophet.jpg",
+    tags: ["Sci-Fi", "Techno-thriller", "Philosophy"],
+    status: "Draft",
+    config: { theme: "neon", engineLogic: "progressive" },
+    episodes: [],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 5
+  {
+    title: "Ashes of the Phoenix",
+    description:
+      "After the fall of a great empire, a lone warrior rises from the ashes to ignite a rebellion — guided by visions of a flaming bird.",
+    coverImage: "https://example.com/images/ashes-phoenix.jpg",
+    tags: ["Action", "Myth", "Rebellion"],
+    status: "Published",
+    config: { theme: "fire", engineLogic: "chaptered" },
+    episodes: [new Types.ObjectId()],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 6
+  {
+    title: "The Librarian's Code",
+    description:
+      "Hidden within an ancient library lies a code that connects every story ever written — and a librarian sworn to protect it.",
+    coverImage: "https://example.com/images/librarians-code.jpg",
+    tags: ["Mystery", "Fantasy", "Library"],
+    status: "Draft",
+    config: { theme: "classic", engineLogic: "episodic" },
+    episodes: [],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+  // 🎉 Novel เพิ่มใหม่ 7
+  {
+    title: "Echoes of the Deep",
+    description:
+      "Beneath the ocean’s surface lies an ancient city whose siren songs call to a deep-sea diver haunted by his past.",
+    coverImage: "https://example.com/images/echoes-deep.jpg",
+    tags: ["Mystery", "Horror", "Underwater"],
+    status: "Published",
+    config: { theme: "aqua", engineLogic: "episodic" },
+    episodes: [],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 8
+  {
+    title: "Chrono Alchemist",
+    description:
+      "An alchemist discovers how to manipulate time itself, but every change in the past demands a sacrifice in the present.",
+    coverImage: "https://example.com/images/chrono-alchemist.jpg",
+    tags: ["Fantasy", "Time Travel", "Alchemy"],
+    status: "Draft",
+    config: { theme: "steampunk", engineLogic: "progressive" },
+    episodes: [new Types.ObjectId()],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 9
+  {
+    title: "Silent Frequency",
+    description:
+      "A radio engineer intercepts a mysterious broadcast that reveals future disasters — and now must stop them before the world listens.",
+    coverImage: "https://example.com/images/silent-frequency.jpg",
+    tags: ["Sci-Fi", "Thriller", "Mystery"],
+    status: "Published",
+    config: { theme: "noir", engineLogic: "episodic" },
+    episodes: [],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
+
+  // 🎉 Novel เพิ่มใหม่ 10
+  {
+    title: "Garden of Glass",
+    description:
+      "In a city where flowers are forbidden, a young botanist creates a secret glasshouse — and discovers life that fights back.",
+    coverImage: "https://example.com/images/garden-glass.jpg",
+    tags: ["Dystopia", "Nature", "Drama"],
+    status: "Archived",
+    config: { theme: "greenhouse", engineLogic: "chaptered" },
+    episodes: [new Types.ObjectId(), new Types.ObjectId()],
+    author: new Types.ObjectId("507f1f77bcf86cd799439011"),
+  },
 ];
 
 /**
