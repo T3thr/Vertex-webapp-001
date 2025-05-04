@@ -4,7 +4,7 @@ import { NavBar } from "@/components/layouts/NavBar";
 import { Book, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 
 interface SearchResult {
   id: string;
@@ -14,7 +14,7 @@ interface SearchResult {
   description?: string;
 }
 
-export default function SearchPage() {
+const SearchPageContent = () => {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
   
@@ -118,5 +118,13 @@ export default function SearchPage() {
         )}
       </main>
     </div>
+  );
+};
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div>Loading search page...</div>}>
+      <SearchPageContent />
+    </Suspense>
   );
 }
