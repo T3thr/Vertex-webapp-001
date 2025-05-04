@@ -1,20 +1,18 @@
 // src/components/layouts/UserMenu.tsx
 "use client"
-import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
-import { 
-  User, 
-  BookMarked, 
-  History, 
-  Star, 
-  Settings, 
-  LogOut, 
-  BookOpen,
-  PenTool
-} from 'lucide-react';
 import { SessionUser } from '@/app/api/auth/[...nextauth]/options';
 import { Avatar } from '@/components/ui/Avatar';
+import { useAuth } from '@/context/AuthContext';
+import {
+  BookMarked,
+  History,
+  LogOut,
+  PenTool,
+  Settings,
+  Star
+} from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 
 interface UserMenuProps {
   user: SessionUser;

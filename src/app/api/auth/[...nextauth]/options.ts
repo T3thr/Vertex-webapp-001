@@ -1,15 +1,16 @@
-import { NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
-import TwitterProvider from "next-auth/providers/twitter";
-import FacebookProvider from "next-auth/providers/facebook";
-import AppleProvider from "next-auth/providers/apple";
-import LineProvider from "next-auth/providers/line";
-import mongoose from "mongoose";
-import { compare } from "bcryptjs";
 import dbConnect from "@/backend/lib/mongodb";
+import { compare } from "bcryptjs";
+import mongoose from "mongoose";
+import { NextAuthOptions } from "next-auth";
+import AppleProvider from "next-auth/providers/apple";
+import CredentialsProvider from "next-auth/providers/credentials";
+import FacebookProvider from "next-auth/providers/facebook";
+import GoogleProvider from "next-auth/providers/google";
+import LineProvider from "next-auth/providers/line";
+import TwitterProvider from "next-auth/providers/twitter";
 
 export type SessionUser = {
+  image: any;
   id: string;
   email: string;
   username: string;

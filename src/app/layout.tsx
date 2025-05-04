@@ -1,9 +1,9 @@
+import dbConnect from "@/backend/lib/mongodb";
+import { NavBarClient } from "@/components/layouts/NavBarClient";
+import { GlobalProvider } from "@/context/GlobalContext";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import dbConnect from "@/backend/lib/mongodb";
-import { GlobalProvider } from "@/context/GlobalContext";
-import NavBar from "@/components/layouts/NavBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +32,7 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <GlobalProvider>
-          <NavBar/>
+          <NavBarClient />
           {children}
         </GlobalProvider>
       </body>

@@ -1,5 +1,5 @@
-import { NovelCard } from "@/components/NovelCard";
 import { Novel } from "@/backend/types/novel";
+import { NovelCard } from "@/components/NovelCard";
 import Link from "next/link";
 
 async function getNovels() {
