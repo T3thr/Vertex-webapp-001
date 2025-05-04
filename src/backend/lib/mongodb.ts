@@ -9,7 +9,7 @@ const DB_NAME: string = process.env.DB_NAME || 'default_db';
 // ตรวจสอบว่า MONGODB_URI ถูกกำหนดไว้หรือไม่
 if (!MONGODB_URI) {
   throw new Error(
-    '❌ MONGODB_URI ไม่ได้ถูกกำหนดไว้ใน .env.local กรุณาเพิ่มค่าเช่น MONGODB_URI="mongodb+srv://..."'
+    '❌ MONGODB_URI ไม่ได้ถูกกำหนดไว้ใน .env กรุณาเพิ่มค่าเช่น MONGODB_URI="mongodb+srv://..."'
   );
 }
 
