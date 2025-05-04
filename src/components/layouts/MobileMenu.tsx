@@ -1,144 +1,151 @@
-// src/components/layouts/MobileMenu.tsx
-"use client"
-import { useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LogIn, 
-  UserPlus,
-  BookOpen
-} from 'lucide-react';
+"use client";
 
-interface NavItem {
-  name: string;
-  href: string;
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+
+// Define the type for user profile data
+interface UserProfile {
+  displayName?: string; // Add displayName field
+  bio?: string;
+  location?: string;
+  website?: string;
+  [key: string]: any; // Allow for additional fields if needed
 }
 
-interface MobileMenuProps {
-  isOpen: boolean;
-  navItems: NavItem[];
+// Define the type for user data
+type User = {
+  role?: string;
+  profile?: UserProfile;
+  id?: string;
+  username: string;
+  email: string;
+  avatar?: string;
+};
+
+// Define the type for context
+type AuthContextType = {
+  user: User | null;
+  status: "unauthenticated" | "authenticated" | "loading";
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (username: string, email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+};
+
+// Define the type for props
+interface AuthProviderProps {
+  children: ReactNode;
 }
 
-export const MobileMenu = ({ isOpen, navItems }: MobileMenuProps) => {
-  const { user, status } = useAuth();
-  const pathname = usePathname();
+// Create Context
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  status: "unauthenticated",
+  signIn: async () => {},
+  signUp: async () => {},
+  signOut: async () => {},
+});
 
-  // Prevent scrolling when menu is open
+// Create Provider
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null);
+  const [status, setStatus] = useState<"unauthenticated" | "authenticated" | "loading">("loading");
+
+  // Check auth status on page load
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
+    const checkAuth = async () => {
+      try {
+        // Simulate checking auth status from localStorage or token
+        const savedUser = localStorage.getItem("user");
+
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+          setStatus("authenticated");
+        } else {
+          setStatus("unauthenticated");
+        }
+      } catch (error) {
+        console.error("Auth check failed:", error);
+        setStatus("unauthenticated");
+      }
     };
-  }, [isOpen]);
+
+    checkAuth();
+  }, []);
+
+  // Sign-in function
+  const signIn = async (email: string, password: string) => {
+    try {
+      setStatus("loading");
+
+      // Simulate API call for sign-in
+      const mockUser: User = {
+        id: "user-123",
+        username: "ผู้ใช้ทดสอบ",
+        email: email,
+        role: "user",
+        profile: {
+          displayName: "ผู้ใช้ทดสอบ", // Add displayName to match MobileMenu expectation
+        },
+      };
+
+      // Store user data in localStorage
+      localStorage.setItem("user", JSON.stringify(mockUser));
+
+      setUser(mockUser);
+      setStatus("authenticated");
+    } catch (error) {
+      console.error("Sign in failed:", error);
+      setStatus("unauthenticated");
+      throw error;
+    }
+  };
+
+  // Sign-up function
+  const signUp = async (username: string, email: string, password: string) => {
+    try {
+      setStatus("loading");
+
+      // Simulate API call for sign-up
+      const mockUser: User = {
+        id: "user-" + Math.floor(Math.random() * 1000),
+        username: username,
+        email: email,
+        role: "user",
+        profile: {
+          displayName: username, // Add displayName to match MobileMenu expectation
+        },
+      };
+
+      // Store user data in localStorage
+      localStorage.setItem("user", JSON.stringify(mockUser));
+
+      setUser(mockUser);
+      setStatus("authenticated");
+    } catch (error) {
+      console.error("Sign up failed:", error);
+      setStatus("unauthenticated");
+      throw error;
+    }
+  };
+
+  // Sign-out function
+  const signOut = async () => {
+    try {
+      // Remove user data from localStorage
+      localStorage.removeItem("user");
+
+      setUser(null);
+      setStatus("unauthenticated");
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    }
+  };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-          className="md:hidden overflow-hidden bg-background border-b border-accent/20"
-        >
-          <div className="px-4 py-3 space-y-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center py-3 text-base font-medium transition-colors ${
-                  pathname === item.href
-                    ? 'text-primary'
-                    : 'text-foreground/80 hover:text-primary'
-                }`}
-              >
-                {item.name}
-              </Link>
-            ))}
-            
-            {/* Mobile auth links */}
-            {status === 'unauthenticated' && (
-              <div className="py-3 pt-6 mt-2 border-t border-accent/50">
-                <Link
-                  href="/auth/signin"
-                  className="flex items-center mb-3 gap-2 text-base font-medium text-foreground/90 hover:text-primary transition-colors"
-                >
-                  <LogIn className="h-5 w-5" />
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  className="flex items-center gap-2 text-base font-medium text-foreground/90 hover:text-primary transition-colors"
-                >
-                  <UserPlus className="h-5 w-5" />
-                  Sign Up
-                </Link>
-              </div>
-            )}
-
-            {status === 'authenticated' && user && (
-              <div className="py-3 pt-6 mt-2 border-t border-accent/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium text-primary">
-                    {user.profile.displayName
-                      ? user.profile.displayName.substring(0, 1).toUpperCase()
-                      : user.username.substring(0, 1).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">
-                      {user.profile.displayName || user.username}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {user.email}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3 mt-4">
-                  <Link
-                    href="/my-library"
-                    className="block py-2 text-base font-medium text-foreground/80 hover:text-primary transition-colors"
-                  >
-                    My Library
-                  </Link>
-                  <Link
-                    href="/reading-history"
-                    className="block py-2 text-base font-medium text-foreground/80 hover:text-primary transition-colors"
-                  >
-                    Reading History
-                  </Link>
-                  <Link
-                    href="/favorites"
-                    className="block py-2 text-base font-medium text-foreground/80 hover:text-primary transition-colors"
-                  >
-                    Favorites
-                  </Link>
-                  {(user.role === "Writer" || user.role === "Admin") && (
-                    <Link
-                      href="/my-works"
-                      className="block py-2 text-base font-medium text-foreground/80 hover:text-primary transition-colors"
-                    >
-                      My Works
-                    </Link>
-                  )}
-                  <Link
-                    href="/settings"
-                    className="block py-2 text-base font-medium text-foreground/80 hover:text-primary transition-colors"
-                  >
-                    Settings
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <AuthContext.Provider value={{ user, status, signIn, signUp, signOut }}>
+      {children}
+    </AuthContext.Provider>
   );
-};
+}
+
+// Create hook to use context
+export const useAuth = () => useContext(AuthContext);

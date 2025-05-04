@@ -1,147 +1,412 @@
-// src/components/layouts/NavBar.tsx
-"use client"
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
-import { 
-  Menu, 
-  Search, 
-  BookOpen, 
-  BookMarked, 
-  Star, 
-  Clock, 
-  User, 
-  LogOut, 
-  Settings, 
-  Moon, 
+"use client";
+
+import {
+  Bell,
+  Bookmark,
+  ChevronDown,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
   Sun,
-  X,
-} from 'lucide-react';
-import { Avatar } from '@/components/ui/Avatar';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { MobileMenu } from '@/components/layouts/MobileMenu';
-import { UserMenu } from '@/components/layouts/UserMenu';
-import { SearchDialog } from '@/components/ui/SearchDialog';
+  User,
+  X
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { createContext, useContext, useEffect, useState } from "react";
 
-const NavBar = () => {
-  const { user, status } = useAuth();
+// Define the user type for context
+type User = {
+  username: string;
+  email: string;
+  role?: string;
+  profile?: {
+    displayName?: string;
+    [key: string]: any;
+  };
+  id?: string;
+  avatar?: string;
+};
+
+type AuthContextType = {
+  user: User | null;
+  status: "unauthenticated" | "authenticated" | "loading";
+  signOut: () => Promise<void>;
+};
+
+// Create Context
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  status: "unauthenticated",
+  signOut: () => Promise.resolve(),
+});
+
+export const useAuth = () => useContext(AuthContext);
+
+// Define props for SearchBar
+interface SearchBarProps {
+  onClose: () => void;
+}
+
+// SearchBar Component
+const SearchBar = ({ onClose }: SearchBarProps) => {
+  return (
+    <div className="w-full bg-card rounded-md shadow-lg p-2 border border-accent">
+      <div className="flex items-center space-x-2">
+        <Search size={16} className="text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="ค้นหางานเขียน..."
+          className="bg-transparent w-full focus:outline-none text-sm"
+        />
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Define props for UserAvatar
+interface UserAvatarProps {
+  user: User | null;
+}
+
+// UserAvatar Component
+const UserAvatar = ({ user }: UserAvatarProps) => {
+  return (
+    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
+      {user?.username?.charAt(0).toUpperCase() || "U"}
+    </div>
+  );
+};
+
+// ThemeToggle Component
+const ThemeToggle = () => {
+  const [theme, setTheme] = useState("light");
+  
+  const toggleTheme = () => {
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    document.documentElement.classList.toggle("dark");
+  };
+  
+  return (
+    <button
+      onClick={toggleTheme}
+      className="p-2 rounded-full hover:bg-secondary flex items-center justify-center"
+      aria-label="Toggle theme"
+    >
+      {theme === "light" ? (
+        <Moon size={20} className="text-foreground" />
+      ) : (
+        <Sun size={20} className="text-foreground" />
+      )}
+    </button>
+  );
+};
+
+export interface NavBarProps {
+  logoText?: string;
+}
+
+export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
+  const { user, status, signOut } = useAuth();
   const pathname = usePathname();
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Handle scroll effect for navbar
+  // Handle scroll effect
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+      setIsScrolled(window.scrollY > 20);
     };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Toggle mobile menu
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (isDropdownOpen) {
+        setIsDropdownOpen(false);
+      }
+    };
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isDropdownOpen]);
+
+  const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
+  
+  const toggleDropdown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    setIsDropdownOpen(!isDropdownOpen);
   };
 
-  // Navigation items
-  const navItems = [
-    { name: 'Home', href: '/' },
-    { name: 'Browse', href: '/browse' },
-    { name: 'Popular', href: '/popular' },
-    { name: 'New Releases', href: '/new-releases' },
-    { name: 'Categories', href: '/categories' },
+  const handleSignOut = async () => {
+    await signOut();
+    setIsDropdownOpen(false);
+  };
+
+  const navLinks = [
+    { href: "/", label: "หน้าหลัก", isActive: pathname === "/" },
+    { href: "/categories", label: "หมวดหมู่", isActive: pathname === "/categories" },
+    { href: "/novels", label: "งานเขียน", isActive: pathname === "/novels" },
   ];
 
   return (
-    <header
+    <header 
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
-        scrolled 
-          ? 'bg-background/95 backdrop-blur-sm border-b border-accent/20 shadow-sm' 
-          : 'bg-background'
+        isScrolled ? "bg-card/90 backdrop-blur-md shadow-md" : "bg-background"
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex justify-between items-center py-4 md:py-6">
-          {/* Logo and Brand */}
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <BookOpen className="h-8 w-8 text-primary" strokeWidth={2} />
-              <span className="text-xl font-bold tracking-tight hidden sm:block">NovelVerse</span>
-            </Link>
-          </div>
-
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            {navItems.map((item) => (
+      <div className="w-full px-6">
+        <div className="flex items-center justify-between h-16">
+          {/* Left: Navigation Links */}
+          <nav className="gap-2 hidden md:flex items-center space-x-10">
+            {navLinks.map((link) => (
               <Link
-                key={item.name}
-                href={item.href}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  pathname === item.href
-                    ? 'text-primary'
-                    : 'text-foreground/80'
+                key={link.href}
+                href={link.href}
+                className={`text-sm font-medium transition-colors hover:text-primary px-3 ${
+                  link.isActive ? "text-primary" : "text-foreground"
                 }`}
               >
-                {item.name}
+                {link.label}
               </Link>
             ))}
           </nav>
 
-          {/* Actions (Search, Sign in/User Menu) */}
-          <div className="flex items-center gap-2 md:gap-4">
-            <button
-              onClick={() => setSearchOpen(true)}
-              className="p-2 rounded-full hover:bg-accent/50 transition-colors"
-              aria-label="Search"
-            >
-              <Search className="h-5 w-5" />
-            </button>
+          {/* Center: Logo */}
+          <div className="flex-1 flex justify-center">
+            <Link href="/" className="flex items-center">
+              <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+                {logoText}
+              </span>
+            </Link>
+          </div>
 
+          {/* Right: Actions */}
+          <div className="hidden md:flex items-center space-x-4">
+            {/* Search */}
+            <div className="relative">
+              <button
+                onClick={() => setIsSearchOpen(!isSearchOpen)}
+                className="p-2 rounded-full hover:bg-secondary flex items-center justify-center"
+                aria-label="Search"
+              >
+                <Search size={20} className="text-foreground" />
+              </button>
+              {isSearchOpen && (
+                <div className="absolute right-0 top-12 w-80">
+                  <SearchBar onClose={() => setIsSearchOpen(false)} />
+                </div>
+              )}
+            </div>
+
+            {/* Theme Toggle */}
             <ThemeToggle />
 
-            {status === 'authenticated' && user ? (
-              <UserMenu user={user} />
-            ) : status === 'unauthenticated' ? (
-              <div className="hidden sm:flex gap-3">
+            {/* Authentication */}
+            {status === "authenticated" && user ? (
+              <div className="relative">
+                <button
+                  onClick={toggleDropdown}
+                  className="flex items-center space-x-2 p-1 rounded-full hover:bg-secondary"
+                  aria-expanded={isDropdownOpen}
+                  aria-label="User menu"
+                >
+                  <UserAvatar user={user} />
+                  <ChevronDown size={18} className="text-foreground" />
+                </button>
+
+                {/* User Dropdown */}
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-card border border-accent">
+                    <div className="p-2 border-b border-accent">
+                      <div className="font-medium text-foreground">{user.username}</div>
+                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    </div>
+                    <div className="py-1">
+                      <Link
+                        href="/profile"
+                        className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <User size={16} className="mr-2" />
+                        โปรไฟล์
+                      </Link>
+                      <Link
+                        href="/bookmarks"
+                        className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <Bookmark size={16} className="mr-2" />
+                        บุ๊คมาร์ค
+                      </Link>
+                      <Link
+                        href="/notifications"
+                        className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <Bell size={16} className="mr-2" />
+                        การแจ้งเตือน
+                      </Link>
+                      <button
+                        onClick={handleSignOut}
+                        className="flex w-full items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
+                      >
+                        <LogOut size={16} className="mr-2" />
+                        ออกจากระบบ
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
                 <Link
                   href="/auth/signin"
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-accent hover:bg-accent/30 transition-colors"
+                  className="px-4 py-2 text-sm font-medium rounded-full border border-accent hover:bg-secondary transition-colors"
                 >
-                  Sign In
+                  เข้าสู่ระบบ
                 </Link>
                 <Link
                   href="/auth/signup"
-                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors"
                 >
-                  Sign Up
+                  สมัครสมาชิก
                 </Link>
               </div>
-            ) : (
-              <div className="h-10 w-10 rounded-full bg-accent/30 animate-pulse" />
             )}
+          </div>
 
-            {/* Mobile menu button */}
+          {/* Mobile Menu Button */}
+          <div className="flex items-center space-x-4 md:hidden">
             <button
-              onClick={toggleMobileMenu}
-              className="p-2 rounded-full hover:bg-accent/50 transition-colors md:hidden"
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
+              className="p-2 rounded-full hover:bg-secondary flex items-center justify-center"
+              aria-label="Search"
+            >
+              <Search size={20} className="text-foreground" />
+            </button>
+            <button
+              onClick={toggleMenu}
+              className="p-2 rounded-full hover:bg-secondary flex items-center justify-center"
+              aria-expanded={isMenuOpen}
               aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {isMenuOpen ? (
+                <X size={24} className="text-foreground" />
+              ) : (
+                <Menu size={24} className="text-foreground" />
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Navigation */}
-      <MobileMenu isOpen={mobileMenuOpen} navItems={navItems} />
+      {/* Mobile Search */}
+      {isSearchOpen && (
+        <div className="md:hidden p-2 border-t border-accent">
+          <SearchBar onClose={() => setIsSearchOpen(false)} />
+        </div>
+      )}
 
-      {/* Search Dialog */}
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {/* Mobile Menu */}
+      {isMenuOpen && (
+        <div className="md:hidden bg-card border-t border-accent">
+          <div className="px-4 py-2 space-y-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`block px-3 py-2 rounded-md text-base font-medium ${
+                  link.isActive
+                    ? "bg-secondary text-primary"
+                    : "text-foreground hover:bg-secondary"
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+
+            <div className="pt-4 pb-2 border-t border-accent">
+              <ThemeToggle />
+            </div>
+
+            {status === "authenticated" && user ? (
+              <div className="pt-2 space-y-1">
+                <div className="px-3 py-2 flex items-center">
+                  <UserAvatar user={user} />
+                  <div className="ml-3">
+                    <div className="text-base font-medium text-foreground">
+                      {user.username}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {user.email}
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  href="/profile"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <User size={16} className="inline mr-2" />
+                  โปรไฟล์
+                </Link>
+                <Link
+                  href="/bookmarks"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Bookmark size={16} className="inline mr-2" />
+                  บุ๊คมาร์ค
+                </Link>
+                <Link
+                  href="/notifications"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Bell size={16} className="inline mr-2" />
+                  การแจ้งเตือน
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary"
+                >
+                  <LogOut size={16} className="inline mr-2" />
+                  ออกจากระบบ
+                </button>
+              </div>
+            ) : (
+              <div className="pt-2 pb-3 space-y-2">
+                <Link
+                  href="/auth/signin"
+                  className="block w-full px-4 py-2 text-center text-sm font-medium rounded-md border border-accent hover:bg-secondary"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  เข้าสู่ระบบ
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="block w-full px-4 py-2 text-center text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  สมัครสมาชิก
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 };
-
-export default NavBar;

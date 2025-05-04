@@ -1,8 +1,6 @@
-// src/app/page.tsx
-import { NovelCard } from "@/components/NovelCard";
-import { Novel } from "@/backend/types/novel";
-import Link from "next/link";
 import { ImageSlider } from "@/components/ImageSlider";
+import { NovelCard } from "@/components/NovelCard";
+import Link from "next/link";
 
 async function getNovels() {
   try {

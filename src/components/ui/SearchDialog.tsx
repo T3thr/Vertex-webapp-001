@@ -1,8 +1,8 @@
 // src/components/ui/SearchDialog.tsx
 "use client"
-import { useEffect, useState, useRef } from 'react';
-import { Search, X, BookOpen, Bookmark, History, Star } from 'lucide-react';
-import { motion} from 'framer-motion';
+import { motion } from 'framer-motion';
+import { BookOpen, Bookmark, History, Search, Star, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 interface SearchDialogProps {
   open: boolean;
