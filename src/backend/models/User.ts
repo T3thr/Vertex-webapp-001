@@ -1,6 +1,11 @@
-import { Schema, model, models, Types } from "mongoose";
+// src/backend/models/User.ts
 
-export interface IUser {
+import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+
+// ------------------------
+// 1. Interface
+// ------------------------
+export interface IUser extends Document {
   email: string;
   username: string;
   password?: string;
@@ -14,10 +19,11 @@ export interface IUser {
   purchases: Types.ObjectId[];
   isEmailVerified: boolean;
   lastLogin: Date;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
+// ------------------------
+// 2. Schema
+// ------------------------
 const UserSchema = new Schema<IUser>(
   {
     email: {
@@ -26,7 +32,8 @@ const UserSchema = new Schema<IUser>(
       unique: true,
       trim: true,
       lowercase: true,
-      match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"],
+      match: [/^\S+@\S+\.\S+$/, "รูปแบบอีเมลไม่ถูกต้อง"],
+      index: true,
     },
     username: {
       type: String,
@@ -35,13 +42,12 @@ const UserSchema = new Schema<IUser>(
       trim: true,
       minlength: 3,
       maxlength: 30,
+      index: true,
     },
     password: {
       type: String,
-      required: function () {
-        return !this.isEmailVerified;
-      },
       minlength: 8,
+      select: false,
     },
     role: {
       type: String,
@@ -49,20 +55,32 @@ const UserSchema = new Schema<IUser>(
       default: "Reader",
     },
     profile: {
+      _id: false,
       displayName: { type: String, trim: true, maxlength: 50 },
-      avatar: { type: String, trim: true },
+      avatar: {
+        type: String,
+        trim: true,
+        validate: {
+          validator: (v: string) => /^https?:\/\/|^\//.test(v),
+          message: "รูปแบบ URL ของรูปโปรไฟล์ไม่ถูกต้อง",
+        },
+      },
       bio: { type: String, trim: true, maxlength: 500 },
     },
-    novels: [{
-      type: Schema.Types.ObjectId,
-      ref: "Novel",
-      default: [],
-    }],
-    purchases: [{
-      type: Schema.Types.ObjectId,
-      ref: "Purchase",
-      default: [],
-    }],
+    novels: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Novel",
+        default: [],
+      },
+    ],
+    purchases: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Purchase",
+        default: [],
+      },
+    ],
     isEmailVerified: {
       type: Boolean,
       default: false,
@@ -79,6 +97,13 @@ const UserSchema = new Schema<IUser>(
   }
 );
 
-UserSchema.index({ email: 1, username: 1 });
+// ------------------------
+// 3. Model Factory Function
+// ------------------------
+const UserModel = () =>
+  models.User || model<IUser>("User", UserSchema);
 
-export default () => models.User || model<IUser>("User", UserSchema);
+// ------------------------
+// 4. Export
+// ------------------------
+export default UserModel;

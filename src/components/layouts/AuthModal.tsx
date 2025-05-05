@@ -118,7 +118,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     try {
       if (mode === 'signin') {
-        // ใช้ฟังก์ชัน signIn ของ NextAuth
+        // ใช้ฟังก์ชัน signIn จาก next-auth/react
         const result = await signIn('credentials', {
           redirect: false,
           email,
@@ -135,7 +135,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           }, 1000);
         }
       } else {
-        // สมัครสมาชิกด้วยฟังก์ชันกำหนดเอง
+        // สมัครสมาชิกด้วยฟังก์ชันจาก AuthContext
         const result = await signUp(email, username, password);
         if (result.error) {
           setError(result.error);
@@ -155,12 +155,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   // จัดการการลงชื่อเข้าใช้ด้วยโซเชียล
-  const handleSocialSignIn = async (provider: string) => {
+  const handleSocialSignIn = async (provider: 'google' | 'facebook' | 'twitter' | 'apple' | 'line') => {
     try {
       setIsLoading(true);
-      const result = await signIn(provider, { callbackUrl: window.location.href });
+      const result = await signIn(provider, {
+        redirect: false,
+        callbackUrl: window.location.href,
+      });
+
       if (result?.error) {
         setError(`ไม่สามารถลงชื่อเข้าใช้ด้วย ${provider}: ${result.error}`);
+      } else {
+        setIsSuccess(true);
+        setTimeout(() => {
+          onClose();
+          window.location.reload(); // รีเฟรชเพื่ออัปเดตสถานะการตรวจสอบ
+        }, 1000);
       }
     } catch (error: any) {
       console.error(`❌ ข้อผิดพลาดในการลงชื่อเข้าใช้ด้วย ${provider}:`, error);
@@ -296,7 +306,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 >
                   {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
                 </button>
-              </div>
+              </ div>
               {mode === 'signup' && (
                 <p className="text-xs text-muted-foreground mt-1">
                   รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร รวมตัวเลขและตัวพิมพ์ใหญ่
@@ -346,8 +356,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => handleSocialSignIn('google')}
+                disabled={isLoading}
                 className="flex justify-center items-center p-2.5 bg-white hover:bg-gray-50 text-black rounded-lg border border-gray-300 
-                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 aria-label="ลงชื่อเข้าใช้ด้วย Google"
               >
                 <FaGoogle size={18} />
@@ -355,8 +366,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => handleSocialSignIn('facebook')}
+                disabled={isLoading}
                 className="flex justify-center items-center p-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
-                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 aria-label="ลงชื่อเข้าใช้ด้วย Facebook"
               >
                 <FaFacebook size={18} />
@@ -364,20 +376,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => handleSocialSignIn('twitter')}
+                disabled={isLoading}
                 className="flex justify-center items-center p-2.5 bg-blue-400 hover:bg-blue-500 text-white rounded-lg
-                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 aria-label="ลงชื่อเข้าใช้ด้วย Twitter"
               >
                 <FaTwitter size={18} />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mt-3">
               <button
                 type="button"
                 onClick={() => handleSocialSignIn('apple')}
+                disabled={isLoading}
                 className="flex justify-center items-center p-2.5 bg-black hover:bg-gray-800 text-white rounded-lg
-                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 aria-label="ลงชื่อเข้าใช้ด้วย Apple"
               >
                 <FaApple size={18} className="mr-2" />
@@ -386,8 +400,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => handleSocialSignIn('line')}
+                disabled={isLoading}
                 className="flex justify-center items-center p-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg
-                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                          focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 aria-label="ลงชื่อเข้าใช้ด้วย Line"
               >
                 <SiLine size={18} className="mr-2" />

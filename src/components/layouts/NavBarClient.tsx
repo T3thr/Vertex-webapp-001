@@ -1,6 +1,6 @@
 "use client";
 
-import { NavBar } from "@/components/layouts/NavBar";
+import { NavBar } from "./NavBar";
 
 export function NavBarClient() {
   return <NavBar />;
