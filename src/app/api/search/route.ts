@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     await dbConnect();
 
     // Create a text search query
-    const results = await NovelModel()
+    const results = await NovelModel
       .find(
         {
           $or: [
