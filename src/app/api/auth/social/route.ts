@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     // ค้นหาผู้ใช้ใน SocialMediaUser collection
-    const user = await SocialMediaUserModel().findOne({
+    let user = await SocialMediaUserModel().findOne({
       $or: [
         { provider, providerAccountId: providerId },
         ...(email && email.trim() ? [{ email: email.toLowerCase() }] : []),
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     console.log(`⏳ ไม่พบผู้ใช้ ${email || username}, กำลังสร้างบัญชีใหม่จาก ${provider}...`);
 
     // สร้าง username ที่ไม่ซ้ำกัน
-    const baseUsername =
+    let baseUsername =
       username ||
       (email && email.trim() ? email.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "") : undefined) ||
       name?.replace(/\s+/g, "_").toLowerCase() ||
@@ -179,12 +179,12 @@ export async function POST(request: Request) {
     // ดึงผู้ใช้ที่บันทึกแล้วเพื่อตรวจสอบ
     const savedUser = await SocialMediaUserModel().findById(newUser._id);
     if (!savedUser) {
-      // If the user wasn't saved successfully, handle the error
-      console.error(`❌ ไม่พบผู้ใช้ที่บันทึก: ${newUser._id}`);
-      return NextResponse.json(
+    // If the user wasn't saved successfully, handle the error
+    console.error(`❌ ไม่พบผู้ใช้ที่บันทึก: ${newUser._id}`);
+    return NextResponse.json(
         { error: "ไม่สามารถสร้างผู้ใช้ใหม่ได้" },
         { status: 500 }
-      );
+    );
     }
 
     console.log(`✅ สร้างผู้ใช้ใหม่ ${savedUser.email || savedUser.username} จาก ${provider} สำเร็จ`, savedUser.toObject());
