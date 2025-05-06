@@ -1,90 +1,135 @@
 // src/app/api/auth/signup/route.ts
 
-// นำเข้าโมดูลที่จำเป็น
 import { NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb"; // Utility สำหรับเชื่อมต่อฐานข้อมูล
-import UserModel, { IUser } from "@/backend/models/User"; // Mongoose Model สำหรับ User
-import bcrypt from "bcryptjs"; // Library สำหรับ hash รหัสผ่าน
+import dbConnect from "@/backend/lib/mongodb";
+import UserModel, { IUser } from "@/backend/models/User";
 
-// ฟังก์ชัน Handler สำหรับ HTTP POST request (การสมัครสมาชิก)
+// Helper function to send verification email (Placeholder)
+// In a real application, you would use a service like Nodemailer, SendGrid, Resend, etc.
+async function sendVerificationEmail(email: string, token: string) {
+  // TODO: Implement actual email sending logic here
+  const verificationUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`;
+  console.log(`📧 [Signup] Sending verification email to ${email}`);
+  console.log(`🔗 Verification URL: ${verificationUrl}`); // Log URL for testing
+  // Example: await sendEmail({ to: email, subject: "Verify your email", html: `<p>Click <a href="${verificationUrl}">here</a> to verify your email.</p>` });
+  return Promise.resolve(); // Simulate successful sending
+}
+
 export async function POST(request: Request) {
-  // เชื่อมต่อฐานข้อมูล
-  await dbConnect();
-
   try {
-    // ดึงข้อมูล email, username, password จาก request body
+    await dbConnect();
     const { email, username, password } = await request.json();
 
-    // ตรวจสอบข้อมูลเบื้องต้น
+    // 1. Validate Input
     if (!email || !username || !password) {
       return NextResponse.json(
         { error: "กรุณากรอกข้อมูลให้ครบถ้วน (อีเมล, ชื่อผู้ใช้, รหัสผ่าน)" },
         { status: 400 }
       );
     }
-
-    // ตรวจสอบว่ามี email หรือ username นี้ในระบบแล้วหรือยัง
-    const existingUser = await UserModel().findOne({
-      $or: [{ email: email.toLowerCase() }, { username }],
-    });// ใช้ lean() เพื่อ performance ถ้าไม่ต้องการ Mongoose document methods
-
-    if (existingUser) {
-      let errorMessage = "";
-      if (existingUser.email === email.toLowerCase()) {
-        errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
-      } else {
-        errorMessage = "ชื่อผู้ใช้นี้ถูกใช้งานแล้ว";
-      }
-      return NextResponse.json({ error: errorMessage }, { status: 409 }); // 409 Conflict
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" },
+        { status: 400 }
+      );
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return NextResponse.json(
+        { error: "ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร, ตัวเลข หรือเครื่องหมาย _ เท่านั้น" },
+        { status: 400 }
+      );
+    }
+    if (username.length < 3 || username.length > 30) {
+      return NextResponse.json(
+        { error: "ชื่อผู้ใช้ต้องมีระหว่าง 3 ถึง 30 ตัวอักษร" },
+        { status: 400 }
+      );
     }
 
-    // Hash รหัสผ่านก่อนบันทึก
-    const salt = await bcrypt.genSalt(10); // สร้าง salt
-    const hashedPassword = await bcrypt.hash(password, salt); // Hash รหัสผ่าน
+    const lowerCaseEmail = email.toLowerCase();
 
-    // สร้างผู้ใช้ใหม่ในฐานข้อมูล
-    const newUser = new (UserModel()) ({
-      email: email.toLowerCase(),
+    // 2. Check for existing user
+    const existingUser = await UserModel().findOne({
+      $or: [{ email: lowerCaseEmail }, { username }],
+    });
+    if (existingUser) {
+      const conflictField = existingUser.email === lowerCaseEmail ? "อีเมล" : "ชื่อผู้ใช้";
+      return NextResponse.json(
+        { error: `${conflictField}นี้ถูกใช้งานแล้ว` },
+        { status: 409 } // 409 Conflict
+      );
+    }
+
+    // 3. Create New User (Unverified)
+    const newUser = new (UserModel())({
+      email: lowerCaseEmail,
       username,
-      password: hashedPassword,
-      role: "Reader", // กำหนด role เริ่มต้น
-      isEmailVerified: false, // ยังไม่ได้ยืนยันอีเมล
-      // profile, novels, purchases จะใช้ค่า default จาก schema
+      password, // Will be hashed by pre-save middleware
+      role: "Reader",
+      isEmailVerified: false,
+      profile: {
+        displayName: username,
+      },
+      stats: {
+        followers: 0,
+        following: 0,
+        novels: 0,
+        purchases: 0,
+      },
+      preferences: {
+        language: "th",
+        theme: "system",
+        notifications: {
+          email: true,
+          push: true,
+        },
+      },
+      wallet: {
+        balance: 0,
+        currency: "THB",
+      },
+      lastLogin: new Date(),
+      isActive: true,
     });
 
-    await newUser.save(); // บันทึกผู้ใช้ใหม่
+    // 4. Generate Verification Token
+    const verificationToken = newUser.getEmailVerificationToken();
+    await newUser.save();
+    console.log(`✅ [Signup] สร้างผู้ใช้ใหม่ (ยังไม่ยืนยัน): ${username} (${lowerCaseEmail})`);
 
-    // ไม่ส่งข้อมูล password กลับไป
-    const userResponse = { ...newUser.toObject() };
-    delete userResponse.password;
+    // 5. Send Verification Email
+    try {
+      await sendVerificationEmail(lowerCaseEmail, verificationToken);
+    } catch (emailError) {
+      console.error("❌ [Signup] ไม่สามารถส่งอีเมลยืนยันได้:", emailError);
+      // User is created, but email failed. Log the error but proceed.
+    }
 
-    // ส่ง response กลับไปว่าสมัครสมาชิกสำเร็จ
+    // 6. Return Success Response
     return NextResponse.json(
-      { message: "สมัครสมาชิกสำเร็จ", user: userResponse },
-      { status: 201 } // 201 Created
+      { success: true, message: "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลของคุณเพื่อยืนยันบัญชี" },
+      { status: 201 }
     );
-
   } catch (error: any) {
-    console.error("❌ ข้อผิดพลาดในการสมัครสมาชิก:", error);
-
-    // จัดการกับ Mongoose validation errors
-    if (error.name === 'ValidationError') {
-      let errors = Object.values(error.errors).map((el: any) => el.message);
+    console.error("❌ [Signup] เกิดข้อผิดพลาด:", error);
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue)[0];
+      const value = error.keyValue[field];
+      return NextResponse.json(
+        { error: `${field === "email" ? "อีเมล" : "ชื่อผู้ใช้"} '${value}' นี้ถูกใช้งานแล้ว` },
+        { status: 409 }
+      );
+    }
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((e: any) => e.message);
       return NextResponse.json({ error: errors.join(", ") }, { status: 400 });
     }
-
-    // จัดการกับ Mongoose duplicate key errors (ถึงแม้จะเช็คไปแล้ว แต่เผื่อ race condition)
-    if (error.code === 11000) {
-        let field = Object.keys(error.keyValue)[0];
-        let message = `${field === 'email' ? 'อีเมล' : 'ชื่อผู้ใช้'} นี้ถูกใช้งานแล้ว`;
-        return NextResponse.json({ error: message }, { status: 409 });
-    }
-
-    // ข้อผิดพลาดอื่นๆ
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดบางอย่างบนเซิร์ฟเวอร์" },
+      { error: "เกิดข้อผิดพลาดในการสมัครสมาชิก", details: error.message },
       { status: 500 }
     );
   }
 }
-

@@ -1,90 +1,95 @@
 // src/app/api/auth/signin/route.ts
 
-// นำเข้าโมดูลที่จำเป็น
 import { NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb"; // Utility สำหรับเชื่อมต่อฐานข้อมูล
-import UserModel, { IUser } from "@/backend/models/User"; // Mongoose Model สำหรับ User
-import bcrypt from "bcryptjs"; // Library สำหรับเปรียบเทียบ hash รหัสผ่าน
+import dbConnect from "@/backend/lib/mongodb";
+import UserModel, { IUser } from "@/backend/models/User";
+import { Types } from "mongoose";
 
 // ฟังก์ชัน Handler สำหรับ HTTP POST request (การลงชื่อเข้าใช้ด้วย Credentials)
 export async function POST(request: Request) {
-  // เชื่อมต่อฐานข้อมูล
   await dbConnect();
 
   try {
-    // ดึงข้อมูล email หรือ username และ password จาก request body
     const { email, username, password } = await request.json();
 
-    // ตรวจสอบว่ามี email หรือ username และ password หรือไม่
     if ((!email && !username) || !password) {
       return NextResponse.json(
         { error: "กรุณากรอกอีเมลหรือชื่อผู้ใช้ และรหัสผ่าน" },
-        { status: 400 } // Bad Request
+        { status: 400 }
       );
     }
 
-    // ค้นหาผู้ใช้ด้วย email หรือ username
-    // ใช้ .select("+password") เพื่อดึงฟิลด์ password ที่ปกติถูกซ่อนไว้
-    const user = await UserModel().findOne({
-      $or: [
-        { email: email?.toLowerCase() },
-        { username: username }
-      ],
-    }).select("+password");
+    const user = await UserModel()
+      .findOne({
+        $or: [{ email: email?.toLowerCase() }, { username }],
+      })
+      .select("+password") as IUser & { _id: Types.ObjectId };
 
-    // ตรวจสอบว่าพบผู้ใช้หรือไม่
     if (!user) {
       return NextResponse.json(
         { error: "ไม่พบผู้ใช้ที่ตรงกับอีเมลหรือชื่อผู้ใช้นี้" },
-        { status: 404 } // Not Found
+        { status: 404 }
       );
     }
 
-    // ตรวจสอบว่าผู้ใช้มีรหัสผ่านหรือไม่ (อาจไม่มีถ้าสมัครผ่าน social login)
     if (!user.password) {
-        return NextResponse.json(
-            { error: "บัญชีนี้อาจถูกสร้างผ่าน Social Login กรุณาลองเข้าสู่ระบบด้วยวิธีอื่น" },
-            { status: 400 } // Bad Request
-        );
+      return NextResponse.json(
+        { error: "บัญชีนี้อาจถูกสร้างผ่าน Social Login กรุณาลองเข้าสู่ระบบด้วยวิธีอื่น" },
+        { status: 400 }
+      );
     }
 
-    // เปรียบเทียบรหัสผ่านที่ส่งมากับ hash ในฐานข้อมูล
-    const isPasswordMatch = await bcrypt.compare(password, user.password);
+    if (!user.isActive) {
+      return NextResponse.json(
+        { error: "บัญชีนี้ถูกระงับการใช้งาน" },
+        { status: 403 }
+      );
+    }
 
-    // ถ้า รหัสผ่านไม่ตรงกัน
+    if (user.bannedUntil && user.bannedUntil > new Date()) {
+      return NextResponse.json(
+        { error: `บัญชีนี้ถูกแบนจนถึง ${user.bannedUntil.toLocaleDateString("th-TH")}` },
+        { status: 403 }
+      );
+    }
+
+    if (!user.isEmailVerified) {
+      return NextResponse.json(
+        { error: "ยังไม่ได้ยืนยันอีเมล" },
+        { status: 403 }
+      );
+    }
+
+    const isPasswordMatch = await user.matchPassword(password);
+
     if (!isPasswordMatch) {
       return NextResponse.json(
         { error: "รหัสผ่านไม่ถูกต้อง" },
-        { status: 401 } // Unauthorized
+        { status: 401 }
       );
     }
 
-    // ถ้า รหัสผ่านถูกต้อง
-    // อัปเดต lastLogin
     user.lastLogin = new Date();
     await user.save();
 
-    // สร้าง object ผู้ใช้ที่จะส่งคืน (โดยไม่มีรหัสผ่าน)
-    // เราต้องส่งคืนข้อมูลที่ตรงกับโครงสร้างที่ CredentialsProvider คาดหวังใน authorize callback
-    // และตรงกับประเภท User ที่เราประกาศใน next-auth.d.ts
     const userResponse = {
-        id: user._id.toString(), // แปลง ObjectId เป็น string
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        profile: user.profile,
-        // ไม่ต้องส่ง password
+      id: user._id.toString(),
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      profile: user.profile,
+      stats: user.stats,
+      preferences: user.preferences,
+      wallet: user.wallet,
+      isEmailVerified: user.isEmailVerified,
     };
 
-    // ส่งข้อมูลผู้ใช้กลับไป (NextAuth CredentialsProvider จะใช้ข้อมูลนี้)
     return NextResponse.json({ user: userResponse }, { status: 200 });
-
   } catch (error: any) {
     console.error("❌ ข้อผิดพลาดในการลงชื่อเข้าใช้:", error);
     return NextResponse.json(
       { error: "เกิดข้อผิดพลาดบางอย่างบนเซิร์ฟเวอร์" },
-      { status: 500 } // Internal Server Error
+      { status: 500 }
     );
   }
 }
-

@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ["lh3.googleusercontent.com" , "example.com" ], // อนุญาตให้โหลดภาพจาก Googleusercontent
+    domains: ["lh3.googleusercontent.com" , "example.com" , "via.placeholder.com"], // อนุญาตให้โหลดภาพจาก Googleusercontent
   },
   async headers() {
     return [
