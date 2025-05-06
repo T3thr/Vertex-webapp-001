@@ -348,7 +348,7 @@ EpisodeSchema.pre("save", async function(next) {
       let totalDialogues = 0;
       let totalChoices = 0;
       let totalWords = 0;
-      let characters = new Set();
+      const characters = new Set();
       
       scenes.forEach(scene => {
         if (scene.dialogues) {
