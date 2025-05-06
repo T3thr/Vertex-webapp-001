@@ -1,4 +1,5 @@
 // src/components/layouts/NavBar.tsx
+
 "use client";
 
 import {
@@ -11,14 +12,16 @@ import {
   Search,
   Sun,
   User,
-  X
+  X,
+  BookOpen
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
+import AuthModal from "./AuthModal";
 import { useAuth } from "@/context/AuthContext";
 
-// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน
+// Session User Interface
 interface SessionUser {
   id: string;
   name: string;
@@ -32,49 +35,41 @@ interface SessionUser {
   };
 }
 
-// คอมโพเนนต์ SearchBar
+// SearchBar Component
 interface SearchBarProps {
   onClose: () => void;
 }
 
 const SearchBar = ({ onClose }: SearchBarProps) => {
   return (
-    <div className="w-full bg-card rounded-lg shadow-lg p-3 border border-accent">
+    <div className="w-full bg-card rounded-md shadow-lg p-2 border border-accent">
       <div className="flex items-center space-x-2">
-        <Search size={18} className="text-muted-foreground" />
+        <Search size={16} className="text-muted-foreground" />
         <input
           type="text"
           placeholder="ค้นหางานเขียน..."
           className="bg-transparent w-full focus:outline-none text-sm"
-          autoFocus
         />
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X size={18} />
+          <X size={16} />
         </button>
       </div>
     </div>
   );
 };
 
-// คอมโพเนนต์ UserAvatar
+// UserAvatar Component
 interface UserAvatarProps {
   user: SessionUser | null;
-  size?: 'sm' | 'md' | 'lg';
 }
 
-const UserAvatar = ({ user, size = 'md' }: UserAvatarProps) => {
-  const sizeClasses = {
-    sm: 'w-7 h-7 text-xs',
-    md: 'w-9 h-9 text-sm',
-    lg: 'w-12 h-12 text-base'
-  };
-  
+const UserAvatar = ({ user }: UserAvatarProps) => {
   return (
-    <div className={`${sizeClasses[size]} rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium overflow-hidden`}>
+    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium overflow-hidden">
       {user?.profile?.avatar ? (
         <img
           src={user.profile.avatar}
-          alt={user.name}
+          alt="User Avatar"
           className="h-full w-full object-cover"
         />
       ) : (
@@ -84,30 +79,33 @@ const UserAvatar = ({ user, size = 'md' }: UserAvatarProps) => {
   );
 };
 
-// คอมโพเนนต์ ThemeToggle
+// ThemeToggle Component
 const ThemeToggle = () => {
   const [theme, setTheme] = useState("light");
 
-  // ตั้งค่าธีมตามที่บันทึกไว้หรือตามระบบ
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") ||
                        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(savedTheme);
-    document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
     localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
+    document.documentElement.classList.toggle("dark");
   };
 
   return (
     <button
       onClick={toggleTheme}
-      className="p-2 rounded-full hover:bg-secondary transition-colors flex items-center justify-center"
-      aria-label="สลับธีม"
+      className="p-2 rounded-full hover:bg-secondary flex items-center justify-center"
+      aria-label="Toggle theme"
     >
       {theme === "light" ? (
         <Moon size={20} className="text-foreground" />
@@ -132,7 +130,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // จัดการเมื่อเลื่อนหน้าเว็บ
+  // Handle scroll effect
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
@@ -141,7 +139,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // ปิดเมนูเมื่อคลิกข้างนอก
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -167,9 +165,9 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
   };
 
   const navLinks = [
-    { href: "/", label: "หน้าหลัก", isActive: pathname === "/" },
-    { href: "/categories", label: "หมวดหมู่", isActive: pathname === "/categories" },
-    { href: "/novels", label: "งานเขียน", isActive: pathname.startsWith("/novels") },
+    { href: "/", label: "หน้าหลัก", isActive: pathname === "/", icon: <BookOpen size={18} className="mr-2" /> },
+    { href: "/categories", label: "หมวดหมู่", isActive: pathname === "/categories", icon: <Bookmark size={18} className="mr-2" /> },
+    { href: "/novels", label: "งานเขียน", isActive: pathname === "/novels", icon: <BookOpen size={18} className="mr-2" /> },
   ];
 
   return (
@@ -179,23 +177,38 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
           isScrolled ? "bg-card/90 backdrop-blur-md shadow-md" : "bg-background"
         }`}
       >
-        <div className="container-custom">
+        <div className="w-full px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            {/* ซ้าย: ลิงก์นำทาง */}
-            <nav className="hidden md:flex items-center space-x-6">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`nav-link ${link.isActive ? "nav-link-active" : ""}`}
-                >
-                  {link.label}
+            {/* Left: Logo on mobile / Navigation Links on desktop */}
+            <div className="flex items-center">
+              {/* Mobile Logo */}
+              <div className="md:hidden">
+                <Link href="/" className="flex items-center">
+                  <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+                    {logoText}
+                  </span>
                 </Link>
-              ))}
-            </nav>
+              </div>
 
-            {/* กลาง: โลโก้ */}
-            <div className="flex-1 flex justify-center md:justify-start md:flex-none">
+              {/* Desktop Navigation */}
+              <nav className="hidden md:flex items-center space-x-8 ml-6">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
+                      link.isActive ? "text-primary" : "text-foreground"
+                    }`}
+                  >
+                    {link.icon}
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+
+            {/* Center: Logo on desktop only */}
+            <div className="hidden md:flex justify-center flex-1">
               <Link href="/" className="flex items-center">
                 <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
                   {logoText}
@@ -203,67 +216,50 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
               </Link>
             </div>
 
-            {/* ขวา: การกระทำ */}
+            {/* Right: Actions */}
             <div className="flex items-center space-x-4">
-              {/* ค้นหา */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsSearchOpen(!isSearchOpen)}
-                  className="p-2 rounded-full hover:bg-secondary transition-colors flex items-center justify-center"
-                  aria-label="ค้นหา"
-                >
-                  <Search size={20} className="text-foreground" />
-                </button>
-                {isSearchOpen && (
-                  <div className="absolute right-0 top-12 w-80 z-10">
-                    <SearchBar onClose={() => setIsSearchOpen(false)} />
-                  </div>
-                )}
-              </div>
+              {/* Search */}
+              <button
+                onClick={() => setIsSearchOpen(!isSearchOpen)}
+                className="p-2 rounded-full hover:bg-secondary flex items-center justify-center"
+                aria-label="Search"
+              >
+                <Search size={20} className="text-foreground" />
+              </button>
 
-              {/* สลับธีม */}
-              <div className="hidden md:block">
-                <ThemeToggle />
-              </div>
+              {/* Theme Toggle */}
+              <ThemeToggle />
 
-              {/* สถานะการเข้าสู่ระบบ */}
+              {/* Authentication */}
               {status === "loading" && (
                 <div className="h-8 w-20 bg-secondary rounded animate-pulse"></div>
               )}
 
               {status === "unauthenticated" && (
-                <div className="hidden md:flex items-center space-x-2">
-                  <button
-                    onClick={openModal}
-                    className="btn-outline text-sm"
-                  >
-                    เข้าสู่ระบบ
-                  </button>
-                  <button
-                    onClick={openModal}
-                    className="btn-primary text-sm"
-                  >
-                    สมัครสมาชิก
-                  </button>
-                </div>
+                <button
+                  onClick={openModal}
+                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm"
+                >
+                  เข้าสู่ระบบ
+                </button>
               )}
 
               {status === "authenticated" && user && (
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={toggleDropdown}
-                    className="flex items-center space-x-2 p-1 rounded-full hover:bg-secondary transition-colors"
+                    className="flex items-center space-x-2 p-1 rounded-full hover:bg-secondary"
                     aria-expanded={isDropdownOpen}
-                    aria-label="เมนูผู้ใช้"
+                    aria-label="User menu"
                   >
                     <UserAvatar user={user} />
-                    <ChevronDown size={18} className="text-foreground hidden md:block" />
+                    <ChevronDown size={18} className="text-foreground" />
                   </button>
 
-                  {/* เมนูแบบดร็อปดาวน์ */}
+                  {/* User Dropdown */}
                   {isDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg bg-card border border-accent z-10">
-                      <div className="p-3 border-b border-accent">
+                    <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-card border border-accent z-10">
+                      <div className="p-2 border-b border-accent">
                         <div className="font-medium text-foreground truncate">{user.name}</div>
                         <div className="text-xs text-muted-foreground truncate">
                           {user.email || "ไม่มีอีเมล"}
@@ -272,7 +268,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
                       <div className="py-1">
                         <Link
                           href="/profile"
-                          className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                          className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           <User size={16} className="mr-2" />
@@ -280,7 +276,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
                         </Link>
                         <Link
                           href="/bookmarks"
-                          className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                          className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           <Bookmark size={16} className="mr-2" />
@@ -288,7 +284,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
                         </Link>
                         <Link
                           href="/notifications"
-                          className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                          className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary"
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           <Bell size={16} className="mr-2" />
@@ -297,7 +293,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
                         <button
                           onClick={handleSignOut}
                           disabled={authLoading}
-                          className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           <LogOut size={16} className="mr-2" />
                           {authLoading ? "กำลังออกจากระบบ..." : "ออกจากระบบ"}
@@ -308,12 +304,12 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
                 </div>
               )}
 
-              {/* ปุ่มเมนูมือถือ */}
+              {/* Mobile Menu Button */}
               <button
                 onClick={toggleMenu}
-                className="p-2 rounded-full hover:bg-secondary md:hidden flex items-center justify-center"
+                className="p-2 rounded-full hover:bg-secondary flex md:hidden items-center justify-center"
                 aria-expanded={isMenuOpen}
-                aria-label="สลับเมนู"
+                aria-label="Toggle menu"
               >
                 {isMenuOpen ? (
                   <X size={24} className="text-foreground" />
@@ -325,122 +321,41 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
           </div>
         </div>
 
-        {/* เมนูมือถือ */}
+        {/* Search Overlay */}
+        {isSearchOpen && (
+          <div className="absolute top-16 left-0 right-0 px-4 py-2 bg-card border-t border-accent shadow-md">
+            <SearchBar onClose={() => setIsSearchOpen(false)} />
+          </div>
+        )}
+
+        {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden bg-card border-t border-accent">
+          <div className="md:hidden bg-card border-t border-accent shadow-lg">
             <div className="px-4 py-2 space-y-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`block px-3 py-2 rounded-md text-base font-medium ${
+                  className={`flex items-center px-3 py-2 rounded-md text-base font-medium ${
                     link.isActive
                       ? "bg-secondary text-primary"
                       : "text-foreground hover:bg-secondary"
-                  } transition-colors`}
+                  }`}
                   onClick={() => setIsMenuOpen(false)}
                 >
+                  {link.icon}
                   {link.label}
                 </Link>
               ))}
-
-              <div className="flex items-center justify-between pt-4 pb-2 border-t border-accent">
-                <ThemeToggle />
-                
-                {status === "unauthenticated" && (
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => {
-                        openModal();
-                        setIsMenuOpen(false);
-                      }}
-                      className="btn-outline text-sm py-1.5"
-                    >
-                      เข้าสู่ระบบ
-                    </button>
-                    <button
-                      onClick={() => {
-                        openModal();
-                        setIsMenuOpen(false);
-                      }}
-                      className="btn-primary text-sm py-1.5"
-                    >
-                      สมัครสมาชิก
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {status === "authenticated" && user && (
-                <div className="pt-2 space-y-1">
-                  <div className="px-3 py-2 flex items-center">
-                    <UserAvatar user={user} size="lg" />
-                    <div className="ml-3">
-                      <div className="text-base font-medium text-foreground truncate">
-                        {user.name}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate">
-                        {user.email || "ไม่มีอีเมล"}
-                      </div>
-                    </div>
-                  </div>
-                  <Link
-                    href="/profile"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <User size={16} className="inline mr-2" />
-                    โปรไฟล์
-                  </Link>
-                  <Link
-                    href="/bookmarks"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <Bookmark size={16} className="inline mr-2" />
-                    บุ๊คมาร์ค
-                  </Link>
-                  <Link
-                    href="/notifications"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <Bell size={16} className="inline mr-2" />
-                    การแจ้งเตือน
-                  </Link>
-                  <button
-                    onClick={handleSignOut}
-                    disabled={authLoading}
-                    className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  >
-                    <LogOut size={16} className="inline mr-2" />
-                    {authLoading ? "กำลังออกจากระบบ..." : "ออกจากระบบ"}
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
       </header>
 
-      {/* โมดัลเข้าสู่ระบบ/สมัครสมาชิก (ต้องสร้างคอมโพเนนต์ AuthModal แยก) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-lg shadow-xl max-w-md w-full p-6 relative">
-            <button 
-              onClick={closeModal}
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
-            >
-              <X size={20} />
-            </button>
-            <h2 className="text-xl font-bold mb-4">เข้าสู่ระบบ / สมัครสมาชิก</h2>
-            {/* ส่วนของฟอร์มเข้าสู่ระบบ/สมัครสมาชิก */}
-            <div className="space-y-4">
-              {/* เพิ่มฟอร์มเข้าสู่ระบบ/สมัครสมาชิกตรงนี้ */}
-            </div>
-          </div>
-        </div>
-      )}
+      <AuthModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+      />
     </>
   );
 };
