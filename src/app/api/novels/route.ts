@@ -20,31 +20,36 @@ export async function GET(request: Request) {
     console.log(`📡 API /api/novels called with query: ${request.url}`);
 
     // ตัวกรองสำหรับ query
-    let query: any = {
+    const query: any = {
       isDeleted: false,
       visibility: "public",
     };
-    let sort: any = {};
+    const sort: any = {};
 
     switch (filter) {
       case "trending":
         // นิยายยอดนิยม: เรียงตามยอดเข้าชม, ผู้ติดตาม, และวันที่อัพเดตล่าสุด
-        sort = { "stats.views": -1, "stats.followers": -1, lastEpisodeAt: -1 };
+        sort["stats.views"] = -1;
+        sort["stats.followers"] = -1;
+        sort.lastEpisodeAt = -1;
         break;
       case "published":
         // อัพเดตล่าสุด: เรียงตามวันที่อัพเดตและวันที่สร้าง
-        sort = { lastEpisodeAt: -1, createdAt: -1 };
+        sort.lastEpisodeAt = -1;
+        sort.createdAt = -1;
         query.status = "published";
         break;
       case "discount":
         // ส่วนลดพิเศษ: นิยายที่มีสถานะ discount
         query.status = "discount";
-        sort = { "stats.views": -1, createdAt: -1 };
+        sort["stats.views"] = -1;
+        sort.createdAt = -1;
         break;
       case "completed":
         // จบบริบูรณ์: นิยายที่มีสถานะ completed
         query.status = "completed";
-        sort = { "stats.rating": -1, "stats.views": -1 };
+        sort["stats.rating"] = -1;
+        sort["stats.views"] = -1;
         break;
       default:
         console.error(`❌ Invalid filter parameter: ${filter}`);
@@ -82,7 +87,11 @@ export async function GET(request: Request) {
     // ขั้นตอนเพิ่มเติม: ตรวจสอบหากไม่พบข้อมูล user จาก UserModel ให้ลองหาจาก SocialMediaUserModel
     for (const novel of novels) {
       if (novel.author === null) {
-        const socialMediaUser = await SocialMediaUser.findById(novel.author).select("username profile.displayName profile.avatar").lean();
+        const socialMediaUser = await SocialMediaUser
+          .findById(novel.author)
+          .select("username profile.displayName profile.avatar")
+          .lean();
+        
         if (socialMediaUser) {
           novel.author = socialMediaUser;
         }
