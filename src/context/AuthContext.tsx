@@ -12,7 +12,12 @@ interface AuthContextType {
     providerOrIdentifier: string,
     password?: string
   ) => Promise<{ error?: string; success?: boolean; verificationRequired?: boolean }>;
-  signUp: (email: string, username: string, password: string) => Promise<{ error?: string; success?: boolean; message?: string }>;
+  signUp: (
+    email: string,
+    username: string,
+    password: string,
+    captchaToken: string
+  ) => Promise<{ error?: string; success?: boolean; message?: string }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -65,10 +70,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           if (errorMessage.includes("ยังไม่ได้ยืนยันอีเมล")) {
             errorMessage = "บัญชีของคุณยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายเข้าและสแปมของคุณ";
             verificationRequired = true;
+          } else if (errorMessage.includes("บัญชีนี้ถูกแบน")) {
+            errorMessage = result.error; // Use exact ban message
+          } else if (errorMessage.includes("บัญชีนี้ถูกระงับการใช้คงาน")) {
+            errorMessage = "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อฝ่ายสนับสนุน";
           } else if (errorMessage === "CredentialsSignin") {
             errorMessage = "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง";
           } else if (errorMessage.includes("ไม่ได้รับข้อมูลที่เพียงพอจาก Twitter")) {
             errorMessage = "ไม่สามารถลงชื่อเข้าใช้ด้วย Twitter เนื่องจากข้อมูลไม่ครบถ้วน";
+          } else if (errorMessage.includes("ไม่ได้รับอีเมลจาก")) {
+            errorMessage = "ไม่สามารถลงชื่อเข้าใช้เนื่องจากไม่ได้รับข้อมูลอีเมลจากผู้ให้บริการ";
           } else {
             errorMessage = "เกิดข้อผิดพลาดในการลงชื่อเข้าใช้ กรุณาลองใหม่";
           }
@@ -89,7 +100,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // ฟังก์ชันสมัครสมาชิก
   const signUp = useCallback(
-    async (email: string, username: string, password: string): Promise<{ error?: string; success?: boolean; message?: string }> => {
+    async (
+      email: string,
+      username: string,
+      password: string,
+      captchaToken: string
+    ): Promise<{ error?: string; success?: boolean; message?: string }> => {
       setLoading(true);
       try {
         const response = await fetch("/api/auth/signup", {
@@ -97,13 +113,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ email, username, password }),
+          body: JSON.stringify({ email, username, password, captchaToken }),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-          return { error: data.error || "การสมัครสมาชิกผิดพลาด", success: false };
+          let errorMessage = data.error || "การสมัครสมาชิกผิดพลาด";
+          if (data.error.includes("ถูกใช้งานแล้ว")) {
+            errorMessage = data.error; // Use exact duplicate message
+          }
+          return { error: errorMessage, success: false };
         }
 
         return { success: true, message: data.message || "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมล" };

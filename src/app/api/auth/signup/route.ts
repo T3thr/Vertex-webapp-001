@@ -3,81 +3,121 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel, { IUser } from "@/backend/models/User";
+import { sendVerificationEmail, generateVerificationToken } from "@/backend/services/sendemail";
 
-// Helper function to send verification email (Placeholder)
-// In a real application, you would use a service like Nodemailer, SendGrid, Resend, etc.
-async function sendVerificationEmail(email: string, token: string) {
-  // TODO: Implement actual email sending logic here
-  const verificationUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`;
-  console.log(`📧 [Signup] Sending verification email to ${email}`);
-  console.log(`🔗 Verification URL: ${verificationUrl}`); // Log URL for testing
-  // Example: await sendEmail({ to: email, subject: "Verify your email", html: `<p>Click <a href="${verificationUrl}">here</a> to verify your email.</p>` });
-  return Promise.resolve(); // Simulate successful sending
+// ประเภทสำหรับ Request Body
+interface SignUpRequestBody {
+  email: string;
+  username: string;
+  password: string;
+  captchaToken: string;
 }
 
-export async function POST(request: Request) {
+// POST: สร้างผู้ใช้ใหม่สำหรับ Credentials-based signup
+export async function POST(request: Request): Promise<NextResponse> {
   try {
     await dbConnect();
-    const { email, username, password } = await request.json();
+    const body = await request.json() as SignUpRequestBody;
+    const { email, username, password, captchaToken } = body;
 
-    // 1. Validate Input
-    if (!email || !username || !password) {
+    // 1. ตรวจสอบข้อมูลที่จำเป็น
+    if (!email || !username || !password || !captchaToken) {
+      console.error(`❌ ข้อมูลไม่ครบถ้วน: email=${email}, username=${username}, password=${password ? "provided" : "missing"}, captchaToken=${captchaToken ? "provided" : "missing"}`);
       return NextResponse.json(
-        { error: "กรุณากรอกข้อมูลให้ครบถ้วน (อีเมล, ชื่อผู้ใช้, รหัสผ่าน)" },
+        { error: "กรุณากรอกข้อมูลให้ครบถ้วน (อีเมล, ชื่อผู้ใช้, รหัสผ่าน, CAPTCHA)" },
         { status: 400 }
       );
     }
-    if (password.length < 8) {
+
+    // 2. ตรวจสอบ CAPTCHA
+    const captchaResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/verify-captcha`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: captchaToken }),
+    });
+
+    const captchaData = await captchaResponse.json();
+
+    if (!captchaResponse.ok || !captchaData.success) {
+      console.error("❌ การตรวจสอบ CAPTCHA ล้มเหลว:", captchaData.error || "ไม่ทราบสาเหตุ");
       return NextResponse.json(
-        { error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" },
+        { error: captchaData.error || "การตรวจสอบ CAPTCHA ล้มเหลว กรุณาลองใหม่" },
         { status: 400 }
       );
     }
+
+    // 3. ตรวจสอบรูปแบบข้อมูล
     if (!/^\S+@\S+\.\S+$/.test(email)) {
+      console.error(`❌ รูปแบบอีเมลไม่ถูกต้องขนาด: ${email}`);
       return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      console.error(`❌ รูปแบบชื่อผู้ใช้ไม่ถูกต้อง: ${username}`);
       return NextResponse.json(
         { error: "ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร, ตัวเลข หรือเครื่องหมาย _ เท่านั้น" },
         { status: 400 }
       );
     }
     if (username.length < 3 || username.length > 30) {
+      console.error(`❌ ความยาวชื่อผู้ใช้ไม่ถูกต้อง: ${username}`);
       return NextResponse.json(
         { error: "ชื่อผู้ใช้ต้องมีระหว่าง 3 ถึง 30 ตัวอักษร" },
+        { status: 400 }
+      );
+    }
+    if (password.length < 8) {
+      console.error(`❌ รหัสผ่านสั้นเกินไป: length=${password.length}`);
+      return NextResponse.json(
+        { error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" },
         { status: 400 }
       );
     }
 
     const lowerCaseEmail = email.toLowerCase();
 
-    // 2. Check for existing user
-    const existingUser = await UserModel().findOne({
-      $or: [{ email: lowerCaseEmail }, { username }],
-    });
+    // 4. ตรวจสอบว่ามีผู้ใช้ซ้ำหรือไม่
+    const existingUser = await UserModel()
+      .findOne({
+        $or: [{ email: lowerCaseEmail }, { username }],
+      })
+      .lean();
+
     if (existingUser) {
       const conflictField = existingUser.email === lowerCaseEmail ? "อีเมล" : "ชื่อผู้ใช้";
+      console.error(`❌ ${conflictField} ถูกใช้งานแล้ว: ${lowerCaseEmail || username}`);
       return NextResponse.json(
-        { error: `${conflictField}นี้ถูกใช้งานแล้ว` },
-        { status: 409 } // 409 Conflict
+        { error: `${conflictField} นี้ถูกใช้งานแล้ว` },
+        { status: 409 }
       );
     }
 
-    // 3. Create New User (Unverified)
+    // 5. สร้าง Verification Token
+    const { token, expiry } = generateVerificationToken();
+
+    // 6. สร้างผู้ใช้ใหม่ (ยังไม่ยืนยัน)
     const newUser = new (UserModel())({
       email: lowerCaseEmail,
       username,
-      password, // Will be hashed by pre-save middleware
+      password, // จะถูก hashed โดย middleware
       role: "Reader",
       isEmailVerified: false,
+      emailVerificationToken: token,
+      emailVerificationTokenExpiry: expiry,
       profile: {
         displayName: username,
+        avatar: "",
+        bio: "",
+        coverImage: "",
+        preferredGenres: [],
       },
       stats: {
-        followers: 0,
-        following: 0,
-        novels: 0,
-        purchases: 0,
+        followersCount: 0,
+        followingCount: 0,
+        novelsCount: 0,
+        purchasesCount: 0,
+        donationsReceivedAmount: 0,
+        donationsMadeAmount: 0,
+        totalEpisodesSoldCount: 0,
       },
       preferences: {
         language: "th",
@@ -85,50 +125,80 @@ export async function POST(request: Request) {
         notifications: {
           email: true,
           push: true,
+          novelUpdates: true,
+          comments: true,
+          donations: true,
         },
       },
       wallet: {
         balance: 0,
         currency: "THB",
       },
-      lastLogin: new Date(),
+      gamification: {
+        level: 1,
+        experience: 0,
+        streaks: {
+          currentLoginStreak: 0,
+          longestLoginStreak: 0,
+          lastLoginDate: new Date(),
+        },
+      },
+      writerVerification: {
+        status: "none",
+      },
       isActive: true,
+      lastLoginAt: new Date(),
+      accounts: [
+        {
+          provider: "credentials",
+          providerAccountId: lowerCaseEmail,
+          type: "credentials",
+        },
+      ],
     });
 
-    // 4. Generate Verification Token
-    const verificationToken = newUser.getEmailVerificationToken();
     await newUser.save();
     console.log(`✅ [Signup] สร้างผู้ใช้ใหม่ (ยังไม่ยืนยัน): ${username} (${lowerCaseEmail})`);
 
-    // 5. Send Verification Email
+    // 7. ส่งอีเมลยืนยัน
     try {
-      await sendVerificationEmail(lowerCaseEmail, verificationToken);
-    } catch (emailError) {
+      await sendVerificationEmail(lowerCaseEmail, token);
+    } catch (emailError: unknown) {
       console.error("❌ [Signup] ไม่สามารถส่งอีเมลยืนยันได้:", emailError);
-      // User is created, but email failed. Log the error but proceed.
+      // แจ้งผู้ใช้ให้ลองส่งอีเมลยืนยันใหม่
+      return NextResponse.json(
+        {
+          success: true,
+          message: "สมัครสมาชิกสำเร็จ แต่ไม่สามารถส่งอีเมลยืนยันได้ กรุณาขอส่งอีเมลยืนยันใหม่",
+        },
+        { status: 201 }
+      );
     }
 
-    // 6. Return Success Response
+    // 8. ส่ง Response สำเร็จ
     return NextResponse.json(
       { success: true, message: "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลของคุณเพื่อยืนยันบัญชี" },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ [Signup] เกิดข้อผิดพลาด:", error);
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-      const value = error.keyValue[field];
+
+    if (error instanceof Error && (error as any).code === 11000) {
+      const field = Object.keys((error as any).keyValue)[0];
+      const value = (error as any).keyValue[field];
       return NextResponse.json(
         { error: `${field === "email" ? "อีเมล" : "ชื่อผู้ใช้"} '${value}' นี้ถูกใช้งานแล้ว` },
         { status: 409 }
       );
     }
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((e: any) => e.message);
+
+    if (error instanceof Error && error.name === "ValidationError") {
+      const errors = Object.values((error as any).errors).map((e: any) => e.message);
       return NextResponse.json({ error: errors.join(", ") }, { status: 400 });
     }
+
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดในการสมัครสมาชิก", details: error.message },
+      { error: "เกิดข้อผิดพลาดในการสมัครสมาชิก" },
       { status: 500 }
     );
   }
