@@ -175,7 +175,7 @@ async function updateTargetRatingAggregation(doc: IRating | null, action: "save"
 
   const results = await model("Rating").aggregate(pipeline);
 
-  let updateData: { [key: string]: any } = {
+  const updateData: { [key: string]: any } = {
     "statistics.averageRating": 0,
     "statistics.ratingCount": 0,
     "statistics.ratingDistribution": { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 } // Assuming 1-5 scale
