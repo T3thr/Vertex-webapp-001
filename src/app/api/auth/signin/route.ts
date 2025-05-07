@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       );
     }
 
-    user.lastLogin = new Date();
+    user.lastLoginAt = new Date();
     await user.save();
 
     const userResponse = {
