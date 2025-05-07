@@ -16,7 +16,7 @@ interface AuthContextType {
     email: string,
     username: string,
     password: string,
-    captchaToken: string
+    recaptchaToken: string
   ) => Promise<{ error?: string; success?: boolean; message?: string }>;
   signOut: () => Promise<void>;
   loading: boolean;
@@ -72,7 +72,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             verificationRequired = true;
           } else if (errorMessage.includes("บัญชีนี้ถูกแบน")) {
             errorMessage = result.error; // Use exact ban message
-          } else if (errorMessage.includes("บัญชีนี้ถูกระงับการใช้คงาน")) {
+          } else if (errorMessage.includes("บัญชีนี้ถูกระงับการใช้งาน")) {
             errorMessage = "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อฝ่ายสนับสนุน";
           } else if (errorMessage === "CredentialsSignin") {
             errorMessage = "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง";
@@ -104,7 +104,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       email: string,
       username: string,
       password: string,
-      captchaToken: string
+      recaptchaToken: string
     ): Promise<{ error?: string; success?: boolean; message?: string }> => {
       setLoading(true);
       try {
@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ email, username, password, captchaToken }),
+          body: JSON.stringify({ email, username, password, recaptchaToken }),
         });
 
         const data = await response.json();

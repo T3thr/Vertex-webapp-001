@@ -7,7 +7,6 @@ import { useAuth } from '@/context/AuthContext';
 import { validateEmail, validatePassword, validateUsername } from '@/backend/utils/validation';
 import { signIn } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { 
   FiX, 
   FiLogIn, 
@@ -28,6 +27,7 @@ import {
   FaApple
 } from 'react-icons/fa';
 import { SiLine } from 'react-icons/si';
+import { ReCAPTCHA } from 'react-google-recaptcha';
 
 // LoadingSpinner Component - คอมโพเนนต์แสดงการโหลด
 const LoadingSpinner = ({ size = "md", color = "currentColor" }: { size?: "sm" | "md" | "lg", color?: string }) => {
@@ -215,7 +215,6 @@ type ValidationErrors = {
   username?: string;
   password?: string;
   confirmPassword?: string;
-  captcha?: string;
 }
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
@@ -227,31 +226,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   
   // Refs
   const modalRef = useRef<HTMLDivElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
-  const captchaRef = useRef<HCaptcha>(null);
   
   // Context
   const { signUp } = useAuth();
 
-  // รีเซ็ต CAPTCHA เมื่อเปลี่ยนโหมด
-  useEffect(() => {
-    if (captchaRef.current) {
-      captchaRef.current.resetCaptcha();
-      setCaptchaToken(null);
-    }
-  }, [mode]);
-
   // ฟังก์ชันสำหรับตรวจสอบการป้อนข้อมูล
-  const validateField = useCallback((field: keyof ValidationErrors, value: string) => {
+  const validateField = (field: 'email' | 'username' | 'password' | 'confirmPassword', value: string) => {
     const fieldErrors: ValidationErrors = {};
     
     if (field === 'email') {
@@ -262,7 +252,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       }
     }
     
-    if (field === 'username') {
+    if (field === 'username' && mode === 'signup') {
       if (!value.trim()) {
         fieldErrors.username = 'กรุณาระบุชื่อผู้ใช้';
       } else {
@@ -283,7 +273,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }
       }
     }
-
+    
     if (field === 'confirmPassword' && mode === 'signup') {
       if (!value.trim()) {
         fieldErrors.confirmPassword = 'กรุณายืนยันรหัสผ่าน';
@@ -291,18 +281,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         fieldErrors.confirmPassword = 'รหัสผ่านไม่ตรงกัน';
       }
     }
-
-    if (field === 'captcha' && mode === 'signup') {
-      if (!captchaToken) {
-        fieldErrors.captcha = 'กรุณายืนยันว่าไม่ใช่บอท';
-      }
-    }
     
     return fieldErrors;
-  }, [mode, password, captchaToken]);
+  };
 
   // ฟังก์ชันสำหรับตรวจสอบความถูกต้องทั้งฟอร์ม
-  const validateForm = useCallback(() => {
+  const validateForm = () => {
     const formErrors: ValidationErrors = {};
     
     // ตรวจสอบอีเมล
@@ -318,32 +302,32 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     // ตรวจสอบรหัสผ่าน
     const passwordErrors = validateField('password', password);
     if (passwordErrors.password) formErrors.password = passwordErrors.password;
-
+    
     // ตรวจสอบยืนยันรหัสผ่าน (เฉพาะโหมดสมัครสมาชิก)
     if (mode === 'signup') {
       const confirmPasswordErrors = validateField('confirmPassword', confirmPassword);
       if (confirmPasswordErrors.confirmPassword) formErrors.confirmPassword = confirmPasswordErrors.confirmPassword;
-      
-      // ตรวจสอบ CAPTCHA
-      const captchaErrors = validateField('captcha', '');
-      if (captchaErrors.captcha) formErrors.captcha = captchaErrors.captcha;
     }
     
     return formErrors;
-  }, [email, username, password, confirmPassword, mode, validateField]);
+  };
 
   // ฟังก์ชันเมื่อผู้ใช้ออกจากฟิลด์ (blur)
-  const handleBlur = (field: keyof ValidationErrors) => {
+  const handleBlur = (field: 'email' | 'username' | 'password' | 'confirmPassword') => {
     setTouchedFields(prev => ({ ...prev, [field]: true }));
     
     const value = field === 'email' ? email : 
                   field === 'username' ? username : 
-                  field === 'password' ? password : 
-                  confirmPassword;
+                  field === 'password' ? password : confirmPassword;
     const fieldErrors = validateField(field, value);
     
     setValidationErrors(prev => ({ ...prev, ...fieldErrors }));
   };
+
+  // จัดการการเปลี่ยนแปลงของ reCAPTCHA
+  const handleRecaptchaChange = useCallback((token: string | null) => {
+    setRecaptchaToken(token);
+  }, []);
 
   // Handle click outside to close - จัดการคลิกภายนอกเพื่อปิดหน้าต่าง
   useEffect(() => {
@@ -382,10 +366,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsSuccess(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
-    setCaptchaToken(null);
-    if (captchaRef.current) {
-      captchaRef.current.resetCaptcha();
-    }
+    setRecaptchaToken(null);
   }, [isOpen, mode]);
 
   // Handle ESC key to close modal - จัดการปุ่ม ESC เพื่อปิดหน้าต่าง
@@ -405,6 +386,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setShowPassword(!showPassword);
   };
 
+  // Toggle confirm password visibility - สลับการแสดงยืนยันรหัสผ่าน
   const toggleShowConfirmPassword = () => {
     setShowConfirmPassword(!showConfirmPassword);
   };
@@ -419,8 +401,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       email: true,
       username: mode === 'signup',
       password: true,
-      confirmPassword: mode === 'signup',
-      captcha: mode === 'signup'
+      confirmPassword: mode === 'signup'
     });
     
     // ตรวจสอบความถูกต้องของฟอร์ม
@@ -432,6 +413,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       return;
     }
     
+    // ตรวจสอบ reCAPTCHA สำหรับการสมัครสมาชิก
+    if (mode === 'signup' && !recaptchaToken) {
+      setError('กรุณายืนยันว่าไม่ใช่บอท');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -453,8 +440,23 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           }, 1000);
         }
       } else {
+        // Verify reCAPTCHA token - ตรวจสอบโทเค็น reCAPTCHA
+        const recaptchaResponse = await fetch('/api/auth/verify-recaptcha', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: recaptchaToken }),
+        });
+
+        const recaptchaData = await recaptchaResponse.json();
+
+        if (!recaptchaResponse.ok || !recaptchaData.success) {
+          setError('การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่');
+          setIsLoading(false);
+          return;
+        }
+
         // Sign up with credentials - สมัครสมาชิกด้วยข้อมูลประจำตัว
-        const result = await signUp(email, username, password, captchaToken!);
+        const result = await signUp(email, username, password ,recaptchaToken!);
         if (result.error) {
           setError(result.error);
         } else {
@@ -496,20 +498,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // ฟังก์ชันเมื่อ CAPTCHA สำเร็จ
-  const handleCaptchaVerify = (token: string) => {
-    setCaptchaToken(token);
-    setValidationErrors(prev => ({ ...prev, captcha: undefined }));
-    setTouchedFields(prev => ({ ...prev, captcha: true }));
-  };
-
-  // ฟังก์ชันเมื่อ CAPTCHA หมดอายุ
-  const handleCaptchaExpire = () => {
-    setCaptchaToken(null);
-    setValidationErrors(prev => ({ ...prev, captcha: 'CAPTCHA หมดอายุ กรุณายืนยันอีกครั้ง' }));
-    setTouchedFields(prev => ({ ...prev, captcha: true }));
   };
 
   // เช็คว่าควรแสดงหน้าต่างหรือไม่
@@ -665,10 +653,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                           if (touchedFields.password) {
                             const passwordErrors = validateField('password', e.target.value);
                             setValidationErrors(prev => ({ ...prev, ...passwordErrors }));
-                          }
-                          if (touchedFields.confirmPassword && confirmPassword) {
-                            const confirmPasswordErrors = validateField('confirmPassword', confirmPassword);
-                            setValidationErrors(prev => ({ ...prev, ...confirmPasswordErrors }));
+                            // อัพเดทการตรวจสอบยืนยันรหัสผ่านเมื่อรหัสผ่านเปลี่ยน
+                            if (confirmPassword) {
+                              const confirmErrors = validateField('confirmPassword', confirmPassword);
+                              setValidationErrors(prev => ({ ...prev, ...confirmErrors }));
+                            }
                           }
                         }}
                         onBlur={() => handleBlur('password')}
@@ -684,7 +673,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         touched={touchedFields.password}
                       />
 
-                      {/* Confirm Password Input (Signup only) - ช่องยืนยันรหัสผ่าน (เฉพาะการสมัคร) */}
+                      {/* Confirm Password Input (Signup only) - ช่องกรอกยืนยันรหัสผ่าน (เฉพาะการสมัคร) */}
                       {mode === 'signup' && (
                         <InputField
                           id="confirmPassword"
@@ -710,27 +699,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         />
                       )}
 
-                      {/* CAPTCHA (Signup only) - CAPTCHA (เฉพาะการสมัคร) */}
+                      {/* reCAPTCHA (Signup only) - reCAPTCHA (เฉพาะการสมัคร) */}
                       {mode === 'signup' && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <label className="block text-sm font-medium text-card-foreground pl-1">
-                              ตรวจสอบ CAPTCHA
-                              <span className="text-red-500 ml-1">*</span>
-                            </label>
-                            {touchedFields.captcha && validationErrors.captcha && (
-                              <span className="text-xs text-red-500 font-medium flex items-center gap-1">
-                                <FiAlertCircle size={12} />
-                                {validationErrors.captcha}
-                              </span>
-                            )}
-                          </div>
-                          <HCaptcha
-                            ref={captchaRef}
-                            sitekey={process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY!}
-                            onVerify={handleCaptchaVerify}
-                            onExpire={handleCaptchaExpire}
-                            theme={document.documentElement.classList.contains('dark') ? 'dark' : 'light'}
+                        <div className="flex justify-center">
+                          <ReCAPTCHA
+                            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+                            onChange={handleRecaptchaChange}
+                            size="normal"
+                            hl="th"
+                            theme="light"
                           />
                         </div>
                       )}
@@ -738,7 +715,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       {/* Submit Button - ปุ่มส่งข้อมูล */}
                       <motion.button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || (mode === 'signup' && !recaptchaToken)}
                         className="w-full py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-xl shadow-lg flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-3 hover:scale-[1.01]"
                         aria-label={mode === 'signin' ? 'ลงชื่อเข้าใช้' : 'สร้างบัญชี'}
                         whileHover={{ scale: 1.01 }}
@@ -768,7 +745,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     </form>
                   </div>
 
-                  {/* Right Column - Social Login (Sign in only) - คอลัมน์ขวา - การเข้าสู่ระบบด้วยโซเชียลมีเดีย (เฉพาะการเข้าสู่ระบบ) */}
+                  {/* Right Column - Social Login (Sign in only) - คอลัมน์ขวา - การเข้าสู่ระบบด้วยโซเชียลมีเดีย (เฉพาะการลงชื่อเข้าใช้) */}
                   {mode === 'signin' && (
                     <div className="flex flex-col w-fit mx-auto space-y-5">
                       <div className="hidden md:block mb-6">
@@ -837,7 +814,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
               {/* Footer - ส่วนท้าย */}
               <div className="border-t border-accent/50 p-6 bg-secondary/30">
-                {/* Toggle Sign In/Sign Up - สลับระหว่างเข้าสู่ระบบ/สมัครสมา�ชิก */}
+                {/* Toggle Sign In/Sign Up - สลับระหว่างเข้าสู่ระบบ/สมัครสมาชิก */}
                 <div className="text-center text-sm">
                   {mode === 'signin' ? (
                     <>

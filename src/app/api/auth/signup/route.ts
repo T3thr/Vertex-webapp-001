@@ -10,7 +10,7 @@ interface SignUpRequestBody {
   email: string;
   username: string;
   password: string;
-  captchaToken: string;
+  recaptchaToken: string;
 }
 
 // POST: สร้างผู้ใช้ใหม่สำหรับ Credentials-based signup
@@ -18,37 +18,42 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     await dbConnect();
     const body = await request.json() as SignUpRequestBody;
-    const { email, username, password, captchaToken } = body;
+    const { email, username, password, recaptchaToken } = body;
 
     // 1. ตรวจสอบข้อมูลที่จำเป็น
-    if (!email || !username || !password || !captchaToken) {
-      console.error(`❌ ข้อมูลไม่ครบถ้วน: email=${email}, username=${username}, password=${password ? "provided" : "missing"}, captchaToken=${captchaToken ? "provided" : "missing"}`);
+    if (!email || !username || !password || !recaptchaToken) {
+      console.error(`❌ ข้อมูลไม่ครบถ้วน: email=${email}, username=${username}, password=${password ? "provided" : "missing"}, recaptchaToken=${recaptchaToken ? "provided" : "missing"}`);
       return NextResponse.json(
-        { error: "กรุณากรอกข้อมูลให้ครบถ้วน (อีเมล, ชื่อผู้ใช้, รหัสผ่าน, CAPTCHA)" },
+        { error: "กรุณากรอกข้อมูลให้ครบถ้วน (อีเมล, ชื่อผู้ใช้, รหัสผ่าน, reCAPTCHA)" },
         { status: 400 }
       );
     }
 
-    // 2. ตรวจสอบ CAPTCHA
-    const captchaResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/verify-captcha`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: captchaToken }),
+    // 2. ตรวจสอบ reCAPTCHA
+    const recaptchaResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        secret: process.env.RECAPTCHA_SECRET_KEY!,
+        response: recaptchaToken,
+      }).toString(),
     });
 
-    const captchaData = await captchaResponse.json();
+    const recaptchaData = await recaptchaResponse.json();
 
-    if (!captchaResponse.ok || !captchaData.success) {
-      console.error("❌ การตรวจสอบ CAPTCHA ล้มเหลว:", captchaData.error || "ไม่ทราบสาเหตุ");
+    if (!recaptchaData.success || (recaptchaData.score && recaptchaData.score < 0.5)) {
+      console.error(`❌ การยืนยัน reCAPTCHA ล้มเหลว: ${JSON.stringify(recaptchaData)}`);
       return NextResponse.json(
-        { error: captchaData.error || "การตรวจสอบ CAPTCHA ล้มเหลว กรุณาลองใหม่" },
+        { error: 'การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่' },
         { status: 400 }
       );
     }
 
     // 3. ตรวจสอบรูปแบบข้อมูล
     if (!/^\S+@\S+\.\S+$/.test(email)) {
-      console.error(`❌ รูปแบบอีเมลไม่ถูกต้องขนาด: ${email}`);
+      console.error(`❌ รูปแบบอีเมลไม่ถูกต้อง: ${email}`);
       return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
