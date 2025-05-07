@@ -1,5 +1,3 @@
-// src/backend/models/UserAchievement.ts
-
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
 // Interface for tracking progress towards a specific criterion of an achievement
@@ -77,9 +75,9 @@ UserAchievementSchema.index({ user: 1, progressPercentage: 1 }); // For querying
 // ----- Middleware -----
 UserAchievementSchema.pre("save", async function (next) {
   if (this.isModified("criteriaProgress") || this.isNew) {
-    let totalCriteria = this.criteriaProgress.length;
+    const totalCriteria = this.criteriaProgress.length;
     if (totalCriteria > 0) {
-      let completedCriteria = this.criteriaProgress.filter(c => c.isCompleted).length;
+      const completedCriteria = this.criteriaProgress.filter(c => c.isCompleted).length;
       this.progressPercentage = Math.floor((completedCriteria / totalCriteria) * 100);
 
       if (completedCriteria === totalCriteria && !this.isUnlocked) {
@@ -147,4 +145,3 @@ const UserAchievementModel = () =>
   models.UserAchievement as mongoose.Model<IUserAchievement> || model<IUserAchievement>("UserAchievement", UserAchievementSchema);
 
 export default UserAchievementModel;
-
