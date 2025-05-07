@@ -289,14 +289,14 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
               {/* Mobile Logo */}
               <div className="md:hidden">
                 <Link href="/" className="flex items-center">
-                  <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent">
+                  <span className="text-xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
                     {logoText}
                   </span>
                 </Link>
               </div>
 
               {/* Desktop Navigation */}
-              <nav className="hidden md:flex items-center space-x-8 ml-6">
+              <nav className="hidden md:flex items-center space-x-8">
                 {navLinks.map((link) => (
                   <Link
                     key={link.href}
@@ -315,7 +315,7 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
             {/* Center: Logo on desktop only */}
             <div className="hidden md:flex justify-center flex-1">
               <Link href="/" className="flex items-center">
-                <span className="text-2xl font-bold bg-gradient-to-r from-foreground to-blue-500 bg-clip-text text-transparent">
+                <span className="text-2xl -ml-24 font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
                   {logoText}
                 </span>
               </Link>

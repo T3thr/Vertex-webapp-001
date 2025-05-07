@@ -1,3 +1,4 @@
+// src/scripts/novel-seed.ts
 import mongoose, { Types } from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { INovel } from "@/backend/models/Novel";

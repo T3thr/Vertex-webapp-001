@@ -22,11 +22,8 @@
   to { transform: rotate(360deg); }
 }
 
-/* รูปแบบพื้นฐาน */
-.root {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  
+/* กำหนดตัวแปรพื้นฐานใน :root */
+:root {
   --background: #ffffff;
   --foreground: #171717;
   --primary: #2563eb;
@@ -36,30 +33,24 @@
   --accent: #e2e8f0;
   --muted: #64748b;
   --muted-foreground: #94a3b8;
-  --card: #ffffff;
+  --card: #f9f9f9;
   --card-foreground: #171717;
   --border: #e2e8f0;
   --input: #f1f5f9;
   --ring: #2563eb;
-  
-  /* Container custom values */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --container-padding: 1rem;
   --container-max-width: 1536px;
-  
-  /* Animation speeds */
   --animation-fast: 150ms;
   --animation-normal: 300ms;
   --animation-slow: 500ms;
-  
-  /* Border radius */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
-  
-  /* Shadow values */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
@@ -84,11 +75,48 @@
   --ring: #3b82f6;
 }
 
+/* กำหนดธีมสำหรับ Tailwind CSS */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --container-padding: var(--container-padding);
+  --container-max-width: var(--container-max-width);
+  --animation-fast: var(--animation-fast);
+  --animation-normal: var(--animation-normal);
+  --animation-slow: var(--animation-slow);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-full: var(--radius-full);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+}
+
 /* ใช้รูปแบบพื้นฐานกับ body */
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background: var(--background);
+  color: var(--color-foreground);
   font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -177,59 +205,4 @@ body {
 .overflow-x-auto {
   scrollbar-width: thin;
   scrollbar-color: var(--accent) var(--secondary);
-}
-
-/* การกำหนดธีมแบบ inline สำหรับ Tailwind CSS 4.0 */
-@theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  
-  --background: #ffffff;
-  --foreground: #171717;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #1e293b;
-  --accent: #e2e8f0;
-  --muted: #64748b;
-  --muted-foreground: #94a3b8;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --border: #e2e8f0;
-  --input: #f1f5f9;
-  --ring: #2563eb;
-  
-  --dark-background: #0f172a;
-  --dark-foreground: #f8fafc;
-  --dark-primary: #3b82f6;
-  --dark-primary-foreground: #ffffff;
-  --dark-secondary: #1e293b;
-  --dark-secondary-foreground: #f1f5f9;
-  --dark-accent: #334155;
-  --dark-muted: #475569;
-  --dark-muted-foreground: #94a3b8;
-  --dark-card: #1e293b;
-  --dark-card-foreground: #f1f5f9;
-  --dark-border: #334155;
-  --dark-input: #1e293b;
-  --dark-ring: #3b82f6;
-  
-  --container-padding: 1rem;
-  --container-max-width: 1536px;
-  
-  --animation-fast: 150ms;
-  --animation-normal: 300ms;
-  --animation-slow: 500ms;
-  
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
-  --radius-full: 9999px;
-  
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
 }

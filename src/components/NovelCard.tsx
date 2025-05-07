@@ -1,4 +1,3 @@
-// src/components/NovelCard.tsx
 "use client";
 
 import Image from "next/image";
@@ -8,6 +7,7 @@ import { FiHeart, FiEye, FiStar, FiClock } from "react-icons/fi";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
 
+// อินเตอร์เฟซสำหรับข้อมูลนิยาย
 interface Novel {
   _id: string;
   title: string;
@@ -31,6 +31,7 @@ interface Novel {
   };
 }
 
+// อินเตอร์เฟซสำหรับ props ของคอมโพเนนต์
 interface NovelCardProps {
   novel: Novel;
   priority?: boolean;
@@ -38,6 +39,7 @@ interface NovelCardProps {
   showAuthor?: boolean;
 }
 
+// คอมโพเนนต์ NovelCard สำหรับแสดงการ์ดนิยาย
 export function NovelCard({ 
   novel, 
   priority = false, 
@@ -52,21 +54,21 @@ export function NovelCard({
       })
     : "ไม่มีข้อมูล";
 
-  // กำหนดสีป้ายสถานะ
+  // กำหนดสีป้ายสถานะโดยใช้ธีม
   const getStatusColor = () => {
     switch (novel.status) {
-      case "published": return "bg-green-500";
-      case "completed": return "bg-blue-500";
-      case "onHiatus": return "bg-amber-500";
-      case "discount": return "bg-purple-500";
-      default: return "bg-gray-500";
+      case "published": return "bg-primary";
+      case "completed": return "bg-secondary";
+      case "onHiatus": return "bg-accent";
+      case "discount": return "bg-purple-500"; // ใช้สีเฉพาะเนื่องจากไม่มีตัวแปรธีมที่เหมาะสม
+      default: return "bg-muted";
     }
   };
 
   // แปลงสถานะเป็นภาษาไทย
   const getStatusLabel = () => {
     switch (novel.status) {
-      case "published": return "กำลังเผยแพร่";
+      case "published": return "ยังไม่จบ";
       case "completed": return "จบแล้ว";
       case "onHiatus": return "หยุดชั่วคราว";
       case "discount": return "ลดราคา";
@@ -74,7 +76,7 @@ export function NovelCard({
     }
   };
 
-  // ปรับขนาดตามพารามิเตอร์ size
+  // ปรับขนาดตัวอักษรตามพารามิเตอร์ size
   const sizeClasses = {
     sm: 'text-xs', 
     md: 'text-sm',
@@ -92,7 +94,7 @@ export function NovelCard({
       <Link href={`/novels/${novel.slug}`} className="block h-full">
         <div className="bg-card rounded-xl shadow-md overflow-hidden h-full flex flex-col">
           {/* ปกนิยายพร้อมป้ายสถานะ */}
-          <div className="relative aspect-[2/3] w-full overflow-hidden">
+          <div className="relative aspect-[4/3] w-full overflow-hidden">
             <Image
               src={novel.coverImage || "/images/placeholder-cover.jpg"}
               alt={novel.title}
@@ -102,36 +104,36 @@ export function NovelCard({
               priority={priority}
             />
             
-            {/* Tag แสดงสถานะนิยาย */}
+            {/* ป้ายแสดงสถานะนิยาย */}
             <div className="absolute top-2 right-2">
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full text-white ${getStatusColor()}`}>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full text-primary-foreground ${getStatusColor()}`}>
                 {getStatusLabel()}
               </span>
             </div>
             
-            {/* Tag แสดงการจำกัดอายุ */}
+            {/* ป้ายแสดงการจำกัดอายุ */}
             {novel.isExplicit && (
               <div className="absolute top-2 left-2">
-                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-500 text-white">
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-500 text-primary-foreground">
                   18+
                 </span>
               </div>
             )}
             
-            {/* เกรเดียนท์ด้านล่างรูป - เพิ่มความชัดเจนให้กับข้อความ */}
-            <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent"></div>
+            {/* เกรเดียนท์ด้านล่างรูปเพื่อเพิ่มความชัดเจนให้ข้อความ */}
+            <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-background/70 to-transparent"></div>
           </div>
 
-          {/* เนื้อหา */}
+          {/* เนื้อหาการ์ด */}
           <div className="p-3 flex flex-col flex-grow">
             <h2 
-              className={`font-semibold ${sizeClasses[size]} line-clamp-1`} 
+              className={`font-semibold text-foreground ${sizeClasses[size]} line-clamp-1`} 
               title={novel.title}
             >
               {novel.title}
             </h2>
             
-            {/* ชื่อผู้เขียน (ถ้าแสดง) */}
+            {/* ชื่อผู้เขียน (ถ้าเลือกแสดง) */}
             {showAuthor && novel.author && (
               <p className="text-xs text-muted-foreground mt-1">
                 โดย {novel.author.name || novel.author.username || "ไม่ระบุผู้เขียน"}
