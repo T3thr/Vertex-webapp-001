@@ -98,8 +98,6 @@ const NovelSchema = new Schema<INovel>(
       required: [true, "กรุณาระบุชื่อนิยาย"],
       trim: true,
       maxlength: [200, "ชื่อนิยายต้องไม่เกิน 200 ตัวอักษร"],
-      // unique: true, // อาจจะไม่ unique ทั่วทั้งระบบ แต่ควร unique ภายในผู้เขียนคนเดียวกัน
-      // พิจารณา compound index { author: 1, title: 1 } สำหรับ unique constraint
       index: true, // Index สำหรับการค้นหาและเรียงลำดับ
     },
     slug: {
@@ -214,15 +212,10 @@ const NovelSchema = new Schema<INovel>(
     embeddingVector: { type: [Number], select: false }, // Select false เพราะอาจมีขนาดใหญ่
     genreDistribution: { type: Schema.Types.Mixed, select: false }, // { genreId: score, ... }
     sentimentAnalysis: {
-        overallScore: Number,
-        dominantEmotion: String,
-        select: false,
+      overallScore: Number,
+      dominantEmotion: String,
+      _id: false, // ป้องกันการสร้าง _id ใน subdocument
     },
-    isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: Date,
-    lastEpisodePublishedAt: { type: Date, index: true },
-    firstPublishedAt: Date,
-    lastSignificantUpdateAt: { type: Date, default: Date.now, index: true },
   },
   {
     timestamps: true, // เพิ่ม createdAt และ updatedAt โดยอัตโนมัติ
@@ -234,8 +227,8 @@ const NovelSchema = new Schema<INovel>(
 // ----- Indexes -----
 // Unique novel title per author (not deleted)
 NovelSchema.index({ author: 1, title: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
-// Full-text search on title, description, tags, and author's username
-NovelSchema.index({ title: "text", description: "text", tags: "text", "author.username": "text" }, { default_language: "thai" });
+// Full-text search on title, description, tags
+NovelSchema.index({ title: "text", description: "text", tags: "text" }, { default_language: "thai" });
 // Sorting/filtering: status + visibility + deletion
 NovelSchema.index({ status: 1, visibility: 1, isDeleted: 1 });
 // Sorting/filtering: language + status + deletion
@@ -280,12 +273,19 @@ NovelSchema.pre("save", async function (next) {
   if (this.isModified("title") || this.isNew) {
     // A more robust slug generation might be needed, handling special characters, Thai language, and ensuring uniqueness.
     // For now, a simple version. Consider using a library for this.
-    this.slug = this.title
+    let baseSlug = this.title
       .toLowerCase()
       .replace(/[\s\W-]+/g, "-") // Replace spaces and non-word chars with hyphens
       .replace(/^-+|-+$/g, ""); // Trim leading/trailing hyphens
-    // Add a unique suffix if slug already exists (this needs a proper check and loop)
-    // This is a simplified example; robust slug uniqueness needs careful handling.
+
+    // ตรวจสอบความซ้ำของ slug และเพิ่ม suffix หากจำเป็น
+    let slug = baseSlug;
+    let counter = 1;
+    while (await models.Novel.exists({ slug, _id: { $ne: this._id } })) {
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+    this.slug = slug;
   }
   
   if (this.isModified("status") && this.status === "published" && !this.firstPublishedAt) {
@@ -293,7 +293,7 @@ NovelSchema.pre("save", async function (next) {
   }
 
   if (this.isModified("title") || this.isModified("description") || this.isModified("categories") || this.isModified("tags")) {
-      this.lastSignificantUpdateAt = new Date();
+    this.lastSignificantUpdateAt = new Date();
   }
   next();
 });
@@ -313,4 +313,3 @@ NovelSchema.methods.updateCounts = async function () {
 const NovelModel = () => models.Novel as mongoose.Model<INovel> || model<INovel>("Novel", NovelSchema);
 
 export default NovelModel;
-
