@@ -1,3 +1,5 @@
+// src/components/layouts/AuthModal.tsx
+
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -235,7 +237,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   // ฟังก์ชันสำหรับตรวจสอบการป้อนข้อมูล
   const validateField = (field: 'email' | 'username' | 'password', value: string) => {
-    let fieldErrors: ValidationErrors = {};
+    const fieldErrors: ValidationErrors = {};
     
     if (field === 'email') {
       if (!value.trim()) {
@@ -272,7 +274,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   // ฟังก์ชันสำหรับตรวจสอบความถูกต้องทั้งฟอร์ม
   const validateForm = () => {
-    let formErrors: ValidationErrors = {};
+    const formErrors: ValidationErrors = {};
     
     // ตรวจสอบอีเมล
     const emailErrors = validateField('email', email);
@@ -746,7 +748,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     </a>{' '}
                     และ{' '}
                     <a href="/privacy" className="text-primary hover:underline transition-colors duration-200">
-                      นโยบายความเป็นส่วนตัว
+                      นโยบ.tomayความเป็นส่วนตัว
                     </a>
                   </div>
                 )}
