@@ -2,13 +2,9 @@ import dbConnect from "@/backend/lib/mongodb";
 import NovelModel from "@/backend/models/Novel";
 import { NextRequest, NextResponse } from "next/server";
 
-// Define the type for a novel document after lean()
+// อินเตอร์เฟซสำหรับข้อมูลนิยายที่ได้จาก lean()
 interface LeanNovel {
-  map(arg0: (novel: LeanNovel) => {
-      id: string; // No need for .toString() since lean() already returns string
-      title: string; coverImage: string; author: string | undefined;
-  }): unknown;
-  _id: string; // lean() converts ObjectId to string
+  _id: string; // lean() แปลง ObjectId เป็น string
   title: string;
   coverImage: string;
   author: {
@@ -16,22 +12,25 @@ interface LeanNovel {
   };
 }
 
+// ฟังก์ชันจัดการ GET request สำหรับการค้นหานิยาย
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q");
 
+    // ตรวจสอบว่า query มีความยาวเพียงพอหรือไม่
     if (!query || query.trim().length < 2) {
       return NextResponse.json(
-        { results: [], message: "Query too short" },
+        { results: [], message: "คำค้นหาสั้นเกินไป" },
         { status: 400 }
       );
     }
 
+    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
 
-    // Create a text search query
-    const results = await NovelModel
+    // สร้าง query สำหรับค้นหาแบบข้อความ
+    const results = await NovelModel()
       .find(
         {
           $or: [
@@ -40,7 +39,7 @@ export async function GET(request: NextRequest) {
             { "author.username": { $regex: query, $options: "i" } },
             { tags: { $in: [new RegExp(query, "i")] } },
           ],
-          status: "Published", // Only search published novels
+          status: "published", // ค้นหาเฉพาะนิยายที่เผยแพร่แล้ว
         },
         {
           score: { $meta: "textScore" },
@@ -51,9 +50,9 @@ export async function GET(request: NextRequest) {
       .limit(10)
       .lean<LeanNovel>();
 
-    // Format the results
+    // จัดรูปแบบผลลัพธ์
     const formattedResults = results.map((novel: LeanNovel) => ({
-      id: novel._id, // No need for .toString() since lean() already returns string
+      id: novel._id,
       title: novel.title,
       coverImage: novel.coverImage,
       author: novel.author?.username || undefined,
@@ -61,9 +60,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ results: formattedResults });
   } catch (error) {
-    console.error("Search error:", error);
+    console.error("❌ ข้อผิดพลาดในการค้นหา:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
     );
   }
