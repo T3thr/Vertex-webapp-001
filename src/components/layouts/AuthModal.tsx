@@ -479,7 +479,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           animate="visible"
           exit="exit"
           variants={backdropVariants}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground bg-opacity-70 backdrop-blur-md p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-md p-4"
         >
           <motion.div 
             ref={modalRef}
