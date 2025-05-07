@@ -1,10 +1,17 @@
 // src/app/page.tsx
 import { Suspense } from "react";
 import { NovelCard } from "@/components/NovelCard";
-import { Novel } from "@/backend/types/novel";
 import Link from "next/link";
 import { ImageSlider } from "@/components/ImageSlider";
-import { FiArrowRight, FiTrendingUp, FiGift, FiCheck, FiClock, FiStar } from "react-icons/fi";
+import { 
+  FiArrowRight, 
+  FiTrendingUp, 
+  FiGift, 
+  FiCheck, 
+  FiClock, 
+  FiStar,
+  FiAward 
+} from "react-icons/fi";
 
 /**
  * ฟังก์ชันดึงข้อมูลนิยายจาก API
@@ -42,7 +49,7 @@ async function getNovels(filter: string, limit: number = 8) {
  */
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div className="flex items-center gap-2 mb-4">
+    <div className="flex items-center gap-2">
       <div className="text-primary">{icon}</div>
       <h2 className="text-xl font-bold">{title}</h2>
     </div>
@@ -70,22 +77,24 @@ function NovelCardSkeleton() {
 /**
  * คอมโพเนนต์แสดงกริดนิยาย
  */
-function NovelGrid({ novels, isLoading }: { novels: Novel[]; isLoading?: boolean }) {
+function NovelGrid({ novels, isLoading, limit = 6 }: { novels: any[]; isLoading?: boolean; limit?: number }) {
+  const displayNovels = novels.slice(0, limit);
+  
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
       {isLoading ? (
         // แสดง skeleton เมื่อกำลังโหลด
-        Array.from({ length: 6 }).map((_, i) => (
+        Array.from({ length: limit }).map((_, i) => (
           <NovelCardSkeleton key={i} />
         ))
-      ) : novels.length === 0 ? (
+      ) : displayNovels.length === 0 ? (
         // แสดงข้อความเมื่อไม่มีนิยาย
-        <div className="col-span-full text-center text-muted-foreground">
+        <div className="col-span-full text-center text-muted-foreground py-8">
           ไม่พบนิยายในหมวดนี้
         </div>
       ) : (
         // แสดงการ์ดนิยาย
-        novels.map((novel, index) => (
+        displayNovels.map((novel, index) => (
           <NovelCard key={novel._id} novel={novel} priority={index < 2} />
         ))
       )}
@@ -105,13 +114,13 @@ function SectionWithViewAll({
 }: {
   title: string;
   icon: React.ReactNode;
-  novels: Novel[];
+  novels: any[];
   viewAllUrl: string;
   isLoading?: boolean;
 }) {
   return (
     <section className="mb-12">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-5">
         <SectionTitle icon={icon} title={title} />
         <Link
           href={viewAllUrl}
@@ -171,12 +180,12 @@ export default async function HomePage() {
     <main className="pb-16">
       {/* ส่วนสไลด์ภาพหน้าแรก */}
       <section className="w-full mb-12">
-        <div className="container-custom">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
           <ImageSlider slides={featuredSlides} />
         </div>
       </section>
 
-      <div className="container-custom">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
         {/* ส่วนนิยายยอดนิยม */}
         <Suspense
           fallback={

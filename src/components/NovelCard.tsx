@@ -1,7 +1,6 @@
 // src/components/NovelCard.tsx
 "use client";
 
-import { Novel } from "@/backend/types/novel";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -9,13 +8,42 @@ import { FiHeart, FiEye, FiStar, FiClock } from "react-icons/fi";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
 
+interface Novel {
+  _id: string;
+  title: string;
+  slug: string;
+  coverImage: string;
+  description?: string;
+  status: "draft" | "published" | "completed" | "onHiatus" | "discount";
+  isExplicit: boolean;
+  tags: string[];
+  lastEpisodeAt?: Date | string;
+  stats?: {
+    views?: number;
+    likes?: number;
+    comments?: number;
+    rating?: number;
+    followers?: number;
+  };
+  author?: {
+    name?: string;
+    username?: string;
+  };
+}
+
 interface NovelCardProps {
   novel: Novel;
   priority?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  showAuthor?: boolean;
 }
 
-export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardProps) {
+export function NovelCard({ 
+  novel, 
+  priority = false, 
+  size = 'md',
+  showAuthor = false 
+}: NovelCardProps) {
   // ฟอร์แมตวันที่เป็นภาษาไทย
   const lastUpdated = novel.lastEpisodeAt 
     ? formatDistanceToNow(new Date(novel.lastEpisodeAt), { 
@@ -30,6 +58,7 @@ export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardPro
       case "published": return "bg-green-500";
       case "completed": return "bg-blue-500";
       case "onHiatus": return "bg-amber-500";
+      case "discount": return "bg-purple-500";
       default: return "bg-gray-500";
     }
   };
@@ -40,6 +69,7 @@ export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardPro
       case "published": return "กำลังเผยแพร่";
       case "completed": return "จบแล้ว";
       case "onHiatus": return "หยุดชั่วคราว";
+      case "discount": return "ลดราคา";
       default: return "ร่าง";
     }
   };
@@ -72,12 +102,14 @@ export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardPro
               priority={priority}
             />
             
+            {/* Tag แสดงสถานะนิยาย */}
             <div className="absolute top-2 right-2">
               <span className={`text-xs font-semibold px-2 py-1 rounded-full text-white ${getStatusColor()}`}>
                 {getStatusLabel()}
               </span>
             </div>
             
+            {/* Tag แสดงการจำกัดอายุ */}
             {novel.isExplicit && (
               <div className="absolute top-2 left-2">
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-500 text-white">
@@ -85,6 +117,9 @@ export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardPro
                 </span>
               </div>
             )}
+            
+            {/* เกรเดียนท์ด้านล่างรูป - เพิ่มความชัดเจนให้กับข้อความ */}
+            <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent"></div>
           </div>
 
           {/* เนื้อหา */}
@@ -96,9 +131,16 @@ export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardPro
               {novel.title}
             </h2>
             
+            {/* ชื่อผู้เขียน (ถ้าแสดง) */}
+            {showAuthor && novel.author && (
+              <p className="text-xs text-muted-foreground mt-1">
+                โดย {novel.author.name || novel.author.username || "ไม่ระบุผู้เขียน"}
+              </p>
+            )}
+            
             {/* แท็ก */}
             <div className="mt-2 flex flex-wrap gap-1">
-              {novel.tags.slice(0, 2).map((tag) => (
+              {novel.tags?.slice(0, 2).map((tag) => (
                 <span
                   key={tag}
                   className="text-[10px] bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded"
@@ -106,7 +148,7 @@ export function NovelCard({ novel, priority = false, size = 'md' }: NovelCardPro
                   {tag}
                 </span>
               ))}
-              {novel.tags.length > 2 && (
+              {novel.tags?.length > 2 && (
                 <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                   +{novel.tags.length - 2}
                 </span>

@@ -89,7 +89,7 @@ export function ImageSlider({ slides, autoPlayInterval = 5000 }: ImageSliderProp
 
   return (
     <div 
-      className="relative w-full h-[300px] sm:h-[400px] md:h-[500px]"
+      className="relative w-full h-[300px] sm:h-[400px] md:h-[500px] lg:h-[550px]"
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       onTouchStart={onTouchStart}
@@ -117,7 +117,7 @@ export function ImageSlider({ slides, autoPlayInterval = 5000 }: ImageSliderProp
                 className="object-cover"
               />
               {/* เกรเดียนท์เพื่อความชัดเจนของข้อความ */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
               
               {/* เนื้อหาข้อความ */}
               <div className="absolute bottom-0 left-0 p-6 md:p-10 w-full">
@@ -125,7 +125,7 @@ export function ImageSlider({ slides, autoPlayInterval = 5000 }: ImageSliderProp
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.7, delay: 0.2 }}
-                  className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2"
+                  className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2"
                 >
                   {slides[currentIndex].title}
                 </motion.h2>
@@ -143,7 +143,7 @@ export function ImageSlider({ slides, autoPlayInterval = 5000 }: ImageSliderProp
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.7, delay: 0.6 }}
-                  className="mt-4 bg-primary hover:bg-primary/90 text-white py-2 px-6 rounded-full inline-flex items-center gap-2 font-semibold transition-all"
+                  className="mt-6 bg-primary hover:bg-primary/90 text-white py-3 px-8 rounded-full inline-flex items-center gap-2 font-semibold transition-all text-lg"
                 >
                   อ่านเลย <FiArrowRight className="ml-1" />
                 </motion.button>
@@ -158,33 +158,33 @@ export function ImageSlider({ slides, autoPlayInterval = 5000 }: ImageSliderProp
             e.preventDefault();
             goToPrevious();
           }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 p-2 rounded-full text-white transition-all z-10"
+          className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 p-3 rounded-full text-white transition-all z-10"
           aria-label="สไลด์ก่อนหน้า"
         >
-          <FiArrowLeft size={20} />
+          <FiArrowLeft size={24} />
         </button>
         <button
           onClick={(e) => {
             e.preventDefault();
             goToNext();
           }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 p-2 rounded-full text-white transition-all z-10"
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 p-3 rounded-full text-white transition-all z-10"
           aria-label="สไลด์ถัดไป"
         >
-          <FiArrowRight size={20} />
+          <FiArrowRight size={24} />
         </button>
       </div>
       
-            {/* จุดระบุตำแหน่ง */}
-            <div className="absolute -bottom-6 left-0 right-0 flex justify-center gap-2">
+      {/* จุดระบุตำแหน่ง */}
+      <div className="absolute -bottom-8 left-0 right-0 flex justify-center gap-2">
         {slides.map((_, slideIndex) => (
           <button
             key={slideIndex}
             onClick={() => goToSlide(slideIndex)}
             className={`h-3 rounded-full transition-all ${
               slideIndex === currentIndex
-                ? "bg-primary w-6"
-                : "bg-secondary w-3"
+                ? "bg-primary w-8"
+                : "bg-secondary w-3 hover:bg-primary/40"
             }`}
             aria-label={`ไปที่สไลด์ ${slideIndex + 1}`}
           />
@@ -204,66 +204,6 @@ export function ImageSlider({ slides, autoPlayInterval = 5000 }: ImageSliderProp
           key={currentIndex}
         />
       </div>
-
-      {/* ปุ่มสำหรับอุปกรณ์เคลื่อนที่ */}
-      <div className="md:hidden absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            goToPrevious();
-          }}
-          className="bg-black/50 hover:bg-black/70 p-2 rounded-full text-white"
-          aria-label="สไลด์ก่อนหน้า"
-        >
-          <FiArrowLeft size={16} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            goToNext();
-          }}
-          className="bg-black/50 hover:bg-black/70 p-2 rounded-full text-white"
-          aria-label="สไลด์ถัดไป"
-        >
-          <FiArrowRight size={16} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// คอมโพเนนต์สำหรับแสดงตัวอย่างสไลด์ (ตัวอย่างข้อมูล)
-export const SampleImageSlider = () => {
-  const sampleSlides: Slide[] = [
-    {
-      id: "1",
-      title: "เรื่องราวที่น่าติดตาม",
-      description: "พบกับนวนิยายใหม่ล่าสุดที่คัดสรรมาอย่างดี",
-      imageUrl: "/images/slide1.jpg",
-      link: "/novels/1"
-    },
-    {
-      id: "2",
-      title: "ผลงานจากนักเขียนยอดนิยม",
-      description: "อัปเดตผลงานใหม่จากนักเขียนชื่อดัง",
-      imageUrl: "/images/slide2.jpg",
-      link: "/novels/2"
-    },
-    {
-      id: "3",
-      title: "หมวดหมู่แนะนำ",
-      description: "ค้นพบเรื่องราวในสไตล์ที่คุณชอบ",
-      imageUrl: "/images/slide3.jpg",
-      link: "/categories"
-    }
-  ];
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <ImageSlider 
-        slides={sampleSlides} 
-        autoPlayInterval={6000} 
-      />
     </div>
   );
 };

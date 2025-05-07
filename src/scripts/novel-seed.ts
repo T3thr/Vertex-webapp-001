@@ -1,12 +1,11 @@
-// src/scripts/novel-seed.ts
 import mongoose, { Types } from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { INovel } from "@/backend/models/Novel";
-import UserModel from "@/backend/models/User";
 import CategoryModel from "@/backend/models/Category";
-import * as dotenv from "dotenv";
+import { config } from "dotenv";
 
-dotenv.config();
+// โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
+config({ path: ".env" });
 
 // เตรียมข้อมูลหมวดหมู่เบื้องต้น
 const categories = [
@@ -19,37 +18,61 @@ const categories = [
   { name: "ลึกลับ", slug: "mystery", description: "นิยายแนวสืบสวนและปริศนา" },
 ];
 
-// ข้อมูลนิยายตัวอย่าง
+// ข้อมูลนิยายตัวอย่าง (รักษาชื่อและคำอธิบายเดิม แต่ปรับให้เข้ากับ INovel interface)
 const sampleNovels: Array<Partial<INovel>> = [
   {
     title: "The Shadow of Eternity",
     slug: "shadow-of-eternity",
     description:
-      "ในโลกที่เวลาเบี่ยงเบนตามเจตจำนงของนักเวทย์โบราณ พ่อมดรุ่นใหม่ได้ค้นพบคาถาต้องห้ามที่อาจทำลายเนื้อผ้าแห่งความเป็นจริง",
+      "ในโลกที่เวลาเบี่ยงเบนตามเจตจำนงของนักเวทย์โบราณ นักรบรุ่นใหม่ได้ค้นพบคาถาต้องห้ามที่อาจทำลายเนื้อผ้าแห่งความเป็นจริง",
     coverImage: "https://via.placeholder.com/400x600?text=Shadow+Eternity",
     tags: ["Fantasy", "Adventure", "Magic", "Time"],
     status: "published",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.8,
+    ratingsCount: 900,
+    viewsCount: 15000,
+    likesCount: 4000,
+    followersCount: 3200,
+    commentsCount: 200,
+    episodesCount: 20,
+    publishedEpisodesCount: 20,
+    wordsCount: 80000,
     stats: {
-      views: 15000,
-      likes: 4000,
-      comments: 200,
-      followers: 3200,
-      purchases: 1100,
-      rating: 4.8,
-      ratingCount: 900,
+      totalPurchasesAmount: 110000,
+      totalDonationsAmount: 5000,
+      completionRate: 85,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 1, // Monday
+      timeOfDay: "09:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: false,
+      hasMultipleEndings: false,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Neon Dreams",
@@ -59,27 +82,51 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Neon+Dreams",
     tags: ["Sci-Fi", "Cyberpunk", "Thriller", "AI"],
     status: "published",
-    isExplicit: true,
     visibility: "public",
+    language: "th",
+    isExplicitContent: true,
+    ageRating: "mature17+",
+    isOriginalWork: true,
+    isPremium: true,
+    averageRating: 4.6,
+    ratingsCount: 600,
+    viewsCount: 9500,
+    likesCount: 2300,
+    followersCount: 2100,
+    commentsCount: 150,
+    episodesCount: 15,
+    publishedEpisodesCount: 15,
+    wordsCount: 60000,
     stats: {
-      views: 9500,
-      likes: 2300,
-      comments: 150,
-      followers: 2100,
-      purchases: 800,
-      rating: 4.6,
-      ratingCount: 600,
+      totalPurchasesAmount: 80000,
+      totalDonationsAmount: 3000,
+      completionRate: 80,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: true,
+      contentWarnings: ["Violence", "Strong Language"],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 2, // Tuesday
+      timeOfDay: "10:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: true,
+      hasMultipleEndings: true,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Whispers of the Forest",
@@ -89,23 +136,38 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Whispers+Forest",
     tags: ["Fantasy", "Mystery", "Supernatural", "Coming of Age"],
     status: "completed",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "everyone",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.9,
+    ratingsCount: 1000,
+    viewsCount: 17000,
+    likesCount: 4500,
+    followersCount: 3800,
+    commentsCount: 350,
+    episodesCount: 25,
+    publishedEpisodesCount: 25,
+    wordsCount: 100000,
     stats: {
-      views: 17000,
-      likes: 4500,
-      comments: 350,
-      followers: 3800,
-      purchases: 1900,
-      rating: 4.9,
-      ratingCount: 1000,
+      totalPurchasesAmount: 190000,
+      totalDonationsAmount: 7000,
+      completionRate: 90,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Starborn Legacy",
@@ -115,23 +177,38 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Starborn+Legacy",
     tags: ["Sci-Fi", "Space Opera", "Action", "War"],
     status: "onHiatus",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.3,
+    ratingsCount: 420,
+    viewsCount: 8000,
+    likesCount: 1900,
+    followersCount: 1600,
+    commentsCount: 130,
+    episodesCount: 10,
+    publishedEpisodesCount: 10,
+    wordsCount: 40000,
     stats: {
-      views: 8000,
-      likes: 1900,
-      comments: 130,
-      followers: 1600,
-      purchases: 650,
-      rating: 4.3,
-      ratingCount: 420,
+      totalPurchasesAmount: 65000,
+      totalDonationsAmount: 2000,
+      completionRate: 70,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 240 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Crimson Skies",
@@ -140,24 +217,52 @@ const sampleNovels: Array<Partial<INovel>> = [
       "ในโลกที่ปกครองโดยเรือเหาะและอาณาจักรลอยฟ้า นักบินผู้เสื่อมเสียชื่อเสียงมองหาการไถ่บาปด้วยการเปิดโปงการสมคบคิดบนท้องฟ้า",
     coverImage: "https://via.placeholder.com/400x600?text=Crimson+Skies",
     tags: ["Steampunk", "Adventure", "Fantasy", "Sky"],
-    status: "discount",
-    isExplicit: false,
+    status: "published",
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.6,
+    ratingsCount: 650,
+    viewsCount: 10000,
+    likesCount: 2600,
+    followersCount: 2200,
+    commentsCount: 170,
+    episodesCount: 18,
+    publishedEpisodesCount: 18,
+    wordsCount: 72000,
     stats: {
-      views: 10000,
-      likes: 2600,
-      comments: 170,
-      followers: 2200,
-      purchases: 900,
-      rating: 4.6,
-      ratingCount: 650,
+      totalPurchasesAmount: 90000,
+      totalDonationsAmount: 4000,
+      completionRate: 82,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+    releaseSchedule: {
+      frequency: "weekly",
+      dayOfWeek: 3, // Wednesday
+      timeOfDay: "08:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    gameElementsSummary: {
+      hasChoices: false,
+      hasMultipleEndings: false,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Echoes of the Deep",
@@ -167,27 +272,51 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Echoes+Deep",
     tags: ["Mystery", "Ocean", "Sci-Fi", "Adventure"],
     status: "published",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "everyone",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.4,
+    ratingsCount: 400,
+    viewsCount: 7200,
+    likesCount: 1700,
+    followersCount: 1500,
+    commentsCount: 100,
+    episodesCount: 12,
+    publishedEpisodesCount: 12,
+    wordsCount: 48000,
     stats: {
-      views: 7200,
-      likes: 1700,
-      comments: 100,
-      followers: 1500,
-      purchases: 550,
-      rating: 4.4,
-      ratingCount: 400,
+      totalPurchasesAmount: 55000,
+      totalDonationsAmount: 2000,
+      completionRate: 75,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 4, // Thursday
+      timeOfDay: "09:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: false,
+      hasMultipleEndings: false,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Moonlight Requiem",
@@ -197,27 +326,51 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Moonlight+Requiem",
     tags: ["Fantasy", "Horror", "Music", "Dark"],
     status: "published",
-    isExplicit: true,
     visibility: "public",
+    language: "th",
+    isExplicitContent: true,
+    ageRating: "adult18+",
+    isOriginalWork: true,
+    isPremium: true,
+    averageRating: 4.7,
+    ratingsCount: 700,
+    viewsCount: 11000,
+    likesCount: 2900,
+    followersCount: 2500,
+    commentsCount: 220,
+    episodesCount: 16,
+    publishedEpisodesCount: 16,
+    wordsCount: 64000,
     stats: {
-      views: 11000,
-      likes: 2900,
-      comments: 220,
-      followers: 2500,
-      purchases: 1000,
-      rating: 4.7,
-      ratingCount: 700,
+      totalPurchasesAmount: 100000,
+      totalDonationsAmount: 4500,
+      completionRate: 83,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: true,
+      contentWarnings: ["Horror", "Dark Themes"],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 5, // Friday
+      timeOfDay: "10:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: true,
+      hasMultipleEndings: true,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Digital Prophet",
@@ -226,24 +379,52 @@ const sampleNovels: Array<Partial<INovel>> = [
       "ในอนาคตที่อัลกอริทึมทำนายทุกความเคลื่อนไหว นักคณิตศาสตร์นอกกฎหมายเขียนสูตรที่สามารถท้าทายชะตากรรมได้",
     coverImage: "https://via.placeholder.com/400x600?text=Digital+Prophet",
     tags: ["Sci-Fi", "Techno-thriller", "Philosophy", "Future"],
-    status: "discount",
-    isExplicit: false,
+    status: "published",
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.5,
+    ratingsCount: 500,
+    viewsCount: 8700,
+    likesCount: 2100,
+    followersCount: 1900,
+    commentsCount: 160,
+    episodesCount: 14,
+    publishedEpisodesCount: 14,
+    wordsCount: 56000,
     stats: {
-      views: 8700,
-      likes: 2100,
-      comments: 160,
-      followers: 1900,
-      purchases: 750,
-      rating: 4.5,
-      ratingCount: 500,
+      totalPurchasesAmount: 75000,
+      totalDonationsAmount: 2500,
+      completionRate: 78,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+    releaseSchedule: {
+      frequency: "weekly",
+      dayOfWeek: 6, // Saturday
+      timeOfDay: "09:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    gameElementsSummary: {
+      hasChoices: false,
+      hasMultipleEndings: false,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Ashes of the Phoenix",
@@ -253,27 +434,51 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Ashes+Phoenix",
     tags: ["Action", "Fantasy", "Rebellion", "Empire"],
     status: "published",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.7,
+    ratingsCount: 800,
+    viewsCount: 13000,
+    likesCount: 3400,
+    followersCount: 2900,
+    commentsCount: 250,
+    episodesCount: 22,
+    publishedEpisodesCount: 22,
+    wordsCount: 88000,
     stats: {
-      views: 13000,
-      likes: 3400,
-      comments: 250,
-      followers: 2900,
-      purchases: 1200,
-      rating: 4.7,
-      ratingCount: 800,
+      totalPurchasesAmount: 120000,
+      totalDonationsAmount: 5000,
+      completionRate: 87,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 0, // Sunday
+      timeOfDay: "08:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: false,
+      hasMultipleEndings: false,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
   },
   {
     title: "The Librarian's Code",
@@ -283,23 +488,38 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Librarians+Code",
     tags: ["Mystery", "Fantasy", "Library", "Secret"],
     status: "completed",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "everyone",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.6,
+    ratingsCount: 600,
+    viewsCount: 10500,
+    likesCount: 2500,
+    followersCount: 2200,
+    commentsCount: 190,
+    episodesCount: 18,
+    publishedEpisodesCount: 18,
+    wordsCount: 72000,
     stats: {
-      views: 10500,
-      likes: 2500,
-      comments: 190,
-      followers: 2200,
-      purchases: 850,
-      rating: 4.6,
-      ratingCount: 600,
+      totalPurchasesAmount: 85000,
+      totalDonationsAmount: 3000,
+      completionRate: 80,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Chrono Alchemist",
@@ -308,24 +528,52 @@ const sampleNovels: Array<Partial<INovel>> = [
       "นักเล่นแร่แปรธาตุค้นพบวิธีควบคุมเวลา แต่ทุกการเปลี่ยนแปลงในอดีตต้องแลกมาด้วยการเสียสละในปัจจุบัน",
     coverImage: "https://via.placeholder.com/400x600?text=Chrono+Alchemist",
     tags: ["Fantasy", "Time Travel", "Alchemy", "Adventure"],
-    status: "discount",
-    isExplicit: false,
+    status: "published",
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.4,
+    ratingsCount: 460,
+    viewsCount: 8200,
+    likesCount: 2000,
+    followersCount: 1800,
+    commentsCount: 150,
+    episodesCount: 13,
+    publishedEpisodesCount: 13,
+    wordsCount: 52000,
     stats: {
-      views: 8200,
-      likes: 2000,
-      comments: 150,
-      followers: 1800,
-      purchases: 700,
-      rating: 4.4,
-      ratingCount: 460,
+      totalPurchasesAmount: 70000,
+      totalDonationsAmount: 2500,
+      completionRate: 76,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+    releaseSchedule: {
+      frequency: "weekly",
+      dayOfWeek: 1, // Monday
+      timeOfDay: "09:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    gameElementsSummary: {
+      hasChoices: true,
+      hasMultipleEndings: true,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Silent Frequency",
@@ -335,23 +583,38 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Silent+Frequency",
     tags: ["Sci-Fi", "Thriller", "Mystery", "Radio"],
     status: "completed",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.8,
+    ratingsCount: 850,
+    viewsCount: 14000,
+    likesCount: 3700,
+    followersCount: 3100,
+    commentsCount: 280,
+    episodesCount: 20,
+    publishedEpisodesCount: 20,
+    wordsCount: 80000,
     stats: {
-      views: 14000,
-      likes: 3700,
-      comments: 280,
-      followers: 3100,
-      purchases: 1450,
-      rating: 4.8,
-      ratingCount: 850,
+      totalPurchasesAmount: 145000,
+      totalDonationsAmount: 6000,
+      completionRate: 88,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Garden of Glass",
@@ -361,23 +624,38 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Garden+Glass",
     tags: ["Dystopia", "Nature", "Drama", "Rebellion"],
     status: "completed",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.7,
+    ratingsCount: 800,
+    viewsCount: 13500,
+    likesCount: 3400,
+    followersCount: 3000,
+    commentsCount: 260,
+    episodesCount: 22,
+    publishedEpisodesCount: 22,
+    wordsCount: 88000,
     stats: {
-      views: 13500,
-      likes: 3400,
-      comments: 260,
-      followers: 3000,
-      purchases: 1300,
-      rating: 4.7,
-      ratingCount: 800,
+      totalPurchasesAmount: 130000,
+      totalDonationsAmount: 5000,
+      completionRate: 85,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000),
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 240 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Quantum Harmony",
@@ -387,27 +665,51 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Quantum+Harmony",
     tags: ["Sci-Fi", "Music", "Multiverse", "Collaboration"],
     status: "published",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.5,
+    ratingsCount: 520,
+    viewsCount: 9000,
+    likesCount: 2200,
+    followersCount: 2000,
+    commentsCount: 170,
+    episodesCount: 15,
+    publishedEpisodesCount: 15,
+    wordsCount: 60000,
     stats: {
-      views: 9000,
-      likes: 2200,
-      comments: 170,
-      followers: 2000,
-      purchases: 750,
-      rating: 4.5,
-      ratingCount: 520,
+      totalPurchasesAmount: 75000,
+      totalDonationsAmount: 3000,
+      completionRate: 80,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 2, // Tuesday
+      timeOfDay: "09:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: true,
+      hasMultipleEndings: true,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Midnight Cartographer",
@@ -417,23 +719,51 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Midnight+Cartographer",
     tags: ["Fantasy", "Adventure", "Maps", "Hidden World"],
     status: "published",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "everyone",
+    isOriginalWork: true,
+    isPremium: false,
+    averageRating: 4.6,
+    ratingsCount: 650,
+    viewsCount: 10200,
+    likesCount: 2600,
+    followersCount: 2250,
+    commentsCount: 195,
+    episodesCount: 17,
+    publishedEpisodesCount: 17,
+    wordsCount: 68000,
     stats: {
-      views: 10200,
-      likes: 2600,
-      comments: 195,
-      followers: 2250,
-      purchases: 930,
-      rating: 4.6,
-      ratingCount: 650,
+      totalPurchasesAmount: 93000,
+      totalDonationsAmount: 3500,
+      completionRate: 82,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: false,
     },
-    lastEpisodeAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+    releaseSchedule: {
+      frequency: "weekly",
+      dayOfWeek: 3, // Wednesday
+      timeOfDay: "10:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    gameElementsSummary: {
+      hasChoices: false,
+      hasMultipleEndings: false,
+      hasStatSystem: false,
+      hasRelationshipSystem: false,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
   },
   {
     title: "Urban Spirits",
@@ -443,40 +773,65 @@ const sampleNovels: Array<Partial<INovel>> = [
     coverImage: "https://via.placeholder.com/400x600?text=Urban+Spirits",
     tags: ["Urban Fantasy", "Thai", "Supernatural", "Modern"],
     status: "published",
-    isExplicit: false,
     visibility: "public",
+    language: "th",
+    isExplicitContent: false,
+    ageRating: "teen",
+    isOriginalWork: true,
+    isPremium: true,
+    averageRating: 4.9,
+    ratingsCount: 900,
+    viewsCount: 16000,
+    likesCount: 4100,
+    followersCount: 3500,
+    commentsCount: 310,
+    episodesCount: 24,
+    publishedEpisodesCount: 24,
+    wordsCount: 96000,
     stats: {
-      views: 16000,
-      likes: 4100,
-      comments: 310,
-      followers: 3500,
-      purchases: 1500,
-      rating: 4.9,
-      ratingCount: 900,
+      totalPurchasesAmount: 150000,
+      totalDonationsAmount: 7000,
+      completionRate: 90,
+      lastViewedAt: new Date(),
     },
     settings: {
       allowComments: true,
-      monetization: true,
-      showStatistics: true,
+      showContentWarnings: false,
+      contentWarnings: [],
+      enableMonetization: true,
+      enableDonations: true,
+      enableCharacterDonations: true,
     },
     releaseSchedule: {
       frequency: "weekly",
-      nextRelease: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      dayOfWeek: 4, // Thursday
+      timeOfDay: "09:00",
+      nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-    lastEpisodeAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    gameElementsSummary: {
+      hasChoices: true,
+      hasMultipleEndings: true,
+      hasStatSystem: true,
+      hasRelationshipSystem: true,
+      hasInventorySystem: false,
+    },
+    isDeleted: false,
+    lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    firstPublishedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
   },
 ];
 
 /**
  * เตรียมข้อมูลหมวดหมู่
+ * @returns รายการหมวดหมู่ที่ดึงหรือสร้างใหม่
  */
 async function seedCategories() {
   try {
     const Category = CategoryModel();
-    
+
     // ตรวจสอบว่ามีหมวดหมู่อยู่แล้วหรือไม่
     const existingCategories = await Category.countDocuments();
-    
+
     if (existingCategories === 0) {
       console.log("🌱 เริ่มเพิ่มข้อมูลหมวดหมู่...");
       await Category.insertMany(
@@ -485,14 +840,14 @@ async function seedCategories() {
           slug: cat.slug,
           description: cat.description,
           isActive: true,
-          order: 0
+          order: 0,
         }))
       );
       console.log(`✅ เพิ่มข้อมูลหมวดหมู่ ${categories.length} รายการสำเร็จ`);
     } else {
       console.log(`ℹ️ มีหมวดหมู่ ${existingCategories} รายการอยู่แล้ว ข้ามการเพิ่มข้อมูล`);
     }
-    
+
     // ดึงข้อมูลหมวดหมู่ทั้งหมดเพื่อใช้ในขั้นตอนต่อไป
     return await Category.find().lean();
   } catch (error: any) {
@@ -502,39 +857,20 @@ async function seedCategories() {
 }
 
 /**
- * ตรวจสอบหรือสร้างผู้ใช้สำหรับเป็นผู้เขียนนิยาย
+ * ดึง ID ของผู้เขียนจาก User model
+ * @returns ObjectId ของผู้เขียน
  */
-async function ensureAuthorExists() {
+async function getAuthorId() {
   try {
+    const UserModel = (await import("@/backend/models/User")).default;
     const User = UserModel();
-    
-    // ตรวจสอบว่ามีผู้ใช้อยู่แล้วหรือไม่
-    let author = await User.findOne({ username: "novelAuthor" });
-    
+    const author = await User.findOne({ role: "Writer", username: process.env.AUTHOR_USERNAME });
     if (!author) {
-      console.log("🌱 สร้างบัญชีผู้ใช้สำหรับเป็นผู้เขียนนิยาย...");
-      
-      author = await User.create({
-        username: "novelAuthor",
-        email: "author@example.com",
-        password: "password123", // ในสภาพแวดล้อมจริงควรใช้รหัสผ่านที่ซับซ้อนกว่านี้
-        role: "Writer",
-        profile: {
-          displayName: "นักเขียนนิยาย",
-          bio: "ผู้เขียนนิยายหลากหลายแนว รักการเล่าเรื่องและสร้างโลกจินตนาการ",
-        },
-        isEmailVerified: true,
-        isActive: true,
-      });
-      
-      console.log("✅ สร้างบัญชีผู้ใช้สำเร็จ");
-    } else {
-      console.log("ℹ️ มีบัญชีผู้ใช้อยู่แล้ว");
+      throw new Error("ไม่พบผู้ใช้ที่มีบทบาท Writer และ username ตามที่กำหนดใน .env");
     }
-    
     return author._id;
   } catch (error: any) {
-    console.error("❌ เกิดข้อผิดพลาดในการสร้างบัญชีผู้ใช้:", error.message);
+    console.error("❌ เกิดข้อผิดพลาดในการดึง ID ผู้เขียน:", error.message);
     throw error;
   }
 }
@@ -548,21 +884,22 @@ async function seedNovels() {
     await dbConnect();
     console.log("✅ เชื่อมต่อกับ MongoDB สำเร็จ");
 
+    // ดึง ID ผู้เขียน
+    const authorId = await getAuthorId();
+    console.log("✅ ดึง ID ผู้เขียนสำเร็จ");
+
     // เตรียมข้อมูลหมวดหมู่
     const categories = await seedCategories();
-    
-    // ตรวจสอบหรือสร้างผู้ใช้
-    const authorId = await ensureAuthorExists();
-    
+
     // ดึง Novel model
-    const Novel = new NovelModel();
-    
+    const Novel = NovelModel();
+
     // ตรวจสอบจำนวนนิยายที่มีอยู่แล้ว
     const existingNovelsCount = await Novel.countDocuments();
     console.log(`ℹ️ มีนิยายอยู่แล้ว ${existingNovelsCount} เรื่อง`);
-    
+
     console.log("🌱 เริ่มเพิ่มหรืออัปเดตข้อมูลนิยาย...");
-    
+
     // เตรียมข้อมูลนิยายพร้อมกับ ID ของผู้เขียนและหมวดหมู่
     for (const novelData of sampleNovels) {
       // สุ่มเลือกหมวดหมู่ 1-3 หมวด
@@ -571,23 +908,27 @@ async function seedNovels() {
         .sort(() => 0.5 - Math.random())
         .slice(0, numCategories)
         .map(cat => cat._id);
-      
+
       const preparedNovel = {
         ...novelData,
         author: authorId,
         categories: selectedCategories,
+        subCategories: [], // ไม่ใช้ subCategories ใน seed นี้
+        featuredOfficialMedia: [],
+        seo: {
+          metaTitle: novelData.title,
+          metaDescription: novelData.description ? novelData.description.slice(0, 160) : "",
+          keywords: novelData.tags,
+        },
         isDeleted: false,
       };
-      
-      // ตรวจสอบว่ามีนิยายที่มีชื่อนี้อยู่แล้วหรือไม่
-      const existingNovel = await Novel.findOne({ title: novelData.title });
-      
+
+      // ตรวจสอบว่ามีนิยายที่มีชื่อนี้และผู้เขียนนี้อยู่แล้วหรือไม่
+      const existingNovel = await Novel.findOne({ title: novelData.title, author: authorId });
+
       if (existingNovel) {
         // อัปเดตนิยายที่มีอยู่
-        await Novel.updateOne(
-          { _id: existingNovel._id },
-          { $set: preparedNovel }
-        );
+        await Novel.updateOne({ _id: existingNovel._id }, { $set: preparedNovel });
         console.log(`📚 อัปเดตนิยาย: ${novelData.title} (${novelData.status})`);
       } else {
         // เพิ่มนิยายใหม่
@@ -595,19 +936,22 @@ async function seedNovels() {
         console.log(`📚 เพิ่มนิยายใหม่: ${newNovel.title} (${newNovel.status})`);
       }
     }
-    
+
     console.log(`🎉 อัปเดตหรือเพิ่มนิยาย ${sampleNovels.length} เรื่องสำเร็จ`);
-    
+
     // ออกจากโปรแกรมด้วยรหัสสำเร็จ
     console.log("✅ การเพิ่มข้อมูลเสร็จสมบูรณ์");
-    process.exit(0);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error("❌ เกิดข้อผิดพลาดในการเพิ่มข้อมูลนิยาย:", error.message);
-    } else {
-      console.error("❌ เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
+  } catch (error: any) {
+    console.error("❌ เกิดข้อผิดพลาดในการเพิ่มข้อมูลนิยาย:", error.message);
+  } finally {
+    // ปิดการเชื่อมต่อ MongoDB
+    try {
+      await mongoose.connection.close();
+      console.log("🔌 ปิดการเชื่อมต่อ MongoDB แล้ว");
+    } catch (closeError) {
+      console.error("❌ เกิดข้อผิดพลาดในการปิดการเชื่อมต่อ MongoDB:", closeError);
     }
-    process.exit(1);
+    process.exit(0);
   }
 }
 
