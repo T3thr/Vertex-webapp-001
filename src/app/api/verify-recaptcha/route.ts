@@ -22,7 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const body = await request.json() as VerifyRecaptchaRequestBody;
     const { token } = body;
 
-    // ตรวจสอบว่าได้รับโ VITAMIN_TOKEN หรือไม่
+    // ตรวจสอบว่าได้รับโทเค็นหรือไม่
     if (!token) {
       console.error('❌ ไม่ได้รับโทเค็น reCAPTCHA');
       return NextResponse.json(

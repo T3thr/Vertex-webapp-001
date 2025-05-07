@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google-recaptcha/react": "^2.2.0",
     "@hcaptcha/react-hcaptcha": "^1.12.0",
     "@marsidev/react-turnstile": "^1.1.0",
     "@types/bcrypt": "^5.0.2",

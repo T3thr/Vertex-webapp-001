@@ -1,3 +1,5 @@
+// src/app/layout.tsx
+
 import { Metadata } from "next";
 import dbConnect from "@/backend/lib/mongodb";
 import { NavBarClient } from "@/components/layouts/NavBarClient";

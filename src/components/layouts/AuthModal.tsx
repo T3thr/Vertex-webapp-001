@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { validateEmail, validatePassword, validateUsername } from '@/backend/utils/validation';
 import { signIn } from 'next-auth/react';
@@ -27,7 +27,7 @@ import {
   FaApple
 } from 'react-icons/fa';
 import { SiLine } from 'react-icons/si';
-import { ReCAPTCHA } from 'react-google-recaptcha';
+import ReCaptcha from '@/components/ui/ReCaptcha';
 
 // LoadingSpinner Component - คอมโพเนนต์แสดงการโหลด
 const LoadingSpinner = ({ size = "md", color = "currentColor" }: { size?: "sm" | "md" | "lg", color?: string }) => {
@@ -324,11 +324,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setValidationErrors(prev => ({ ...prev, ...fieldErrors }));
   };
 
-  // จัดการการเปลี่ยนแปลงของ reCAPTCHA
-  const handleRecaptchaChange = useCallback((token: string | null) => {
-    setRecaptchaToken(token);
-  }, []);
-
   // Handle click outside to close - จัดการคลิกภายนอกเพื่อปิดหน้าต่าง
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -412,12 +407,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (Object.keys(formErrors).length > 0) {
       return;
     }
-    
-    // ตรวจสอบ reCAPTCHA สำหรับการสมัครสมาชิก
-    if (mode === 'signup' && !recaptchaToken) {
-      setError('กรุณายืนยันว่าไม่ใช่บอท');
-      return;
-    }
 
     setIsLoading(true);
 
@@ -440,6 +429,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           }, 1000);
         }
       } else {
+        // ตรวจสอบ reCAPTCHA token
+        if (!recaptchaToken) {
+          setError('กรุณายืนยันว่าไม่ใช่บอท');
+          setIsLoading(false);
+          return;
+        }
+
         // Verify reCAPTCHA token - ตรวจสอบโทเค็น reCAPTCHA
         const recaptchaResponse = await fetch('/api/auth/verify-recaptcha', {
           method: 'POST',
@@ -456,7 +452,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }
 
         // Sign up with credentials - สมัครสมาชิกด้วยข้อมูลประจำตัว
-        const result = await signUp(email, username, password ,recaptchaToken!);
+        const result = await signUp(email, username, password, recaptchaToken);
         if (result.error) {
           setError(result.error);
         } else {
@@ -498,6 +494,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ฟังก์ชันจัดการเมื่อ reCAPTCHA สำเร็จ
+  const handleReCaptchaVerify = (token: string | null) => {
+    setRecaptchaToken(token);
   };
 
   // เช็คว่าควรแสดงหน้าต่างหรือไม่
@@ -699,23 +700,24 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         />
                       )}
 
-                      {/* reCAPTCHA (Signup only) - reCAPTCHA (เฉพาะการสมัคร) */}
+                      {/* reCAPTCHA Checkbox (Signup only) - ช่องทำเครื่องหมาย reCAPTCHA (เฉพาะการสมัคร) */}
                       {mode === 'signup' && (
                         <div className="flex justify-center">
-                          <ReCAPTCHA
-                            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-                            onChange={handleRecaptchaChange}
-                            size="normal"
-                            hl="th"
-                            theme="light"
-                          />
+                          <ReCaptcha onVerify={handleReCaptchaVerify} />
+                        </div>
+                      )}
+
+                      {/* reCAPTCHA Notice (Signup only) - ข้อความแจ้ง reCAPTCHA (เฉพาะการสมัคร) */}
+                      {mode === 'signup' && (
+                        <div className="text-center text-xs text-muted-foreground">
+                          หน้านี้ได้รับการป้องกันโดย Google reCAPTCHA เพื่อยืนยันว่าคุณไม่ใช่บอท
                         </div>
                       )}
 
                       {/* Submit Button - ปุ่มส่งข้อมูล */}
                       <motion.button
                         type="submit"
-                        disabled={isLoading || (mode === 'signup' && !recaptchaToken)}
+                        disabled={isLoading}
                         className="w-full py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-xl shadow-lg flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-3 hover:scale-[1.01]"
                         aria-label={mode === 'signin' ? 'ลงชื่อเข้าใช้' : 'สร้างบัญชี'}
                         whileHover={{ scale: 1.01 }}

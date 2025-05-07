@@ -4,6 +4,7 @@
     "": {
       "name": "novelmaze",
       "dependencies": {
+        "@google-recaptcha/react": "^2.2.0",
         "@hcaptcha/react-hcaptcha": "^1.12.0",
         "@marsidev/react-turnstile": "^1.1.0",
         "@types/bcrypt": "^5.0.2",
@@ -75,6 +76,10 @@
     "@eslint/object-schema": ["@eslint/object-schema@2.1.6", "", {}, "sha512-RBMg5FRL0I0gs51M/guSAj5/e14VQ4tpZnQNWwuDT66P14I43ItmPfIZRhO9fUVIPOAQXU47atlywZ/czoqFPA=="],
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.2.8", "", { "dependencies": { "@eslint/core": "^0.13.0", "levn": "^0.4.1" } }, "sha512-ZAoA40rNMPwSm+AeHpCq8STiNAwzWLJuP8Xv4CHIc9wv/PSuExjMrmjfYNj682vW0OOiZ1HKxzvjQr9XZIisQA=="],
+
+    "@google-recaptcha/core": ["@google-recaptcha/core@1.1.0", "", {}, "sha512-9ENDs4gCdNUyuhGb3O6EBKmRUn8TVa1uigZcTW58VSjwzv+KHyO93ZC4O39y70oBTkm+1LJTbSHluUcVqDib1Q=="],
+
+    "@google-recaptcha/react": ["@google-recaptcha/react@2.2.0", "", { "dependencies": { "@google-recaptcha/core": "*" }, "peerDependencies": { "@types/react": "^17 || ^18|| ^19", "react": "^17 || ^18 || ^19" }, "optionalPeers": ["@types/react"] }, "sha512-xsD2GNTJUgWp6+bztAxtYik0wKkh/Ly08VwwmV70F6QhutJ3OfiCCJC9kxpUp+fAudTUi11WeaOBrcFGU8zjpQ=="],
 
     "@hcaptcha/loader": ["@hcaptcha/loader@2.0.0", "", {}, "sha512-fFQH6ApU/zCCl6Y1bnbsxsp1Er/lKX+qlgljrpWDeFcenpEtoP68hExlKSXECospzKLeSWcr06cbTjlR/x3IJA=="],
 
