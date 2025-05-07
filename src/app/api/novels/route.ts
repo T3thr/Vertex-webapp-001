@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     }
 
     // นับจำนวนนิยายที่ตรงกับ query เพื่อ debug
-    const total = await NovelModel.countDocuments(query);
+    const total = await NovelModel().countDocuments(query);
     console.log(`ℹ️ Found ${total} novels matching filter: ${filter}`);
 
     // สร้าง User Model ที่จะใช้สำหรับ populate
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
     const SocialMediaUser = SocialMediaUserModel();
     
     // ดึงข้อมูลนิยายพร้อม populate author (สนับสนุนทั้ง User และ SocialMediaUser)
-    const novels = await NovelModel
+    const novels = await NovelModel()
       .find(query)
       .populate([
         {
