@@ -98,12 +98,12 @@ const NovelSchema = new Schema<INovel>(
       required: [true, "กรุณาระบุชื่อนิยาย"],
       trim: true,
       maxlength: [200, "ชื่อนิยายต้องไม่เกิน 200 ตัวอักษร"],
-      index: true, // Index สำหรับการค้นหาและเรียงลำดับ
+      index: true,
     },
     slug: {
       type: String,
       required: [true, "กรุณาระบุ slug URL สำหรับนิยาย"],
-      unique: true, // Slug ต้องไม่ซ้ำกันทั่วทั้งระบบ
+      unique: true,
       trim: true,
       lowercase: true,
       maxlength: [220, "Slug ต้องไม่เกิน 220 ตัวอักษร"],
@@ -120,11 +120,10 @@ const NovelSchema = new Schema<INovel>(
       type: String,
       required: [true, "กรุณาระบุ URL รูปปกนิยาย"],
       trim: true,
-      // validate: { validator: (v: string) => /^https?:\/\/|^\//.test(v), message: "รูปแบบ URL ของรูปปกไม่ถูกต้อง" },
     },
     author: {
       type: Schema.Types.ObjectId,
-      ref: "User", // อ้างอิง User model ที่รวมศูนย์แล้ว
+      ref: "User",
       required: [true, "กรุณาระบุผู้เขียน"],
       index: true,
     },
@@ -156,7 +155,7 @@ const NovelSchema = new Schema<INovel>(
     visibility: {
       type: String,
       enum: ["public", "unlisted", "private", "followersOnly"],
-      default: "private", // เริ่มต้นเป็น private จนกว่าผู้เขียนจะตั้งค่า
+      default: "private",
       index: true,
     },
     language: { type: String, required: [true, "กรุณาระบุภาษาของนิยาย"], default: "th", index: true },
@@ -192,7 +191,7 @@ const NovelSchema = new Schema<INovel>(
     releaseSchedule: {
       frequency: { type: String, enum: ["asReady", "daily", "weekly", "biweekly", "monthly"], default: "asReady" },
       dayOfWeek: { type: Number, min: 0, max: 6 },
-      timeOfDay: { type: String, match: /^([01]\d|2[0-3]):([0-5]\d)$/ }, // HH:MM format
+      timeOfDay: { type: String, match: /^([01]\d|2[0-3]):([0-5]\d)$/ },
       nextExpectedReleaseAt: Date,
     },
     gameElementsSummary: {
@@ -209,41 +208,38 @@ const NovelSchema = new Schema<INovel>(
       keywords: [String],
       socialImage: String,
     },
-    embeddingVector: { type: [Number], select: false }, // Select false เพราะอาจมีขนาดใหญ่
-    genreDistribution: { type: Schema.Types.Mixed, select: false }, // { genreId: score, ... }
+    embeddingVector: { type: [Number], select: false },
+    genreDistribution: { type: Schema.Types.Mixed, select: false },
     sentimentAnalysis: {
-      overallScore: Number,
-      dominantEmotion: String,
-      _id: false, // ป้องกันการสร้าง _id ใน subdocument
+      type: {
+        overallScore: Number,
+        dominantEmotion: String,
+      },
+      select: false,
     },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: Date,
+    lastEpisodePublishedAt: { type: Date, index: true },
+    firstPublishedAt: Date,
+    lastSignificantUpdateAt: { type: Date, default: Date.now, index: true },
   },
   {
-    timestamps: true, // เพิ่ม createdAt และ updatedAt โดยอัตโนมัติ
+    timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
 // ----- Indexes -----
-// Unique novel title per author (not deleted)
 NovelSchema.index({ author: 1, title: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
-// Full-text search on title, description, tags
-NovelSchema.index({ title: "text", description: "text", tags: "text" }, { default_language: "thai" });
-// Sorting/filtering: status + visibility + deletion
+NovelSchema.index({ title: "text", description: "text", tags: "text", "author.username": "text" }, { default_language: "thai" });
 NovelSchema.index({ status: 1, visibility: 1, isDeleted: 1 });
-// Sorting/filtering: language + status + deletion
 NovelSchema.index({ language: 1, status: 1, isDeleted: 1 });
-// Sorting/filtering: categories + status + deletion
 NovelSchema.index({ categories: 1, status: 1, isDeleted: 1 });
-// Premium novels filtering
 NovelSchema.index({ isPremium: 1, status: 1, isDeleted: 1 });
-// Top-rated published novels
 NovelSchema.index({ averageRating: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-// Most viewed published novels
 NovelSchema.index({ viewsCount: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-// Recently updated published novels
 NovelSchema.index({ lastSignificantUpdateAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-// Newly published novels
 NovelSchema.index({ firstPublishedAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 
 // ----- Virtuals (Populated Fields) -----
@@ -258,7 +254,7 @@ NovelSchema.virtual("episodes", {
   ref: "Episode",
   localField: "_id",
   foreignField: "novel",
-  options: { sort: { episodeNumber: 1 } }, // เรียงตอนตามหมายเลข
+  options: { sort: { episodeNumber: 1 } },
 });
 
 NovelSchema.virtual("storyMaps", {
@@ -268,24 +264,12 @@ NovelSchema.virtual("storyMaps", {
 });
 
 // ----- Middleware -----
-// Middleware to generate slug from title if not provided or if title changes
 NovelSchema.pre("save", async function (next) {
   if (this.isModified("title") || this.isNew) {
-    // A more robust slug generation might be needed, handling special characters, Thai language, and ensuring uniqueness.
-    // For now, a simple version. Consider using a library for this.
-    let baseSlug = this.title
+    this.slug = this.title
       .toLowerCase()
-      .replace(/[\s\W-]+/g, "-") // Replace spaces and non-word chars with hyphens
-      .replace(/^-+|-+$/g, ""); // Trim leading/trailing hyphens
-
-    // ตรวจสอบความซ้ำของ slug และเพิ่ม suffix หากจำเป็น
-    let slug = baseSlug;
-    let counter = 1;
-    while (await models.Novel.exists({ slug, _id: { $ne: this._id } })) {
-      slug = `${baseSlug}-${counter}`;
-      counter++;
-    }
-    this.slug = slug;
+      .replace(/[\s\W-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
   
   if (this.isModified("status") && this.status === "published" && !this.firstPublishedAt) {
@@ -299,14 +283,10 @@ NovelSchema.pre("save", async function (next) {
 });
 
 // ----- Instance Methods (Example) -----
-// Method to update calculated counts (episodes, words)
-// This should be called when related entities (Episodes) are changed.
 NovelSchema.methods.updateCounts = async function () {
   const episodeCount = await models.Episode.countDocuments({ novel: this._id, status: "published" });
   this.publishedEpisodesCount = episodeCount;
   this.episodesCount = await models.Episode.countDocuments({ novel: this._id });
-  // Potentially update wordsCount by summing words from all episodes
-  // await this.save(); // Be careful with save() inside methods if it triggers more pre-save hooks
 };
 
 // ----- Model Export -----
