@@ -1,7 +1,7 @@
 // src/app/resend-verification/page.tsx
 
 'use client'
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
@@ -12,7 +12,7 @@ interface ResendState {
   message: string;
 }
 
-export default function ResendVerificationPage() {
+function ResendVerificationContent() {
   const [state, setState] = useState<ResendState>({ status: 'idle', message: '' });
   const [email, setEmail] = useState<string>('');
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -91,54 +91,71 @@ export default function ResendVerificationPage() {
   };
 
   return (
+    <div>
+      <h1 className="text-3xl font-bold text-center text-foreground mb-6">
+        ส่งอีเมลยืนยันใหม่
+      </h1>
+      <p className="text-center text-muted-foreground mb-6">
+        กรุณาระบุอีเมลที่คุณใช้สมัครเพื่อรับลิงก์ยืนยันใหม่
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-foreground"
+          >
+            อีเมล
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <input
+              id="email"
+              type="email"
+              ref={emailInputRef}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="อีเมลของคุณ"
+              className="w-full pl-10 pr-4 py-2 bg-input border border-border rounded-md focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+              required
+            />
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={state.status === 'loading'}
+          className="w-full bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          ส่งอีเมลยืนยัน
+        </button>
+      </form>
+      {state.status !== 'idle' && (
+        <div className="mt-4 text-center text-sm">{renderContent()}</div>
+      )}
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        กลับไปที่{' '}
+        <Link href="/" className="text-primary hover:underline">
+          หน้าหลัก
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+export default function ResendVerificationPage() {
+  return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="container-custom">
         <div className="max-w-md mx-auto bg-card p-8 rounded-lg shadow-lg animate-slideIn">
-          <h1 className="text-3xl font-bold text-center text-foreground mb-6">
-            ส่งอีเมลยืนยันใหม่
-          </h1>
-          <p className="text-center text-muted-foreground mb-6">
-            กรุณาระบุอีเมลที่คุณใช้สมัครเพื่อรับลิงก์ยืนยันใหม่
-          </p>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-foreground"
-              >
-                อีเมล
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <input
-                  id="email"
-                  type="email"
-                  ref={emailInputRef}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="อีเมลของคุณ"
-                  className="w-full pl-10 pr-4 py-2 bg-input border border-border rounded-md focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                  required
-                />
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center gap-4 animate-pulse">
+                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                <p className="text-lg font-medium text-foreground">กำลังโหลด...</p>
               </div>
-            </div>
-            <button
-              type="submit"
-              disabled={state.status === 'loading'}
-              className="w-full bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              ส่งอีเมลยืนยัน
-            </button>
-          </form>
-          {state.status !== 'idle' && (
-            <div className="mt-4 text-center text-sm">{renderContent()}</div>
-          )}
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            กลับไปที่{' '}
-            <Link href="/" className="text-primary hover:underline">
-              หน้าหลัก
-            </Link>
-          </p>
+            }
+          >
+            <ResendVerificationContent />
+          </Suspense>
         </div>
       </div>
     </div>

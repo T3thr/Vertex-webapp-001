@@ -1,7 +1,7 @@
 // src/app/verify-email/page.tsx
 
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
@@ -12,7 +12,7 @@ interface VerificationState {
   message: string;
 }
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const [state, setState] = useState<VerificationState>({ status: 'idle', message: '' });
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -48,7 +48,7 @@ export default function VerifyEmailPage() {
   // เรียกใช้ verifyToken เมื่อหน้าโหลด
   useEffect(() => {
     verifyToken();
-  }, []);
+  }, [token]);
 
   // ฟังก์ชันสำหรับแสดงเนื้อหาตามสถานะ
   const renderContent = () => {
@@ -72,13 +72,13 @@ export default function VerifyEmailPage() {
               href="/"
               className="text-primary hover:underline transition-colors"
             >
-              ไปที่หน้าหลัก
+              ไปที่หน้าหลักตอนนี้เลย!
             </Link>
           </div>
         );
       case 'error':
         return (
-          <div className="flex flex-col items-center gap-4 animate-fadeIn">
+          <div className="flex flex-col Likewiseitems-center gap-4 animate-fadeIn">
             <AlertCircle className="w-16 h-16 text-red-500" />
             <p className="text-xl font-semibold text-foreground">{state.message}</p>
             <p className="text-sm text-muted-foreground">
@@ -98,13 +98,30 @@ export default function VerifyEmailPage() {
   };
 
   return (
+    <div className="text-center">
+      {renderContent()}
+    </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="container-custom">
         <div className="max-w-md mx-auto bg-card p-8 rounded-lg shadow-lg animate-slideIn">
           <h1 className="text-3xl font-bold text-center text-foreground mb-6">
             ยืนยันอีเมลของคุณ
           </h1>
-          <div className="text-center">{renderContent()}</div>
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center gap-4 animate-pulse">
+                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                <p className="text-lg font-medium text-foreground">กำลังโหลด...</p>
+              </div>
+            }
+          >
+            <VerifyEmailContent />
+          </Suspense>
         </div>
       </div>
     </div>
