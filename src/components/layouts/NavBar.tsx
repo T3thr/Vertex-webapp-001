@@ -16,7 +16,8 @@ import {
   BookOpen,
   Home,
   Grid,
-  BookMarked
+  BookMarked,
+  Layout
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -400,13 +401,23 @@ export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
                         </div>
                         <div className="py-1">
                           <Link
-                            href="/profile"
+                            href={`/user/${user.username}`}
                             className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
                             onClick={() => setIsDropdownOpen(false)}
                           >
                             <User size={16} className="mr-2" />
                             โปรไฟล์
                           </Link>
+                          {user.role === "Writer" && ( // เพิ่มลิงก์ dashboard สำหรับ writer
+                            <Link
+                              href={`/dashboard`}
+                              className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                              onClick={() => setIsDropdownOpen(false)}
+                            >
+                              <Layout size={16} className="mr-2" />
+                              แดชบอร์ด
+                            </Link>
+                          )}
                           <Link
                             href="/bookmarks"
                             className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
