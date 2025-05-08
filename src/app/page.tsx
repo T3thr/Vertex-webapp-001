@@ -21,8 +21,23 @@ import {
  */
 async function getNovels(filter: string, limit: number = 8) {
   try {
-    // สร้าง URL สำหรับเรียก API
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/api/novels?limit=${limit}&filter=${filter}`;
+    // สร้าง URL สำหรับเรียก API พร้อมเลือกฟิลด์ที่ต้องการ
+    const fields = [
+      "title",
+      "slug",
+      "coverImage",
+      "description",
+      "status",
+      "isExplicitContent",
+      "tags",
+      "lastEpisodePublishedAt",
+      "viewsCount",
+      "likesCount",
+      "averageRating",
+      "author.profile.displayName",
+      "author.username"
+    ].join(",");
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/api/novels?limit=${limit}&filter=${filter}&fields=${fields}`;
     console.log(`📞 Fetching novels from: ${url}`);
     
     // เรียกใช้ API และกำหนดการรีวาลิเดต
@@ -35,7 +50,7 @@ async function getNovels(filter: string, limit: number = 8) {
     }
 
     const data = await res.json();
-    console.log(`✅ Received ${data.novels?.length || 0} novels for filter: ${filter}`);
+    console.log(`✅ Received ${data.novels?.length || 0} novels for filter: ${filter}`, data.novels);
     
     return { novels: data.novels || [] };
   } catch (error: any) {

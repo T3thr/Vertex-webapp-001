@@ -326,7 +326,7 @@ const sampleNovels: Array<Partial<INovel>> = [
       "นักไวโอลินที่ถูกสาปเดินเร่ร่อนในเมืองใต้แสงจันทร์ บรรเลงทำนองที่ปลุกความทรงจำของวิญญาณที่สูญหาย — และบางครั้งก็ปลุกสิ่งที่มืดมนยิ่งกว่า",
     coverImage: "https://via.placeholder.com/400x600?text=Moonlight+Requiem",
     tags: ["Fantasy", "Horror", "Music", "Dark"],
-    status: "published",
+    status: "discount",
     visibility: "public",
     language: "th",
     isExplicitContent: true,

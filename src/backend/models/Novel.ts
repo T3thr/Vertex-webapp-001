@@ -12,7 +12,7 @@ export interface INovel extends Document {
   categories: Types.ObjectId[]; // หมวดหมู่หลัก (อ้างอิงไปยัง Category model)
   subCategories?: Types.ObjectId[]; // หมวดหมู่ย่อย (อ้างอิงไปยัง Category model, optional)
   tags: string[]; // แท็กคำค้น (ผู้เขียนกำหนดเอง, ช่วยในการค้นหาและ AI recommendations)
-  status: "draft" | "published" | "completed" | "onHiatus" | "archived"; // สถานะนิยาย (เพิ่ม archived)
+  status: "draft" | "published" | "completed" | "onHiatus" | "archived" | "discount"; // สถานะนิยาย (เพิ่ม archived)
   visibility: "public" | "unlisted" | "private" | "followersOnly"; // การมองเห็น (เพิ่ม followersOnly)
   language: string; // ภาษาของนิยาย (เช่น "th", "en", ISO 639-1 codes)
   isExplicitContent: boolean; // เนื้อหาสำหรับผู้ใหญ่ (18+)

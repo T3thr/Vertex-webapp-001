@@ -1,3 +1,5 @@
+// src/components/NovelCard.tsx
+
 "use client";
 
 import Image from "next/image";
@@ -15,18 +17,14 @@ interface Novel {
   coverImage: string;
   description?: string;
   status: "draft" | "published" | "completed" | "onHiatus" | "discount";
-  isExplicit: boolean;
+  isExplicitContent: boolean;
   tags: string[];
-  lastEpisodeAt?: Date | string;
-  stats?: {
-    views?: number;
-    likes?: number;
-    comments?: number;
-    rating?: number;
-    followers?: number;
-  };
+  lastEpisodePublishedAt?: Date | string;
+  viewsCount?: number;
+  likesCount?: number;
+  averageRating?: number;
   author?: {
-    name?: string;
+    displayName?: string;
     username?: string;
   };
 }
@@ -47,8 +45,8 @@ export function NovelCard({
   showAuthor = false 
 }: NovelCardProps) {
   // ฟอร์แมตวันที่เป็นภาษาไทย
-  const lastUpdated = novel.lastEpisodeAt 
-    ? formatDistanceToNow(new Date(novel.lastEpisodeAt), { 
+  const lastUpdated = novel.lastEpisodePublishedAt 
+    ? formatDistanceToNow(new Date(novel.lastEpisodePublishedAt), { 
         addSuffix: true, 
         locale: th 
       })
@@ -112,7 +110,7 @@ export function NovelCard({
             </div>
             
             {/* ป้ายแสดงการจำกัดอายุ */}
-            {novel.isExplicit && (
+            {novel.isExplicitContent && (
               <div className="absolute top-2 left-2">
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-500 text-primary-foreground">
                   18+
@@ -136,7 +134,7 @@ export function NovelCard({
             {/* ชื่อผู้เขียน (ถ้าเลือกแสดง) */}
             {showAuthor && novel.author && (
               <p className="text-xs text-muted-foreground mt-1">
-                โดย {novel.author.name || novel.author.username || "ไม่ระบุผู้เขียน"}
+                โดย {novel.author.displayName || novel.author.username || "ไม่ระบุผู้เขียน"}
               </p>
             )}
             
@@ -167,15 +165,15 @@ export function NovelCard({
             <div className="mt-auto pt-2 grid grid-cols-3 text-[10px] text-muted-foreground">
               <div className="flex items-center gap-1 justify-center">
                 <FiEye size={12} />
-                <span>{novel.stats?.views?.toLocaleString() || 0}</span>
+                <span>{novel.viewsCount?.toLocaleString() || 0}</span>
               </div>
               <div className="flex items-center gap-1 justify-center">
                 <FiHeart size={12} />
-                <span>{novel.stats?.likes?.toLocaleString() || 0}</span>
+                <span>{novel.likesCount?.toLocaleString() || 0}</span>
               </div>
               <div className="flex items-center gap-1 justify-center">
                 <FiStar size={12} />
-                <span>{novel.stats?.rating?.toFixed(1) || 0}</span>
+                <span>{novel.averageRating?.toFixed(1) || 0}</span>
               </div>
             </div>
           </div>
