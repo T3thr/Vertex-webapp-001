@@ -1,142 +1,144 @@
 // src/app/resend-verification/page.tsx
 
-'use client';
-
-import { useState } from 'react';
+'use client'
+import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Mail, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
-interface ResendResponse {
-  success?: boolean;
-  message?: string;
-  error?: string;
+// สถานะของการส่งอีเมลยืนยัน
+interface ResendState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  message: string;
 }
 
 export default function ResendVerificationPage() {
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [message, setMessage] = useState('');
+  const [state, setState] = useState<ResendState>({ status: 'idle', message: '' });
+  const [email, setEmail] = useState<string>('');
+  const emailInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  // ฟังก์ชันจัดการการส่งฟอร์ม
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus('loading');
-    setMessage('');
+
+    // ตรวจสอบความถูกต้องของอีเมล
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      setState({ status: 'error', message: 'กรุณาระบุอีเมลที่ถูกต้อง' });
+      return;
+    }
+
+    setState({ status: 'loading', message: 'กำลังส่งอีเมลยืนยัน...' });
 
     try {
       const response = await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.toLowerCase() }),
       });
 
-      const data: ResendResponse = await response.json();
+      const data = await response.json();
 
-      if (data.success) {
-        setStatus('success');
-        setMessage(data.message || 'Verification email sent successfully!');
-        setTimeout(() => router.push('/auth/signin'), 5000); // Auto-redirect after 5s
+      if (response.ok) {
+        setState({
+          status: 'success',
+          message: data.message || 'ส่งอีเมลยืนยันเรียบร้อยแล้ว กรุณาตรวจสอบกล่องจดหมายของคุณ',
+        });
+        setEmail('');
+        setTimeout(() => router.push('/auth/signin'), 5000);
       } else {
-        setStatus('error');
-        setMessage(data.error || 'An error occurred. Please try again.');
+        setState({
+          status: 'error',
+          message: data.error || 'เกิดข้อผิดพลาดในการส่งอีเมลยืนยัน',
+        });
       }
     } catch (error) {
-      setStatus('error');
-      setMessage('An unexpected error occurred. Please try again later.');
+      console.error('❌ ข้อผิดพลาดในการส่งอีเมลยืนยัน:', error);
+      setState({
+        status: 'error',
+        message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่ภายหลัง',
+      });
+    }
+  };
+
+  // ฟังก์ชันสำหรับแสดงผลตามสถานะ
+  const renderContent = () => {
+    switch (state.status) {
+      case 'loading':
+        return (
+          <div className="flex items-center gap-2 text-primary">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>{state.message}</span>
+          </div>
+        );
+      case 'success':
+        return (
+          <div className="flex items-center gap-2 text-green-500">
+            <CheckCircle className="w-6 h-6" />
+            <span>{state.message}</span>
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex items-center gap-2 text-red-500">
+            <AlertCircle className="w-6 h-6" />
+            <span>{state.message}</span>
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="container-custom py-12">
-        <div className="max-w-md mx-auto bg-card rounded-xl shadow-lg p-8 animate-slideIn">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-foreground">
-              Resend Verification Email
-            </h1>
-            <p className="mt-2 text-muted-foreground">
-              Enter your email to receive a new verification link.
-            </p>
-          </div>
-
-          {status === 'success' ? (
-            <div className="mt-6 text-center">
-              <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <svg
-                  className="h-8 w-8 text-primary"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <p className="mt-4 text-muted-foreground">{message}</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Redirecting to sign-in page...
-              </p>
-              <Link
-                href="/auth/signin"
-                className="mt-4 inline-block text-primary hover:underline"
+      <div className="container-custom">
+        <div className="max-w-md mx-auto bg-card p-8 rounded-lg shadow-lg animate-slideIn">
+          <h1 className="text-3xl font-bold text-center text-foreground mb-6">
+            ส่งอีเมลยืนยันใหม่
+          </h1>
+          <p className="text-center text-muted-foreground mb-6">
+            กรุณาระบุอีเมลที่คุณใช้สมัครเพื่อรับลิงก์ยืนยันใหม่
+          </p>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-foreground"
               >
-                Go to Sign In
-              </Link>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  Email Address
-                </label>
+                อีเมล
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   id="email"
                   type="email"
+                  ref={emailInputRef}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  placeholder="อีเมลของคุณ"
+                  className="w-full pl-10 pr-4 py-2 bg-input border border-border rounded-md focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                   required
-                  className="mt-1 w-full px-4 py-2 bg-input border border-border rounded-md shadow-sm focus:ring focus:ring-ring focus:ring-opacity-50 transition-colors"
-                  placeholder="your.email@example.com"
                 />
               </div>
-
-              {status === 'error' && (
-                <p className="text-sm text-destructive">{message}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={status === 'loading'}
-                className="w-full flex justify-center py-2 px-4 bg-primary text-primary-foreground rounded-md shadow-sm hover:bg-primary/90 focus:outline-none focus:ring focus:ring-ring focus:ring-opacity-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {status === 'loading' ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  'Send Verification Email'
-                )}
-              </button>
-            </form>
+            </div>
+            <button
+              type="submit"
+              disabled={state.status === 'loading'}
+              className="w-full bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ส่งอีเมลยืนยัน
+            </button>
+          </form>
+          {state.status !== 'idle' && (
+            <div className="mt-4 text-center text-sm">{renderContent()}</div>
           )}
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Already verified?{' '}
-              <Link href="/auth/signin" className="text-primary hover:underline">
-                Sign In
-              </Link>
-            </p>
-          </div>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            กลับไปที่{' '}
+            <Link href="/" className="text-primary hover:underline">
+              หน้าหลัก
+            </Link>
+          </p>
         </div>
       </div>
     </div>

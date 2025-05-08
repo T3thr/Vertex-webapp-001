@@ -1,146 +1,110 @@
 // src/app/verify-email/page.tsx
 
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+'use client'
+import React, { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
-interface VerificationResponse {
-  error?: string;
-  message?: string;
+// สถานะของการยืนยันอีเมล
+interface VerificationState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  message: string;
 }
 
 export default function VerifyEmailPage() {
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState<string>('');
-  const router = useRouter();
+  const [state, setState] = useState<VerificationState>({ status: 'idle', message: '' });
   const searchParams = useSearchParams();
+  const router = useRouter();
   const token = searchParams.get('token');
 
+  // ฟังก์ชันสำหรับยืนยัน token
+  const verifyToken = async () => {
+    if (!token) {
+      setState({ status: 'error', message: 'ไม่พบโทเค็นยืนยันใน URL' });
+      return;
+    }
+
+    setState({ status: 'loading', message: 'กำลังยืนยันอีเมลของคุณ...' });
+
+    try {
+      const response = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, {
+        method: 'GET',
+      });
+
+      if (response.redirected) {
+        setState({ status: 'success', message: 'ยืนยันอีเมลสำเร็จ! คุณสามารถเข้าสู่ระบบได้แล้ว' });
+        setTimeout(() => router.push('/auth/signin'), 3000);
+      } else {
+        const data = await response.json();
+        setState({ status: 'error', message: data.error || 'เกิดข้อผิดพลาดในการยืนยันอีเมล' });
+      }
+    } catch (error) {
+      console.error('❌ ข้อผิดพลาดในการยืนยันอีเมล:', error);
+      setState({ status: 'error', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่ภายหลัง' });
+    }
+  };
+
+  // เรียกใช้ verifyToken เมื่อหน้าโหลด
   useEffect(() => {
-    const verifyEmail = async () => {
-      if (!token) {
-        setStatus('error');
-        setMessage('Verification token is missing.');
-        return;
-      }
+    verifyToken();
+  }, []);
 
-      try {
-        const response = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, {
-          method: 'GET',
-        });
-
-        if (response.redirected) {
-          router.push(response.url); // Redirect to sign-in page on success
-          return;
-        }
-
-        const data: VerificationResponse = await response.json();
-
-        if (data.error) {
-          setStatus('error');
-          setMessage(data.error);
-        } else {
-          setStatus('success');
-          setMessage('Your email has been verified successfully!');
-          setTimeout(() => router.push('/auth/signin?verified=true'), 3000); // Auto-redirect after 3s
-        }
-      } catch (error) {
-        setStatus('error');
-        setMessage('An unexpected error occurred. Please try again later.');
-      }
-    };
-
-    verifyEmail();
-  }, [token, router]);
+  // ฟังก์ชันสำหรับแสดงเนื้อหาตามสถานะ
+  const renderContent = () => {
+    switch (state.status) {
+      case 'loading':
+        return (
+          <div className="flex flex-col items-center gap-4 animate-pulse">
+            <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            <p className="text-lg font-medium text-foreground">{state.message}</p>
+          </div>
+        );
+      case 'success':
+        return (
+          <div className="flex flex-col items-center gap-4 animate-fadeIn">
+            <CheckCircle className="w-16 h-16 text-green-500" />
+            <p className="text-xl font-semibold text-foreground">{state.message}</p>
+            <p className="text-sm text-muted-foreground">
+              กำลังนำคุณไปยังหน้าหลัก...
+            </p>
+            <Link
+              href="/"
+              className="text-primary hover:underline transition-colors"
+            >
+              ไปที่หน้าหลัก
+            </Link>
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex flex-col items-center gap-4 animate-fadeIn">
+            <AlertCircle className="w-16 h-16 text-red-500" />
+            <p className="text-xl font-semibold text-foreground">{state.message}</p>
+            <p className="text-sm text-muted-foreground">
+              กรุณาตรวจสอบลิงก์ยืนยันหรือขออีเมลยืนยันใหม่
+            </p>
+            <Link
+              href="/auth/resend-verification"
+              className="text-primary hover:underline transition-colors"
+            >
+              ขออีเมลยืนยันใหม่
+            </Link>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="container-custom py-12">
-        <div className="max-w-md mx-auto bg-card rounded-xl shadow-lg p-8 animate-slideIn">
-          <div className="text-center">
-            {status === 'loading' && (
-              <>
-                <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin" />
-                <h1 className="mt-4 text-2xl font-bold text-foreground">
-                  Verifying Your Email
-                </h1>
-                <p className="mt-2 text-muted-foreground">
-                  Please wait while we verify your email address...
-                </p>
-              </>
-            )}
-
-            {status === 'success' && (
-              <>
-                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <svg
-                    className="h-8 w-8 text-primary"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <h1 className="mt-4 text-2xl font-bold text-foreground">
-                  Verification Successful
-                </h1>
-                <p className="mt-2 text-muted-foreground">{message}</p>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Redirecting to sign-in page...
-                </p>
-                <Link
-                  href="/auth/signin"
-                  className="mt-6 inline-block text-primary hover:underline"
-                >
-                  Go to Sign In
-                </Link>
-              </>
-            )}
-
-            {status === 'error' && (
-              <>
-                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <svg
-                    className="h-8 w-8 text-destructive"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </div>
-                <h1 className="mt-4 text-2xl font-bold text-foreground">
-                  Verification Failed
-                </h1>
-                <p className="mt-2 text-muted-foreground">{message}</p>
-                <div className="mt-6 space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Need a new verification email?
-                  </p>
-                  <Link
-                    href="/auth/resend-verification"
-                    className="inline-block text-primary hover:underline"
-                  >
-                    Resend Verification Email
-                  </Link>
-                </div>
-              </>
-            )}
-          </div>
+      <div className="container-custom">
+        <div className="max-w-md mx-auto bg-card p-8 rounded-lg shadow-lg animate-slideIn">
+          <h1 className="text-3xl font-bold text-center text-foreground mb-6">
+            ยืนยันอีเมลของคุณ
+          </h1>
+          <div className="text-center">{renderContent()}</div>
         </div>
       </div>
     </div>
