@@ -13,8 +13,7 @@ interface RecaptchaResponse {
   success: boolean;
   challenge_ts?: string;
   hostname?: string;
-  score?: number; // สำหรับ reCAPTCHA v3 (ไม่ใช้ใน v2 Invisible)
-  action?: string; // สำหรับ reCAPTCHA v3 (ไม่ใช้ใน v2 Invisible)
+  // สำหรับ reCAPTCHA v2 Invisible ไม่มี score แต่จะมีการตอบกลับสถานะ success
   "error-codes"?: string[];
 }
 
@@ -52,7 +51,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                      headersList.get('x-real-ip') ||
                      'unknown';
 
-    // สร้างพารามิเตอร์สำหรับการยืนยัน
+    // สร้างพารามิเตอร์สำหรับการยืนยัน reCAPTCHA v2 Invisible
     const params = new URLSearchParams({
       secret: secretKey,
       response: token,
