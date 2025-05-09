@@ -9,6 +9,7 @@ import ActivityHistoryModel from "@/backend/models/ActivityHistory";
 import NovelModel from "@/backend/models/Novel";
 import EpisodeModel from "@/backend/models/Episode";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import { model } from "mongoose"; // Added missing import for model
 
 // อินเทอร์เฟซสำหรับ response
 interface ActivityHistoryResponse {
