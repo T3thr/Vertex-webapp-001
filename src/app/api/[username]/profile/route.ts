@@ -8,7 +8,7 @@ import UserModel from "@/backend/models/User";
 import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
 import UserFollowModel from "@/backend/models/UserFollow";
 import NovelModel from "@/backend/models/Novel";
-import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
 // อินเทอร์เฟซสำหรับข้อมูลโปรไฟล์ที่ส่งกลับ
 interface UserProfile {
