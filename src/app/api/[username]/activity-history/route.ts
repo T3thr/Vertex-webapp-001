@@ -9,7 +9,7 @@ import ActivityHistoryModel from "@/backend/models/ActivityHistory";
 import NovelModel from "@/backend/models/Novel";
 import EpisodeModel from "@/backend/models/Episode";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
-import { model } from "mongoose"; // Added missing import for model
+import { model } from "mongoose";
 
 // อินเทอร์เฟซสำหรับ response
 interface ActivityHistoryResponse {
@@ -60,7 +60,7 @@ const ALLOWED_ACTIVITY_TYPES = [
 // ฟังก์ชันหลักสำหรับ GET request
 export async function GET(
   req: NextRequest,
-  { params }: { params: { username: string } }
+  context: { params: { username: string } }
 ): Promise<NextResponse> {
   try {
     // เชื่อมต่อ MongoDB
@@ -73,7 +73,7 @@ export async function GET(
       : null;
 
     // ดึง username จาก params
-    const { username } = params;
+    const { username } = context.params;
     if (!username) {
       return NextResponse.json(
         { error: "ต้องระบุชื่อผู้ใช้" },
@@ -241,7 +241,7 @@ export async function GET(
 
     return NextResponse.json(response);
   } catch (error: any) {
-    console.error(`[API Error] /api/users/${params.username}/activity-history:`, error);
+    console.error(`[API Error] /api/users/${context.params.username}/activity-history:`, error);
     return NextResponse.json(
       { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
