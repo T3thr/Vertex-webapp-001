@@ -1,14 +1,14 @@
 // src/app/api/[username]/activity-history/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import mongoose, { Document, Types } from "mongoose";
-import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
-import ActivityHistoryModel from "@/backend/models/ActivityHistory";
-import NovelModel from "@/backend/models/Novel";
-import EpisodeModel from "@/backend/models/Episode";
-import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import mongoose from 'mongoose';
+import dbConnect from '@/backend/lib/mongodb';
+import UserModel from '@/backend/models/User';
+import SocialMediaUserModel from '@/backend/models/SocialMediaUser';
+import ActivityHistoryModel from '@/backend/models/ActivityHistory';
+import NovelModel from '@/backend/models/Novel';
+import EpisodeModel from '@/backend/models/Episode';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 
 // อินเทอร์เฟซสำหรับ response
 interface ActivityHistoryResponse {
@@ -44,57 +44,23 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
-// อินเทอร์เฟซสำหรับผู้ใช้
-interface UserDocument extends Document {
-  _id: Types.ObjectId;
-  username: string;
-  isDeleted: boolean;
-  preferences: {
-    privacy: {
-      profileVisibility: "public" | "private" | "followersOnly";
-    };
-  };
-  profile?: {
-    displayName?: string;
-  };
-}
-
-// อินเทอร์เฟซสำหรับรายละเอียดกิจกรรม
-interface ActivityDocument extends Document {
-  _id: Types.ObjectId;
-  user: Types.ObjectId;
-  activityType: string;
-  content?: string;
-  createdAt: Date;
-  details: {
-    novelId?: Types.ObjectId;
-    episodeId?: Types.ObjectId;
-    commentId?: Types.ObjectId;
-    ratingId?: Types.ObjectId;
-    targetUserId?: Types.ObjectId;
-    purchaseId?: Types.ObjectId;
-    donationId?: Types.ObjectId;
-    amountCoin?: number;
-  };
-}
-
 // กิจกรรมที่ต้องการแสดงในประวัติ
 const ALLOWED_ACTIVITY_TYPES = [
-  "EPISODE_READ",
-  "COMMENT_CREATED",
-  "RATING_GIVEN",
-  "USER_FOLLOWED",
-  "NOVEL_LIKED",
-  "COIN_SPENT_EPISODE",
-  "COIN_SPENT_DONATION_WRITER",
-  "COIN_EARNED_WRITER_DONATION",
+  'EPISODE_READ',
+  'COMMENT_CREATED',
+  'RATING_GIVEN',
+  'USER_FOLLOWED',
+  'NOVEL_LIKED',
+  'COIN_SPENT_EPISODE',
+  'COIN_SPENT_DONATION_WRITER',
+  'COIN_EARNED_WRITER_DONATION',
 ];
 
 // ฟังก์ชันหลักสำหรับ GET request
 export async function GET(
   req: NextRequest,
   { params }: { params: { username: string } }
-): Promise<NextResponse<ActivityHistoryResponse | { error: string }>> {
+): Promise<NextResponse<ActivityHistoryResponse>> {
   try {
     // เชื่อมต่อ MongoDB
     await dbConnect();
@@ -109,46 +75,45 @@ export async function GET(
     const { username } = params;
     if (!username) {
       return NextResponse.json(
-        { error: "ต้องระบุชื่อผู้ใช้" },
+        { error: 'ต้องระบุชื่อผู้ใช้' },
         { status: 400 }
       );
     }
 
     // ค้นหาผู้ใช้จาก User หรือ SocialMediaUser
-    let viewedUser: UserDocument | null = await UserModel()
-      .findOne({ username, isDeleted: false })
-      .lean();
+    let viewedUser = await UserModel.findOne({ username, isDeleted: false }).lean();
     if (!viewedUser) {
-      viewedUser = await SocialMediaUserModel()
-        .findOne({ username, isDeleted: false })
-        .lean();
+      viewedUser = await SocialMediaUserModel.findOne({
+        username,
+        isDeleted: false,
+      }).lean();
     }
     if (!viewedUser) {
-      return NextResponse.json(
-        { error: "ไม่พบผู้ใช้" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'ไม่พบผู้ใช้' }, { status: 404 });
     }
 
     // ตรวจสอบสิทธิ์การเข้าถึง
     const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences.privacy.profileVisibility;
+    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility;
     if (!isOwnProfile) {
-      if (profileVisibility === "private") {
+      if (profileVisibility === 'private') {
         return NextResponse.json(
-          { error: "โปรไฟล์นี้เป็นส่วนตัว" },
+          { error: 'โปรไฟล์นี้เป็นส่วนตัว' },
           { status: 403 }
         );
       }
-      if (profileVisibility === "followersOnly" && currentUserId) {
-        const isFollower = await mongoose.model("UserFollow").findOne({
-          followerId: currentUserId,
-          followingId: viewedUser._id,
-          status: "active",
-        });
+      if (profileVisibility === 'followersOnly' && currentUserId) {
+        const isFollower = await mongoose
+          .model('UserFollow')
+          .findOne({
+            followerId: currentUserId,
+            followingId: viewedUser._id,
+            status: 'active',
+          })
+          .lean();
         if (!isFollower) {
           return NextResponse.json(
-            { error: "ต้องติดตามผู้ใช้เพื่อดูประวัติกิจกรรม" },
+            { error: 'ต้องติดตามผู้ใช้เพื่อดูประวัติกิจกรรม' },
             { status: 403 }
           );
         }
@@ -156,12 +121,12 @@ export async function GET(
     }
 
     // ดึง query parameters
-    const url = new URL(req.url);
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
     if (page < 1 || limit < 1) {
       return NextResponse.json(
-        { error: "page และ limit ต้องมากกว่า 0" },
+        { error: 'page และ limit ต้องมากกว่า 0' },
         { status: 400 }
       );
     }
@@ -175,66 +140,58 @@ export async function GET(
       // จำกัดประเภทสำหรับผู้ใช้ที่ไม่ใช่เจ้าของโปรไฟล์
       activityFilter = activityFilter.filter(
         (type) =>
-          ![
-            "COIN_SPENT_DONATION_WRITER",
-            "COIN_EARNED_WRITER_DONATION",
-          ].includes(type)
+          !['COIN_SPENT_DONATION_WRITER', 'COIN_EARNED_WRITER_DONATION'].includes(
+            type
+          )
       );
     }
 
     // ดึงประวัติกิจกรรม
-    const activities = await ActivityHistoryModel()
-      .find({
-        user: viewedUser._id,
-        activityType: { $in: activityFilter },
-      })
+    const activities = await ActivityHistoryModel.find({
+      user: viewedUser._id,
+      activityType: { $in: activityFilter },
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate<{
-        details: {
-          novelId?: { _id: Types.ObjectId; title: string; slug: string };
-          episodeId?: { _id: Types.ObjectId; title: string; episodeNumber: number };
-          targetUserId?: { _id: Types.ObjectId; username: string; profile?: { displayName?: string } };
-        };
-      }>([
+      .populate([
         {
-          path: "details.novelId",
-          model: NovelModel(),
-          select: "title slug",
+          path: 'details.novelId',
+          model: NovelModel,
+          select: 'title slug',
         },
         {
-          path: "details.episodeId",
-          model: EpisodeModel(),
-          select: "title episodeNumber",
+          path: 'details.episodeId',
+          model: EpisodeModel,
+          select: 'title episodeNumber',
         },
         {
-          path: "details.targetUserId",
-          model: UserModel(),
-          select: "username profile.displayName",
+          path: 'details.targetUserId',
+          model: UserModel,
+          select: 'username profile.displayName',
           match: { isDeleted: false },
         },
         {
-          path: "details.targetUserId",
-          model: SocialMediaUserModel(),
-          select: "username profile.displayName",
+          path: 'details.targetUserId',
+          model: SocialMediaUserModel,
+          select: 'username profile.displayName',
           match: { isDeleted: false },
         },
       ])
       .lean();
 
     // นับจำนวนกิจกรรมทั้งหมด
-    const totalActivities = await ActivityHistoryModel().countDocuments({
+    const totalActivities = await ActivityHistoryModel.countDocuments({
       user: viewedUser._id,
       activityType: { $in: activityFilter },
     });
     const totalPages = Math.ceil(totalActivities / limit);
 
     // แปลงข้อมูลให้ตรงกับ ActivityItem
-    const formattedActivities: ActivityItem[] = activities.map((activity: ActivityDocument) => {
-      const novel = activity.details.novelId as { _id: Types.ObjectId; title: string; slug: string } | undefined;
-      const episode = activity.details.episodeId as { _id: Types.ObjectId; title: string; episodeNumber: number } | undefined;
-      const targetUser = activity.details.targetUserId as { _id: Types.ObjectId; username: string; profile?: { displayName?: string } } | undefined;
+    const formattedActivities: ActivityItem[] = activities.map((activity) => {
+      const novel = activity.details.novelId as any;
+      const episode = activity.details.episodeId as any;
+      const targetUser = activity.details.targetUserId as any;
 
       return {
         _id: activity._id.toString(),
@@ -247,7 +204,7 @@ export async function GET(
         ratingId: activity.details.ratingId?.toString(),
         followedUserId: activity.details.targetUserId?.toString(),
         likedNovelId:
-          activity.activityType === "NOVEL_LIKED"
+          activity.activityType === 'NOVEL_LIKED'
             ? activity.details.novelId?.toString()
             : undefined,
         purchaseId: activity.details.purchaseId?.toString(),
@@ -277,9 +234,12 @@ export async function GET(
 
     return NextResponse.json(response);
   } catch (error: any) {
-    console.error(`[API Error] /api/users/${params.username}/activity-history:`, error);
+    console.error(
+      `[API Error] /api/users/${params.username}/activity-history:`,
+      error
+    );
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
+      { error: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' },
       { status: 500 }
     );
   }
