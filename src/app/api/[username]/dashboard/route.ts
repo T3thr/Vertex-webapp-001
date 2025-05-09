@@ -24,7 +24,10 @@ interface DashboardResponse {
 }
 
 // ฟังก์ชันจัดการ GET request
-export async function GET(req: NextRequest, { params }: { params: { username: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { username: string } }
+): Promise<NextResponse<DashboardResponse | { error: string }>> {
   try {
     await dbConnect();
 
@@ -81,8 +84,6 @@ export async function GET(req: NextRequest, { params }: { params: { username: st
       }
 
       // ดึงนิยายที่ถูกใจล่าสุด (สมมติมี Like model)
-      // ตัวอย่างนี้ใช้ข้อมูลจำลอง เนื่องจากไม่มี Like model ในข้อมูลที่ให้
-      // ในระบบจริงควร query จาก Like model
       const mockLastLikedNovel = await NovelModel()
         .findOne({ status: "published", isDeleted: false })
         .select("title slug")
