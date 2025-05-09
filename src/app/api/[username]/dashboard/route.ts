@@ -26,12 +26,13 @@ interface DashboardResponse {
 // ฟังก์ชันจัดการ GET request
 export async function GET(
   request: NextRequest,
-  { params }: { params: { username: string } }
+  context: { params: { username: string } }
 ): Promise<NextResponse<DashboardResponse | { error: string }>> {
   try {
     await dbConnect();
 
-    const { username } = params;
+    // ดึง username จาก path parameters
+    const username = context.params.username;
     if (!username) {
       return NextResponse.json({ error: "ต้องระบุชื่อผู้ใช้" }, { status: 400 });
     }
