@@ -8,7 +8,7 @@ import UserModel from "@/backend/models/User";
 import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
 import UserFollowModel from "@/backend/models/UserFollow";
 import ActivityHistoryModel from "@/backend/models/ActivityHistory";
-import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
 // ตัวจัดการสำหรับ POST request (ติดตามผู้ใช้)
 export async function POST(
