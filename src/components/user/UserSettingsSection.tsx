@@ -6,7 +6,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'react-toastify';
-import debounce from 'lodash.debounce';
 
 // อินเทอร์เฟซสำหรับ props ของคอมโพเนนต์
 interface UserSettingsSectionProps {
@@ -32,11 +31,26 @@ interface UserSettingsData {
 // ฟังก์ชันตรวจสอบ URL
 const isValidUrl = (url: string) => !url || /^https?:\/\/|^\//.test(url);
 
+// ฟังก์ชัน debounce แบบกำหนดเอง
+function debounce<T extends (...args: any[]) => void>(func: T, wait: number) {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
 const UserSettingsSection: React.FC<UserSettingsSectionProps> = ({ userId }) => {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<UserSettingsData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [errors, setErrors] = useState<Partial<Record<keyof UserSettingsData, string>>>({});
+  const [expandedSections, setExpandedSections] = useState({
+    profile: true,
+    notifications: true,
+    privacy: true,
+    general: true,
+  });
   const isOwnProfile = session?.user?.id === userId;
 
   // ดึงข้อมูลการตั้งค่า
@@ -90,6 +104,11 @@ const UserSettingsSection: React.FC<UserSettingsSectionProps> = ({ userId }) => 
     setSettings((prev) => ({ ...prev, [name]: newValue }));
   };
 
+  // จัดการการสลับส่วนที่ขยาย
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
   // จัดการการส่งฟอร์ม (debounced)
   const handleSubmit = useCallback(
     debounce(async (settings: UserSettingsData) => {
@@ -128,258 +147,364 @@ const UserSettingsSection: React.FC<UserSettingsSectionProps> = ({ userId }) => 
 
   if (isLoading && !settings.displayName) {
     return (
-      <section className="container-custom my-6 animate-pulse">
-        <div className="bg-card p-6 rounded-radius-lg shadow-shadow-md">
-          <div className="h-8 bg-muted rounded-radius-md w-1/3 mb-6"></div>
-          <div className="space-y-4">
-            <div className="h-4 bg-muted rounded-radius-md w-1/2"></div>
-            <div className="h-4 bg-muted rounded-radius-md w-3/4"></div>
-            <div className="h-4 bg-muted rounded-radius-md w-1/3"></div>
-          </div>
+      <div className="p-6 bg-card rounded-radius-lg shadow-shadow-md my-4 animate-pulse">
+        <div className="h-6 bg-muted rounded-radius-md w-1/4 mb-6"></div>
+        <div className="space-y-4">
+          <div className="h-4 bg-muted rounded-radius-md w-1/2"></div>
+          <div className="h-4 bg-muted rounded-radius-md w-3/4"></div>
+          <div className="h-4 bg-muted rounded-radius-md w-1/3"></div>
         </div>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section className="container-custom my-8">
-      <div className="bg-card p-8 rounded-radius-lg shadow-shadow-lg animate-fadeIn">
-        <h2 className="text-2xl md:text-3xl font-semibold text-foreground mb-8">การตั้งค่าผู้ใช้</h2>
-        <form onSubmit={onSubmit} className="space-y-8" aria-label="การตั้งค่าผู้ใช้">
-          {/* ส่วนข้อมูลโปรไฟล์ */}
-          <fieldset className="space-y-6">
-            <legend className="text-lg font-medium text-foreground border-b pb-2 mb-4">
-              ข้อมูลโปรไฟล์
-            </legend>
-            {/* ชื่อที่แสดง */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="displayName" className="block text-sm font-medium text-foreground/80 mb-2">
-                  ชื่อที่แสดง
-                </label>
-                <input
-                  type="text"
-                  id="displayName"
-                  name="displayName"
-                  value={settings.displayName || ''}
-                  onChange={handleInputChange}
-                  className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                  aria-invalid={!!errors.displayName}
-                  aria-describedby={errors.displayName ? 'displayName-error' : undefined}
-                />
-                {errors.displayName && (
-                  <p id="displayName-error" className="text-sm text-red-500 mt-2 animate-slideIn">
-                    {errors.displayName}
-                  </p>
-                )}
+    <div className="container-custom py-8">
+      <div className="bg-card shadow-shadow-lg rounded-radius-lg p-6 md:p-8 animate-fadeIn">
+        <h2 className="text-2xl md:text-3xl font-semibold text-foreground mb-6">
+          การตั้งค่าผู้ใช้
+        </h2>
+        <form onSubmit={onSubmit} className="space-y-6" aria-label="การตั้งค่าผู้ใช้">
+          {/* ส่วนโปรไฟล์ */}
+          <section className="border-b border-border pb-4">
+            <button
+              type="button"
+              onClick={() => toggleSection('profile')}
+              className="flex items-center justify-between w-full text-lg font-medium text-foreground mb-2 transition-colors hover:text-primary"
+              aria-expanded={expandedSections.profile}
+              aria-controls="profile-settings"
+            >
+              <span>ข้อมูลโปรไฟล์</span>
+              <svg
+                className={`w-5 h-5 transition-transform ${
+                  expandedSections.profile ? 'rotate-180' : ''
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {expandedSections.profile && (
+              <div id="profile-settings" className="space-y-4 animate-slideIn">
+                {/* ชื่อที่แสดง */}
+                <div>
+                  <label
+                    htmlFor="displayName"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    ชื่อที่แสดง
+                  </label>
+                  <input
+                    type="text"
+                    id="displayName"
+                    name="displayName"
+                    value={settings.displayName || ''}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                    aria-invalid={!!errors.displayName}
+                    aria-describedby={errors.displayName ? 'displayName-error' : undefined}
+                  />
+                  {errors.displayName && (
+                    <p id="displayName-error" className="text-sm text-red-500 mt-1">
+                      {errors.displayName}
+                    </p>
+                  )}
+                </div>
+                {/* ประวัติ */}
+                <div>
+                  <label
+                    htmlFor="bio"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    ประวัติ
+                  </label>
+                  <textarea
+                    id="bio"
+                    name="bio"
+                    value={settings.bio || ''}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent resize-y"
+                    rows={4}
+                    aria-invalid={!!errors.bio}
+                    aria-describedby={errors.bio ? 'bio-error' : undefined}
+                  />
+                  {errors.bio && (
+                    <p id="bio-error" className="text-sm text-red-500 mt-1">{errors.bio}</p>
+                  )}
+                </div>
+                {/* URL รูปโปรไฟล์ */}
+                <div>
+                  <label
+                    htmlFor="avatarUrl"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    URL รูปโปรไฟล์
+                  </label>
+                  <input
+                    type="text"
+                    id="avatarUrl"
+                    name="avatarUrl"
+                    value={settings.avatarUrl || ''}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                    aria-invalid={!!errors.avatarUrl}
+                    aria-describedby={errors.avatarUrl ? 'avatarUrl-error' : undefined}
+                  />
+                  {errors.avatarUrl && (
+                    <p id="avatarUrl-error" className="text-sm text-red-500 mt-1">
+                      {errors.avatarUrl}
+                    </p>
+                  )}
+                </div>
+                {/* URL รูปปก */}
+                <div>
+                  <label
+                    htmlFor="coverImageUrl"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    URL รูปปก
+                  </label>
+                  <input
+                    type="text"
+                    id="coverImageUrl"
+                    name="coverImageUrl"
+                    value={settings.coverImageUrl || ''}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                    aria-invalid={!!errors.coverImageUrl}
+                    aria-describedby={errors.coverImageUrl ? 'coverImageUrl-error' : undefined}
+                  />
+                  {errors.coverImageUrl && (
+                    <p id="coverImageUrl-error" className="text-sm text-red-500 mt-1">
+                      {errors.coverImageUrl}
+                    </p>
+                  )}
+                </div>
               </div>
-              {/* URL รูปโปรไฟล์ */}
-              <div>
-                <label htmlFor="avatarUrl" className="block text-sm font-medium text-foreground/80 mb-2">
-                  URL รูปโปรไฟล์
-                </label>
-                <input
-                  type="text"
-                  id="avatarUrl"
-                  name="avatarUrl"
-                  value={settings.avatarUrl || ''}
-                  onChange={handleInputChange}
-                  className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                  aria-invalid={!!errors.avatarUrl}
-                  aria-describedby={fieldset.avatarUrl ? 'avatarUrl-error' : undefined}
-                />
-                {errors.avatarUrl && (
-                  <p id="avatarUrl-error" className="text-sm text-red-500 mt-2 animate-slideIn">
-                    {errors.avatarUrl}
-                  </p>
-                )}
-              </div>
-            </div>
-            {/* ประวัติ */}
-            <div>
-              <label htmlFor="bio" className="block text-sm font-medium text-foreground/80 mb-2">
-                ประวัติ
-              </label>
-              <textarea
-                id="bio"
-                name="bio"
-                value={settings.bio || ''}
-                onChange={handleInputChange}
-                className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50 resize-y"
-                rows={4}
-                aria-invalid={!!errors.bio}
-                aria-describedby={errors.bio ? 'bio-error' : undefined}
-              />
-              {errors.bio && (
-                <p id="bio-error" className="text-sm text-red-500 mt-2 animate-slideIn">
-                  {errors.bio}
-                </p>
-              )}
-            </div>
-            {/* URL รูปปก */}
-            <div>
-              <label htmlFor="coverImageUrl" className="block text-sm font-medium text-foreground/80 mb-2">
-                URL รูปปก
-              </label>
-              <input
-                type="text"
-                id="coverImageUrl"
-               ños="coverImageUrl"
-                value={settings.coverImageUrl || ''}
-                onChange={handleInputChange}
-                className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                aria-invalid={!!errors.coverImageUrl}
-                aria-describedby={errors.coverImageUrl ? 'coverImageUrl-error' : undefined}
-              />
-              {errors.coverImageUrl && (
-                <p id="coverImageUrl-error" className="text-sm text-red-500 mt-2 animate-slideIn">
-                  {errors.coverImageUrl}
-                </p>
-              )}
-            </div>
-          </fieldset>
+            )}
+          </section>
 
-          {/* การตั้งค่าการแจ้งเตือน */}
-          <fieldset className="space-y-4">
-            <legend className="text-lg font-medium text-foreground border-b pb-2 mb-4">
-              การตั้งค่าการแจ้งเตือน
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="emailNotifications"
-                  name="emailNotifications"
-                  checked={settings.emailNotifications || false}
-                  onChange={handleInputChange}
-                  className="h-5 w-5 text-primary focus:ring-primary border-input rounded-radius-sm transition-colors"
-                />
-                <label htmlFor="emailNotifications" className="text-sm font-medium text-foreground/80">
-                  การแจ้งเตือนทางอีเมล
-                </label>
+          {/* ส่วนการแจ้งเตือน */}
+          <section className="border-b border-border pb-4">
+            <button
+              type="button"
+              onClick={() => toggleSection('notifications')}
+              className="flex items-center justify-between w-full text-lg font-medium text-foreground mb-2 transition-colors hover:text-primary"
+              aria-expanded={expandedSections.notifications}
+              aria-controls="notification-settings"
+            >
+              <span>การตั้งค่าการแจ้งเตือน</span>
+              <svg
+                className={`w-5 h-5 transition-transform ${
+                  expandedSections.notifications ? 'rotate-180' : ''
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {expandedSections.notifications && (
+              <div id="notification-settings" className="space-y-2 animate-slideIn">
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="emailNotifications"
+                    name="emailNotifications"
+                    checked={settings.emailNotifications || false}
+                    onChange={handleInputChange}
+                    className="h-5 w-5 text-primary focus:ring-ring border-input rounded-radius-sm transition-colors"
+                  />
+                  <label
+                    htmlFor="emailNotifications"
+                    className="text-sm text-foreground/80 cursor-pointer"
+                  >
+                    การแจ้งเตือนทางอีเมล
+                  </label>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="pushNotifications"
+                    name="pushNotifications"
+                    checked={settings.pushNotifications || false}
+                    onChange={handleInputChange}
+                    className="h-5 w-5 text-primary focus:ring-ring border-input rounded-radius-sm transition-colors"
+                  />
+                  <label
+                    htmlFor="pushNotifications"
+                    className="text-sm text-foreground/80 cursor-pointer"
+                  >
+                    การแจ้งเตือนแบบพุช
+                  </label>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="novelUpdatesNotifications"
+                    name="novelUpdatesNotifications"
+                    checked={settings.novelUpdatesNotifications || false}
+                    onChange={handleInputChange}
+                    className="h-5 w-5 text-primary focus:ring-ring border-input rounded-radius-sm transition-colors"
+                  />
+                  <label
+                    htmlFor="novelUpdatesNotifications"
+                    className="text-sm text-foreground/80 cursor-pointer"
+                  >
+                    การแจ้งเตือนการอัปเดตนิยาย
+                  </label>
+                </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="pushNotifications"
-                  name="pushNotifications"
-                  checked={settings.pushNotifications || false}
-                  onChange={handleInputChange}
-                  className="h-5 w-5 text-primary focus:ring-primary border-input rounded-radius-sm transition-colors"
-                />
-                <label htmlFor="pushNotifications" className="text-sm font-medium text-foreground/80">
-                  การแจ้งเตือนแบบพุช
-                </label>
-              </div>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="novelUpdatesNotifications"
-                  name="novelUpdatesNotifications"
-                  checked={settings.novelUpdatesNotifications || false}
-                  onChange={handleInputChange}
-                  className="h-5 w-5 text-primary focus:ring-primary border-input rounded-radius-sm transition-colors"
-                />
-                <label htmlFor="novelUpdatesNotifications" className="text-sm font-medium text-foreground/80">
-                  การแจ้งเตือนการอัปเดตนิยาย
-                </label>
-              </div>
-            </div>
-          </fieldset>
+            )}
+          </section>
 
-          {/* การตั้งค่าความเป็นส่วนตัว */}
-          <fieldset className="space-y-6">
-            <legend className="text-lg font-medium text-foreground border-b pb-2 mb-4">
-              การตั้งค่าความเป็นส่วนตัว
-            </legend>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="profileVisibility" className="block text-sm font-medium text-foreground/80 mb-2">
-                  การมองเห็นโปรไฟล์
-                </label>
-                <select
-                  id="profileVisibility"
-                  name="profileVisibility"
-                  value={settings.profileVisibility || 'public'}
-                  onChange={handleInputChange}
-                  className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                >
-                  <option value="public">สาธารณะ</option>
-                  <option value="followersOnly">เฉพาะผู้ติดตาม</option>
-                  <option value="private">ส่วนตัว</option>
-                </select>
+          {/* ส่วนความเป็นส่วนตัว */}
+          <section className="border-b border-border pb-4">
+            <button
+              type="button"
+              onClick={() => toggleSection('privacy')}
+              className="flex items-center justify-between w-full text-lg font-medium text-foreground mb-2 transition-colors hover:text-primary"
+              aria-expanded={expandedSections.privacy}
+              aria-controls="privacy-settings"
+            >
+              <span>การตั้งค่าความเป็นส่วนตัว</span>
+              <svg
+                className={`w-5 h-5 transition-transform ${
+                  expandedSections.privacy ? 'rotate-180' : ''
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {expandedSections.privacy && (
+              <div id="privacy-settings" className="space-y-4 animate-slideIn">
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="showActivityStatus"
+                    name="showActivityStatus"
+                    checked={settings.showActivityStatus || false}
+                    onChange={handleInputChange}
+                    className="h-5 w-5 text-primary focus:ring-ring border-input rounded-radius-sm transition-colors"
+                  />
+                  <label
+                    htmlFor="showActivityStatus"
+                    className="text-sm text-foreground/80 cursor-pointer"
+                  >
+                    แสดงสถานะกิจกรรม
+                  </label>
+                </div>
+                <div>
+                  <label
+                    htmlFor="profileVisibility"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    การมองเห็นโปรไฟล์
+                  </label>
+                  <select
+                    id="profileVisibility"
+                    name="profileVisibility"
+                    value={settings.profileVisibility || 'public'}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                  >
+                    <option value="public">สาธารณะ</option>
+                    <option value="followersOnly">เฉพาะผู้ติดตาม</option>
+                    <option value="private">ส่วนตัว</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    htmlFor="readingHistoryVisibility"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    การมองเห็นประวัติการอ่าน
+                  </label>
+                  <select
+                    id="readingHistoryVisibility"
+                    name="readingHistoryVisibility"
+                    value={settings.readingHistoryVisibility || 'public'}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                  >
+                    <option value="public">สาธารณะ</option>
+                    <option value="followersOnly">เฉพาะผู้ติดตาม</option>
+                    <option value="private">ส่วนตัว</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label htmlFor="readingHistoryVisibility" className="block text-sm font-medium text-foreground/80 mb-2">
-                  การมองเห็นประวัติการอ่าน
-                </label>
-                <select
-                  id="readingHistoryVisibility"
-                  name="readingHistoryVisibility"
-                  value={settings.readingHistoryVisibility || 'public'}
-                  onChange={handleInputChange}
-                  className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                >
-                  <option value="public">สาธารณะ</option>
-                  <option value="followersOnly">เฉพาะผู้ติดตาม</option>
-                  <option value="private">ส่วนตัว</option>
-                </select>
-              </div>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="showActivityStatus"
-                  name="showActivityStatus"
-                  checked={settings.showActivityStatus || false}
-                  onChange={handleInputChange}
-                  className="h-5 w-5 text-primary focus:ring-primary border-input rounded-radius-sm transition-colors"
-                />
-                <label htmlFor="showActivityStatus" className="text-sm font-medium text-foreground/80">
-                  แสดงสถานะกิจกรรม
-                </label>
-              </div>
-            </div>
-          </fieldset>
+            )}
+          </section>
 
-          {/* การตั้งค่าทั่วไป */}
-          <fieldset className="space-y-6">
-            <legend className="text-lg font-medium text-foreground border-b pb-2 mb-4">
-              การตั้งค่าทั่วไป
-            </legend>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="theme" className="block text-sm font-medium text-foreground/80 mb-2">
-                  ธีม
-                </label>
-                <select
-                  id="theme"
-                  name="theme"
-                  value={settings.theme || 'system'}
-                  onChange={handleInputChange}
-                  className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                >
-                  <option value="light">สว่าง</option>
-                  <option value="dark">มืด</option>
-                  <option value="system">ตามระบบ</option>
-                </select>
+          {/* ส่วนการตั้งค่าทั่วไป */}
+          <section>
+            <button
+              type="button"
+              onClick={() => toggleSection('general')}
+              className="flex items-center justify-between w-full text-lg font-medium text-foreground mb-2 transition-colors hover:text-primary"
+              aria-expanded={expandedSections.general}
+              aria-controls="general-settings"
+            >
+              <span>การตั้งค่าทั่วไป</span>
+              <svg
+                className={`w-5 h-5 transition-transform ${
+                  expandedSections.general ? 'rotate-180' : ''
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {expandedSections.general && (
+              <div id="general-settings" className="space-y-4 animate-slideIn">
+                <div>
+                  <label
+                    htmlFor="theme"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    ธีม
+                  </label>
+                  <select
+                    id="theme"
+                    name="theme"
+                    value={settings.theme || 'system'}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                  >
+                    <option value="light">สว่าง</option>
+                    <option value="dark">มืด</option>
+                    <option value="system">ตามระบบ</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    htmlFor="language"
+                    className="block text-sm font-medium text-foreground/80 mb-1"
+                  >
+                    ภาษา
+                  </label>
+                  <select
+                    id="language"
+                    name="language"
+                    value={settings.language || 'th'}
+                    onChange={handleInputChange}
+                    className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm bg-background text-foreground transition-all focus:ring-2 focus:ring-ring focus:border-transparent"
+                  >
+                    <option value="th">ไทย</option>
+                    <option value="en">อังกฤษ</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label htmlFor="language" className="block text-sm font-medium text-foreground/80 mb-2">
-                  ภาษา
-                </label>
-                <select
-                  id="language"
-                  name="language"
-                  value={settings.language || 'th'}
-                  onChange={handleInputChange}
-                  className="block w-full p-3 border border-input rounded-radius-md shadow-shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground transition-all hover:border-primary/50"
-                >
-                  <option value="th">ไทย</option>
-                  <option value="en">อังกฤษ</option>
-                </select>
-              </div>
-            </div>
-          </fieldset>
+            )}
+          </section>
 
           {/* ปุ่มบันทึก */}
           <div className="flex justify-end mt-8">
@@ -393,13 +518,33 @@ const UserSettingsSection: React.FC<UserSettingsSectionProps> = ({ userId }) => 
               }`}
               aria-disabled={isLoading || Object.values(errors).some((error) => error)}
             >
-              {isLoading && <span className="animate-spin h-5 w-5 border-2 border-t-transparent border-primary-foreground rounded-full"></span>}
+              {isLoading && (
+                <svg
+                  className="animate-spin h-5 w-5 mr-2"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8h8a8 8 0 01-16 0z"
+                  />
+                </svg>
+              )}
               <span>{isLoading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}</span>
             </button>
           </div>
         </form>
       </div>
-    </section>
+    </div>
   );
 };
 
