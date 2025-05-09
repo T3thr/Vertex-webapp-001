@@ -1,5 +1,6 @@
 // src/components/UserDashboardSection.tsx
 // คอมโพเนนต์สำหรับแสดงแดชบอร์ดของผู้ใช้ โดยเน้น UI ที่สวยงามสำหรับนักเขียน
+'use client';
 
 import { useEffect, useState } from "react";
 import { BarChart2, BookOpen, Heart, Users, TrendingUp, DollarSign, UserPlus, Loader2, Gift } from "lucide-react";
