@@ -139,7 +139,7 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({ viewedUser, ini
             <div className="flex-grow">
               <p className="text-sm text-foreground">
                 {activity.description || activity.content || `Activity: ${activity.type}`}
-                {activity.novelTitle && <span className="font-semibold"> on "{activity.novelTitle}"</span>}
+                {activity.novelTitle && <span className="font-semibold"> on &quot;{activity.novelTitle}&quot;</span>}
                 {activity.episodeTitle && <span className="italic"> - {activity.episodeTitle}</span>}
                 {activity.targetUserName && <span className="font-semibold"> with {activity.targetUserName}</span>}
                 {activity.coinAmount && <span className="text-yellow-600"> ({activity.coinAmount} coins)</span>}
