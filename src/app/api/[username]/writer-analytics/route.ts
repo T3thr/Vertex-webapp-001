@@ -1,108 +1,149 @@
-// src/app/api/users/[username]/writer-analytics/route.ts
+// src/app/api/[username]/writer-analytics/route.ts
+// API สำหรับดึงข้อมูลวิเคราะห์โดยละเอียดสำหรับนักเขียน (รองรับทั้ง User และ SocialMediaUser)
+
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/options"; // Assuming this path is correct
-import { User } from "@/models/User"; // Assuming User model exists
-import { WriterStats } from "@/models/WriterStats"; // Assuming WriterStats model exists
-import { Novel } from "@/models/Novel"; // Assuming Novel model exists
-import { Purchase } from "@/models/Purchase"; // Assuming Purchase model exists
-import { Donation } from "@/models/Donation"; // Assuming Donation model exists
-import { EarningAnalytic } from "@/models/EarningAnalytic"; // Assuming EarningAnalytic model exists
+import mongoose from "mongoose";
+import dbConnect from "@/backend/lib/mongodb";
+import UserModel from "@/backend/models/User";
+import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
+import WriterStatsModel from "@/backend/models/WriterStats";
+import DonationModel from "@/backend/models/Donation";
+import NovelModel from "@/backend/models/Novel";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { username: string } }
-) {
+// Interface สำหรับการตอบกลับของ API
+interface WriterAnalyticsResponse {
+  overview: {
+    totalNovelViews: number;
+    totalCoinRevenue: number;
+    totalDonations: number;
+    totalFollowers: number;
+    averageRating: number;
+    lastCalculatedAt: string;
+  };
+  novelPerformance: Array<{
+    novelId: string;
+    title: string;
+    totalViews: number;
+    totalReads: number;
+    totalLikes: number;
+    totalCoinRevenue: number;
+    totalDonations: number;
+  }>;
+  monthlyEarnings: Array<{
+    date: string;
+    coinValue: number;
+    donationValue: number;
+  }>;
+  socialStats: {
+    followersCount: number;
+    followingCount: number;
+    commentsMadeCount: number;
+    likesGivenCount: number;
+  };
+}
+
+// ฟังก์ชันหลักสำหรับ GET request
+export async function GET(req: NextRequest, { params }: { params: { username: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    const loggedInUser = session?.user as { id: string; username: string; role: string } | undefined;
-    const requestedUsername = params.username;
+    await dbConnect();
 
-    // Authentication: Check if user is logged in
-    if (!loggedInUser) {
-      return NextResponse.json(
-        { message: "Unauthorized: Not logged in" },
-        { status: 401 }
-      );
+    const { username } = params;
+    if (!username) {
+      return NextResponse.json({ error: "ต้องระบุชื่อผู้ใช้" }, { status: 400 });
     }
 
-    // Authorization: Check if the logged-in user is requesting their own analytics or is an Admin
-    if (loggedInUser.username !== requestedUsername && loggedInUser.role !== "Admin") {
-      return NextResponse.json(
-        { message: "Forbidden: You do not have permission to view these analytics" },
-        { status: 403 }
-      );
-    }
-
-    // Find the user by username to get their ID
-    const user = await User.findOne({ username: requestedUsername }).select('_id');
+    // ค้นหาผู้ใช้จาก username ในทั้งสองคอลเลกชัน
+    let user = await UserModel()
+      .findOne({ username, role: "Writer", isActive: true, isBanned: false })
+      .select("_id writerStats");
+    
     if (!user) {
-      // Try finding in SocialMediaUser if not in User (assuming username is unique across both)
-      // This part might need adjustment based on your exact User/SocialMediaUser setup
-      // For now, let's assume username is sufficient to find the user ID in the primary User model
-      // or that SocialMediaUser also has a direct link to WriterStats if they can be writers.
-      // For simplicity, we'll assume User model is the primary source for writers for now.
-      return NextResponse.json(
-        { message: "User not found" },
-        { status: 404 }
-      );
+      user = await SocialMediaUserModel()
+        .findOne({ username, role: "Writer", isActive: true, isBanned: false })
+        .select("_id writerStats socialStats");
     }
 
-    const userId = user._id;
+    if (!user) {
+      return NextResponse.json({ error: "ไม่พบนักเขียน" }, { status: 404 });
+    }
 
-    // Fetch writer statistics
-    const writerStats = await WriterStats.findOne({ userId });
+    // ดึงข้อมูล WriterStats
+    const writerStats = await WriterStatsModel()
+      .findOne({ user: user._id })
+      .select(
+        "totalNovelViews_Lifetime totalCoinEarned_Lifetime totalFollowers_Lifetime averageRating_AllNovels novelPerformance monthlyCoinEarnings lastCalculatedAt"
+      );
 
     if (!writerStats) {
-      return NextResponse.json(
-        { message: "Writer statistics not found for this user" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "ไม่พบข้อมูลสถิตินักเขียน" }, { status: 404 });
     }
 
-    // Fetch novel performance (example: count of novels, total views - needs more specific aggregation)
-    const novels = await Novel.find({ authorId: userId });
-    const novelCount = novels.length;
-    const totalNovelViews = novels.reduce((sum, novel) => sum + (novel.views || 0), 0);
-    const totalNovelLikes = novels.reduce((sum, novel) => sum + (novel.likes || 0), 0); // Assuming 'likes' field
+    // ดึงข้อมูลการบริจาค
+    const donations = await DonationModel()
+      .aggregate([
+        {
+          $match: {
+            recipient: user._id,
+            status: "completed",
+            isDeleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: "$novel",
+            totalDonations: { $sum: "$netAmountToRecipient" },
+          },
+        },
+      ]);
 
-    // Fetch earnings (example: sum of purchases and donations - needs more specific aggregation)
-    // This is a simplified example. In a real scenario, you'd likely have more complex queries
-    // and potentially separate tables/collections for financial transactions linked to the writer.
-    const purchases = await Purchase.find({ novelId: { $in: novels.map(n => n._id) } });
-    const totalPurchaseAmount = purchases.reduce((sum, p) => sum + (p.amountInCoins || 0), 0);
+    const donationMap = new Map(donations.map(d => [d._id?.toString() || "general", d.totalDonations]));
 
-    const donations = await Donation.find({ writerId: userId });
-    const totalDonationAmount = donations.reduce((sum, d) => sum + (d.amountInCoins || 0), 0);
+    // ดึงข้อมูลนิยาย
+    const novelIds = writerStats.novelPerformance.map((np: any) => np.novelId);
+    const novels = await NovelModel()
+      .find({ _id: { $in: novelIds }, isDeleted: false })
+      .select("title");
 
-    // Fetch earning analytics (example - this might be pre-calculated or aggregated differently)
-    const earningAnalytics = await EarningAnalytic.find({ writerId: userId }).sort({ period: -1 }).limit(10); // Get last 10 periods
+    const novelTitleMap = new Map(novels.map(novel => [novel._id.toString(), novel.title]));
 
-    const responseData = {
-      writerStats,
-      novelPerformance: {
-        novelCount,
-        totalNovelViews,
-        totalNovelLikes,
-        // You can add more detailed novel-specific stats here by iterating through `novels`
+    // สร้าง response
+    const response: WriterAnalyticsResponse = {
+      overview: {
+        totalNovelViews: writerStats.totalNovelViews_Lifetime || 0,
+        totalCoinRevenue: writerStats.totalCoinEarned_Lifetime || 0,
+        totalDonations: donationMap.get("general") || 0,
+        totalFollowers: writerStats.totalFollowers_Lifetime || 0,
+        averageRating: writerStats.averageRating_AllNovels || 0,
+        lastCalculatedAt: writerStats.lastCalculatedAt.toISOString(),
       },
-      earnings: {
-        totalCoinsFromPurchases: totalPurchaseAmount,
-        totalCoinsFromDonations: totalDonationAmount,
-        totalCoinsOverall: totalPurchaseAmount + totalDonationAmount,
-        // Potentially convert coins to real money based on some exchange rate if needed
+      novelPerformance: writerStats.novelPerformance.map((np: any) => ({
+        novelId: np.novelId.toString(),
+        title: novelTitleMap.get(np.novelId.toString()) || "นิยายไม่มีชื่อ",
+        totalViews: np.totalViews || 0,
+        totalReads: np.totalReads || 0,
+        totalLikes: np.totalLikes || 0,
+        totalCoinRevenue: np.totalCoinRevenue || 0,
+        totalDonations: donationMap.get(np.novelId.toString()) || 0,
+      })),
+      monthlyEarnings: writerStats.monthlyCoinEarnings?.map((me: any) => ({
+        date: me.date.toISOString(),
+        coinValue: me.value || 0,
+        donationValue: 0, // เพิ่มการคำนวณจาก Donation ในอนาคต
+      })) || [],
+      socialStats: {
+        followersCount: user.socialStats?.followersCount || writerStats.totalFollowers_Lifetime || 0,
+        followingCount: user.socialStats?.followingCount || 0,
+        commentsMadeCount: user.socialStats?.commentsMadeCount || 0,
+        likesGivenCount: user.socialStats?.likesGivenCount || 0,
       },
-      recentEarningAnalytics: earningAnalytics, // Last 10 earning periods
     };
 
-    return NextResponse.json(responseData, { status: 200 });
-
+    return NextResponse.json(response, { status: 200 });
   } catch (error) {
-    console.error("Error fetching writer analytics:", error);
+    console.error("ข้อผิดพลาดใน API /writer-analytics:", error);
     return NextResponse.json(
-      { message: "Internal server error while fetching writer analytics", error: error.message },
+      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
     );
   }
 }
-
