@@ -1,24 +1,16 @@
 // src/app/api/[username]/activity-history/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
 import mongoose from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
-import ActivityHistoryModel from "@/backend/models/ActivityHistory";
-import NovelModel from "@/backend/models/Novel";
-import EpisodeModel from "@/backend/models/Episode";
+import UserModel, { IUser } from "@/backend/models/User";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
+import ActivityHistoryModel, { IActivityHistory } from "@/backend/models/ActivityHistory";
+import NovelModel, { INovel } from "@/backend/models/Novel";
+import EpisodeModel, { IEpisode } from "@/backend/models/Episode";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
-import { model } from "mongoose";
 
-// อินเทอร์เฟซสำหรับ response
-interface ActivityHistoryResponse {
-  activities: ActivityItem[];
-  currentPage: number;
-  totalPages: number;
-  totalActivities: number;
-}
-
+// อินเทอร์เฟซสำหรับการตอบกลับ API
 interface ActivityItem {
   _id: string;
   userId: string;
@@ -45,205 +37,200 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
-// กิจกรรมที่ต้องการแสดงในประวัติ
-const ALLOWED_ACTIVITY_TYPES = [
-  "EPISODE_READ",
-  "COMMENT_CREATED",
-  "RATING_GIVEN",
-  "USER_FOLLOWED",
-  "NOVEL_LIKED",
-  "COIN_SPENT_EPISODE",
-  "COIN_SPENT_DONATION_WRITER",
-  "COIN_EARNED_WRITER_DONATION",
-];
+interface ActivityHistoryResponse {
+  activities: ActivityItem[];
+  currentPage: number;
+  totalPages: number;
+  totalActivities: number;
+}
 
-// ฟังก์ชันหลักสำหรับ GET request
+// ตัวเลือกการจัดเรียง
+const SORT_OPTIONS = {
+  newest: { createdAt: -1 },
+  oldest: { createdAt: 1 },
+} as const;
+
+// ประเภทของการจัดเรียง
+type SortOption = keyof typeof SORT_OPTIONS;
+
+// ฟังก์ชันหลักสำหรับจัดการ GET request
 export async function GET(
   request: NextRequest,
   { params }: { params: { username: string } }
-): Promise<NextResponse<ActivityHistoryResponse | { error: string }>> {
+): Promise<NextResponse> {
   try {
-    // เชื่อมต่อ MongoDB
+    // เชื่อมต่อกับ MongoDB
     await dbConnect();
 
-    // ดึง session และตรวจสอบผู้ใช้
-    const session = await getServerSession(authOptions);
-    const currentUserId = session?.user?.id
-      ? new mongoose.Types.ObjectId(session.user.id)
-      : null;
-
-    // ดึง username จาก URL
-    const username = params.username;
-    if (!username) {
-      return NextResponse.json(
-        { error: "ต้องระบุชื่อผู้ใช้" },
-        { status: 400 }
-      );
-    }
-
-    // ค้นหาผู้ใช้จาก User หรือ SocialMediaUser
-    let viewedUser = await UserModel()
-      .findOne({ username, isDeleted: false })
-      .lean();
-    if (!viewedUser) {
-      viewedUser = await SocialMediaUserModel()
-        .findOne({ username, isDeleted: false })
-        .lean();
-    }
-    if (!viewedUser) {
-      return NextResponse.json(
-        { error: "ไม่พบผู้ใช้" },
-        { status: 404 }
-      );
-    }
-
-    // ตรวจสอบสิทธิ์การเข้าถึง
-    const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
-    if (!isOwnProfile) {
-      if (profileVisibility === "private") {
-        return NextResponse.json(
-          { error: "โปรไฟล์นี้เป็นส่วนตัว" },
-          { status: 403 }
-        );
-      }
-      if (
-        profileVisibility === "followersOnly" &&
-        currentUserId
-      ) {
-        const isFollower = await model("UserFollow").findOne({
-          followerId: currentUserId,
-          followingId: viewedUser._id,
-          status: "active",
-        });
-        if (!isFollower) {
-          return NextResponse.json(
-            { error: "ต้องติดตามผู้ใช้เพื่อดูประวัติกิจกรรม" },
-            { status: 403 }
-          );
-        }
-      }
-    }
-
-    // ดึง query parameters
+    // ดึงพารามิเตอร์จาก URL
+    const { username } = params;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const sort = (searchParams.get("sort") as SortOption) || "newest";
+
     if (page < 1 || limit < 1) {
       return NextResponse.json(
-        { error: "page และ limit ต้องมากกว่า 0" },
+        { error: "หน้าหรือจำนวนต่อหน้าต้องมากกว่า 0" },
         { status: 400 }
       );
     }
 
-    // คำนวณ skip สำหรับ pagination
-    const skip = (page - 1) * limit;
+    // ค้นหาผู้ใช้จาก username หรือ slug
+    const user =
+      (await UserModel()
+        .findOne({ $or: [{ username }, { slug: username }], isActive: true, isDeleted: false })
+        .lean()) ||
+      (await SocialMediaUserModel()
+        .findOne({ $or: [{ username }, { slug: username }], isActive: true, isDeleted: false })
+        .lean());
 
-    // กำหนดประเภทกิจกรรมที่แสดง
-    let activityFilter: string[] = ALLOWED_ACTIVITY_TYPES;
-    if (!isOwnProfile) {
-      // จำกัดประเภทสำหรับผู้ใช้ที่ไม่ใช่เจ้าของโปรไฟล์
-      activityFilter = activityFilter.filter(
-        (type) =>
-          ![
-            "COIN_SPENT_DONATION_WRITER",
-            "COIN_EARNED_WRITER_DONATION",
-          ].includes(type)
-      );
+    if (!user) {
+      return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
 
-    // ดึงประวัติกิจกรรม
+    // ตรวจสอบ session เพื่อดูว่าเป็นเจ้าของโปรไฟล์หรือไม่
+    const session = await getServerSession(authOptions);
+    const isOwnProfile = session?.user?._id === user._id.toString();
+
+    // สร้างเงื่อนไขการค้นหา
+    const query: mongoose.FilterQuery<IActivityHistory> = {
+      user: user._id,
+    };
+
+    // จำกัดประเภทกิจกรรมที่แสดงตามการมองเห็น
+    const publicActivityTypes = [
+      "EPISODE_READ",
+      "COMMENT_CREATED",
+      "RATING_GIVEN",
+      "USER_FOLLOWED",
+      "NOVEL_LIKED",
+      "COIN_SPENT_EPISODE",
+      "COIN_SPENT_DONATION_WRITER",
+      "COIN_EARNED_WRITER_DONATION",
+    ];
+
+    if (!isOwnProfile) {
+      query.activityType = { $in: publicActivityTypes };
+    }
+
+    // คำนวณข้อมูลการแบ่งหน้า
+    const totalActivities = await ActivityHistoryModel().countDocuments(query);
+    const totalPages = Math.ceil(totalActivities / limit);
+    const skip = (page - 1) * limit;
+
+    // ดึงข้อมูลกิจกรรม
     const activities = await ActivityHistoryModel()
-      .find({
-        user: viewedUser._id,
-        activityType: { $in: activityFilter },
-      })
-      .sort({ createdAt: -1 })
+      .find(query)
+      .sort(SORT_OPTIONS[sort] || SORT_OPTIONS.newest)
       .skip(skip)
       .limit(limit)
-      .populate([
-        {
-          path: "details.novelId",
-          model: NovelModel(),
-          select: "title slug",
-        },
-        {
-          path: "details.episodeId",
-          model: EpisodeModel(),
-          select: "title episodeNumber",
-        },
-        {
-          path: "details.targetUserId",
-          model: UserModel(),
-          select: "username profile.displayName",
-          match: { isDeleted: false },
-        },
-        {
-          path: "details.targetUserId",
-          model: SocialMediaUserModel(),
-          select: "username profile.displayName",
-          match: { isDeleted: false },
-        },
-      ])
       .lean();
 
-    // นับจำนวนกิจกรรมทั้งหมด
-    const totalActivities = await ActivityHistoryModel().countDocuments({
-      user: viewedUser._id,
-      activityType: { $in: activityFilter },
-    });
-    const totalPages = Math.ceil(totalActivities / limit);
+    // เตรียมข้อมูลสำหรับการตอบกลับ
+    const activityItems: ActivityItem[] = await Promise.all(
+      activities.map(async (activity) => {
+        const item: ActivityItem = {
+          _id: activity._id.toString(),
+          userId: activity.user.toString(),
+          type: activity.activityType,
+          content: activity.content,
+          timestamp: activity.createdAt,
+        };
 
-    // แปลงข้อมูลให้ตรงกับ ActivityItem
-    const formattedActivities: ActivityItem[] = activities.map((activity) => {
-      const novel = activity.details.novelId as any;
-      const episode = activity.details.episodeId as any;
-      const targetUser = activity.details.targetUserId as any;
+        // เพิ่มข้อมูลที่เกี่ยวข้องจาก details
+        if (activity.details) {
+          if (activity.details.novelId) {
+            item.novelId = activity.details.novelId.toString();
+            item.novelSlug = activity.details.novelSlug;
+            // ดึง novelTitle ถ้า novelSlug ไม่มี
+            if (!item.novelSlug) {
+              const novel = await NovelModel()
+                .findById(activity.details.novelId)
+                .select("title slug")
+                .lean();
+              if (novel) {
+                item.novelTitle = novel.title;
+                item.novelSlug = novel.slug;
+              }
+            } else {
+              item.novelTitle = activity.details.novelTitle || "";
+            }
+          }
+          if (activity.details.episodeId) {
+            item.episodeId = activity.details.episodeId.toString();
+            item.episodeNumber = activity.details.episodeNumber;
+            if (!item.episodeNumber) {
+              const episode = await EpisodeModel()
+                .findById(activity.details.episodeId)
+                .select("title episodeNumber")
+                .lean();
+              if (episode) {
+                item.episodeTitle = episode.title;
+                item.episodeNumber = episode.episodeNumber;
+              }
+            } else {
+              item.episodeTitle = activity.details.episodeTitle || "";
+            }
+          }
+          if (activity.details.commentId) {
+            item.commentId = activity.details.commentId.toString();
+          }
+          if (activity.details.ratingId) {
+            item.ratingId = activity.details.ratingId.toString();
+          }
+          if (activity.details.targetUserId) {
+            item.followedUserId = activity.details.targetUserId.toString();
+            item.targetUserSlug = activity.details.targetUserSlug;
+            if (!item.targetUserSlug) {
+              const targetUser =
+                (await UserModel()
+                  .findById(activity.details.targetUserId)
+                  .select("username slug")
+                  .lean()) ||
+                (await SocialMediaUserModel()
+                  .findById(activity.details.targetUserId)
+                  .select("username slug")
+                  .lean());
+              if (targetUser) {
+                item.targetUserName = targetUser.username;
+                item.targetUserSlug = targetUser.slug;
+              }
+            } else {
+              item.targetUserName = activity.details.targetUserName || "";
+            }
+          }
+          if (activity.details.likedNovelId) {
+            item.likedNovelId = activity.details.likedNovelId?.toString();
+          }
+          if (activity.details.purchaseId) {
+            item.purchaseId = activity.details.purchaseId.toString();
+          }
+          if (activity.details.donationId) {
+            item.donationId = activity.details.donationId.toString();
+          }
+          if (typeof activity.details.amountCoin === "number") {
+            item.coinAmount = activity.details.amountCoin;
+          }
+        }
 
-      return {
-        _id: activity._id.toString(),
-        userId: activity.user.toString(),
-        type: activity.activityType,
-        content: activity.content,
-        novelId: activity.details.novelId?.toString(),
-        episodeId: activity.details.episodeId?.toString(),
-        commentId: activity.details.commentId?.toString(),
-        ratingId: activity.details.ratingId?.toString(),
-        followedUserId: activity.details.targetUserId?.toString(),
-        likedNovelId:
-          activity.activityType === "NOVEL_LIKED"
-            ? activity.details.novelId?.toString()
-            : undefined,
-        purchaseId: activity.details.purchaseId?.toString(),
-        donationId: activity.details.donationId?.toString(),
-        relatedUser: targetUser?._id?.toString(),
-        relatedNovel: novel?._id?.toString(),
-        relatedEpisode: episode?._id?.toString(),
-        coinAmount: activity.details.amountCoin,
-        timestamp: activity.createdAt,
-        novelTitle: novel?.title,
-        novelSlug: novel?.slug,
-        episodeTitle: episode?.title,
-        episodeNumber: episode?.episodeNumber,
-        targetUserName:
-          targetUser?.profile?.displayName || targetUser?.username,
-        targetUserSlug: targetUser?.username,
-      };
-    });
+        return item;
+      })
+    );
 
     // สร้าง response
     const response: ActivityHistoryResponse = {
-      activities: formattedActivities,
+      activities: activityItems,
       currentPage: page,
       totalPages,
       totalActivities,
     };
 
-    return NextResponse.json(response);
-  } catch (error: any) {
-    console.error(`[API Error] /api/users/${params.username}/activity-history:`, error);
+    return NextResponse.json(response, { status: 200 });
+  } catch (error) {
+    console.error("❌ ข้อผิดพลาดในการดึงประวัติกิจกรรม:", error);
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
+      { error: "เกิดข้อผิดพลาดในการดึงประวัติกิจกรรม" },
       { status: 500 }
     );
   }
