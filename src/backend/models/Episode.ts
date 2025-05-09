@@ -261,7 +261,7 @@ EpisodeSchema.index({ novel: 1, isFree: 1, status: 1, isDeleted: 1 }); // สำ
 EpisodeSchema.pre("save", async function (next) {
   // Auto-generate slug from title if not provided or if title changes
   if ((this.isModified("title") || this.isNew) && (!this.slug || this.isModified("title"))) {
-    const baseSlug = (this.name || "")...
+    const baseSlug = (this.title || "")
       .toLowerCase()
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9ก-๙เ-ไ\-]+/g, "")
@@ -416,4 +416,3 @@ EpisodeSchema.post("findOneAndDelete", async function(doc) {
 const EpisodeModel = () => models.Episode as mongoose.Model<IEpisode> || model<IEpisode>("Episode", EpisodeSchema);
 
 export default EpisodeModel;
-
