@@ -1,3 +1,5 @@
+// src/backend/models/Like.ts
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
 // Interface for Like document

@@ -1,10 +1,13 @@
 // src/context/AuthContext.tsx
+// คอนเท็กซ์สำหรับจัดการการยืนยันตัวตนของผู้ใช้
+// รองรับการลงชื่อเข้าใช้ สมัครสมาชิก และออกจากระบบ
 
 import { createContext, useContext, useCallback, ReactNode, useState } from "react";
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
 import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
+import { useQueryClient } from "@tanstack/react-query";
 
-// กำหนดประเภทสำหรับ AuthContext
+// อินเทอร์เฟซสำหรับ AuthContext
 interface AuthContextType {
   user: SessionUser | null;
   status: "authenticated" | "loading" | "unauthenticated";
@@ -22,21 +25,19 @@ interface AuthContextType {
   loading: boolean;
 }
 
-// สร้าง AuthContext พร้อมค่าเริ่มต้นเป็น undefined
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// กำหนด props สำหรับ AuthProvider
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-// คอมโพเนนต์ AuthProvider
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const { data: session, status } = useSession();
   const user = session?.user as SessionUser | null;
   const [loading, setLoading] = useState<boolean>(false);
+  const queryClient = useQueryClient();
 
-  // ฟังก์ชันลงชื่อเข้าใช้ (รองรับทั้ง credentials และ social providers)
+  // ฟังก์ชันลงชื่อเข้าใช้
   const signIn = useCallback(
     async (
       providerOrIdentifier: string,
@@ -63,7 +64,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         if (result?.error) {
-          console.error("❌ [AuthContext] ข้อผิดพลาดจาก NextAuth signIn:", result.error);
           let errorMessage = result.error;
           let verificationRequired = false;
 
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             errorMessage = "บัญชีของคุณยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายเข้าและสแปมของคุณ";
             verificationRequired = true;
           } else if (errorMessage.includes("บัญชีนี้ถูกแบน")) {
-            errorMessage = result.error; // Use exact ban message
+            errorMessage = result.error;
           } else if (errorMessage.includes("บัญชีนี้ถูกระงับการใช้งาน")) {
             errorMessage = "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อฝ่ายสนับสนุน";
           } else if (errorMessage === "CredentialsSignin") {
@@ -87,15 +87,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return { error: errorMessage, success: false, verificationRequired };
         }
 
+        // รีเฟรชแคชเซสชัน
+        queryClient.invalidateQueries({ queryKey: ["session"] });
         return { success: true };
       } catch (error: any) {
-        console.error("❌ [AuthContext] ข้อผิดพลาดที่ไม่คาดคิดใน signIn:", error);
         return { error: error.message || "เกิดข้อผิดพลาดที่ไม่คาดคิดระหว่างการลงชื่อเข้าใช้", success: false };
       } finally {
         setLoading(false);
       }
     },
-    []
+    [queryClient]
   );
 
   // ฟังก์ชันสมัครสมาชิก
@@ -116,19 +117,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           body: JSON.stringify({ email, username, password, recaptchaToken }),
         });
 
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          const responseText = await response.text();
+          return {
+            error: `การตอบกลับจากเซิร์ฟเวอร์ไม่ถูกต้อง (สถานะ: ${response.status})`,
+            success: false,
+          };
+        }
 
         if (!response.ok) {
           let errorMessage = data.error || "การสมัครสมาชิกผิดพลาด";
-          if (data.error.includes("ถูกใช้งานแล้ว")) {
-            errorMessage = data.error; // Use exact duplicate message
+          if (data.error?.includes("ถูกใช้งานแล้ว")) {
+            errorMessage = data.error;
           }
           return { error: errorMessage, success: false };
         }
 
         return { success: true, message: data.message || "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมล" };
       } catch (error: any) {
-        console.error("❌ [AuthContext] ข้อผิดพลาดระหว่างการสมัครสมาชิก:", error);
         return { error: error.message || "เกิดข้อผิดพลาดที่ไม่คาดคิดระหว่างการสมัครสมาชิก", success: false };
       } finally {
         setLoading(false);
@@ -142,14 +151,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setLoading(true);
     try {
       await nextAuthSignOut({ redirect: true, callbackUrl: "/" });
+      queryClient.invalidateQueries({ queryKey: ["session"] });
     } catch (error) {
       console.error("❌ [AuthContext] ข้อผิดพลาดระหว่างการออกจากระบบ:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
-  // ค่า context ที่จะส่งผ่าน
   const contextValue: AuthContextType = {
     user,
     status,
@@ -162,7 +171,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };
 
-// Hook สำหรับใช้ AuthContext
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {

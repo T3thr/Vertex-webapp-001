@@ -1,4 +1,4 @@
-// src/components/layouts/NavBar.tsx
+"use client";
 
 "use client";
 
@@ -8,25 +8,30 @@ import {
   ChevronDown,
   LogOut,
   Menu,
-  Moon,
   Search,
-  Sun,
   User,
   X,
   BookOpen,
   Home,
   Grid,
-  BookMarked,
-  Layout
+  Layout,
+  Settings,
+  Sun,
+  Moon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AuthModal from "./AuthModal";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import Image from "next/image";
+import SearchBar from "./SearchBar";
+import { useQuery } from "@tanstack/react-query";
+import { getSession } from "next-auth/react";
 
-// Session User Interface
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ในเซสชัน
 interface SessionUser {
   id: string;
   name: string;
@@ -38,484 +43,410 @@ interface SessionUser {
     bio?: string;
     displayName?: string;
   };
-  image?: string; // เพิ่มฟิลด์ image สำหรับผู้ใช้จากโซเชียลมีเดีย
+  image?: string;
 }
 
-// SearchBar Component
-interface SearchBarProps {
-  onClose: () => void;
-}
-
-const SearchBar = ({ onClose }: SearchBarProps) => {
-  const [searchValue, setSearchValue] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  useEffect(() => {
-    // Focus input when search bar opens
-    inputRef.current?.focus();
-  }, []);
-  
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchValue.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchValue)}`;
-      onClose();
-    }
-  };
-  
-  return (
-    <form onSubmit={handleSubmit}>
-      <div className="w-full bg-card rounded-lg shadow-lg p-3 border border-accent">
-        <div className="flex items-center gap-3">
-          <Search size={18} className="text-muted-foreground" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="ค้นหานิยาย ผู้เขียน หรือหมวดหมู่..."
-            className="bg-transparent w-full focus:outline-none text-foreground"
-          />
-          {isSearching ? (
-            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
-          ) : searchValue ? (
-            <button 
-              type="button"
-              onClick={() => setSearchValue('')}
-              className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-secondary"
-            >
-              <X size={16} />
-            </button>
-          ) : null}
-          <button 
-            type="button"
-            onClick={onClose} 
-            className="text-muted-foreground hover:text-foreground ml-1 p-1 rounded-full hover:bg-secondary"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        
-        {/* Search suggestions - can be expanded */}
-        {searchValue.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-accent">
-            <div className="text-xs text-muted-foreground mb-2">คำแนะนำยอดนิยม</div>
-            <div className="flex flex-wrap gap-2">
-              {['แฟนตาซี', 'โรแมนติก', 'สืบสวน', 'แอคชั่น'].map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => {
-                    setSearchValue(tag);
-                    inputRef.current?.focus();
-                  }}
-                  className="px-3 py-1 bg-secondary hover:bg-secondary/70 rounded-full text-xs"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </form>
-  );
-};
-
-// UserAvatar Component
+// คอมโพเนนต์ UserAvatar
 interface UserAvatarProps {
   user: SessionUser | null;
   size?: "sm" | "md" | "lg";
+  className?: string;
 }
 
-const UserAvatar = ({ user, size = "md" }: UserAvatarProps) => {
-  // ตรวจสอบว่ามีรูปโปรไฟล์จาก provider (เช่น Google) หรือไม่
-  const hasProviderImage = user?.image;
-  // ตรวจสอบว่ามีรูปโปรไฟล์จากระบบหรือไม่
-  const hasCustomAvatar = user?.profile?.avatar;
-  // ตรวจสอบว่ามีชื่อผู้ใช้หรือไม่
-  const hasUsername = user?.username;
-  
+const UserAvatar = React.memo(({ user, size = "md", className = "" }: UserAvatarProps) => {
+  const avatarUrl = user?.profile?.avatar || user?.image;
+  const displayName = user?.profile?.displayName || user?.name || user?.username;
+
   const sizeClasses = {
     sm: "w-7 h-7",
     md: "w-8 h-8",
-    lg: "w-10 h-10"
+    lg: "w-10 h-10",
   };
-  
+
   const fontClasses = {
     sm: "text-xs",
     md: "text-sm",
-    lg: "text-base"
+    lg: "text-base",
   };
 
-  return (
-    <div className={`${sizeClasses[size]} rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium overflow-hidden shadow-sm`}>
-      {hasProviderImage ? (
-        // แสดงรูปจาก provider (เช่น Google)
-        <img
-          src={user.image}
-          alt="User Avatar"
+  const sizeInPixels = {
+    sm: 28,
+    md: 32,
+    lg: 40,
+  };
+
+  if (avatarUrl && avatarUrl.startsWith("http")) {
+    return (
+      <div className={`${sizeClasses[size]} ${className} rounded-full overflow-hidden shadow-sm`}>
+        <Image
+          src={avatarUrl}
+          alt={displayName ? `${displayName}'s avatar` : "User avatar"}
+          width={sizeInPixels[size]}
+          height={sizeInPixels[size]}
           className="h-full w-full object-cover"
-          referrerPolicy="no-referrer" // ป้องกันปัญหารูปโปรไฟล์ Google
+          priority
+          referrerPolicy="no-referrer"
         />
-      ) : hasCustomAvatar ? (
-        // แสดงรูปที่ผู้ใช้อัพโหลดเอง
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClasses[size]} ${className} rounded-full bg-muted flex items-center justify-center text-muted-foreground font-medium overflow-hidden shadow-sm`}
+    >
+      {avatarUrl ? (
         <img
-          src={user.profile.avatar}
-          alt="User Avatar"
+          src={avatarUrl}
+          alt={displayName ? `${displayName}'s avatar` : "User avatar"}
           className="h-full w-full object-cover"
+          referrerPolicy="no-referrer"
         />
       ) : (
-        // แสดงตัวอักษรแรกของชื่อผู้ใช้
         <span className={fontClasses[size]}>
-          {hasUsername?.charAt(0).toUpperCase() || "U"}
+          {displayName ? displayName.charAt(0).toUpperCase() : <User size={parseInt(sizeClasses[size].replace(/[^\d]/g, "")) * 0.6} />}
         </span>
       )}
     </div>
   );
-};
+});
 
-// ThemeToggle Component
-const ThemeToggle = () => {
-  const [theme, setTheme] = useState("light");
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") ||
-                     (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setTheme(savedTheme);
-    if (savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    
-    if (newTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  };
-
-  return (
-    <button
-      onClick={toggleTheme}
-      className="p-2 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
-      aria-label="Toggle theme"
-    >
-      {theme === "light" ? (
-        <Moon size={20} className="text-foreground" />
-      ) : (
-        <Sun size={20} className="text-foreground" />
-      )}
-    </button>
-  );
-};
-
-export interface NavBarProps {
+// อินเทอร์เฟซสำหรับ NavBar
+interface NavBarProps {
   logoText?: string;
 }
 
-export const NavBar = ({ logoText = "NOVELMAZE" }: NavBarProps) => {
+export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
   const { user, status, signOut, loading: authLoading } = useAuth();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
-  
-  // Handle scroll effect
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // ใช้ React Query เพื่อแคชข้อมูลเซสชัน
+  const { data: sessionData, isLoading: sessionLoading } = useQuery({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const session = await getSession();
+      return session;
+    },
+    staleTime: 5 * 60 * 1000, // แคช 5 นาที
+    refetchOnWindowFocus: false,
+  });
+
+  const handleScroll = useCallback(() => {
+    setIsScrolled(window.scrollY > 20);
   }, []);
 
-  // Close dropdown when clicking outside
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-      
-      if (searchRef.current && !searchRef.current.contains(event.target as Node) && isSearchOpen) {
-        setIsSearchOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsDropdownOpen(false);
+      if (searchRef.current && !searchRef.current.contains(event.target as Node) && isSearchOpen) setIsSearchOpen(false);
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node) && isMenuOpen) setIsMenuOpen(false);
     };
-    
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isDropdownOpen, isSearchOpen]);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isDropdownOpen, isSearchOpen, isMenuOpen]);
 
-  const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
-  const toggleDropdown = () => setIsDropdownOpen(!isDropdownOpen);
-  const toggleSearch = () => setIsSearchOpen(!isSearchOpen);
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
+  const toggleMenu = useCallback(() => setIsMenuOpen((prev) => !prev), []);
+  const toggleDropdown = useCallback(() => setIsDropdownOpen((prev) => !prev), []);
+  const toggleSearch = useCallback(() => {
+    setIsSearchOpen((prev) => !prev);
+    if (isMenuOpen) setIsMenuOpen(false);
+  }, [isMenuOpen]);
+  const toggleMobileSearch = useCallback(() => {
+    setIsMobileSearchOpen((prev) => !prev);
+    if (isMenuOpen) setIsMenuOpen(false);
+  }, [isMenuOpen]);
+  const toggleTheme = useCallback(() => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }, [resolvedTheme, setTheme]);
+  const openModal = useCallback(() => {
+    setIsModalOpen(true);
+    if (isMenuOpen) setIsMenuOpen(false);
+    if (isDropdownOpen) setIsDropdownOpen(false);
+  }, [isMenuOpen, isDropdownOpen]);
+  const closeModal = useCallback(() => setIsModalOpen(false), []);
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     setIsDropdownOpen(false);
     await signOut();
-  };
+  }, [signOut]);
 
-  const navLinks = [
-    { href: "/", label: "หน้าหลัก", isActive: pathname === "/", icon: <Home size={18} className="mr-2" /> },
-    { href: "/categories", label: "หมวดหมู่", isActive: pathname === "/categories", icon: <Grid size={18} className="mr-2" /> },
-    { href: "/novels", label: "งานเขียน", isActive: pathname === "/novels", icon: <BookOpen size={18} className="mr-2" /> },
-  ];
+  // ใช้ useMemo เพื่อป้องกันการสร้าง navLinks ใหม่ทุกครั้ง
+  const navLinks = useMemo(
+    () => [
+      { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
+      { href: "/categories", label: "หมวดหมู่", icon: <Grid size={18} /> },
+      { href: "/novels", label: "งานเขียน", icon: <BookOpen size={18} /> },
+    ],
+    []
+  );
 
-  return (
-    <>
-      <header
-        className={`sticky top-0 z-50 w-full transition-all duration-300 ${
-          isScrolled ? "bg-card/90 backdrop-blur-md shadow-md" : "bg-background"
-        }`}
-      >
-        <div className="w-full px-4 sm:px-6 max-w-screen-2xl mx-auto">
-          <div className="flex items-center justify-between h-16">
-            {/* Left: Logo on mobile / Navigation Links on desktop */}
-            <div className="flex items-center">
-              {/* Mobile Logo */}
-              <div className="md:hidden">
-                <Link href="/" className="flex items-center">
-                  <span className="text-xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
-                    {logoText}
-                  </span>
-                </Link>
-              </div>
+  // ใช้ useMemo สำหรับ userDropdownLinks
+  const userDropdownLinks = useMemo(
+    () => [
+      {
+        href: `/user/${user?.username}`,
+        label: "โปรไฟล์ของฉัน",
+        icon: <User size={16} />,
+        condition: !!user?.username,
+      },
+      {
+        href: user?.role === "Writer" ? `/user/${user?.username}` : `/dashboard`,
+        label: "แดชบอร์ดนักเขียน",
+        icon: <Layout size={16} />,
+        condition: user?.role === "Writer",
+      },
+      {
+        href: "/bookmarks",
+        label: "บุ๊คมาร์ค",
+        icon: <Bookmark size={16} />,
+        condition: !!user,
+      },
+      {
+        href: `/user/${user?.username}#settings`,
+        label: "การตั้งค่า",
+        icon: <Settings size={16} />,
+        condition: !!user?.username,
+      },
+    ],
+    [user]
+  );
 
-              {/* Desktop Navigation */}
-              <nav className="hidden md:flex items-center space-x-8">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`flex items-center text-sm font-medium transition-colors hover:text-primary ${
-                      link.isActive ? "text-primary" : "text-foreground"
-                    }`}
-                  >
-                    {link.icon}
-                    {link.label}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-
-            {/* Center: Logo on desktop only */}
-            <div className="hidden md:flex justify-center flex-1">
-              <Link href="/" className="flex items-center">
-                <span className="text-2xl -ml-24 font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
-                  {logoText}
-                </span>
-              </Link>
-            </div>
-
-            {/* Right: Actions */}
-            <div className="flex items-center space-x-4">
-              {/* Search */}
-              <div className="relative" ref={searchRef}>
-                <button
-                  onClick={toggleSearch}
-                  className="p-2 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
-                  aria-label="Search"
-                >
-                  <Search size={20} className="text-foreground" />
-                </button>
-                
-                {/* Search Overlay */}
-                <AnimatePresence>
-                  {isSearchOpen && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="absolute right-0 top-12 w-80 z-50"
-                    >
-                      <SearchBar onClose={() => setIsSearchOpen(false)} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Theme Toggle */}
-              <ThemeToggle />
-
-              {/* Authentication */}
-              {status === "loading" && (
-                <div className="h-8 w-20 bg-secondary rounded animate-pulse"></div>
-              )}
-
-              {status === "unauthenticated" && (
-                <motion.button
-                  onClick={openModal}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm"
-                >
-                  เข้าสู่ระบบ
-                </motion.button>
-              )}
-
-              {status === "authenticated" && user && (
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={toggleDropdown}
-                    className="flex items-center space-x-2 p-1 rounded-full hover:bg-secondary transition-colors"
-                    aria-expanded={isDropdownOpen}
-                    aria-label="User menu"
-                  >
-                    <UserAvatar user={user} />
-                    <ChevronDown size={18} className="text-foreground" />
-                  </button>
-
-                  {/* User Dropdown */}
-                  <AnimatePresence>
-                    {isDropdownOpen && (
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                        className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg bg-card border border-accent z-10 overflow-hidden"
-                      >
-                        <div className="p-3 border-b border-accent">
-                          <div className="font-medium text-foreground truncate">
-                            {user.profile?.displayName || user.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {user.email || user.username || "ไม่มีอีเมล"}
-                          </div>
-                        </div>
-                        <div className="py-1">
-                          <Link
-                            href={`/user/${user.username}`}
-                            className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                            onClick={() => setIsDropdownOpen(false)}
-                          >
-                            <User size={16} className="mr-2" />
-                            โปรไฟล์
-                          </Link>
-                          {user.role === "Writer" && ( // เพิ่มลิงก์ dashboard สำหรับ writer
-                            <Link
-                              href={`/dashboard`}
-                              className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                              onClick={() => setIsDropdownOpen(false)}
-                            >
-                              <Layout size={16} className="mr-2" />
-                              แดชบอร์ด
-                            </Link>
-                          )}
-                          <Link
-                            href="/bookmarks"
-                            className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                            onClick={() => setIsDropdownOpen(false)}
-                          >
-                            <Bookmark size={16} className="mr-2" />
-                            บุ๊คมาร์ค
-                          </Link>
-                          <Link
-                            href="/notifications"
-                            className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                            onClick={() => setIsDropdownOpen(false)}
-                          >
-                            <Bell size={16} className="mr-2" />
-                            การแจ้งเตือน
-                          </Link>
-                          <button
-                            onClick={handleSignOut}
-                            disabled={authLoading}
-                            className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                          >
-                            <LogOut size={16} className="mr-2" />
-                            {authLoading ? "กำลังออกจากระบบ..." : "ออกจากระบบ"}
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-
-              {/* Mobile Menu Button */}
-              <button
-                onClick={toggleMenu}
-                className="p-2 rounded-full hover:bg-secondary flex md:hidden items-center justify-center"
-                aria-expanded={isMenuOpen}
-                aria-label="Toggle menu"
-              >
-                {isMenuOpen ? (
-                  <X size={24} className="text-foreground" />
-                ) : (
-                  <Menu size={24} className="text-foreground" />
-                )}
-              </button>
-            </div>
-          </div>
+  // คอมโพเนนต์ AuthSection
+  const AuthSection = () => {
+    if (sessionLoading || status === "loading") {
+      return (
+        <div className="flex items-center space-x-2">
+          <div className="h-9 w-[88px] rounded-full bg-muted animate-pulse"></div>
         </div>
+      );
+    }
 
-        {/* Mobile Menu */}
+    if (status === "unauthenticated") {
+      return (
+        <motion.button
+          onClick={openModal}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap"
+        >
+          เข้าสู่ระบบ
+        </motion.button>
+      );
+    }
+
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={toggleDropdown}
+          className="flex items-center space-x-2 p-1 rounded-full hover:bg-secondary transition-colors"
+          aria-expanded={isDropdownOpen}
+          aria-label="เมนูผู้ใช้"
+        >
+          <UserAvatar user={user} size="md" />
+          <span className="hidden sm:inline text-sm font-medium text-foreground truncate max-w-[100px]">
+            {user?.profile?.displayName || user?.name || user?.username}
+          </span>
+          <ChevronDown
+            size={18}
+            className={`text-muted-foreground transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+          />
+        </button>
         <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-              className="md:hidden bg-card border-t border-accent shadow-lg"
+          {isDropdownOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute right-0 mt-2 w-64 rounded-lg shadow-xl bg-card border border-border z-50 overflow-hidden"
             >
-              <div className="px-4 py-3 space-y-1">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`flex items-center px-3 py-2 rounded-lg text-base font-medium transition-colors ${
-                      link.isActive
-                        ? "bg-secondary text-primary"
-                        : "text-foreground hover:bg-secondary"
-                    }`}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {link.icon}
-                    {link.label}
-                  </Link>
-                ))}
-                
-                {/* Additional mobile menu items */}
-                <div className="mt-4 pt-4 border-t border-accent">
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsSearchOpen(true);
-                    }}
-                    className="flex w-full items-center px-3 py-2 rounded-lg text-base font-medium text-foreground hover:bg-secondary transition-colors"
-                  >
-                    <Search size={18} className="mr-2" />
-                    ค้นหา
-                  </button>
+              <div className="p-3 border-b border-border">
+                <div className="font-semibold text-foreground truncate">
+                  {user?.profile?.displayName || user?.name || user?.username}
                 </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {user?.email || `@${user?.username}`}
+                </div>
+              </div>
+              <div className="py-1">
+                {userDropdownLinks.map(
+                  (link) =>
+                    link.condition && (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className="flex items-center px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors w-full text-left"
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        {React.cloneElement(link.icon, { className: "mr-2.5 text-muted-foreground" })}
+                        {link.label}
+                      </Link>
+                    )
+                )}
+                <button
+                  onClick={() => {
+                    toggleTheme();
+                    setIsDropdownOpen(false);
+                  }}
+                  className="flex items-center w-full px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors text-left"
+                >
+                  {resolvedTheme === "dark" ? (
+                    <>
+                      <Sun size={16} className="mr-2.5 text-muted-foreground" />
+                      <span>เปลี่ยนเป็นธีมสว่าง</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon size={16} className="mr-2.5 text-muted-foreground" />
+                      <span>เปลี่ยนเป็นธีมมืด</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="border-t border-border p-1">
+                <button
+                  onClick={handleSignOut}
+                  disabled={authLoading}
+                  className="flex w-full items-center px-4 py-2.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors rounded-md disabled:opacity-50"
+                >
+                  <LogOut size={16} className="mr-2.5" />
+                  ออกจากระบบ
+                </button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </header>
+      </div>
+    );
+  };
 
-      <AuthModal
-        isOpen={isModalOpen}
-        onClose={closeModal}
-      />
-    </>
+  return (
+    <nav
+      className={`w-full transition-all duration-300 ${
+        isScrolled ? "bg-background/95 shadow-md" : "bg-background"
+      } border-b border-border/50`}
+    >
+      <div className="max-w-[96rem] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* โลโก้ */}
+          <div className="flex items-center">
+            <Link href="/" className="flex items-center space-x-2">
+              <span className="text-xl font-bold text-foreground">{logoText}</span>
+            </Link>
+          </div>
+
+          {/* ลิงก์นำทางสำหรับเดสก์ท็อป */}
+          <div className="hidden md:flex items-center space-x-6">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`flex items-center space-x-1 text-sm font-medium ${
+                  pathname === link.href ? "text-primary" : "text-foreground hover:text-primary"
+                } transition-colors`}
+              >
+                {link.icon}
+                <span>{link.label}</span>
+              </Link>
+            ))}
+          </div>
+
+          {/* ส่วนขวา: ค้นหาและผู้ใช้ */}
+          <div className="flex items-center space-x-4">
+            <div className="hidden md:block relative" ref={searchRef}>
+              <button
+                onClick={toggleSearch}
+                className="p-2 rounded-full hover:bg-secondary transition-colors"
+                aria-label="สลับการค้นหา"
+              >
+                <Search size={20} className="text-foreground" />
+              </button>
+              <AnimatePresence>
+                {isSearchOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 300 }}
+                    exit={{ opacity: 0, width: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-2 z-50"
+                  >
+                    <SearchBar onClose={() => setIsSearchOpen(false)} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <AuthSection />
+            <button
+              className="md:hidden p-2 rounded-full hover:bg-secondary transition-colors"
+              onClick={toggleMenu}
+              aria-label="สลับเมนู"
+            >
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
+        </div>
+
+        {/* เมนูมือถือ */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              ref={mobileMenuRef}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden border-t border-border/50"
+            >
+              <div className="px-2 pt-2 pb-3 space-y-1">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium ${
+                      pathname === link.href
+                        ? "bg-secondary text-primary"
+                        : "text-foreground hover:bg-secondary hover:text-primary"
+                    } transition-colors`}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {link.icon}
+                    <span>{link.label}</span>
+                  </Link>
+                ))}
+                <button
+                  onClick={toggleMobileSearch}
+                  className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-foreground hover:bg-secondary hover:text-primary transition-colors w-full text-left"
+                >
+                  <Search size={18} />
+                  <span>ค้นหา</span>
+                </button>
+                {isMobileSearchOpen && (
+                  <div className="px-3 py-2">
+                    <SearchBar onClose={() => setIsMobileSearchOpen(false)} />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      <AuthModal isOpen={isModalOpen} onClose={closeModal} />
+    </nav>
   );
-};
+}

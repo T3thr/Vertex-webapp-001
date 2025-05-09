@@ -1,4 +1,6 @@
 // src/app/api/auth/social/route.ts
+// API สำหรับการจัดการการเข้าสู่ระบบผ่าน OAuth providers (Google, Twitter, etc.)
+// รองรับการสร้างหรืออัปเดตผู้ใช้ใน SocialMediaUser collection
 
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
@@ -7,6 +9,7 @@ import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialM
 import { Types } from "mongoose";
 
 // ประเภทสำหรับ Request Body
+// อินเทอร์เฟซสำหรับข้อมูลที่ส่งมาในคำขอ
 interface SocialSignInRequestBody {
   provider: string;
   providerId: string;
@@ -16,7 +19,8 @@ interface SocialSignInRequestBody {
   picture?: string;
 }
 
-// ประเภทสำหรับ Response User (สอดคล้องกับ SessionUser ใน options.ts)
+// ประเภทสำหรับ Response User (สอดคล้องกับ SessionUser และ ISocialMediaUser)
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่ส่งกลับในคำตอบ
 interface SocialSignInResponseUser {
   id: string;
   email?: string;
@@ -30,14 +34,23 @@ interface SocialSignInResponseUser {
     gender?: "male" | "female" | "other" | "preferNotToSay";
     preferredGenres?: string[];
   };
-  stats: {
-    followers: number;
-    following: number;
-    novels: number;
-    purchases: number;
-    donationsReceived: number;
-    donationsMade: number;
-    totalEpisodesSold: number;
+  trackingStats: {
+    totalLoginDays: number;
+    totalNovelsRead: number;
+    totalEpisodesRead: number;
+    totalCoinSpent: number;
+    totalRealMoneySpent: number;
+    lastNovelReadId?: string;
+    lastNovelReadAt?: Date;
+    joinDate: Date;
+  };
+  socialStats: {
+    followersCount: number;
+    followingCount: number;
+    novelsCreatedCount: number;
+    commentsMadeCount: number;
+    ratingsGivenCount: number;
+    likesGivenCount: number;
   };
   preferences: {
     language: string;
@@ -48,46 +61,65 @@ interface SocialSignInResponseUser {
       novelUpdates: boolean;
       comments: boolean;
       donations: boolean;
+      newFollowers: boolean;
+      systemAnnouncements: boolean;
+    };
+    contentFilters?: {
+      showMatureContent: boolean;
+      blockedGenres?: string[];
+      blockedTags?: string[];
+    };
+    privacy: {
+      showActivityStatus: boolean;
+      profileVisibility: "public" | "followersOnly" | "private";
+      readingHistoryVisibility: "public" | "followersOnly" | "private";
     };
   };
   wallet: {
-    balance: number;
-    currency: string;
-    lastTransaction?: Date;
-    transactionHistory?: string[];
-    paymentMethods?: {
-      type: string;
-      details: Record<string, any>;
-      isDefault: boolean;
-    }[];
+    coinBalance: number;
+    lastCoinTransactionAt?: Date;
   };
   gamification: {
     level: number;
     experience: number;
-    achievements?: { id: string; name: string; unlockedAt: Date }[];
+    achievements?: string[];
     badges?: string[];
     streaks: {
       currentLoginStreak: number;
       longestLoginStreak: number;
       lastLoginDate?: Date;
     };
+    dailyCheckIn?: {
+      lastCheckInDate?: Date;
+      currentStreak: number;
+    };
   };
   writerVerification?: {
-    status: "pending" | "verified" | "rejected";
+    status: "none" | "pending" | "verified" | "rejected";
     submittedAt?: Date;
     verifiedAt?: Date;
     rejectedReason?: string;
     documents?: { type: string; url: string; uploadedAt: Date }[];
   };
+  donationSettings?: {
+    isDonationEnabled: boolean;
+    donationApplicationId?: string;
+    customMessage?: string;
+  };
   isActive: boolean;
   isEmailVerified: boolean;
+  isBanned: boolean;
   bannedUntil?: Date;
 }
 
-// ประเภทสำหรับการสร้างผู้ใช้ใหม่ (สอดคล้องกับ ISocialMediaUser โดยไม่มี Mongoose Document properties)
+// ประเภทสำหรับการสร้างผู้ใช้ใหม่ (สอดคล้องกับ ISocialMediaUser)
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ใหม่ที่สร้างใน SocialMediaUser
 interface SocialMediaUserInput {
-  provider: string;
-  providerAccountId: string;
+  accounts: {
+    provider: string;
+    providerAccountId: string;
+    type: string;
+  }[];
   email?: string;
   username: string;
   role: "Reader" | "Writer" | "Admin";
@@ -99,14 +131,23 @@ interface SocialMediaUserInput {
     gender?: "male" | "female" | "other" | "preferNotToSay";
     preferredGenres?: Types.ObjectId[];
   };
-  stats: {
-    followers: number;
-    following: number;
-    novels: number;
-    purchases: number;
-    donationsReceived: number;
-    donationsMade: number;
-    totalEpisodesSold: number;
+  trackingStats: {
+    totalLoginDays: number;
+    totalNovelsRead: number;
+    totalEpisodesRead: number;
+    totalCoinSpent: number;
+    totalRealMoneySpent: number;
+    lastNovelReadId?: Types.ObjectId;
+    lastNovelReadAt?: Date;
+    joinDate: Date;
+  };
+  socialStats: {
+    followersCount: number;
+    followingCount: number;
+    novelsCreatedCount: number;
+    commentsMadeCount: number;
+    ratingsGivenCount: number;
+    likesGivenCount: number;
   };
   preferences: {
     language: string;
@@ -117,43 +158,68 @@ interface SocialMediaUserInput {
       novelUpdates: boolean;
       comments: boolean;
       donations: boolean;
+      newFollowers: boolean;
+      systemAnnouncements: boolean;
+    };
+    contentFilters?: {
+      showMatureContent: boolean;
+      blockedGenres?: Types.ObjectId[];
+      blockedTags?: string[];
+    };
+    privacy: {
+      showActivityStatus: boolean;
+      profileVisibility: "public" | "followersOnly" | "private";
+      readingHistoryVisibility: "public" | "followersOnly" | "private";
     };
   };
   wallet: {
-    balance: number;
-    currency: string;
-    lastTransaction?: Date;
-    transactionHistory?: Types.ObjectId[];
-    paymentMethods?: {
-      type: string;
-      details: Record<string, any>;
-      isDefault: boolean;
-    }[];
+    coinBalance: number;
+    lastCoinTransactionAt?: Date;
   };
   gamification: {
     level: number;
-    experience: number;
-    achievements: { id: string; name: string; unlockedAt: Date }[];
+    experiencePoints: number;
+    achievements: Types.ObjectId[];
     badges: Types.ObjectId[];
     streaks: {
       currentLoginStreak: number;
       longestLoginStreak: number;
-      lastLoginDate: Date;
+      lastLoginDate?: Date;
+    };
+    dailyCheckIn?: {
+      lastCheckInDate?: Date;
+      currentStreak: number;
     };
   };
   writerVerification?: {
-    status: "pending" | "verified" | "rejected";
-    submittedAt: Date;
+    status: "none" | "pending" | "verified" | "rejected";
+    submittedAt?: Date;
     verifiedAt?: Date;
     rejectedReason?: string;
-    documents: { type: string; url: string; uploadedAt: Date }[];
+    documents?: { type: string; url: string; uploadedAt: Date }[];
   };
+  donationSettings?: {
+    isDonationEnabled: boolean;
+    donationApplicationId?: Types.ObjectId;
+    customMessage?: string;
+  };
+  writerApplication?: Types.ObjectId;
+  writerStats?: Types.ObjectId;
+  isEmailVerified: boolean;
   isActive: boolean;
+  isBanned: boolean;
+  banReason?: string;
   bannedUntil?: Date;
-  lastLogin: Date;
+  lastLoginAt: Date;
+  joinedAt: Date;
+  isDeleted: boolean;
+  deletedAt?: Date;
+  emailVerified?: Date | null;
+  image?: string;
 }
 
 // สร้าง username ที่ไม่ซ้ำกัน
+// ฟังก์ชันสำหรับสร้างชื่อผู้ใช้ที่ไม่ซ้ำในทั้ง User และ SocialMediaUser
 async function generateUniqueUsername(baseUsername: string): Promise<string> {
   let newUsername = baseUsername.toLowerCase().replace(/[^a-zA-Z0-9_]/g, "");
   if (newUsername.length < 3) {
@@ -176,6 +242,7 @@ async function generateUniqueUsername(baseUsername: string): Promise<string> {
 }
 
 // POST: สร้างหรืออัปเดตผู้ใช้ SocialMediaUser ผ่าน OAuth
+// รับคำขอและจัดการการเข้าสู่ระบบหรือสร้างผู้ใช้ใหม่
 export async function POST(request: Request): Promise<NextResponse> {
   await dbConnect();
 
@@ -197,26 +264,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       console.error(`❌ รูปแบบอีเมลไม่ถูกต้อง: ${email}`);
       return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
     }
-    if (username && !/^[a-zA-Z0-9_]+$/.test(username)) {
-      console.error(`❌ รูปแบบชื่อผู้ใช้ไม่ถูกต้อง: ${username}`);
-      return NextResponse.json(
-        { error: "ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร, ตัวเลข หรือเครื่องหมาย _ เท่านั้น" },
-        { status: 400 }
-      );
-    }
-    if (name && !/^[a-zA-Z0-9\s_]+$/.test(name)) {
-      console.error(`❌ รูปแบบชื่อไม่ถูกต้อง: ${name}`);
-      return NextResponse.json(
-        { error: "ชื่อต้องประกอบด้วยตัวอักษร, ตัวเลข, ช่องว่าง หรือเครื่องหมาย _ เท่านั้น" },
-        { status: 400 }
-      );
-    }
 
-    // ค้นหาผู้ใช้ใน SocialMediaUser collection
+    // ค้นหาผู้ใช้ใน SocialMediaUser collection โดยใช้ accounts
     const user = await SocialMediaUserModel()
       .findOne({
         $or: [
-          { provider, providerAccountId: providerId },
+          { "accounts.provider": provider, "accounts.providerAccountId": providerId },
           email && email.trim() ? { email: email.toLowerCase() } : {},
           username ? { username: username.toLowerCase() } : {},
         ].filter((condition) => Object.keys(condition).length > 0),
@@ -244,7 +297,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
       // อัปเดตข้อมูลผู้ใช้ที่มีอยู่
       const updates: Partial<ISocialMediaUser> = {
-        lastLogin: new Date(),
+        lastLoginAt: new Date(),
       };
 
       if (name && !user.profile.displayName) {
@@ -256,22 +309,46 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (email && email.trim() && !user.email) {
         updates.email = email.toLowerCase();
       }
+      if (picture && !user.image) {
+        updates.image = picture;
+      }
+
+      // ตรวจสอบและเพิ่ม trackingStats และ socialStats ถ้าขาดหาย
+      if (!user.trackingStats || !user.socialStats) {
+        updates.trackingStats = user.trackingStats || {
+          totalLoginDays: 0,
+          totalNovelsRead: 0,
+          totalEpisodesRead: 0,
+          totalCoinSpent: 0,
+          totalRealMoneySpent: 0,
+          joinDate: user.joinedAt || new Date(),
+        };
+        updates.socialStats = user.socialStats || {
+          followersCount: 0,
+          followingCount: 0,
+          novelsCreatedCount: 0,
+          commentsMadeCount: 0,
+          ratingsGivenCount: 0,
+          likesGivenCount: 0,
+        };
+        console.warn(`⚠️ ผู้ใช้ ${user.email || user.username} มี trackingStats หรือ socialStats ขาดหาย, อัปเดตด้วยค่าเริ่มต้น`);
+      }
 
       if (Object.keys(updates).length > 1) {
         console.log(`⏳ อัปเดตผู้ใช้ ${user.email || user.username} ด้วยข้อมูล:`, updates);
         await SocialMediaUserModel().updateOne({ _id: user._id }, { $set: updates });
       } else {
-        await SocialMediaUserModel().updateOne({ _id: user._id }, { lastLogin: new Date() });
+        await SocialMediaUserModel().updateOne({ _id: user._id }, { lastLoginAt: new Date() });
       }
 
       console.log(`✅ ผู้ใช้ ${user.email || user.username} เข้าสู่ระบบด้วย ${provider} (บัญชีเดิม)`);
 
-      // สร้าง response user
+      // สร้าง response user ด้วยการตรวจสอบค่าเริ่มต้น
       const userResponse: SocialSignInResponseUser = {
         id: user._id.toString(),
         email: user.email,
         username: user.username,
-        role: user.role,
+        role: user.role || "Reader",
         profile: {
           displayName: user.profile?.displayName,
           avatar: user.profile?.avatar,
@@ -280,47 +357,79 @@ export async function POST(request: Request): Promise<NextResponse> {
           gender: user.profile?.gender,
           preferredGenres: user.profile?.preferredGenres?.map((id) => id.toString()) ?? [],
         },
-        stats: user.stats ?? {
-          followers: 0,
-          following: 0,
-          novels: 0,
-          purchases: 0,
-          donationsReceived: 0,
-          donationsMade: 0,
-          totalEpisodesSold: 0,
+        trackingStats: {
+          totalLoginDays: user.trackingStats?.totalLoginDays ?? 0,
+          totalNovelsRead: user.trackingStats?.totalNovelsRead ?? 0,
+          totalEpisodesRead: user.trackingStats?.totalEpisodesRead ?? 0,
+          totalCoinSpent: user.trackingStats?.totalCoinSpent ?? 0,
+          totalRealMoneySpent: user.trackingStats?.totalRealMoneySpent ?? 0,
+          lastNovelReadId: user.trackingStats?.lastNovelReadId?.toString(),
+          lastNovelReadAt: user.trackingStats?.lastNovelReadAt,
+          joinDate: user.joinedAt || new Date(),
         },
-        preferences: user.preferences ?? {
-          language: "th",
-          theme: "system",
+        socialStats: {
+          followersCount: user.socialStats?.followersCount ?? 0,
+          followingCount: user.socialStats?.followingCount ?? 0,
+          novelsCreatedCount: user.socialStats?.novelsCreatedCount ?? 0,
+          commentsMadeCount: user.socialStats?.commentsMadeCount ?? 0,
+          ratingsGivenCount: user.socialStats?.ratingsGivenCount ?? 0,
+          likesGivenCount: user.socialStats?.likesGivenCount ?? 0,
+        },
+        preferences: {
+          language: user.preferences?.language ?? "th",
+          theme: user.preferences?.theme ?? "system",
           notifications: {
-            email: true,
-            push: true,
-            novelUpdates: true,
-            comments: true,
-            donations: true,
+            email: user.preferences?.notifications?.email ?? true,
+            push: user.preferences?.notifications?.push ?? true,
+            novelUpdates: user.preferences?.notifications?.novelUpdates ?? true,
+            comments: user.preferences?.notifications?.comments ?? true,
+            donations: user.preferences?.notifications?.donations ?? true,
+            newFollowers: user.preferences?.notifications?.newFollowers ?? true,
+            systemAnnouncements: user.preferences?.notifications?.systemAnnouncements ?? false,
+          },
+          contentFilters: {
+            showMatureContent: user.preferences?.contentFilters?.showMatureContent ?? false,
+            blockedGenres: user.preferences?.contentFilters?.blockedGenres?.map((id) => id.toString()) ?? [],
+            blockedTags: user.preferences?.contentFilters?.blockedTags ?? [],
+          },
+          privacy: {
+            showActivityStatus: user.preferences?.privacy?.showActivityStatus ?? true,
+            profileVisibility: user.preferences?.privacy?.profileVisibility ?? "public",
+            readingHistoryVisibility: user.preferences?.privacy?.readingHistoryVisibility ?? "followersOnly",
           },
         },
         wallet: {
-          balance: user.wallet?.balance ?? 0,
-          currency: user.wallet?.currency ?? "THB",
-          lastTransaction: user.wallet?.lastTransaction,
-          transactionHistory: user.wallet?.transactionHistory?.map((id) => id.toString()) ?? [],
-          paymentMethods: user.wallet?.paymentMethods ?? [],
+          coinBalance: user.wallet?.coinBalance ?? 0,
+          lastCoinTransactionAt: user.wallet?.lastCoinTransactionAt,
         },
         gamification: {
           level: user.gamification?.level ?? 1,
-          experience: user.gamification?.experience ?? 0,
-          achievements: user.gamification?.achievements ?? [],
+          experience: user.gamification?.experiencePoints ?? 0,
+          achievements: user.gamification?.achievements?.map((id) => id.toString()) ?? [],
           badges: user.gamification?.badges?.map((id) => id.toString()) ?? [],
-          streaks: user.gamification?.streaks ?? {
-            currentLoginStreak: 0,
-            longestLoginStreak: 0,
-            lastLoginDate: new Date(),
+          streaks: {
+            currentLoginStreak: user.gamification?.streaks?.currentLoginStreak ?? 0,
+            longestLoginStreak: user.gamification?.streaks?.longestLoginStreak ?? 0,
+            lastLoginDate: user.gamification?.streaks?.lastLoginDate,
           },
+          dailyCheckIn: user.gamification?.dailyCheckIn
+            ? {
+                lastCheckInDate: user.gamification.dailyCheckIn.lastCheckInDate,
+                currentStreak: user.gamification.dailyCheckIn.currentStreak ?? 0,
+              }
+            : undefined,
         },
-        writerVerification: user.writerVerification,
+        writerVerification: user.writerVerification?.status !== "none" ? user.writerVerification : undefined,
+        donationSettings: user.donationSettings?.isDonationEnabled
+          ? {
+              isDonationEnabled: user.donationSettings.isDonationEnabled,
+              donationApplicationId: user.donationSettings.donationApplicationId?.toString(),
+              customMessage: user.donationSettings.customMessage,
+            }
+          : undefined,
         isActive: user.isActive ?? true,
-        isEmailVerified: !!user.email,
+        isEmailVerified: user.isEmailVerified ?? false,
+        isBanned: user.bannedUntil ? user.bannedUntil > new Date() : false,
         bannedUntil: user.bannedUntil,
       };
 
@@ -341,8 +450,13 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // สร้างผู้ใช้ใหม่ด้วยข้อมูลทั้งหมดตาม schema
     const newUserData: SocialMediaUserInput = {
-      provider,
-      providerAccountId: providerId,
+      accounts: [
+        {
+          provider,
+          providerAccountId: providerId,
+          type: "oauth",
+        },
+      ],
       email: email && email.trim() ? email.toLowerCase() : undefined,
       username: newUsername,
       role: "Reader",
@@ -353,14 +467,21 @@ export async function POST(request: Request): Promise<NextResponse> {
         coverImage: "",
         preferredGenres: [],
       },
-      stats: {
-        followers: 0,
-        following: 0,
-        novels: 0,
-        purchases: 0,
-        donationsReceived: 0,
-        donationsMade: 0,
-        totalEpisodesSold: 0,
+      trackingStats: {
+        totalLoginDays: 1,
+        totalNovelsRead: 0,
+        totalEpisodesRead: 0,
+        totalCoinSpent: 0,
+        totalRealMoneySpent: 0,
+        joinDate: new Date(),
+      },
+      socialStats: {
+        followersCount: 0,
+        followingCount: 0,
+        novelsCreatedCount: 0,
+        commentsMadeCount: 0,
+        ratingsGivenCount: 0,
+        likesGivenCount: 0,
       },
       preferences: {
         language: "th",
@@ -371,27 +492,51 @@ export async function POST(request: Request): Promise<NextResponse> {
           novelUpdates: true,
           comments: true,
           donations: true,
+          newFollowers: true,
+          systemAnnouncements: false,
+        },
+        contentFilters: {
+          showMatureContent: false,
+          blockedGenres: [],
+          blockedTags: [],
+        },
+        privacy: {
+          showActivityStatus: true,
+          profileVisibility: "public",
+          readingHistoryVisibility: "followersOnly",
         },
       },
       wallet: {
-        balance: 0,
-        currency: "THB",
-        transactionHistory: [],
-        paymentMethods: [],
+        coinBalance: 0,
       },
       gamification: {
         level: 1,
-        experience: 0,
+        experiencePoints: 0,
         achievements: [],
         badges: [],
         streaks: {
-          currentLoginStreak: 0,
-          longestLoginStreak: 0,
+          currentLoginStreak: 1,
+          longestLoginStreak: 1,
           lastLoginDate: new Date(),
         },
+        dailyCheckIn: {
+          currentStreak: 0,
+        },
       },
+      writerVerification: {
+        status: "none",
+      },
+      donationSettings: {
+        isDonationEnabled: false,
+      },
+      isEmailVerified: !!email,
       isActive: true,
-      lastLogin: new Date(),
+      isBanned: false,
+      lastLoginAt: new Date(),
+      joinedAt: new Date(),
+      isDeleted: false,
+      emailVerified: email ? new Date() : null,
+      image: picture,
     };
 
     const newUser = new (SocialMediaUserModel())(newUserData);
@@ -430,47 +575,79 @@ export async function POST(request: Request): Promise<NextResponse> {
         gender: savedUser.profile?.gender,
         preferredGenres: savedUser.profile?.preferredGenres?.map((id) => id.toString()) ?? [],
       },
-      stats: savedUser.stats ?? {
-        followers: 0,
-        following: 0,
-        novels: 0,
-        purchases: 0,
-        donationsReceived: 0,
-        donationsMade: 0,
-        totalEpisodesSold: 0,
+      trackingStats: {
+        totalLoginDays: savedUser.trackingStats?.totalLoginDays ?? 0,
+        totalNovelsRead: savedUser.trackingStats?.totalNovelsRead ?? 0,
+        totalEpisodesRead: savedUser.trackingStats?.totalEpisodesRead ?? 0,
+        totalCoinSpent: savedUser.trackingStats?.totalCoinSpent ?? 0,
+        totalRealMoneySpent: savedUser.trackingStats?.totalRealMoneySpent ?? 0,
+        lastNovelReadId: savedUser.trackingStats?.lastNovelReadId?.toString(),
+        lastNovelReadAt: savedUser.trackingStats?.lastNovelReadAt,
+        joinDate: savedUser.joinedAt || new Date(),
       },
-      preferences: savedUser.preferences ?? {
-        language: "th",
-        theme: "system",
+      socialStats: {
+        followersCount: savedUser.socialStats?.followersCount ?? 0,
+        followingCount: savedUser.socialStats?.followingCount ?? 0,
+        novelsCreatedCount: savedUser.socialStats?.novelsCreatedCount ?? 0,
+        commentsMadeCount: savedUser.socialStats?.commentsMadeCount ?? 0,
+        ratingsGivenCount: savedUser.socialStats?.ratingsGivenCount ?? 0,
+        likesGivenCount: savedUser.socialStats?.likesGivenCount ?? 0,
+      },
+      preferences: {
+        language: savedUser.preferences?.language ?? "th",
+        theme: savedUser.preferences?.theme ?? "system",
         notifications: {
-          email: true,
-          push: true,
-          novelUpdates: true,
-          comments: true,
-          donations: true,
+          email: savedUser.preferences?.notifications?.email ?? true,
+          push: savedUser.preferences?.notifications?.push ?? true,
+          novelUpdates: savedUser.preferences?.notifications?.novelUpdates ?? true,
+          comments: savedUser.preferences?.notifications?.comments ?? true,
+          donations: savedUser.preferences?.notifications?.donations ?? true,
+          newFollowers: savedUser.preferences?.notifications?.newFollowers ?? true,
+          systemAnnouncements: savedUser.preferences?.notifications?.systemAnnouncements ?? false,
+        },
+        contentFilters: {
+          showMatureContent: savedUser.preferences?.contentFilters?.showMatureContent ?? false,
+          blockedGenres: savedUser.preferences?.contentFilters?.blockedGenres?.map((id) => id.toString()) ?? [],
+          blockedTags: savedUser.preferences?.contentFilters?.blockedTags ?? [],
+        },
+        privacy: {
+          showActivityStatus: savedUser.preferences?.privacy?.showActivityStatus ?? true,
+          profileVisibility: savedUser.preferences?.privacy?.profileVisibility ?? "public",
+          readingHistoryVisibility: savedUser.preferences?.privacy?.readingHistoryVisibility ?? "followersOnly",
         },
       },
       wallet: {
-        balance: savedUser.wallet?.balance ?? 0,
-        currency: savedUser.wallet?.currency ?? "THB",
-        lastTransaction: savedUser.wallet?.lastTransaction,
-        transactionHistory: savedUser.wallet?.transactionHistory?.map((id) => id.toString()) ?? [],
-        paymentMethods: savedUser.wallet?.paymentMethods ?? [],
+        coinBalance: savedUser.wallet?.coinBalance ?? 0,
+        lastCoinTransactionAt: savedUser.wallet?.lastCoinTransactionAt,
       },
       gamification: {
         level: savedUser.gamification?.level ?? 1,
-        experience: savedUser.gamification?.experience ?? 0,
-        achievements: savedUser.gamification?.achievements ?? [],
+        experience: savedUser.gamification?.experiencePoints ?? 0,
+        achievements: savedUser.gamification?.achievements?.map((id) => id.toString()) ?? [],
         badges: savedUser.gamification?.badges?.map((id) => id.toString()) ?? [],
-        streaks: savedUser.gamification?.streaks ?? {
-          currentLoginStreak: 0,
-          longestLoginStreak: 0,
-          lastLoginDate: new Date(),
+        streaks: {
+          currentLoginStreak: savedUser.gamification?.streaks?.currentLoginStreak ?? 0,
+          longestLoginStreak: savedUser.gamification?.streaks?.longestLoginStreak ?? 0,
+          lastLoginDate: savedUser.gamification?.streaks?.lastLoginDate,
         },
+        dailyCheckIn: savedUser.gamification?.dailyCheckIn
+          ? {
+              lastCheckInDate: savedUser.gamification.dailyCheckIn.lastCheckInDate,
+              currentStreak: savedUser.gamification.dailyCheckIn.currentStreak ?? 0,
+            }
+          : undefined,
       },
-      writerVerification: savedUser.writerVerification,
+      writerVerification: savedUser.writerVerification?.status !== "none" ? savedUser.writerVerification : undefined,
+      donationSettings: savedUser.donationSettings?.isDonationEnabled
+        ? {
+            isDonationEnabled: savedUser.donationSettings.isDonationEnabled,
+            donationApplicationId: savedUser.donationSettings.donationApplicationId?.toString(),
+            customMessage: savedUser.donationSettings.customMessage,
+          }
+        : undefined,
       isActive: savedUser.isActive ?? true,
-      isEmailVerified: !!savedUser.email,
+      isEmailVerified: savedUser.isEmailVerified ?? false,
+      isBanned: savedUser.bannedUntil ? savedUser.bannedUntil > new Date() : false,
       bannedUntil: savedUser.bannedUntil,
     };
 

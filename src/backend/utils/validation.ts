@@ -1,33 +1,64 @@
 // src/backend/utils/validation.ts
+// src/backend/utils/validation.ts
+
+
+/**
+ * ตรวจสอบการยืนยันรหัสผ่าน
+ * เปรียบเทียบรหัสผ่านและการยืนยันรหัสผ่านว่าตรงกันหรือไม่
+ * @returns ผลการตรวจสอบพร้อมข้อความอธิบาย
+ */
+export const validateConfirmPassword = (password: string, confirmPassword: string): { valid: boolean; message?: string } => {
+  const sanitizedPassword = sanitizeInput(password);
+  const sanitizedConfirmPassword = sanitizeInput(confirmPassword);
+  
+  if (!sanitizedConfirmPassword.trim()) {
+    return { valid: false, message: 'กรุณายืนยันรหัสผ่าน' };
+  }
+  
+  if (sanitizedPassword !== sanitizedConfirmPassword) {
+    return { valid: false, message: 'รหัสผ่านไม่ตรงกัน' };
+  }
+  
+  return { valid: true };
+};// src/backend/utils/validation.ts
 /**
  * Form validation utility functions - ฟังก์ชันตรวจสอบความถูกต้องของฟอร์ม
  */
 
 /**
  * สะอาดข้อมูลที่รับเข้ามาเพื่อป้องกันการโจมตี
+ * ทำความสะอาดอินพุตโดยการตัดช่องว่างและกรองอักขระพิเศษที่อาจใช้ในการโจมตี XSS
  */
 const sanitizeInput = (input: string): string => {
+  if (!input) return '';
+  // ตัดช่องว่างและกรองแท็ก HTML ทั่วไปที่อาจใช้ในการโจมตี
   return input.trim().replace(/[<>{}]/g, '');
 };
 
 /**
  * ตรวจสอบความถูกต้องของอีเมล
+ * ใช้การตรวจสอบอีเมลแบบมาตรฐานตามมาตรฐาน RFC 5322
  */
 export const validateEmail = (email: string): boolean => {
   const sanitizedEmail = sanitizeInput(email);
   if (!sanitizedEmail) {
     return false;
   }
+  
+  // ตรวจสอบความยาวอีเมล (ตามมาตรฐาน)
   if (sanitizedEmail.length > 254) {
     return false;
   }
-  const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  
+  // รูปแบบอีเมลที่ถูกต้องตามมาตรฐาน RFC 5322
+  const emailPattern = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
   return emailPattern.test(sanitizedEmail);
 };
 
 /**
  * ตรวจสอบความถูกต้องของรหัสผ่าน
- * วิเคราะห์รหัสผ่านและคืนค่าผลการตรวจสอบ พร้อมข้อความอธิบาย
+ * วิเคราะห์รหัสผ่านตามเกณฑ์ความปลอดภัยมาตรฐาน
+ * @returns ผลการตรวจสอบ พร้อมข้อความอธิบายและรายละเอียดการตรวจสอบแต่ละเกณฑ์
  */
 export const validatePassword = (password: string): { valid: boolean; message?: string; checks?: Record<string, boolean> } => {
   const sanitizedPassword = sanitizeInput(password);
@@ -37,7 +68,8 @@ export const validatePassword = (password: string): { valid: boolean; message?: 
     length: sanitizedPassword.length >= 8 && sanitizedPassword.length <= 128,
     hasDigit: /\d/.test(sanitizedPassword),
     hasUppercase: /[A-Z]/.test(sanitizedPassword),
-    hasLowercase: /[a-z]/.test(sanitizedPassword)
+    hasLowercase: /[a-z]/.test(sanitizedPassword),
+    hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(sanitizedPassword)
   };
 
   // ตรวจสอบความยาว
@@ -91,6 +123,8 @@ export const validatePassword = (password: string): { valid: boolean; message?: 
 
 /**
  * ตรวจสอบความถูกต้องของชื่อผู้ใช้
+ * ตรวจสอบชื่อผู้ใช้ตามเกณฑ์ความปลอดภัยและความเหมาะสม
+ * @returns ผลการตรวจสอบ พร้อมข้อความอธิบายและรายละเอียดการตรวจสอบแต่ละเกณฑ์
  */
 export const validateUsername = (username: string): { valid: boolean; message?: string; checks?: Record<string, boolean> } => {
   const sanitizedUsername = sanitizeInput(username);
@@ -99,7 +133,8 @@ export const validateUsername = (username: string): { valid: boolean; message?: 
   const checks = {
     length: sanitizedUsername.length >= 3 && sanitizedUsername.length <= 20,
     validChars: /^[a-zA-Z0-9_]+$/.test(sanitizedUsername),
-    notReserved: true
+    notReserved: true,
+    noConsecutiveUnderscores: !/__{2,}/.test(sanitizedUsername)
   };
   
   // ตรวจสอบความยาว
@@ -130,8 +165,20 @@ export const validateUsername = (username: string): { valid: boolean; message?: 
     };
   }
   
+  // ตรวจสอบไม่ให้มีขีดล่างติดกันมากกว่าหนึ่งตัว
+  if (!checks.noConsecutiveUnderscores) {
+    return {
+      valid: false,
+      message: 'ชื่อผู้ใช้ต้องไม่มีเครื่องหมายขีดล่างติดกันมากกว่าหนึ่งตัว',
+      checks
+    };
+  }
+  
   // ตรวจสอบชื่อที่สงวนไว้
-  const reservedUsernames = ['admin', 'administrator', 'root', 'system', 'guest', 'user'];
+  const reservedUsernames = [
+    'admin', 'administrator',
+  ];
+  
   checks.notReserved = !reservedUsernames.includes(sanitizedUsername.toLowerCase());
   
   if (!checks.notReserved) {
@@ -143,22 +190,5 @@ export const validateUsername = (username: string): { valid: boolean; message?: 
   }
   
   return { valid: true, checks };
-};
 
-/**
- * ตรวจสอบการยืนยันรหัสผ่าน
- */
-export const validateConfirmPassword = (password: string, confirmPassword: string): { valid: boolean; message?: string } => {
-  const sanitizedPassword = sanitizeInput(password);
-  const sanitizedConfirmPassword = sanitizeInput(confirmPassword);
-  
-  if (!sanitizedConfirmPassword.trim()) {
-    return { valid: false, message: 'กรุณายืนยันรหัสผ่าน' };
-  }
-  
-  if (sanitizedPassword !== sanitizedConfirmPassword) {
-    return { valid: false, message: 'รหัสผ่านไม่ตรงกัน' };
-  }
-  
-  return { valid: true };
 };

@@ -8,8 +8,9 @@ import FacebookProvider from "next-auth/providers/facebook";
 import AppleProvider from "next-auth/providers/apple";
 import LineProvider from "next-auth/providers/line";
 import { JWT } from "next-auth/jwt";
+import { Types } from "mongoose";
 
-// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน
+// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน (สอดคล้องกับ IUser และ ISocialMediaUser)
 export type SessionUser = {
   id: string;
   name: string;
@@ -24,14 +25,23 @@ export type SessionUser = {
     gender?: "male" | "female" | "other" | "preferNotToSay";
     preferredGenres?: string[];
   };
-  stats: {
-    followers: number;
-    following: number;
-    novels: number;
-    purchases: number;
-    donationsReceived: number;
-    donationsMade: number;
-    totalEpisodesSold: number;
+  trackingStats: {
+    totalLoginDays: number;
+    totalNovelsRead: number;
+    totalEpisodesRead: number;
+    totalCoinSpent: number;
+    totalRealMoneySpent: number;
+    lastNovelReadId?: string;
+    lastNovelReadAt?: Date;
+    joinDate: Date;
+  };
+  socialStats: {
+    followersCount: number;
+    followingCount: number;
+    novelsCreatedCount: number;
+    commentsMadeCount: number;
+    ratingsGivenCount: number;
+    likesGivenCount: number;
   };
   preferences: {
     language: string;
@@ -42,17 +52,23 @@ export type SessionUser = {
       novelUpdates: boolean;
       comments: boolean;
       donations: boolean;
+      newFollowers: boolean;
+      systemAnnouncements: boolean;
+    };
+    privacy: {
+      showActivityStatus: boolean;
+      profileVisibility: "public" | "followersOnly" | "private";
+      readingHistoryVisibility: "public" | "followersOnly" | "private";
     };
   };
   wallet: {
-    balance: number;
-    currency: string;
-    lastTransaction?: Date;
+    coinBalance: number;
+    lastCoinTransactionAt?: Date;
   };
   gamification: {
     level: number;
     experience: number;
-    achievements?: { id: string; name: string; unlockedAt: Date }[];
+    achievements?: string[];
     badges?: string[];
     streaks: {
       currentLoginStreak: number;
@@ -67,9 +83,14 @@ export type SessionUser = {
     rejectedReason?: string;
     documents?: { type: string; url: string; uploadedAt: Date }[];
   };
+  donationSettings?: {
+    isDonationEnabled: boolean;
+    donationApplicationId?: string;
+    customMessage?: string;
+  };
   isActive: boolean;
   isEmailVerified: boolean;
-  isBanned?: boolean;
+  isBanned: boolean;
   bannedUntil?: Date;
 };
 
@@ -183,50 +204,19 @@ export const authOptions: NextAuthOptions = {
             name: data.user.profile?.displayName || data.user.username,
             email: data.user.email,
             username: data.user.username,
-            role: data.user.role || "Reader",
-            profile: data.user.profile || {
-              displayName: data.user.username,
-              avatar: "",
-              bio: "",
-              coverImage: "",
-            },
-            stats: {
-              followers: data.user.stats?.followersCount || 0,
-              following: data.user.stats?.followingCount || 0,
-              novels: data.user.stats?.novelsCount || 0,
-              purchases: data.user.stats?.purchasesCount || 0,
-              donationsReceived: data.user.stats?.donationsReceivedAmount || 0,
-              donationsMade: data.user.stats?.donationsMadeAmount || 0,
-              totalEpisodesSold: data.user.stats?.totalEpisodesSoldCount || 0,
-            },
-            preferences: data.user.preferences || {
-              language: "th",
-              theme: "system",
-              notifications: {
-                email: true,
-                push: true,
-                novelUpdates: true,
-                comments: true,
-                donations: true,
-              },
-            },
-            wallet: data.user.wallet || {
-              balance: 0,
-              currency: "THB",
-            },
-            gamification: data.user.gamification || {
-              level: 1,
-              experience: 0,
-              streaks: {
-                currentLoginStreak: 0,
-                longestLoginStreak: 0,
-              },
-            },
+            role: data.user.role,
+            profile: data.user.profile,
+            trackingStats: data.user.trackingStats,
+            socialStats: data.user.socialStats,
+            preferences: data.user.preferences,
+            wallet: data.user.wallet,
+            gamification: data.user.gamification,
             writerVerification: data.user.writerVerification,
-            isActive: data.user.isActive !== undefined ? data.user.isActive : true,
-            isEmailVerified: data.user.isEmailVerified || false,
-            isBanned: data.user.isBanned || false,
-            bannedUntil: data.user.bannedUntil || null,
+            donationSettings: data.user.donationSettings,
+            isActive: data.user.isActive,
+            isEmailVerified: data.user.isEmailVerified,
+            isBanned: data.user.isBanned,
+            bannedUntil: data.user.bannedUntil,
           } as NextAuthUser;
         } catch (error: any) {
           console.error(`❌ ข้อผิดพลาดในการ authorize ผ่าน CredentialsProvider: ${error.message}`);
@@ -316,11 +306,13 @@ export const authOptions: NextAuthOptions = {
         token.username = user.username;
         token.role = user.role;
         token.profile = user.profile;
-        token.stats = user.stats;
+        token.trackingStats = user.trackingStats;
+        token.socialStats = user.socialStats;
         token.preferences = user.preferences;
         token.wallet = user.wallet;
         token.gamification = user.gamification;
         token.writerVerification = user.writerVerification;
+        token.donationSettings = user.donationSettings;
         token.isActive = user.isActive;
         token.isEmailVerified = user.isEmailVerified;
         token.isBanned = user.isBanned;
@@ -423,54 +415,19 @@ export const authOptions: NextAuthOptions = {
             token.name = data.user.profile?.displayName || data.user.username;
             token.email = data.user.email;
             token.username = data.user.username;
-            token.role = data.user.role || "Reader";
-            token.profile = {
-              displayName: data.user.profile?.displayName || data.user.username,
-              avatar: data.user.profile?.avatar || "",
-              bio: data.user.profile?.bio || "",
-              coverImage: data.user.profile?.coverImage || "",
-              gender: data.user.profile?.gender,
-              preferredGenres: data.user.profile?.preferredGenres || [],
-            };
-            token.stats = {
-              followers: data.user.stats?.followers || 0,
-              following: data.user.stats?.following || 0,
-              novels: data.user.stats?.novels || 0,
-              purchases: data.user.stats?.purchases || 0,
-              donationsReceived: data.user.stats?.donationsReceived || 0,
-              donationsMade: data.user.stats?.donationsMade || 0,
-              totalEpisodesSold: data.user.stats?.totalEpisodesSold || 0,
-            };
-            token.preferences = data.user.preferences || {
-              language: "th",
-              theme: "system",
-              notifications: {
-                email: true,
-                push: true,
-                novelUpdates: true,
-                comments: true,
-                donations: true,
-              },
-            };
-            token.wallet = data.user.wallet || {
-              balance: 0,
-              currency: "THB",
-            };
-            token.gamification = {
-              level: data.user.gamification?.level || 1,
-              experience: data.user.gamification?.experience || 0,
-              achievements: data.user.gamification?.achievements || [],
-              badges: data.user.gamification?.badges || [],
-              streaks: data.user.gamification?.streaks || {
-                currentLoginStreak: 0,
-                longestLoginStreak: 0,
-              },
-            };
+            token.role = data.user.role;
+            token.profile = data.user.profile;
+            token.trackingStats = data.user.trackingStats;
+            token.socialStats = data.user.socialStats;
+            token.preferences = data.user.preferences;
+            token.wallet = data.user.wallet;
+            token.gamification = data.user.gamification;
             token.writerVerification = data.user.writerVerification;
-            token.isActive = data.user.isActive !== undefined ? data.user.isActive : true;
-            token.isEmailVerified = data.user.isEmailVerified || (data.user.email ? true : false);
+            token.donationSettings = data.user.donationSettings;
+            token.isActive = data.user.isActive;
+            token.isEmailVerified = data.user.isEmailVerified;
             token.isBanned = data.user.bannedUntil ? new Date(data.user.bannedUntil) > new Date() : false;
-            token.bannedUntil = data.user.bannedUntil || null;
+            token.bannedUntil = data.user.bannedUntil;
           } catch (error: any) {
             console.error(`❌ ข้อผิดพลาดใน JWT callback ขณะประมวลผล ${account.provider}: ${error.message}`);
             throw error;
@@ -498,11 +455,13 @@ export const authOptions: NextAuthOptions = {
             gender: token.profile?.gender,
             preferredGenres: token.profile?.preferredGenres,
           },
-          stats: token.stats as SessionUser["stats"],
+          trackingStats: token.trackingStats as SessionUser["trackingStats"],
+          socialStats: token.socialStats as SessionUser["socialStats"],
           preferences: token.preferences as SessionUser["preferences"],
           wallet: token.wallet as SessionUser["wallet"],
           gamification: token.gamification as SessionUser["gamification"],
           writerVerification: token.writerVerification as SessionUser["writerVerification"],
+          donationSettings: token.donationSettings as SessionUser["donationSettings"],
           isActive: token.isActive as boolean,
           isEmailVerified: token.isEmailVerified as boolean,
           isBanned: token.isBanned as boolean,
@@ -540,14 +499,23 @@ declare module "next-auth" {
       gender?: "male" | "female" | "other" | "preferNotToSay";
       preferredGenres?: string[];
     };
-    stats: {
-      followers: number;
-      following: number;
-      novels: number;
-      purchases: number;
-      donationsReceived: number;
-      donationsMade: number;
-      totalEpisodesSold: number;
+    trackingStats: {
+      totalLoginDays: number;
+      totalNovelsRead: number;
+      totalEpisodesRead: number;
+      totalCoinSpent: number;
+      totalRealMoneySpent: number;
+      lastNovelReadId?: string;
+      lastNovelReadAt?: Date;
+      joinDate: Date;
+    };
+    socialStats: {
+      followersCount: number;
+      followingCount: number;
+      novelsCreatedCount: number;
+      commentsMadeCount: number;
+      ratingsGivenCount: number;
+      likesGivenCount: number;
     };
     preferences: {
       language: string;
@@ -558,17 +526,23 @@ declare module "next-auth" {
         novelUpdates: boolean;
         comments: boolean;
         donations: boolean;
+        newFollowers: boolean;
+        systemAnnouncements: boolean;
+      };
+      privacy: {
+        showActivityStatus: boolean;
+        profileVisibility: "public" | "followersOnly" | "private";
+        readingHistoryVisibility: "public" | "followersOnly" | "private";
       };
     };
     wallet: {
-      balance: number;
-      currency: string;
-      lastTransaction?: Date;
+      coinBalance: number;
+      lastCoinTransactionAt?: Date;
     };
     gamification: {
       level: number;
       experience: number;
-      achievements?: { id: string; name: string; unlockedAt: Date }[];
+      achievements?: string[];
       badges?: string[];
       streaks: {
         currentLoginStreak: number;
@@ -583,9 +557,14 @@ declare module "next-auth" {
       rejectedReason?: string;
       documents?: { type: string; url: string; uploadedAt: Date }[];
     };
+    donationSettings?: {
+      isDonationEnabled: boolean;
+      donationApplicationId?: string;
+      customMessage?: string;
+    };
     isActive: boolean;
     isEmailVerified: boolean;
-    isBanned?: boolean;
+    isBanned: boolean;
     bannedUntil?: Date;
   }
 
@@ -609,14 +588,23 @@ declare module "next-auth/jwt" {
       gender?: "male" | "female" | "other" | "preferNotToSay";
       preferredGenres?: string[];
     };
-    stats?: {
-      followers: number;
-      following: number;
-      novels: number;
-      purchases: number;
-      donationsReceived: number;
-      donationsMade: number;
-      totalEpisodesSold: number;
+    trackingStats?: {
+      totalLoginDays: number;
+      totalNovelsRead: number;
+      totalEpisodesRead: number;
+      totalCoinSpent: number;
+      totalRealMoneySpent: number;
+      lastNovelReadId?: string;
+      lastNovelReadAt?: Date;
+      joinDate: Date;
+    };
+    socialStats?: {
+      followersCount: number;
+      followingCount: number;
+      novelsCreatedCount: number;
+      commentsMadeCount: number;
+      ratingsGivenCount: number;
+      likesGivenCount: number;
     };
     preferences?: {
       language: string;
@@ -627,17 +615,23 @@ declare module "next-auth/jwt" {
         novelUpdates: boolean;
         comments: boolean;
         donations: boolean;
+        newFollowers: boolean;
+        systemAnnouncements: boolean;
+      };
+      privacy: {
+        showActivityStatus: boolean;
+        profileVisibility: "public" | "followersOnly" | "private";
+        readingHistoryVisibility: "public" | "followersOnly" | "private";
       };
     };
     wallet?: {
-      balance: number;
-      currency: string;
-      lastTransaction?: Date;
+      coinBalance: number;
+      lastCoinTransactionAt?: Date;
     };
     gamification?: {
       level: number;
       experience: number;
-      achievements?: { id: string; name: string; unlockedAt: Date }[];
+      achievements?: string[];
       badges?: string[];
       streaks: {
         currentLoginStreak: number;
@@ -651,6 +645,11 @@ declare module "next-auth/jwt" {
       verifiedAt?: Date;
       rejectedReason?: string;
       documents?: { type: string; url: string; uploadedAt: Date }[];
+    };
+    donationSettings?: {
+      isDonationEnabled: boolean;
+      donationApplicationId?: string;
+      customMessage?: string;
     };
     isActive?: boolean;
     isEmailVerified?: boolean;

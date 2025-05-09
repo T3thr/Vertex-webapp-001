@@ -12,6 +12,7 @@ import {
   FiStar,
   FiAward 
 } from "react-icons/fi";
+import Footer from "@/components/layouts/Footer";
 
 /**
  * ฟังก์ชันดึงข้อมูลนิยายจาก API
@@ -172,26 +173,27 @@ export default async function HomePage() {
       id: "1",
       title: "ACT PHEC",
       description: "ผจญภัยในโลกแฟนตาซีที่เต็มไปด้วยเวทมนตร์และการต่อสู้",
-      imageUrl: "/images/slider/slide1.jpg",
+      imageUrl: "/images/novel1.png",
       link: "/novels/act-phec",
     },
     {
       id: "2",
       title: "SINISTER",
       description: "สืบสวนคดีสยองขวัญที่จะทำให้คุณนอนไม่หลับ",
-      imageUrl: "/images/slider/slide2.jpg",
+      imageUrl: "/images/novel2.png",
       link: "/novels/sinister",
     },
     {
       id: "3",
       title: "BLOOD MOON",
       description: "เมื่อพระจันทร์สีเลือดปรากฏ ทุกอย่างจะเปลี่ยนไป",
-      imageUrl: "/images/slider/slide3.jpg",
+      imageUrl: "/images/novel3.png",
       link: "/novels/blood-moon",
     },
   ];
 
   return (
+    <div>
     <main className="pb-16">
       {/* ส่วนสไลด์ภาพหน้าแรก */}
       <section className="w-full mb-12">
@@ -282,5 +284,7 @@ export default async function HomePage() {
         </Suspense>
       </div>
     </main>
+    <Footer/>
+    </div>
   );
 }

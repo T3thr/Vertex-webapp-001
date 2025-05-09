@@ -26,14 +26,23 @@ interface SignInResponseUser {
     gender?: "male" | "female" | "other" | "preferNotToSay";
     preferredGenres?: string[];
   };
-  stats: {
-    followers: number;
-    following: number;
-    novels: number;
-    purchases: number;
-    donationsReceived: number;
-    donationsMade: number;
-    totalEpisodesSold: number;
+  trackingStats: {
+    totalLoginDays: number;
+    totalNovelsRead: number;
+    totalEpisodesRead: number;
+    totalCoinSpent: number;
+    totalRealMoneySpent: number;
+    lastNovelReadId?: string;
+    lastNovelReadAt?: Date;
+    joinDate: Date;
+  };
+  socialStats: {
+    followersCount: number;
+    followingCount: number;
+    novelsCreatedCount: number;
+    commentsMadeCount: number;
+    ratingsGivenCount: number;
+    likesGivenCount: number;
   };
   preferences: {
     language: string;
@@ -44,16 +53,24 @@ interface SignInResponseUser {
       novelUpdates: boolean;
       comments: boolean;
       donations: boolean;
+      newFollowers: boolean;
+      systemAnnouncements: boolean;
+    };
+    privacy: {
+      showActivityStatus: boolean;
+      profileVisibility: "public" | "followersOnly" | "private";
+      readingHistoryVisibility: "public" | "followersOnly" | "private";
     };
   };
   wallet: {
-    balance: number;
-    currency: string;
-    lastTransaction?: Date;
+    coinBalance: number;
+    lastCoinTransactionAt?: Date;
   };
   gamification: {
     level: number;
     experience: number;
+    achievements?: string[];
+    badges?: string[];
     streaks: {
       currentLoginStreak: number;
       longestLoginStreak: number;
@@ -66,6 +83,11 @@ interface SignInResponseUser {
     verifiedAt?: Date;
     rejectedReason?: string;
     documents?: { type: string; url: string; uploadedAt: Date }[];
+  };
+  donationSettings?: {
+    isDonationEnabled: boolean;
+    donationApplicationId?: string;
+    customMessage?: string;
   };
   isActive: boolean;
   isEmailVerified: boolean;
@@ -194,41 +216,67 @@ export async function POST(request: Request): Promise<NextResponse> {
         gender: user.profile?.gender,
         preferredGenres: user.profile?.preferredGenres?.map((id) => id.toString()) ?? [],
       },
-      stats: {
-        followers: user.stats?.followersCount ?? 0,
-        following: user.stats?.followingCount ?? 0,
-        novels: user.stats?.novelsCount ?? 0,
-        purchases: user.stats?.purchasesCount ?? 0,
-        donationsReceived: user.stats?.donationsReceivedAmount ?? 0,
-        donationsMade: user.stats?.donationsMadeAmount ?? 0,
-        totalEpisodesSold: user.stats?.totalEpisodesSoldCount ?? 0,
+      trackingStats: {
+        totalLoginDays: user.trackingStats.totalLoginDays,
+        totalNovelsRead: user.trackingStats.totalNovelsRead,
+        totalEpisodesRead: user.trackingStats.totalEpisodesRead,
+        totalCoinSpent: user.trackingStats.totalCoinSpent,
+        totalRealMoneySpent: user.trackingStats.totalRealMoneySpent,
+        lastNovelReadId: user.trackingStats.lastNovelReadId?.toString(),
+        lastNovelReadAt: user.trackingStats.lastNovelReadAt,
+        joinDate: user.trackingStats.joinDate,
       },
-      preferences: user.preferences ?? {
-        language: "th",
-        theme: "system",
+      socialStats: {
+        followersCount: user.socialStats.followersCount,
+        followingCount: user.socialStats.followingCount,
+        novelsCreatedCount: user.socialStats.novelsCreatedCount,
+        commentsMadeCount: user.socialStats.commentsMadeCount,
+        ratingsGivenCount: user.socialStats.ratingsGivenCount,
+        likesGivenCount: user.socialStats.likesGivenCount,
+      },
+      preferences: {
+        language: user.preferences.language,
+        theme: user.preferences.theme,
         notifications: {
-          email: true,
-          push: true,
-          novelUpdates: true,
-          comments: true,
-          donations: true,
+          email: user.preferences.notifications.email,
+          push: user.preferences.notifications.push,
+          novelUpdates: user.preferences.notifications.novelUpdates,
+          comments: user.preferences.notifications.comments,
+          donations: user.preferences.notifications.donations,
+          newFollowers: user.preferences.notifications.newFollowers,
+          systemAnnouncements: user.preferences.notifications.systemAnnouncements,
+        },
+        privacy: {
+          showActivityStatus: user.preferences.privacy.showActivityStatus,
+          profileVisibility: user.preferences.privacy.profileVisibility,
+          readingHistoryVisibility: user.preferences.privacy.readingHistoryVisibility,
         },
       },
-      wallet: user.wallet ?? {
-        balance: 0,
-        currency: "THB",
+      wallet: {
+        coinBalance: user.wallet.coinBalance,
+        lastCoinTransactionAt: user.wallet.lastCoinTransactionAt,
       },
-      gamification: user.gamification ?? {
-        level: 1,
-        experience: 0,
+      gamification: {
+        level: user.gamification.level,
+        experience: user.gamification.experience,
+        achievements: user.gamification.achievements?.map((id) => id.toString()) ?? [],
+        badges: user.gamification.badges?.map((id) => id.toString()) ?? [],
         streaks: {
-          currentLoginStreak: 0,
-          longestLoginStreak: 0,
+          currentLoginStreak: user.gamification.streaks.currentLoginStreak,
+          longestLoginStreak: user.gamification.streaks.longestLoginStreak,
+          lastLoginDate: user.gamification.streaks.lastLoginDate,
         },
       },
       writerVerification: user.writerVerification,
-      isActive: user.isActive ?? true,
-      isEmailVerified: user.isEmailVerified ?? false,
+      donationSettings: user.donationSettings
+        ? {
+            isDonationEnabled: user.donationSettings.isDonationEnabled,
+            donationApplicationId: user.donationSettings.donationApplicationId?.toString(),
+            customMessage: user.donationSettings.customMessage,
+          }
+        : undefined,
+      isActive: user.isActive,
+      isEmailVerified: user.isEmailVerified,
       isBanned: user.bannedUntil ? user.bannedUntil > new Date() : false,
       bannedUntil: user.bannedUntil,
     };

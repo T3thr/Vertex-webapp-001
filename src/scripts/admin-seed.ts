@@ -5,9 +5,11 @@ import { config } from "dotenv";
 import dbConnect from "@/backend/lib/mongodb";
 import { IUser } from "@/backend/models/User";
 
-// Load environment variables from .env file
+// โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
+// Loading environment variables from .env file
 config({ path: ".env" });
 
+// โหลดตัวแปรสภาพแวดล้อม
 // Load environment variables
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
@@ -18,11 +20,13 @@ const AUTHOR_PASSWORD = process.env.AUTHOR_PASSWORD;
 
 /**
  * สร้างหรืออัปเดตผู้ใช้แอดมิน
+ * Create or update admin user
  * @param User - Mongoose model for User
  */
 async function seedAdmin(User: mongoose.Model<IUser>) {
   try {
     // ตรวจสอบตัวแปรสภาพแวดล้อม
+    // Check environment variables
     if (!ADMIN_EMAIL || !ADMIN_USERNAME || !ADMIN_PASSWORD) {
       throw new Error(
         "ตัวแปรสภาพแวดล้อมที่จำเป็นสำหรับแอดมินขาดหายไป: ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD ใน .env"
@@ -30,6 +34,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
     }
 
     // ตรวจสอบว่ามีผู้ใช้แอดมินอยู่แล้วหรือไม่
+    // Check if admin user already exists
     const existingAdmin = await User.findOne({
       $or: [{ email: ADMIN_EMAIL }, { username: ADMIN_USERNAME }],
     });
@@ -38,6 +43,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       console.log(`ℹ️ ผู้ใช้แอดมินมีอยู่แล้ว: ${existingAdmin.email}`);
 
       // อัปเดตข้อมูลผู้ใช้แอดมิน
+      // Update admin user information
       existingAdmin.email = ADMIN_EMAIL.toLowerCase();
       existingAdmin.username = ADMIN_USERNAME;
       existingAdmin.password = ADMIN_PASSWORD; // รหัสผ่านจะถูกแฮชใน pre("save") middleware
@@ -47,14 +53,23 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
         bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ",
         ...existingAdmin.profile, // รักษาค่าเดิมของฟิลด์ที่ไม่ได้ระบุ
       };
-      existingAdmin.stats = {
-        followersCount: existingAdmin.stats.followersCount || 0,
-        followingCount: existingAdmin.stats.followingCount || 0,
-        novelsCount: existingAdmin.stats.novelsCount || 0,
-        purchasesCount: existingAdmin.stats.purchasesCount || 0,
-        donationsReceivedAmount: existingAdmin.stats.donationsReceivedAmount || 0,
-        donationsMadeAmount: existingAdmin.stats.donationsMadeAmount || 0,
-        totalEpisodesSoldCount: existingAdmin.stats.totalEpisodesSoldCount || 0,
+      existingAdmin.trackingStats = {
+        totalLoginDays: existingAdmin.trackingStats.totalLoginDays || 0,
+        totalNovelsRead: existingAdmin.trackingStats.totalNovelsRead || 0,
+        totalEpisodesRead: existingAdmin.trackingStats.totalEpisodesRead || 0,
+        totalCoinSpent: existingAdmin.trackingStats.totalCoinSpent || 0,
+        totalRealMoneySpent: existingAdmin.trackingStats.totalRealMoneySpent || 0,
+        lastNovelReadId: existingAdmin.trackingStats.lastNovelReadId,
+        lastNovelReadAt: existingAdmin.trackingStats.lastNovelReadAt,
+        joinDate: existingAdmin.trackingStats.joinDate || new Date(),
+      };
+      existingAdmin.socialStats = {
+        followersCount: existingAdmin.socialStats.followersCount || 0,
+        followingCount: existingAdmin.socialStats.followingCount || 0,
+        novelsCreatedCount: existingAdmin.socialStats.novelsCreatedCount || 0,
+        commentsMadeCount: existingAdmin.socialStats.commentsMadeCount || 0,
+        ratingsGivenCount: existingAdmin.socialStats.ratingsGivenCount || 0,
+        likesGivenCount: existingAdmin.socialStats.likesGivenCount || 0,
       };
       existingAdmin.preferences = {
         language: "th",
@@ -65,20 +80,28 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
           novelUpdates: true,
           comments: true,
           donations: true,
+          newFollowers: true,
+          systemAnnouncements: true,
+        },
+        privacy: {
+          showActivityStatus: existingAdmin.preferences.privacy.showActivityStatus ?? true,
+          profileVisibility: existingAdmin.preferences.privacy.profileVisibility || "public",
+          readingHistoryVisibility: existingAdmin.preferences.privacy.readingHistoryVisibility || "followersOnly",
         },
       };
       existingAdmin.wallet = {
-        balance: existingAdmin.wallet?.balance || 0,
-        currency: "THB",
-        lastTransactionAt: existingAdmin.wallet?.lastTransactionAt,
+        coinBalance: existingAdmin.wallet.coinBalance || 0,
+        lastCoinTransactionAt: existingAdmin.wallet.lastCoinTransactionAt,
       };
       existingAdmin.gamification = {
-        level: existingAdmin.gamification?.level || 1,
-        experience: existingAdmin.gamification?.experience || 0,
+        level: existingAdmin.gamification.level || 1,
+        experience: existingAdmin.gamification.experience || 0,
+        achievements: existingAdmin.gamification.achievements || [],
+        badges: existingAdmin.gamification.badges || [],
         streaks: {
-          currentLoginStreak: existingAdmin.gamification?.streaks?.currentLoginStreak || 0,
-          longestLoginStreak: existingAdmin.gamification?.streaks?.longestLoginStreak || 0,
-          lastLoginDate: existingAdmin.gamification?.streaks?.lastLoginDate,
+          currentLoginStreak: existingAdmin.gamification.streaks.currentLoginStreak || 0,
+          longestLoginStreak: existingAdmin.gamification.streaks.longestLoginStreak || 0,
+          lastLoginDate: existingAdmin.gamification.streaks.lastLoginDate,
         },
       };
       existingAdmin.writerVerification = {
@@ -86,7 +109,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
         submittedAt: undefined,
         verifiedAt: undefined,
         rejectedReason: undefined,
-        documents: [],
+        documents: existingAdmin.writerVerification?.documents || [],
       };
       existingAdmin.isEmailVerified = true;
       existingAdmin.isActive = true;
@@ -99,6 +122,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
     }
 
     // สร้างผู้ใช้แอดมินใหม่ถ้ายังไม่มี
+    // Create new admin user if none exists
     console.log("🌱 สร้างบัญชีผู้ใช้แอดมิน...");
     const adminUser = await User.create({
       email: ADMIN_EMAIL.toLowerCase(),
@@ -110,14 +134,21 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
         bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ",
       },
       accounts: [], // ปล่อยให้ middleware จัดการเพิ่ม credentials account
-      stats: {
+      trackingStats: {
+        totalLoginDays: 0,
+        totalNovelsRead: 0,
+        totalEpisodesRead: 0,
+        totalCoinSpent: 0,
+        totalRealMoneySpent: 0,
+        joinDate: new Date(),
+      },
+      socialStats: {
         followersCount: 0,
         followingCount: 0,
-        novelsCount: 0,
-        purchasesCount: 0,
-        donationsReceivedAmount: 0,
-        donationsMadeAmount: 0,
-        totalEpisodesSoldCount: 0,
+        novelsCreatedCount: 0,
+        commentsMadeCount: 0,
+        ratingsGivenCount: 0,
+        likesGivenCount: 0,
       },
       preferences: {
         language: "th",
@@ -128,15 +159,23 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
           novelUpdates: true,
           comments: true,
           donations: true,
+          newFollowers: true,
+          systemAnnouncements: true,
+        },
+        privacy: {
+          showActivityStatus: true,
+          profileVisibility: "public",
+          readingHistoryVisibility: "followersOnly",
         },
       },
       wallet: {
-        balance: 0,
-        currency: "THB",
+        coinBalance: 0,
       },
       gamification: {
         level: 1,
         experience: 0,
+        achievements: [],
+        badges: [],
         streaks: {
           currentLoginStreak: 0,
           longestLoginStreak: 0,
@@ -161,12 +200,14 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
 
 /**
  * ตรวจสอบหรือสร้างผู้ใช้สำหรับเป็นผู้เขียนนิยาย
+ * Check or create user for novel author
  * @param User - Mongoose model for User
  * @returns Author ID
  */
 async function ensureAuthorExists(User: mongoose.Model<IUser>) {
   try {
     // ตรวจสอบตัวแปรสภาพแวดล้อม
+    // Check environment variables
     if (!AUTHOR_EMAIL || !AUTHOR_USERNAME || !AUTHOR_PASSWORD) {
       throw new Error(
         "ตัวแปรสภาพแวดล้อมที่จำเป็นสำหรับผู้เขียนขาดหายไป: AUTHOR_EMAIL, AUTHOR_USERNAME, AUTHOR_PASSWORD ใน .env"
@@ -174,6 +215,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
     }
 
     // ตรวจสอบว่ามีผู้เขียนอยู่แล้วหรือไม่
+    // Check if author user already exists
     let author = await User.findOne({ username: AUTHOR_USERNAME });
 
     if (!author) {
@@ -189,14 +231,21 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
           bio: "ผู้เขียนนิยายหลากหลายแนว รักการเล่าเรื่องและสร้างโลกจินตนาการ",
         },
         accounts: [], // ปล่อยให้ middleware จัดการเพิ่ม credentials account
-        stats: {
+        trackingStats: {
+          totalLoginDays: 0,
+          totalNovelsRead: 0,
+          totalEpisodesRead: 0,
+          totalCoinSpent: 0,
+          totalRealMoneySpent: 0,
+          joinDate: new Date(),
+        },
+        socialStats: {
           followersCount: 0,
           followingCount: 0,
-          novelsCount: 0,
-          purchasesCount: 0,
-          donationsReceivedAmount: 0,
-          donationsMadeAmount: 0,
-          totalEpisodesSoldCount: 0,
+          novelsCreatedCount: 0,
+          commentsMadeCount: 0,
+          ratingsGivenCount: 0,
+          likesGivenCount: 0,
         },
         preferences: {
           language: "th",
@@ -207,15 +256,23 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
             novelUpdates: true,
             comments: true,
             donations: true,
+            newFollowers: true,
+            systemAnnouncements: true,
+          },
+          privacy: {
+            showActivityStatus: true,
+            profileVisibility: "public",
+            readingHistoryVisibility: "followersOnly",
           },
         },
         wallet: {
-          balance: 0,
-          currency: "THB",
+          coinBalance: 0,
         },
         gamification: {
           level: 1,
           experience: 0,
+          achievements: [],
+          badges: [],
           streaks: {
             currentLoginStreak: 0,
             longestLoginStreak: 0,
@@ -223,6 +280,8 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
         },
         writerVerification: {
           status: "verified", // ตั้งเป็น verified โดยตรงสำหรับ seed
+          verifiedAt: new Date(),
+          documents: [],
         },
         isEmailVerified: true,
         isActive: true,
@@ -235,6 +294,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
       console.log("ℹ️ มีบัญชีผู้เขียนอยู่แล้ว");
 
       // อัปเดตข้อมูลผู้เขียนถ้ามีอยู่แล้ว
+      // Update author information if already exists
       author.email = AUTHOR_EMAIL.toLowerCase();
       author.username = AUTHOR_USERNAME;
       author.password = AUTHOR_PASSWORD; // รหัสผ่านจะถูกแฮชใน pre("save") middleware
@@ -244,14 +304,23 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
         bio: "ผู้เขียนนิยายหลากหลายแนว รักการเล่าเรื่องและสร้างโลกจินตนาการ",
         ...author.profile, // รักษาค่าเดิมของฟิลด์ที่ไม่ได้ระบุ
       };
-      author.stats = {
-        followersCount: author.stats.followersCount || 0,
-        followingCount: author.stats.followingCount || 0,
-        novelsCount: author.stats.novelsCount || 0,
-        purchasesCount: author.stats.purchasesCount || 0,
-        donationsReceivedAmount: author.stats.donationsReceivedAmount || 0,
-        donationsMadeAmount: author.stats.donationsMadeAmount || 0,
-        totalEpisodesSoldCount: author.stats.totalEpisodesSoldCount || 0,
+      author.trackingStats = {
+        totalLoginDays: author.trackingStats.totalLoginDays || 0,
+        totalNovelsRead: author.trackingStats.totalNovelsRead || 0,
+        totalEpisodesRead: author.trackingStats.totalEpisodesRead || 0,
+        totalCoinSpent: author.trackingStats.totalCoinSpent || 0,
+        totalRealMoneySpent: author.trackingStats.totalRealMoneySpent || 0,
+        lastNovelReadId: author.trackingStats.lastNovelReadId,
+        lastNovelReadAt: author.trackingStats.lastNovelReadAt,
+        joinDate: author.trackingStats.joinDate || new Date(),
+      };
+      author.socialStats = {
+        followersCount: author.socialStats.followersCount || 0,
+        followingCount: author.socialStats.followingCount || 0,
+        novelsCreatedCount: author.socialStats.novelsCreatedCount || 0,
+        commentsMadeCount: author.socialStats.commentsMadeCount || 0,
+        ratingsGivenCount: author.socialStats.ratingsGivenCount || 0,
+        likesGivenCount: author.socialStats.likesGivenCount || 0,
       };
       author.preferences = {
         language: "th",
@@ -262,20 +331,28 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
           novelUpdates: true,
           comments: true,
           donations: true,
+          newFollowers: true,
+          systemAnnouncements: true,
+        },
+        privacy: {
+          showActivityStatus: author.preferences.privacy.showActivityStatus ?? true,
+          profileVisibility: author.preferences.privacy.profileVisibility || "public",
+          readingHistoryVisibility: author.preferences.privacy.readingHistoryVisibility || "followersOnly",
         },
       };
       author.wallet = {
-        balance: author.wallet?.balance || 0,
-        currency: "THB",
-        lastTransactionAt: author.wallet?.lastTransactionAt,
+        coinBalance: author.wallet.coinBalance || 0,
+        lastCoinTransactionAt: author.wallet.lastCoinTransactionAt,
       };
       author.gamification = {
-        level: author.gamification?.level || 1,
-        experience: author.gamification?.experience || 0,
+        level: author.gamification.level || 1,
+        experience: author.gamification.experience || 0,
+        achievements: author.gamification.achievements || [],
+        badges: author.gamification.badges || [],
         streaks: {
-          currentLoginStreak: author.gamification?.streaks?.currentLoginStreak || 0,
-          longestLoginStreak: author.gamification?.streaks?.longestLoginStreak || 0,
-          lastLoginDate: author.gamification?.streaks?.lastLoginDate,
+          currentLoginStreak: author.gamification.streaks.currentLoginStreak || 0,
+          longestLoginStreak: author.gamification.streaks.longestLoginStreak || 0,
+          lastLoginDate: author.gamification.streaks.lastLoginDate,
         },
       };
       author.writerVerification = {
@@ -303,19 +380,23 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
 
 /**
  * เรียกใช้งานฟังก์ชัน seed
+ * Run the seed function
  */
 async function main() {
   try {
     // เชื่อมต่อ MongoDB
+    // Connect to MongoDB
     console.log("🔗 กำลังเชื่อมต่อกับ MongoDB...");
     await dbConnect();
     console.log("✅ [MongoDB] เชื่อมต่อสำเร็จ (NovelMaze)");
 
     // โหลด User model
+    // Load User model
     const UserModel = (await import("@/backend/models/User")).default;
     const User = UserModel();
 
     // รันการ seed สำหรับแอดมินและผู้เขียน
+    // Run seeding for admin and author
     await seedAdmin(User);
     await ensureAuthorExists(User);
 
@@ -325,6 +406,7 @@ async function main() {
     process.exit(1);
   } finally {
     // ปิดการเชื่อมต่อ MongoDB
+    // Close MongoDB connection
     try {
       await mongoose.connection.close();
       console.log("🔌 ปิดการเชื่อมต่อ MongoDB แล้ว");

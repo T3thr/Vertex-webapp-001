@@ -1,4 +1,6 @@
 // src/components/layouts/AuthModal.tsx
+// คอมโพเนนต์สำหรับหน้าต่างการยืนยันตัวตน (ลงชื่อเข้าใช้และสมัครสมาชิก)
+// รองรับการลงชื่อเข้าใช้ด้วย credentials และโซเชียลมีเดีย รวมถึงการสมัครสมาชิกด้วย reCAPTCHA
 
 "use client";
 
@@ -28,7 +30,7 @@ import {
 } from 'react-icons/fa';
 import { SiLine } from 'react-icons/si';
 
-// ขยาย interface ของ Window เพื่อรวม grecaptcha สำหรับ v2 Invisible
+// ขยาย interface ของ Window เพื่อรวม grecaptcha สำหรับ v2 Invisible (ใช้เฉพาะในโหมดสมัครสมาชิก)
 interface ReCaptchaWindow extends Window {
   grecaptcha?: {
     render: (container: HTMLElement | string, parameters: {
@@ -250,16 +252,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [triggerRecaptcha, setTriggerRecaptcha] = useState(false);
-  const [recaptchaAttempts, setRecaptchaAttempts] = useState(0);
 
-  // reCAPTCHA สถานะและ refs
-  const isMountedRef = useRef(false);
+  // reCAPTCHA สถานะและ refs (ใช้เฉพาะในโหมดสมัครสมาชิก)
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
   const isRenderedRef = useRef(false);
   const scriptLoadedRef = useRef(false);
   const recaptchaTokenRef = useRef<string | null>(null);
+  const [recaptchaAttempts, setRecaptchaAttempts] = useState(0);
 
   // ใช้ค่า SITE KEY จาก environment variable
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
@@ -271,7 +271,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   // Context
   const { signUp } = useAuth();
 
-  // ฟังก์ชันโหลดสคริปต์ reCAPTCHA v2
+  // ฟังก์ชันโหลดสคริปต์ reCAPTCHA v2 (เฉพาะโหมดสมัครสมาชิก)
   const loadRecaptchaScript = useCallback(() => {
     if (
       !document.querySelector('script[src^="https://www.google.com/recaptcha/api.js"]') &&
@@ -300,12 +300,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       script.onerror = () => {
         console.error('❌ ไม่สามารถโหลดสคริปต์ reCAPTCHA v2 Invisible ได้');
         scriptLoadedRef.current = false;
-        handleReCaptchaVerify(null);
+        setError('ไม่สามารถโหลด reCAPTCHA ได้ กรุณาลองใหม่');
+        setIsLoading(false);
       };
     }
   }, []);
 
-  // ฟังก์ชันเรนเดอร์และจัดการ reCAPTCHA
+  // ฟังก์ชันเรนเดอร์และจัดการ reCAPTCHA (เฉพาะโหมดสมัครสมาชิก)
   const renderRecaptcha = useCallback(() => {
     if (isRenderedRef.current) {
       console.log('⚠️ reCAPTCHA ถูกเรนเดอร์แล้ว ข้ามการเรนเดอร์ซ้ำ');
@@ -319,30 +320,31 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         console.error('❌ กรุณาตั้งค่า NEXT_PUBLIC_RECAPTCHA_SITE_KEY ใน .env ของคุณ');
         setError('การตั้งค่า reCAPTCHA ไม่ถูกต้อง');
       }
-      handleReCaptchaVerify(null);
+      setIsLoading(false);
       return;
     }
 
     try {
       const recaptchaCallback = (token: string) => {
-        console.log('✅ ได้รับโทเค็น reCAPTCHA v2 Invisible');
+        console.log('✅ ได้รับโทเค็น reCAPTCHA v2 Invisible:', token);
         recaptchaTokenRef.current = token;
-        handleReCaptchaVerify(token);
+        handleSignupWithToken(token);
       };
 
       const recaptchaExpired = () => {
         console.log('⚠️ โทเค็น reCAPTCHA หมดอายุ');
         recaptchaTokenRef.current = null;
-        handleReCaptchaVerify(null);
-        if (widgetIdRef.current !== null) {
-          win.grecaptcha?.reset(widgetIdRef.current);
-        }
+        setError('โทเค็น reCAPTCHA หมดอายุ กรุณาลองใหม่');
+        setIsLoading(false);
+        setRecaptchaAttempts(prev => prev + 1);
       };
 
       const recaptchaError = () => {
         console.error('❌ เกิดข้อผิดพลาดใน reCAPTCHA');
         recaptchaTokenRef.current = null;
-        handleReCaptchaVerify(null);
+        setError('การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่');
+        setIsLoading(false);
+        setRecaptchaAttempts(prev => prev + 1);
       };
 
       // เรนเดอร์ reCAPTCHA v2 Invisible
@@ -361,16 +363,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     } catch (error) {
       console.error('❌ ข้อผิดพลาดในการเรนเดอร์ reCAPTCHA:', error);
       isRenderedRef.current = false;
-      handleReCaptchaVerify(null);
+      setError('เกิดข้อผิดพลาดในการตั้งค่า reCAPTCHA');
+      setIsLoading(false);
     }
   }, [siteKey]);
 
-  // ฟังก์ชันเรียกใช้ reCAPTCHA
+  // ฟังก์ชันเรียกใช้ reCAPTCHA (เฉพาะโหมดสมัครสมาชิก)
   const executeRecaptcha = useCallback(() => {
     const win = window as ReCaptchaWindow;
     if (!win.grecaptcha || widgetIdRef.current === null) {
       console.error('❌ grecaptcha หรือ widget ID ไม่พร้อมใช้งาน');
-      handleReCaptchaVerify(null);
+      setError('ไม่สามารถเรียกใช้ reCAPTCHA ได้ กรุณาลองใหม่');
+      setIsLoading(false);
       return;
     }
 
@@ -379,9 +383,95 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       console.log('🚀 เรียกใช้ reCAPTCHA v2 Invisible');
     } catch (error) {
       console.error('❌ ข้อผิดพลาดในการเรียกใช้ reCAPTCHA:', error);
-      handleReCaptchaVerify(null);
+      setError('เกิดข้อผิดพลาดในการยืนยัน reCAPTCHA');
+      setIsLoading(false);
     }
   }, []);
+
+  // ฟังก์ชันจัดการการสมัครสมาชิกด้วยโทเค็น
+  const handleSignupWithToken = useCallback(async (token: string) => {
+    if (!token) {
+      console.error('❌ ไม่ได้รับโทเค็น reCAPTCHA');
+      setError('ไม่ได้รับโทเค็น reCAPTCHA กรุณาลองใหม่');
+      setIsLoading(false);
+      return;
+    }
+
+    if (recaptchaAttempts >= MAX_RECAPTCHA_ATTEMPTS) {
+      console.error('❌ ถึงจำนวนครั้งสูงสุดของการยืนยัน reCAPTCHA');
+      setError('ถึงจำนวนครั้งสูงสุดของการยืนยัน reCAPTCHA กรุณาลองใหม่ภายหลัง');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // ตรวจสอบ reCAPTCHA token
+      const recaptchaResponse = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+
+      let recaptchaData;
+      try {
+        recaptchaData = await recaptchaResponse.json();
+      } catch (jsonError) {
+        const responseText = await recaptchaResponse.text();
+        console.error(
+          `❌ [AuthModal] ไม่สามารถแปลงการตอบกลับ reCAPTCHA เป็น JSON: สถานะ ${recaptchaResponse.status}, ข้อความ: ${responseText}`
+        );
+        setError('การตอบกลับจากเซิร์ฟเวอร์ reCAPTCHA ไม่ถูกต้อง');
+        setIsLoading(false);
+        return;
+      }
+
+      if (!recaptchaResponse.ok || !recaptchaData.success) {
+        const errorMsg = recaptchaData.error || 'การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่';
+        console.error(`❌ การยืนยัน reCAPTCHA ล้มเหลว: ${errorMsg}`);
+        setError(errorMsg);
+        setIsLoading(false);
+        setRecaptchaAttempts(prev => prev + 1);
+        return;
+      }
+
+      console.log('✅ การยืนยัน reCAPTCHA สำเร็จ, เริ่มสมัครสมาชิก');
+
+      // สมัครสมาชิกด้วยข้อมูลประจำตัว
+      const result = await signUp(email, username, password, token);
+      if (result.error) {
+        console.error(`❌ ข้อผิดพลาดจากการสมัครสมาชิก: ${result.error}`);
+        setError(result.error);
+      } else {
+        console.log('✅ การสมัครสมาชิกสำเร็จ');
+        setIsSuccess(true);
+        setTimeout(() => {
+          setMode('signin');
+          setIsSuccess(false);
+          setEmail('');
+          setUsername('');
+          setPassword('');
+          setConfirmPassword('');
+          setValidationErrors({});
+          setTouchedFields({});
+        }, 1500);
+      }
+    } catch (err: any) {
+      console.error('❌ ข้อผิดพลาดที่ไม่คาดคิดในการสมัครสมาชิก:', err);
+      setError('เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่');
+    } finally {
+      setIsLoading(false);
+      // รีเซ็ต reCAPTCHA
+      if (widgetIdRef.current !== null) {
+        try {
+          const win = window as ReCaptchaWindow;
+          win.grecaptcha?.reset(widgetIdRef.current);
+        } catch (error) {
+          console.error('❌ ไม่สามารถรีเซ็ต reCAPTCHA หลังใช้งาน:', error);
+        }
+      }
+      recaptchaTokenRef.current = null;
+    }
+  }, [email, username, password, signUp, recaptchaAttempts]);
 
   // เพิ่มฟังก์ชัน debounce สำหรับ validation แบบ realtime
   const debounce = <T extends (...args: any[]) => any>(
@@ -398,7 +488,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   // ฟังก์ชันสำหรับตรวจสอบการป้อนข้อมูลแบบ realtime
-  const validateField = (field: 'email' | 'username' | 'password' | 'confirmPassword', value: string) => {
+  const validateField = (field: 'email' | 'username' | 'password' | 'confirmPassword', value: string): ValidationErrors => {
     const fieldErrors: ValidationErrors = {};
 
     if (field === 'email') {
@@ -429,110 +519,120 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           fieldErrors.password = passwordValidation.message || 'รหัสผ่านไม่ถูกต้อง';
         }
       }
-
-      // ตรวจสอบความตรงกันของรหัสผ่านทันทีเมื่อรหัสผ่านเปลี่ยน
-      if (mode === 'signup' && touchedFields.confirmPassword && confirmPassword) {
-        const confirmResult = validateConfirmPassword(value, confirmPassword);
-        if (!confirmResult.valid) {
-          fieldErrors.confirmPassword = confirmResult.message;
-        } else {
-          // อัปเดตเฉพาะ confirmPassword ถ้ารหัสผ่านตรงกัน
-          setValidationErrors(prev => ({ ...prev, confirmPassword: undefined }));
-        }
-      }
     }
 
     if (field === 'confirmPassword' && mode === 'signup') {
-      const confirmResult = validateConfirmPassword(password, value);
-      if (!confirmResult.valid) {
-        fieldErrors.confirmPassword = confirmResult.message;
+      if (!value.trim()) {
+        fieldErrors.confirmPassword = 'กรุณายืนยันรหัสผ่าน';
+      } else {
+        const confirmResult = validateConfirmPassword(password, value);
+        if (!confirmResult.valid) {
+          fieldErrors.confirmPassword = confirmResult.message || 'รหัสผ่านไม่ตรงกัน';
+        }
       }
     }
 
     return fieldErrors;
   };
 
-  // ฟังก์ชันสำหรับอัปเดต validation errors แบบ debounced (หน่วงเวลา)
-  const debouncedUpdateValidation = useCallback(
-    debounce((field: 'email' | 'username' | 'password' | 'confirmPassword', value: string) => {
-      if (touchedFields[field]) {
-        const fieldErrors = validateField(field, value);
-        setValidationErrors(prev => ({ ...prev, ...fieldErrors }));
-      }
-    }, 100), // หน่วงเวลา 100ms เพื่อการตอบสนองที่เร็วขึ้น
-    [touchedFields, mode, password, confirmPassword]
-  );
-
-  // ฟังก์ชันสำหรับตรวจสอบความถูกต้องทั้งฟอร์ม
-  const validateForm = () => {
+  // ตรวจสอบความถูกต้องของฟอร์มทั้งหมด
+  const validateForm = useCallback(() => {
     const formErrors: ValidationErrors = {};
-
+    
     // ตรวจสอบอีเมล
     const emailErrors = validateField('email', email);
     if (emailErrors.email) formErrors.email = emailErrors.email;
-
+    
     // ตรวจสอบชื่อผู้ใช้ (เฉพาะโหมดสมัครสมาชิก)
     if (mode === 'signup') {
       const usernameErrors = validateField('username', username);
       if (usernameErrors.username) formErrors.username = usernameErrors.username;
-    }
-
-    // ตรวจสอบรหัสผ่าน
-    const passwordErrors = validateField('password', password);
-    if (passwordErrors.password) formErrors.password = passwordErrors.password;
-
-    // ตรวจสอบยืนยันรหัสผ่าน (เฉพาะโหมดสมัครสมาชิก)
-    if (mode === 'signup') {
+      
+      // ตรวจสอบรหัสผ่านแบบละเอียด
+      const passwordErrors = validateField('password', password);
+      if (passwordErrors.password) formErrors.password = passwordErrors.password;
+      
+      // ตรวจสอบยืนยันรหัสผ่าน
       const confirmPasswordErrors = validateField('confirmPassword', confirmPassword);
       if (confirmPasswordErrors.confirmPassword) formErrors.confirmPassword = confirmPasswordErrors.confirmPassword;
+    } else {
+      // ตรวจสอบรหัสผ่านแบบง่าย (สำหรับเข้าสู่ระบบ)
+      if (!password.trim()) {
+        formErrors.password = 'กรุณาระบุรหัสผ่าน';
+      }
     }
-
+    
     return formErrors;
-  };
+  }, [email, username, password, confirmPassword, mode]);
+
+  // ฟังก์ชันตรวจสอบฟอร์มแบบ realtime เมื่อมีการเปลี่ยนแปลงค่า
+  useEffect(() => {
+    const updateValidation = () => {
+      if (Object.keys(touchedFields).length > 0) {
+        const formErrors = validateForm();
+        setValidationErrors(formErrors);
+      }
+    };
+    
+    const timeoutId = setTimeout(updateValidation, 50);
+    return () => clearTimeout(timeoutId);
+  }, [email, username, password, confirmPassword, touchedFields, validateForm]);
 
   // ฟังก์ชันเมื่อผู้ใช้ออกจากฟิลด์ (blur)
   const handleBlur = (field: 'email' | 'username' | 'password' | 'confirmPassword') => {
     setTouchedFields(prev => ({ ...prev, [field]: true }));
-
+    
     const value = field === 'email' ? email :
-                  field === 'username' ? username :
-                  field === 'password' ? password : confirmPassword;
+                field === 'username' ? username :
+                field === 'password' ? password : confirmPassword;
+    
     const fieldErrors = validateField(field, value);
-
     setValidationErrors(prev => ({ ...prev, ...fieldErrors }));
   };
 
-  // Handle email change with validation
+  // Handle email change
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setEmail(newValue);
-    debouncedUpdateValidation('email', newValue);
-  };
-
-  // Handle username change with validation
-  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setUsername(newValue);
-    debouncedUpdateValidation('username', newValue);
-  };
-
-  // Handle password change with validation
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setPassword(newValue);
-    debouncedUpdateValidation('password', newValue);
-
-    // ตรวจสอบความตรงกันของรหัสผ่านทันทีเมื่อรหัสผ่านเปลี่ยน
-    if (touchedFields.confirmPassword && confirmPassword) {
-      debouncedUpdateValidation('confirmPassword', confirmPassword);
+    setEmail(e.target.value);
+    if (touchedFields.email) {
+      const emailErrors = validateField('email', e.target.value);
+      setValidationErrors(prev => ({ ...prev, ...emailErrors }));
     }
   };
 
-  // Handle confirm password change with validation
+  // Handle username change
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(e.target.value);
+    if (touchedFields.username) {
+      const usernameErrors = validateField('username', e.target.value);
+      setValidationErrors(prev => ({ ...prev, ...usernameErrors }));
+    }
+  };
+
+  // Handle password change
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setPassword(newValue);
+    
+    if (touchedFields.password) {
+      const passwordErrors = validateField('password', newValue);
+      setValidationErrors(prev => ({ ...prev, ...passwordErrors }));
+    }
+    
+    if (touchedFields.confirmPassword && confirmPassword) {
+      const confirmErrors = validateField('confirmPassword', confirmPassword);
+      setValidationErrors(prev => ({ ...prev, ...confirmErrors }));
+    }
+  };
+
+  // Handle confirm password change
   const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setConfirmPassword(newValue);
-    debouncedUpdateValidation('confirmPassword', newValue);
+    
+    if (touchedFields.confirmPassword) {
+      const confirmErrors = validateField('confirmPassword', newValue);
+      setValidationErrors(prev => ({ ...prev, ...confirmErrors }));
+    }
   };
 
   // Handle click outside to close - จัดการคลิกภายนอกเพื่อปิดหน้าต่าง
@@ -547,7 +647,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       document.addEventListener('mousedown', handleClickOutside);
       document.body.style.overflow = 'hidden';
 
-      // Focus อีเมลเมื่อเปิดหน้าต่าง
       setTimeout(() => {
         emailInputRef.current?.focus();
       }, 100);
@@ -572,12 +671,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsSuccess(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
-    setTriggerRecaptcha(false);
     setRecaptchaAttempts(0);
     recaptchaTokenRef.current = null;
     isRenderedRef.current = false;
     widgetIdRef.current = null;
-    isMountedRef.current = false;
 
     // โหลดสคริปต์ reCAPTCHA เฉพาะในโหมดสมัครสมาชิก
     if (isOpen && mode === 'signup') {
@@ -595,7 +692,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }
         widgetIdRef.current = null;
       }
-      isMountedRef.current = false;
       isRenderedRef.current = false;
     };
   }, [isOpen, mode, loadRecaptchaScript]);
@@ -612,86 +708,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
-  // เรียกใช้ reCAPTCHA เมื่อ trigger เปลี่ยนเป็น true
-  useEffect(() => {
-    if (triggerRecaptcha && isRenderedRef.current && widgetIdRef.current !== null) {
-      executeRecaptcha();
-    } else if (triggerRecaptcha && !isRenderedRef.current) {
-      const win = window as ReCaptchaWindow;
-      if (win.grecaptcha) {
-        renderRecaptcha();
-        setTimeout(() => {
-          if (isRenderedRef.current && widgetIdRef.current !== null) {
-            executeRecaptcha();
-          } else {
-            console.error('❌ ไม่สามารถเรียกใช้ reCAPTCHA หลังพยายามเรนเดอร์');
-            handleReCaptchaVerify(null);
-          }
-        }, 500);
-      } else {
-        console.error('❌ grecaptcha ยังไม่พร้อมใช้งาน');
-        handleReCaptchaVerify(null);
-      }
-    }
-  }, [triggerRecaptcha, executeRecaptcha, renderRecaptcha]);
-
-  // จัดการการยืนยัน reCAPTCHA และสมัครสมาชิก
-  useEffect(() => {
-    if (recaptchaTokenRef.current && isLoading) {
-      const verifyAndSignUp = async () => {
-        try {
-          // ตรวจสอบ reCAPTCHA token
-          const recaptchaResponse = await fetch('/api/auth/verify-recaptcha', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: recaptchaTokenRef.current }),
-          });
-
-          const recaptchaData = await recaptchaResponse.json();
-
-          if (!recaptchaResponse.ok || !recaptchaData.success) {
-            const errorMsg = recaptchaData.error || 'การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่';
-            setError(errorMsg);
-            setIsLoading(false);
-            return;
-          }
-
-          // สมัครสมาชิกด้วยข้อมูลประจำตัว
-          const result = await signUp(email, username, password, recaptchaTokenRef.current!);
-          if (result.error) {
-            setError(result.error);
-          } else {
-            setIsSuccess(true);
-            setTimeout(() => {
-              setMode('signin');
-            }, 1500);
-          }
-        } catch (err: any) {
-          setError('เกิดข้อผิดพลาดที่ไม่คาดคิด');
-          console.error('❌ ข้อผิดพลาดในการตรวจสอบ:', err);
-        } finally {
-          setIsLoading(false);
-          // รีเซ็ต token เพื่อหลีกเลี่ยงการใช้ซ้ำ
-          if (widgetIdRef.current !== null) {
-            try {
-              const win = window as ReCaptchaWindow;
-              win.grecaptcha?.reset(widgetIdRef.current);
-            } catch (error) {
-              console.error('❌ ไม่สามารถรีเซ็ต reCAPTCHA หลังใช้งาน:', error);
-            }
-          }
-          recaptchaTokenRef.current = null;
-        }
-      };
-
-      verifyAndSignUp();
-    } else if (recaptchaTokenRef.current === null && isLoading && !triggerRecaptcha) {
-      // ถ้าไม่ได้รับ token และไม่ได้กำลังพยายามเรียกใช้ reCAPTCHA
-      setError('การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่');
-      setIsLoading(false);
-    }
-  }, [recaptchaTokenRef.current, isLoading, triggerRecaptcha, email, username, password, signUp]);
-
   // Toggle password visibility - สลับการแสดงรหัสผ่าน
   const toggleShowPassword = () => {
     setShowPassword(!showPassword);
@@ -702,25 +718,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setShowConfirmPassword(!showConfirmPassword);
   };
 
-  // ฟังก์ชันสำหรับจัดการเมื่อได้รับโทเค็น reCAPTCHA
-  const handleReCaptchaVerify = useCallback((token: string | null) => {
-    if (!token) {
-      setRecaptchaAttempts(prev => prev + 1);
-      if (recaptchaAttempts + 1 >= MAX_RECAPTCHA_ATTEMPTS) {
-        setError('ถึงจำนวนครั้งสูงสุดของการยืนยัน reCAPTCHA กรุณาลองใหม่ภายหลัง');
-        setIsLoading(false);
-        setTriggerRecaptcha(false);
-      } else {
-        setError('การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่');
-        setIsLoading(false);
-        setTriggerRecaptcha(true);
-      }
-    }
-  }, [recaptchaAttempts]);
-
-  // ฟังก์ชันสำหรับตรวจสอบฟอร์มก่อนเรียก reCAPTCHA
+  // ฟังก์ชันตรวจสอบฟอร์มก่อนเรียก reCAPTCHA (เฉพาะโหมดสมัครสมาชิก)
   const handleSignupValidation = () => {
-    // ทำให้ทุกฟิลด์เป็น touched เพื่อแสดง validation errors
     setTouchedFields({
       email: true,
       username: true,
@@ -728,11 +727,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       confirmPassword: true
     });
 
-    // ตรวจสอบความถูกต้องของฟอร์ม
     const formErrors = validateForm();
     setValidationErrors(formErrors);
 
-    // ถ้ามี errors ให้หยุดการดำเนินการ
     if (Object.keys(formErrors).length > 0) {
       setError('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
       return false;
@@ -747,11 +744,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (!handleSignupValidation()) return;
     setError(null);
     setIsLoading(true);
-    // เรียกใช้ reCAPTCHA
-    handleReCaptchaVerify(null); // รีเซ็ต token ก่อน
-    setTimeout(() => {
-      setTriggerRecaptcha(true);
-    }, 100);
+    setRecaptchaAttempts(0);
+    executeRecaptcha();
   };
 
   // Form submission handler for signin - ตัวจัดการการส่งฟอร์มสำหรับการลงชื่อเข้าใช้
@@ -759,17 +753,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     e.preventDefault();
     setError(null);
 
-    // ทำให้ทุกฟิลด์เป็น touched เพื่อแสดง validation errors
     setTouchedFields({
       email: true,
       password: true
     });
 
-    // ตรวจสอบความถูกต้องของฟอร์มแบบ realtime ก่อนส่ง
     const formErrors = validateForm();
     setValidationErrors(formErrors);
 
-    // ถ้ามี errors ให้หยุดการ submit
     if (Object.keys(formErrors).length > 0) {
       return;
     }
@@ -777,7 +768,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true);
 
     try {
-      // ลงชื่อเข้าใช้ด้วยข้อมูลประจำตัว
       const result = await signIn('credentials', {
         redirect: false,
         email,
@@ -785,8 +775,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       });
 
       if (result?.error) {
+        console.error(`❌ ข้อผิดพลาดจากการลงชื่อเข้าใช้: ${result.error}`);
         setError(result.error);
       } else {
+        console.log('✅ การลงชื่อเข้าใช้สำเร็จ');
         setIsSuccess(true);
         setTimeout(() => {
           onClose();
@@ -794,8 +786,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }, 1000);
       }
     } catch (err) {
+      console.error('❌ ข้อผิดพลาดที่ไม่คาดคิดในการลงชื่อเข้าใช้:', err);
       setError('เกิดข้อผิดพลาดที่ไม่คาดคิด');
-      console.error('❌ ข้อผิดพลาดในการตรวจสอบ:', err);
     } finally {
       setIsLoading(false);
     }
@@ -811,8 +803,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       });
 
       if (result?.error) {
+        console.error(`❌ ข้อผิดพลาดในการลงชื่อเข้าใช้ด้วย ${provider}: ${result.error}`);
         setError(`ไม่สามารถลงชื่อเข้าใช้ด้วย ${provider}: ${result.error}`);
       } else {
+        console.log(`✅ การลงชื่อเข้าใช้ด้วย ${provider} สำเร็จ`);
         setIsSuccess(true);
         setTimeout(() => {
           onClose();
@@ -949,7 +943,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     </div>
 
                     {/* Auth Form - ฟอร์มยืนยันตัวตน */}
-                    <form onSubmit={mode === 'signin' ? handleSigninSubmit : undefined} className="space-y-6 mb-6">
+                    <form onSubmit={mode === 'signin' ? handleSigninSubmit : handleSignupSubmit} className="space-y-6 mb-6">
                       {/* Email Input - ช่องกรอกอีเมล */}
                       <InputField
                         id="email"
@@ -1028,8 +1022,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         <div className="space-y-4">
                           <div ref={recaptchaRef} className="g-recaptcha" data-size="invisible" />
                           <motion.button
-                            type="button"
-                            onClick={handleSignupSubmit}
+                            type="submit"
                             disabled={isLoading}
                             className="w-full py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-xl shadow-lg flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-3 hover:scale-[1.01]"
                             aria-label="สร้างบัญชี"
