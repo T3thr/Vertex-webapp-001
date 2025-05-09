@@ -261,7 +261,7 @@ EpisodeSchema.index({ novel: 1, isFree: 1, status: 1, isDeleted: 1 }); // สำ
 EpisodeSchema.pre("save", async function (next) {
   // Auto-generate slug from title if not provided or if title changes
   if ((this.isModified("title") || this.isNew) && (!this.slug || this.isModified("title"))) {
-    let baseSlug = (this.title || "")
+    const baseSlug = (this.name || "")...
       .toLowerCase()
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9ก-๙เ-ไ\-]+/g, "")
@@ -269,7 +269,7 @@ EpisodeSchema.pre("save", async function (next) {
       .substring(0, 70);
     this.slug = `${baseSlug || "episode"}-${this.episodeNumber}`;
     // Basic uniqueness check, for more robust, consider a dedicated slug service or more complex logic
-    // @ts-ignore
+    // @ts-expect-error The type of 'this.constructor' is unknown
     const Episode = this.constructor as mongoose.Model<IEpisode>; 
     let count = 0;
     let finalSlug = this.slug;
