@@ -2,122 +2,252 @@
 // API route สำหรับดึงข้อมูลแดชบอร์ดของผู้ใช้ตามบทบาท (Reader/Writer)
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import mongoose from "mongoose";
+import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
-import WriterStatsModel from "@/backend/models/WriterStats";
+import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
 import NovelModel from "@/backend/models/Novel";
-import dbConnect from '@/backend/lib/mongodb';
+import ActivityHistoryModel from "@/backend/models/ActivityHistory";
+import DonationModel from "@/backend/models/Donation";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
-// Interface สำหรับการตอบกลับของ API
+// Interface สำหรับการตอบกลับ API
 interface DashboardResponse {
-  writerStats?: {
-    totalNovelViews: number;
-    totalCoinRevenue: number;
-    monthlyNewFollowers: number;
-    lastCalculatedAt: string;
-  };
   readerActivity?: {
     lastNovelRead?: { title: string; novelSlug: string; _id: string };
     lastNovelLiked?: { title: string; novelSlug: string; _id: string };
     lastWriterFollowed?: { name: string; username: string; _id: string };
   };
+  writerAnalytics?: {
+    overview: {
+      totalNovelViews: number;
+      totalCoinRevenue: number;
+      totalDonations: number;
+      totalFollowers: number;
+      averageRating: number;
+      lastCalculatedAt: string;
+    };
+    novelPerformance: Array<{
+      novelId: string;
+      title: string;
+      totalViews: number;
+      totalReads: number;
+      totalLikes: number;
+      totalCoinRevenue: number;
+      totalDonations: number;
+    }>;
+    monthlyEarnings: Array<{
+      date: string;
+      coinValue: number;
+      donationValue: number;
+    }>;
+  };
 }
 
-// ฟังก์ชันจัดการ GET request
+// ฟังก์ชัน GET สำหรับดึงข้อมูลแดชบอร์ดของผู้ใช้
 export async function GET(
-  request: NextRequest,
-  context: { params: { username: string } }
-): Promise<NextResponse<DashboardResponse | { error: string }>> {
+  req: NextRequest,
+  { params }: { params: { username: string } }
+): Promise<NextResponse> {
   try {
+    // เชื่อมต่อกับ MongoDB
     await dbConnect();
 
-    // ดึง username จาก path parameters
-    const username = context.params.username;
-    if (!username) {
-      return NextResponse.json({ error: "ต้องระบุชื่อผู้ใช้" }, { status: 400 });
+    // ตรวจสอบการยืนยันตัวตน
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
     }
 
-    // ค้นหาผู้ใช้จาก username
-    const user = await UserModel()
-      .findOne({ username, isActive: true, isBanned: false })
-      .select("role _id trackingStats socialStats");
-    
-    if (!user) {
+    const { username } = params;
+
+    // ค้นหาผู้ใช้จาก User หรือ SocialMediaUser
+    const user = await UserModel().findOne({ username, isActive: true, isDeleted: false })
+      .lean()
+      .exec();
+    const socialMediaUser = !user
+      ? await SocialMediaUserModel()
+          .findOne({ username, isActive: true, isDeleted: false })
+          .lean()
+          .exec()
+      : null;
+
+    if (!user && !socialMediaUser) {
       return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
+    }
+
+    const currentUser = user || socialMediaUser;
+    const userId = new mongoose.Types.ObjectId(currentUser._id);
+
+    // ตรวจสอบว่าเป็นเจ้าของบัญชีหรือมีสิทธิ์แอดมิน
+    if (
+      session.user.username !== username &&
+      (!session.user.role || session.user.role !== "Admin")
+    ) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
     const response: DashboardResponse = {};
 
-    // ดึงข้อมูลสำหรับนักเขียน
-    if (user.role === "Writer") {
-      const writerStats = await WriterStatsModel()
-        .findOne({ user: user._id })
-        .select("totalNovelViews_Lifetime totalCoinEarned_Lifetime monthlyNewFollowers lastCalculatedAt");
+    // ดึงข้อมูลกิจกรรมสำหรับ Reader และ Writer
+    if (currentUser.role === "Reader" || currentUser.role === "Writer") {
+      const activities = await ActivityHistoryModel()
+        .find({ user: userId })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .populate([
+          { path: "details.novelId", select: "title slug" },
+          { path: "details.targetUserId", select: "username profile.displayName" },
+        ])
+        .lean()
+        .exec();
 
-      if (writerStats) {
-        const latestMonthlyFollowers = writerStats.monthlyNewFollowers?.slice(-1)[0]?.value || 0;
-        response.writerStats = {
-          totalNovelViews: writerStats.totalNovelViews_Lifetime || 0,
-          totalCoinRevenue: writerStats.totalCoinEarned_Lifetime || 0,
-          monthlyNewFollowers: latestMonthlyFollowers,
-          lastCalculatedAt: writerStats.lastCalculatedAt.toISOString(),
-        };
+      response.readerActivity = {
+        lastNovelRead: null,
+        lastNovelLiked: null,
+        lastWriterFollowed: null,
+      };
+
+      for (const activity of activities) {
+        if (
+          activity.activityType === "EPISODE_READ" &&
+          activity.details?.novelId &&
+          !response.readerActivity.lastNovelRead
+        ) {
+          response.readerActivity.lastNovelRead = {
+            _id: activity.details.novelId._id.toString(),
+            title: activity.details.novelId.title,
+            novelSlug: activity.details.novelId.slug,
+          };
+        }
+        if (
+          activity.activityType === "NOVEL_LIKED" &&
+          activity.details?.novelId &&
+          !response.readerActivity.lastNovelLiked
+        ) {
+          response.readerActivity.lastNovelLiked = {
+            _id: activity.details.novelId._id.toString(),
+            title: activity.details.novelId.title,
+            novelSlug: activity.details.novelId.slug,
+          };
+        }
+        if (
+          activity.activityType === "USER_FOLLOWED" &&
+          activity.details?.targetUserId &&
+          !response.readerActivity.lastWriterFollowed
+        ) {
+          response.readerActivity.lastWriterFollowed = {
+            _id: activity.details.targetUserId._id.toString(),
+            name: activity.details.targetUserId.profile?.displayName || activity.details.targetUserId.username,
+            username: activity.details.targetUserId.username,
+          };
+        }
+        if (
+          response.readerActivity.lastNovelRead &&
+          response.readerActivity.lastNovelLiked &&
+          response.readerActivity.lastWriterFollowed
+        ) {
+          break;
+        }
       }
     }
 
-    // ดึงข้อมูลกิจกรรมผู้อ่าน
-    if (user.role === "Reader" || user.role === "Writer") {
-      response.readerActivity = {};
+    // ดึงข้อมูลวิเคราะห์สำหรับ Writer
+    if (currentUser.role === "Writer") {
+      // ดึงข้อมูลนิยายของนักเขียน
+      const novels = await NovelModel()
+        .find({ author: userId, isDeleted: false })
+        .select("title slug viewsCount totalReads likesCount totalCoinRevenue stats.totalDonationsAmount averageRating")
+        .lean()
+        .exec();
 
-      // ดึงนิยายที่อ่านล่าสุด
-      if (user.trackingStats?.lastNovelReadId) {
-        const lastNovel = await NovelModel()
-          .findOne({ _id: user.trackingStats.lastNovelReadId, isDeleted: false })
-          .select("title slug");
+      // คำนวณภาพรวม
+      const overview = {
+        totalNovelViews: novels.reduce((sum, novel) => sum + (novel.viewsCount || 0), 0),
+        totalCoinRevenue: novels.reduce((sum, novel) => sum + (novel.totalCoinRevenue || 0), 0),
+        totalDonations: novels.reduce((sum, novel) => sum + (novel.stats?.totalDonationsAmount || 0), 0),
+        totalFollowers: currentUser.socialStats?.followersCount || 0,
+        averageRating:
+          novels.length > 0
+            ? novels.reduce((sum, novel) => sum + (novel.averageRating || 0), 0) / novels.length
+            : 0,
+        lastCalculatedAt: new Date().toISOString(),
+      };
 
-        if (lastNovel) {
-          response.readerActivity.lastNovelRead = {
-            _id: lastNovel._id.toString(),
-            title: lastNovel.title,
-            novelSlug: lastNovel.slug,
-          };
-        }
-      }
+      // ประสิทธิภาพนิยาย
+      const novelPerformance = novels.map((novel) => ({
+        novelId: novel._id.toString(),
+        title: novel.title,
+        totalViews: novel.viewsCount || 0,
+        totalReads: novel.totalReads || 0,
+        totalLikes: novel.likesCount || 0,
+        totalCoinRevenue: novel.totalCoinRevenue || 0,
+        totalDonations: novel.stats?.totalDonationsAmount || 0,
+      }));
 
-      // ดึงนิยายที่ถูกใจล่าสุด (สมมติมี Like model)
-      const mockLastLikedNovel = await NovelModel()
-        .findOne({ status: "published", isDeleted: false })
-        .select("title slug")
-        .sort({ createdAt: -1 });
+      // รายได้รายเดือน
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 12); // ย้อนหลัง 12 เดือน
+      const monthlyEarnings = await Promise.all(
+        Array.from({ length: 12 }, (_, i) => {
+          const monthStart = new Date(startDate);
+          monthStart.setMonth(startDate.getMonth() + i);
+          monthStart.setDate(1);
+          monthStart.setHours(0, 0, 0, 0);
+          const monthEnd = new Date(monthStart);
+          monthEnd.setMonth(monthStart.getMonth() + 1);
 
-      if (mockLastLikedNovel) {
-        response.readerActivity.lastNovelLiked = {
-          _id: mockLastLikedNovel._id.toString(),
-          title: mockLastLikedNovel.title,
-          novelSlug: mockLastLikedNovel.slug,
-        };
-      }
+          return (async () => {
+            // รายได้จากเหรียญ (การซื้อตอน)
+            const coinRevenue = await ActivityHistoryModel()
+              .aggregate([
+                {
+                  $match: {
+                    user: userId,
+                    activityType: "COIN_EARNED_WRITER_SALE",
+                    createdAt: { $gte: monthStart, $lt: monthEnd },
+                  },
+                },
+                { $group: { _id: null, total: { $sum: "$details.amountCoin" } } },
+              ])
+              .exec();
 
-      // ดึงนักเขียนที่ติดตามล่าสุด (สมมติจาก userFollowing virtual)
-      const lastFollowed = await UserModel()
-        .findOne({ role: "Writer", isActive: true, isBanned: false })
-        .select("username profile.displayName")
-        .sort({ createdAt: -1 });
+            // รายได้จากการบริจาค
+            const donationRevenue = await DonationModel()
+              .aggregate([
+                {
+                  $match: {
+                    recipientUser: userId,
+                    status: "completed",
+                    createdAt: { $gte: monthStart, $lt: monthEnd },
+                  },
+                },
+                { $group: { _id: null, total: { $sum: "$amount" } } },
+              ])
+              .exec();
 
-      if (lastFollowed) {
-        response.readerActivity.lastWriterFollowed = {
-          _id: lastFollowed._id.toString(),
-          name: lastFollowed.profile.displayName || lastFollowed.username,
-          username: lastFollowed.username,
-        };
-      }
+            return {
+              date: monthStart.toISOString(),
+              coinValue: coinRevenue[0]?.total || 0,
+              donationValue: donationRevenue[0]?.total || 0,
+            };
+          })();
+        })
+      );
+
+      response.writerAnalytics = {
+        overview,
+        novelPerformance,
+        monthlyEarnings,
+      };
     }
 
     return NextResponse.json(response, { status: 200 });
   } catch (error) {
-    console.error("ข้อผิดพลาดใน API /dashboard:", error);
+    console.error("❌ [API] ข้อผิดพลาดใน /api/[username]/dashboard:", error);
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
+      { error: "เกิดข้อผิดพลาดในการดึงข้อมูลแดชบอร์ด" },
       { status: 500 }
     );
   }
