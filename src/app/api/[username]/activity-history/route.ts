@@ -1,7 +1,7 @@
-// src/app/api/users/[username]/activity-history/route.ts
+// src/app/api/[username]/activity-history/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import mongoose from "mongoose";
+import mongoose, { Document, Types } from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
 import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
@@ -9,7 +9,6 @@ import ActivityHistoryModel from "@/backend/models/ActivityHistory";
 import NovelModel from "@/backend/models/Novel";
 import EpisodeModel from "@/backend/models/Episode";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
-import { model } from "mongoose";
 
 // อินเทอร์เฟซสำหรับ response
 interface ActivityHistoryResponse {
@@ -45,6 +44,40 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
+// อินเทอร์เฟซสำหรับผู้ใช้
+interface UserDocument extends Document {
+  _id: Types.ObjectId;
+  username: string;
+  isDeleted: boolean;
+  preferences: {
+    privacy: {
+      profileVisibility: "public" | "private" | "followersOnly";
+    };
+  };
+  profile?: {
+    displayName?: string;
+  };
+}
+
+// อินเทอร์เฟซสำหรับรายละเอียดกิจกรรม
+interface ActivityDocument extends Document {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  activityType: string;
+  content?: string;
+  createdAt: Date;
+  details: {
+    novelId?: Types.ObjectId;
+    episodeId?: Types.ObjectId;
+    commentId?: Types.ObjectId;
+    ratingId?: Types.ObjectId;
+    targetUserId?: Types.ObjectId;
+    purchaseId?: Types.ObjectId;
+    donationId?: Types.ObjectId;
+    amountCoin?: number;
+  };
+}
+
 // กิจกรรมที่ต้องการแสดงในประวัติ
 const ALLOWED_ACTIVITY_TYPES = [
   "EPISODE_READ",
@@ -60,8 +93,8 @@ const ALLOWED_ACTIVITY_TYPES = [
 // ฟังก์ชันหลักสำหรับ GET request
 export async function GET(
   req: NextRequest,
-  context: { params: { username: string } }
-): Promise<NextResponse> {
+  { params }: { params: { username: string } }
+): Promise<NextResponse<ActivityHistoryResponse | { error: string }>> {
   try {
     // เชื่อมต่อ MongoDB
     await dbConnect();
@@ -73,7 +106,7 @@ export async function GET(
       : null;
 
     // ดึง username จาก params
-    const { username } = context.params;
+    const { username } = params;
     if (!username) {
       return NextResponse.json(
         { error: "ต้องระบุชื่อผู้ใช้" },
@@ -82,7 +115,7 @@ export async function GET(
     }
 
     // ค้นหาผู้ใช้จาก User หรือ SocialMediaUser
-    let viewedUser = await UserModel()
+    let viewedUser: UserDocument | null = await UserModel()
       .findOne({ username, isDeleted: false })
       .lean();
     if (!viewedUser) {
@@ -107,11 +140,8 @@ export async function GET(
           { status: 403 }
         );
       }
-      if (
-        profileVisibility === "followersOnly" &&
-        currentUserId
-      ) {
-        const isFollower = await model("UserFollow").findOne({
+      if (profileVisibility === "followersOnly" && currentUserId) {
+        const isFollower = await mongoose.model("UserFollow").findOne({
           followerId: currentUserId,
           followingId: viewedUser._id,
           status: "active",
@@ -161,7 +191,13 @@ export async function GET(
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate([
+      .populate<{
+        details: {
+          novelId?: { _id: Types.ObjectId; title: string; slug: string };
+          episodeId?: { _id: Types.ObjectId; title: string; episodeNumber: number };
+          targetUserId?: { _id: Types.ObjectId; username: string; profile?: { displayName?: string } };
+        };
+      }>([
         {
           path: "details.novelId",
           model: NovelModel(),
@@ -195,10 +231,10 @@ export async function GET(
     const totalPages = Math.ceil(totalActivities / limit);
 
     // แปลงข้อมูลให้ตรงกับ ActivityItem
-    const formattedActivities: ActivityItem[] = activities.map((activity) => {
-      const novel = activity.details.novelId as any;
-      const episode = activity.details.episodeId as any;
-      const targetUser = activity.details.targetUserId as any;
+    const formattedActivities: ActivityItem[] = activities.map((activity: ActivityDocument) => {
+      const novel = activity.details.novelId as { _id: Types.ObjectId; title: string; slug: string } | undefined;
+      const episode = activity.details.episodeId as { _id: Types.ObjectId; title: string; episodeNumber: number } | undefined;
+      const targetUser = activity.details.targetUserId as { _id: Types.ObjectId; username: string; profile?: { displayName?: string } } | undefined;
 
       return {
         _id: activity._id.toString(),
@@ -241,7 +277,7 @@ export async function GET(
 
     return NextResponse.json(response);
   } catch (error: any) {
-    console.error(`[API Error] /api/users/${context.params.username}/activity-history:`, error);
+    console.error(`[API Error] /api/users/${params.username}/activity-history:`, error);
     return NextResponse.json(
       { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
