@@ -26,15 +26,7 @@ interface CombinedUser {
 interface ActivityItem {
   _id: string;
   userId: string;
-  type:
-    | 'EPISODE_READ'
-    | 'COMMENT_CREATED'
-    | 'RATING_GIVEN'
-    | 'USER_FOLLOWED'
-    | 'NOVEL_LIKED'
-    | 'COIN_SPENT_EPISODE'
-    | 'COIN_SPENT_DONATION_WRITER'
-    | 'COIN_EARNED_WRITER_DONATION';
+  type: string;
   content?: string;
   novelId?: string;
   episodeId?: string;
@@ -64,7 +56,7 @@ interface ActivityHistoryResponse {
   totalActivities: number;
 }
 
-const getActivityIcon = (type: ActivityItem['type']) => {
+const getActivityIcon = (type: string) => {
   switch (type) {
     case 'EPISODE_READ':
       return <Clock className="w-5 h-5 text-blue-500" />;
