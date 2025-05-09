@@ -111,6 +111,9 @@ const UserAvatar = React.memo(({ user, size = "md", className = "" }: UserAvatar
   );
 });
 
+// Add display name to UserAvatar component
+UserAvatar.displayName = "UserAvatar";
+
 // อินเทอร์เฟซสำหรับ NavBar
 interface NavBarProps {
   logoText?: string;
