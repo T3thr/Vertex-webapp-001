@@ -1,4 +1,4 @@
-// src/app/api/users/[username]/activity-history/route.ts
+// src/app/api/[username]/activity-history/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import mongoose from "mongoose";
@@ -99,7 +99,7 @@ export async function GET(
 
     // ตรวจสอบสิทธิ์การเข้าถึง
     const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences.privacy.profileVisibility;
+    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
         return NextResponse.json(
@@ -126,9 +126,9 @@ export async function GET(
     }
 
     // ดึง query parameters
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "10", 10);
     if (page < 1 || limit < 1) {
       return NextResponse.json(
         { error: "page และ limit ต้องมากกว่า 0" },
