@@ -1,7 +1,7 @@
 // src/app/api/[username]/activity-history/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
 import SocialMediaUserModel from '@/backend/models/SocialMediaUser';
@@ -18,6 +18,7 @@ interface ActivityHistoryResponse {
   totalActivities: number;
 }
 
+// อินเทอร์เฟซสำหรับ ActivityItem
 interface ActivityItem {
   _id: string;
   userId: string;
@@ -44,6 +45,25 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
+// อินเทอร์เฟซสำหรับ populated documents
+interface PopulatedNovel {
+  _id: Types.ObjectId;
+  title: string;
+  slug: string;
+}
+
+interface PopulatedEpisode {
+  _id: Types.ObjectId;
+  title: string;
+  episodeNumber: number;
+}
+
+interface PopulatedUser {
+  _id: Types.ObjectId;
+  username: string;
+  profile?: { displayName?: string };
+}
+
 // กิจกรรมที่ต้องการแสดงในประวัติ
 const ALLOWED_ACTIVITY_TYPES = [
   'EPISODE_READ',
@@ -58,10 +78,22 @@ const ALLOWED_ACTIVITY_TYPES = [
 
 // ฟังก์ชันหลักสำหรับ GET request
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { username: string } }
+  request: NextRequest,
+  context: { params: Promise<{ username: string }> }
 ): Promise<NextResponse<ActivityHistoryResponse | { error: string }>> {
   try {
+    // แก้ไข params จาก Promise
+    const params = await context.params;
+    const { username } = params;
+
+    // ตรวจสอบ username
+    if (!username || typeof username !== 'string') {
+      return NextResponse.json(
+        { error: 'ต้องระบุชื่อผู้ใช้ที่ถูกต้อง' },
+        { status: 400 }
+      );
+    }
+
     // เชื่อมต่อ MongoDB
     await dbConnect();
 
@@ -71,22 +103,17 @@ export async function GET(
       ? new mongoose.Types.ObjectId(session.user.id)
       : null;
 
-    // ดึง username จาก params
-    const { username } = params;
-    if (!username) {
-      return NextResponse.json(
-        { error: 'ต้องระบุชื่อผู้ใช้' },
-        { status: 400 }
-      );
-    }
-
     // ค้นหาผู้ใช้จาก User หรือ SocialMediaUser
-    let viewedUser = await UserModel.findOne({ username, isDeleted: false }).lean();
+    let viewedUser = await UserModel.findOne({ username, isDeleted: false })
+      .lean()
+      .exec();
     if (!viewedUser) {
       viewedUser = await SocialMediaUserModel.findOne({
         username,
         isDeleted: false,
-      }).lean();
+      })
+        .lean()
+        .exec();
     }
     if (!viewedUser) {
       return NextResponse.json({ error: 'ไม่พบผู้ใช้' }, { status: 404 });
@@ -103,14 +130,11 @@ export async function GET(
         );
       }
       if (profileVisibility === 'followersOnly' && currentUserId) {
-        const isFollower = await mongoose
-          .model('UserFollow')
-          .findOne({
-            followerId: currentUserId,
-            followingId: viewedUser._id,
-            status: 'active',
-          })
-          .lean();
+        const isFollower = await mongoose.model('UserFollow').findOne({
+          followerId: currentUserId,
+          followingId: viewedUser._id,
+          status: 'active',
+        });
         if (!isFollower) {
           return NextResponse.json(
             { error: 'ต้องติดตามผู้ใช้เพื่อดูประวัติกิจกรรม' },
@@ -121,23 +145,25 @@ export async function GET(
     }
 
     // ดึง query parameters
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = request.nextUrl;
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
-    if (page < 1 || limit < 1) {
+
+    // ตรวจสอบ page และ limit
+    if (page < 1 || limit < 1 || isNaN(page) || isNaN(limit)) {
       return NextResponse.json(
-        { error: 'page และ limit ต้องมากกว่า 0' },
+        { error: 'page และ limit ต้องเป็นจำนวนเต็มบวก' },
         { status: 400 }
       );
     }
 
-    // คำนวณ skip สำหรับ pagination
-    const skip = (page - 1) * limit;
+    // จำกัด limit เพื่อป้องกันการโหลดข้อมูลมากเกินไป
+    const maxLimit = Math.min(limit, 50);
+    const skip = (page - 1) * maxLimit;
 
     // กำหนดประเภทกิจกรรมที่แสดง
     let activityFilter: string[] = ALLOWED_ACTIVITY_TYPES;
     if (!isOwnProfile) {
-      // จำกัดประเภทสำหรับผู้ใช้ที่ไม่ใช่เจ้าของโปรไฟล์
       activityFilter = activityFilter.filter(
         (type) =>
           !['COIN_SPENT_DONATION_WRITER', 'COIN_EARNED_WRITER_DONATION'].includes(
@@ -153,8 +179,14 @@ export async function GET(
     })
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
-      .populate([
+      .limit(maxLimit)
+      .populate<{
+        details: {
+          novelId?: PopulatedNovel;
+          episodeId?: PopulatedEpisode;
+          targetUserId?: PopulatedUser;
+        };
+      }>([
         {
           path: 'details.novelId',
           model: NovelModel,
@@ -178,40 +210,41 @@ export async function GET(
           match: { isDeleted: false },
         },
       ])
-      .lean();
+      .lean()
+      .exec();
 
     // นับจำนวนกิจกรรมทั้งหมด
     const totalActivities = await ActivityHistoryModel.countDocuments({
       user: viewedUser._id,
       activityType: { $in: activityFilter },
-    });
-    const totalPages = Math.ceil(totalActivities / limit);
+    }).exec();
+    const totalPages = Math.ceil(totalActivities / maxLimit);
 
     // แปลงข้อมูลให้ตรงกับ ActivityItem
     const formattedActivities: ActivityItem[] = activities.map((activity) => {
-      const novel = activity.details.novelId as any;
-      const episode = activity.details.episodeId as any;
-      const targetUser = activity.details.targetUserId as any;
+      const novel = activity.details.novelId;
+      const episode = activity.details.episodeId;
+      const targetUser = activity.details.targetUserId;
 
       return {
         _id: activity._id.toString(),
         userId: activity.user.toString(),
         type: activity.activityType,
         content: activity.content,
-        novelId: activity.details.novelId?.toString(),
-        episodeId: activity.details.episodeId?.toString(),
+        novelId: activity.details.novelId?._id.toString(),
+        episodeId: activity.details.episodeId?._id.toString(),
         commentId: activity.details.commentId?.toString(),
         ratingId: activity.details.ratingId?.toString(),
-        followedUserId: activity.details.targetUserId?.toString(),
+        followedUserId: activity.details.targetUserId?._id.toString(),
         likedNovelId:
           activity.activityType === 'NOVEL_LIKED'
-            ? activity.details.novelId?.toString()
+            ? activity.details.novelId?._id.toString()
             : undefined,
         purchaseId: activity.details.purchaseId?.toString(),
         donationId: activity.details.donationId?.toString(),
-        relatedUser: targetUser?._id?.toString(),
-        relatedNovel: novel?._id?.toString(),
-        relatedEpisode: episode?._id?.toString(),
+        relatedUser: targetUser?._id.toString(),
+        relatedNovel: novel?._id.toString(),
+        relatedEpisode: episode?._id.toString(),
         coinAmount: activity.details.amountCoin,
         timestamp: activity.createdAt,
         novelTitle: novel?.title,
@@ -232,15 +265,16 @@ export async function GET(
       totalActivities,
     };
 
-    return NextResponse.json(response);
-  } catch (error: any) {
+    return NextResponse.json(response, { status: 200 });
+  } catch (error: unknown) {
     console.error(
-      `[API Error] /api/${params.username}/activity-history:`,
+      `[API Error] /api/${(await context.params).username}/activity-history:`,
       error
     );
-    return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' },
-      { status: 500 }
-    );
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
