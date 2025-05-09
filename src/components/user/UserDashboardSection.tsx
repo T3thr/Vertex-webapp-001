@@ -1,82 +1,109 @@
-// src/components/UserDashboardSection.tsx
-// คอมโพเนนต์สำหรับแสดงส่วนแดชบอร์ดของผู้ใช้ ทำงานกับ API และรองรับการตอบสนอง
+// src/components/WriterAnalyticsDashboard.tsx
+// คอมโพเนนต์แดชบอร์ดวิเคราะห์สำหรับนักเขียนโดยเฉพาะ
 
 import { useEffect, useState } from "react";
-import { BarChart2, BookOpen, Heart, Users, TrendingUp, DollarSign, UserPlus, Loader2 } from "lucide-react";
+import { BarChart2, BookOpen, Heart, Users, DollarSign, TrendingUp, Gift } from "lucide-react";
 import Link from "next/link";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
 
-// Interface สำหรับข้อมูลผู้ใช้ (สอดคล้องกับ User model)
-interface CombinedUser {
-  _id: string;
-  username: string;
-  email?: string;
-  role: "Reader" | "Writer" | "Admin";
-  profile: {
-    displayName?: string;
-    bio?: string;
-    avatar?: string;
-    coverImage?: string;
+// ลงทะเบียน Chart.js components
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+
+// Interface สำหรับข้อมูลจาก API
+interface WriterAnalyticsData {
+  overview: {
+    totalNovelViews: number;
+    totalCoinRevenue: number;
+    totalDonations: number;
+    totalFollowers: number;
+    averageRating: number;
+    lastCalculatedAt: string;
   };
-  createdAt: Date;
+  novelPerformance: Array<{
+    novelId: string;
+    title: string;
+    totalViews: number;
+    totalReads: number;
+    totalLikes: number;
+    totalCoinRevenue: number;
+    totalDonations: number;
+  }>;
+  monthlyEarnings: Array<{
+    date: string;
+    coinValue: number;
+    donationValue: number;
+  }>;
+  socialStats: {
+    followersCount: number;
+    followingCount: number;
+    commentsMadeCount: number;
+    likesGivenCount: number;
+  };
 }
 
-// Interface สำหรับข้อมูลสถิตินักเขียน (สอดคล้องกับ WriterStats model)
-interface WriterStatsData {
-  totalNovelViews: number;
-  totalCoinRevenue: number;
-  monthlyNewFollowers: number;
-  lastCalculatedAt: string;
+interface WriterAnalyticsDashboardProps {
+  username: string;
 }
 
-// Interface สำหรับกิจกรรมผู้อ่าน (สอดคล้องกับ Novel, Like, UserFollow models)
-interface ReaderActivityData {
-  lastNovelRead?: { title: string; novelSlug: string; _id: string };
-  lastNovelLiked?: { title: string; novelSlug: string; _id: string };
-  lastWriterFollowed?: { name: string; username: string; _id: string };
-}
-
-interface UserDashboardSectionProps {
-  user: CombinedUser;
-}
-
-// คอมโพเนนต์สำหรับแสดงการ์ดสถิติ
-const StatCard = ({ title, value, icon, unit }: { title: string; value: string | number; icon: React.ReactNode; unit?: string }) => {
-  return (
-    <div className="p-4 bg-secondary rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col justify-between h-full">
-      <div className="flex items-center mb-2">
-        <span className="text-primary mr-2">{icon}</span>
-        <h4 className="text-sm font-medium text-secondary-foreground truncate">{title}</h4>
+// คอมโพเนนต์สำหรับการ์ดสถิติ
+const StatCard = ({
+  title,
+  value,
+  icon,
+  unit,
+  trend,
+}: {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+  unit?: string;
+  trend?: { value: number; isPositive: boolean };
+}) => (
+  <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col justify-between h-full border border-gray-100">
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center">
+        <span className="text-indigo-600 mr-2">{icon}</span>
+        <h4 className="text-sm font-medium text-gray-700">{title}</h4>
       </div>
-      <p className="text-xl sm:text-2xl font-bold text-primary truncate">
-        {value} {unit && <span className="text-base font-normal text-muted-foreground">{unit}</span>}
-      </p>
+      {trend && (
+        <span className={`text-xs ${trend.isPositive ? "text-green-600" : "text-red-600"}`}>
+          {trend.isPositive ? "+" : "-"}{trend.value}%
+        </span>
+      )}
     </div>
-  );
-};
+    <p className="text-2xl font-bold text-indigo-700">
+      {value} {unit && <span className="text-base font-normal text-gray-500">{unit}</span>}
+    </p>
+  </div>
+);
 
-// คอมโพเนนต์หลักของแดชบอร์ด
-const UserDashboardSection = ({ user }: UserDashboardSectionProps) => {
-  const [writerStats, setWriterStats] = useState<WriterStatsData | null>(null);
-  const [readerActivity, setReaderActivity] = useState<ReaderActivityData | null>(null);
+// คอมโพเนนต์หลัก
+const WriterAnalyticsDashboard = ({ username }: WriterAnalyticsDashboardProps) => {
+  const [analytics, setAnalytics] = useState<WriterAnalyticsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ดึงข้อมูลจาก API เมื่อคอมโพเนนต์โหลด
+  // ดึงข้อมูลจาก API
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchAnalytics = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/${user.username}/dashboard`);
+        const response = await fetch(`/api/${username}/writer-analytics`, { next: { revalidate: 3600 } });
         if (!response.ok) {
-          throw new Error("ไม่สามารถดึงข้อมูลแดชบอร์ดได้");
+          throw new Error("ไม่สามารถดึงข้อมูลวิเคราะห์ได้");
         }
         const data = await response.json();
-        if (user.role === "Writer") {
-          setWriterStats(data.writerStats);
-        }
-        if (user.role === "Reader" || user.role === "Writer") {
-          setReaderActivity(data.readerActivity);
-        }
+        setAnalytics(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
       } finally {
@@ -84,14 +111,46 @@ const UserDashboardSection = ({ user }: UserDashboardSectionProps) => {
       }
     };
 
-    fetchDashboardData();
-  }, [user]);
+    fetchAnalytics();
+  }, [username]);
+
+  // ข้อมูลสำหรับกราฟรายได้
+  const chartData = {
+    labels: analytics?.monthlyEarnings.map((e) => new Date(e.date).toLocaleDateString("th-TH", { month: "short", year: "numeric" })) || [],
+    datasets: [
+      {
+        label: "รายได้จากเหรียญ",
+        data: analytics?.monthlyEarnings.map((e) => e.coinValue) || [],
+        borderColor: "rgb(79, 70, 229)",
+        backgroundColor: "rgba(79, 70, 229, 0.2)",
+        tension: 0.4,
+      },
+      {
+        label: "รายได้จากการบริจาค",
+        data: analytics?.monthlyEarnings.map((e) => e.donationValue) || [],
+        borderColor: "rgb(34, 197, 94)",
+        backgroundColor: "rgba(34, 197, 94, 0.2)",
+        tension: 0.4,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: { position: "top" as const },
+      title: { display: true, text: "รายได้รายเดือน" },
+    },
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: "จำนวน (เหรียญ)" } },
+    },
+  };
 
   // แสดงสถานะการโหลด
   if (loading) {
     return (
-      <section className="mb-8 p-4 md:p-6 bg-card rounded-lg shadow-lg flex justify-center items-center min-h-[200px]">
-        <Loader2 className="animate-spin text-primary w-8 h-8" />
+      <section className="py-8 px-4 sm:px-6 bg-gray-50 rounded-xl shadow-lg min-h-[400px] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-indigo-600"></div>
       </section>
     );
   }
@@ -99,98 +158,129 @@ const UserDashboardSection = ({ user }: UserDashboardSectionProps) => {
   // แสดงข้อผิดพลาด
   if (error) {
     return (
-      <section className="mb-8 p-4 md:p-6 bg-card rounded-lg shadow-lg">
-        <p className="text-red-500 text-center">ข้อผิดพลาด: {error}</p>
+      <section className="py-8 px-4 sm:px-6 bg-gray-50 rounded-xl shadow-lg">
+        <p className="text-red-600 text-center font-medium">ข้อผิดพลาด: {error}</p>
       </section>
     );
   }
 
   return (
-    <section className="mb-8 p-4 sm:p-6 bg-card rounded-lg shadow-lg">
-      <h2 className="text-xl sm:text-2xl font-semibold text-card-foreground mb-4 flex items-center">
-        <BarChart2 size={24} className="mr-3 text-primary" /> แดชบอร์ดภาพรวม
+    <section className="py-8 px-4 sm:px-6 bg-gray-50 rounded-xl shadow-lg">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+        <BarChart2 className="w-6 h-6 text-indigo-600 mr-3" /> แดชบอร์ดวิเคราะห์นักเขียน
       </h2>
 
-      {/* ส่วนสถิตินักเขียน */}
-      {user.role === "Writer" && writerStats && (
-        <div className="mb-6 pb-6 border-b border-border">
-          <h3 className="text-lg font-semibold text-primary mb-3">สถิตินักเขียน</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatCard
-              title="ยอดเข้าชมรวม (ทุกเรื่อง)"
-              value={writerStats.totalNovelViews.toLocaleString()}
-              icon={<TrendingUp size={20} />}
-            />
-            <StatCard
-              title="รายได้จากเหรียญ (รวม)"
-              value={writerStats.totalCoinRevenue.toLocaleString()}
-              icon={<DollarSign size={20} />}
-              unit="Coins"
-            />
-            <StatCard
-              title="ผู้ติดตามใหม่ (เดือนนี้)"
-              value={`+${writerStats.monthlyNewFollowers.toLocaleString()}`}
-              icon={<UserPlus size={20} />}
-            />
+      {/* ภาพรวมสถิติ */}
+      {analytics && (
+        <>
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4">ภาพรวม</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                title="ยอดเข้าชมรวม"
+                value={analytics.overview.totalNovelViews.toLocaleString()}
+                icon={<TrendingUp className="w-5 h-5" />}
+                trend={{ value: 5, isPositive: true }}
+              />
+              <StatCard
+                title="รายได้จากเหรียญ"
+                value={analytics.overview.totalCoinRevenue.toLocaleString()}
+                icon={<DollarSign className="w-5 h-5" />}
+                unit="เหรียญ"
+              />
+              <StatCard
+                title="รายได้จากการบริจาค"
+                value={analytics.overview.totalDonations.toLocaleString()}
+                icon={<Gift className="w-5 h-5" />}
+                unit="บาท"
+              />
+              <StatCard
+                title="ผู้ติดตาม"
+                value={analytics.overview.totalFollowers.toLocaleString()}
+                icon={<Users className="w-5 h-5" />}
+                trend={{ value: 3, isPositive: true }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-4">
+              อัปเดตล่าสุด: {new Date(analytics.overview.lastCalculatedAt).toLocaleDateString("th-TH", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-4">
-            ข้อมูลนี้อัปเดตล่าสุดเมื่อ {new Date(writerStats.lastCalculatedAt).toLocaleDateString("th-TH")}
-          </p>
-          <Link href={`/dashboard/writer-analytics`} className="mt-3 text-sm text-primary hover:underline inline-block">
-            ดูสถิติทั้งหมด →
-          </Link>
-        </div>
-      )}
 
-      {/* ส่วนกิจกรรมผู้อ่าน */}
-      {(user.role === "Reader" || user.role === "Writer") && readerActivity && (
-        <div>
-          <h3 className="text-lg font-semibold text-primary mb-3">
-            {user.role === "Writer" ? "กิจกรรมการอ่านของคุณ" : "ภาพรวมกิจกรรมของคุณ"}
-          </h3>
-          <p className="text-sm text-muted-foreground mb-4">สรุปกิจกรรมล่าสุดของคุณบนแพลตฟอร์ม</p>
-          <ul className="space-y-3 text-sm">
-            {readerActivity.lastNovelRead && (
-              <li className="flex items-start p-3 bg-secondary rounded-md hover:bg-secondary/80 transition-colors">
-                <BookOpen size={18} className="mr-3 mt-1 text-primary flex-shrink-0" />
-                <div>
-                  <span className="font-medium text-secondary-foreground">อ่านล่าสุด:</span>{" "}
-                  <Link href={`/novels/${readerActivity.lastNovelRead.novelSlug}`} className="text-primary hover:underline">
-                    {readerActivity.lastNovelRead.title}
-                  </Link>
-                </div>
-              </li>
-            )}
-            {readerActivity.lastNovelLiked && (
-              <li className="flex items-start p-3 bg-secondary rounded-md hover:bg-secondary/80 transition-colors">
-                <Heart size={18} className="mr-3 mt-1 text-red-500 flex-shrink-0" />
-                <div>
-                  <span className="font-medium text-secondary-foreground">ถูกใจล่าสุด:</span>{" "}
-                  <Link href={`/novels/${readerActivity.lastNovelLiked.novelSlug}`} className="text-primary hover:underline">
-                    {readerActivity.lastNovelLiked.title}
-                  </Link>
-                </div>
-              </li>
-            )}
-            {readerActivity.lastWriterFollowed && (
-              <li className="flex items-start p-3 bg-secondary rounded-md hover:bg-secondary/80 transition-colors">
-                <Users size={18} className="mr-3 mt-1 text-green-500 flex-shrink-0" />
-                <div>
-                  <span className="font-medium text-secondary-foreground">ติดตามล่าสุด:</span>{" "}
-                  <Link href={`/user/${readerActivity.lastWriterFollowed.username}`} className="text-primary hover:underline">
-                    {readerActivity.lastWriterFollowed.name}
-                  </Link>
-                </div>
-              </li>
-            )}
-            {!readerActivity.lastNovelRead && !readerActivity.lastNovelLiked && !readerActivity.lastWriterFollowed && (
-              <p className="text-muted-foreground">ยังไม่มีกิจกรรมล่าสุด</p>
-            )}
-          </ul>
-        </div>
+          {/* กราฟรายได้ */}
+          <div className="mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4">แนวโน้มรายได้</h3>
+            <Line data={chartData} options={chartOptions} />
+          </div>
+
+          {/* ประสิทธิภาพนิยาย */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4">ประสิทธิภาพนิยาย</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-gray-700">
+                <thead className="text-xs text-gray-500 uppercase bg-gray-100">
+                  <tr>
+                    <th className="px-6 py-3">ชื่อนิยาย</th>
+                    <th className="px-6 py-3">ยอดวิว</th>
+                    <th className="px-6 py-3">ยอดอ่าน</th>
+                    <th className="px-6 py-3">ยอดไลค์</th>
+                    <th className="px-6 py-3">รายได้เหรียญ</th>
+                    <th className="px-6 py-3">รายได้บริจาค</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.novelPerformance.map((novel) => (
+                    <tr key={novel.novelId} className="bg-white border-b hover:bg-gray-50">
+                      <td className="px-6 py-4 font-medium">
+                        <Link href={`/novels/${novel.novelId}`} className="text-indigo-600 hover:underline">
+                          {novel.title}
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4">{novel.totalViews.toLocaleString()}</td>
+                      <td className="px-6 py-4">{novel.totalReads.toLocaleString()}</td>
+                      <td className="px-6 py-4">{novel.totalLikes.toLocaleString()}</td>
+                      <td className="px-6 py-4">{novel.totalCoinRevenue.toLocaleString()} เหรียญ</td>
+                      <td className="px-6 py-4">{novel.totalDonations.toLocaleString()} บาท</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* สถิติโซเชียล */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-4">การมีส่วนร่วมทางโซเชียล</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                title="ผู้ติดตาม"
+                value={analytics.socialStats.followersCount.toLocaleString()}
+                icon={<Users className="w-5 h-5" />}
+              />
+              <StatCard
+                title="กำลังติดตาม"
+                value={analytics.socialStats.followingCount.toLocaleString()}
+                icon={<Users className="w-5 h-5" />}
+              />
+              <StatCard
+                title="ความคิดเห็น"
+                value={analytics.socialStats.commentsMadeCount.toLocaleString()}
+                icon={<BookOpen className="w-5 h-5" />}
+              />
+              <StatCard
+                title="ไลค์ที่ให้"
+                value={analytics.socialStats.likesGivenCount.toLocaleString()}
+                icon={<Heart className="w-5 h-5" />}
+              />
+            </div>
+          </div>
+        </>
       )}
     </section>
   );
 };
 
-export default UserDashboardSection;
+export default WriterAnalyticsDashboard;
