@@ -60,7 +60,7 @@ const ALLOWED_ACTIVITY_TYPES = [
 export async function GET(
   req: NextRequest,
   { params }: { params: { username: string } }
-): Promise<NextResponse<ActivityHistoryResponse>> {
+): Promise<NextResponse<ActivityHistoryResponse | { error: string }>> {
   try {
     // เชื่อมต่อ MongoDB
     await dbConnect();
@@ -235,7 +235,7 @@ export async function GET(
     return NextResponse.json(response);
   } catch (error: any) {
     console.error(
-      `[API Error] /api/users/${params.username}/activity-history:`,
+      `[API Error] /api/${params.username}/activity-history:`,
       error
     );
     return NextResponse.json(
