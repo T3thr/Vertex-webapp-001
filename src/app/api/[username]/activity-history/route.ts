@@ -1,4 +1,5 @@
 // src/app/api/[username]/activity-history/route.ts
+{/*
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
@@ -235,3 +236,5 @@ export async function GET(
     );
   }
 }
+
+*/}
