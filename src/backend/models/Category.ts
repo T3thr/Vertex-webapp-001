@@ -153,7 +153,7 @@ CategorySchema.pre("save", async function (next) {
     // This is a basic implementation; a more robust solution might use a separate counter or UUIDs for extremely high collision scenarios.
     let slug = baseSlug;
     let count = 0;
-    // @ts-expect-error
+    // @ts-expect-error ไม่สามารถกำหนดประเภทของ this.constructor ได้อย่างชัดเจน
     const Category = this.constructor as mongoose.Model<ICategory>; // Get the model constructor
     while (await Category.findOne({ slug: slug, _id: { $ne: this._id }, isDeleted: this.isDeleted })) {
       count++;
@@ -165,7 +165,7 @@ CategorySchema.pre("save", async function (next) {
   // Manage ancestorPath and level
   if (this.isModified("parentCategory") || this.isNew) {
     if (this.parentCategory) {
-      // @ts-expect-error
+      // @ts-expect-error ต้องกำหนดประเภทเพื่อเข้าถึง findById และ properties อื่นๆ
       const parent = await (this.constructor as mongoose.Model<ICategory>).findById(this.parentCategory).select("ancestorPath level");
       if (parent) {
         this.ancestorPath = [...(parent.ancestorPath || []), this.parentCategory];
