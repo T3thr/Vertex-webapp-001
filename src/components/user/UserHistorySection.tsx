@@ -1,16 +1,25 @@
-// src/app/api/users/[username]/activity-history/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
-import ActivityHistoryModel from "@/backend/models/ActivityHistory";
-import { Types } from "mongoose";
+// src/app/user/[username]/components/UserHistorySection.tsx
+"use client";
 
-// อินเทอร์เฟซสำหรับ ActivityItem ที่ส่งกลับไปยัง client
+import React, { useState, useEffect, useCallback } from 'react';
+import { Clock, MessageSquare, Star, UserPlus, ThumbsUp, ShoppingCart, Gift } from 'lucide-react'; // Lucide icons
+
+interface UserHistorySectionProps {
+  viewedUser: CombinedUser | null; // User whose history is being viewed
+  initialActivities: ActivityItem[]; // Initial set of activities passed from parent
+  isOwnProfile: boolean;
+}
+
+interface CombinedUser {
+  _id: string;
+  username: string;
+  // ... other fields if needed by this component
+}
+
 interface ActivityItem {
   _id: string;
   userId: string;
-  type: string;
+  type: "READ_EPISODE" | "COMMENT" | "RATING" | "FOLLOW_USER" | "LIKE_NOVEL" | "PURCHASE_EPISODE" | "RECEIVE_DONATION" | string;
   description?: string;
   novelId?: string;
   episodeId?: string;
@@ -26,6 +35,7 @@ interface ActivityItem {
   coinAmount?: number;
   content?: string;
   timestamp: Date;
+  // For UI display, these might be populated or constructed
   novelTitle?: string;
   novelSlug?: string;
   episodeTitle?: string;
@@ -34,7 +44,6 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
-// อินเทอร์เฟซสำหรับการตอบกลับของ API
 interface ActivityHistoryResponse {
   activities: ActivityItem[];
   currentPage: number;
@@ -42,181 +51,120 @@ interface ActivityHistoryResponse {
   totalActivities: number;
 }
 
-// อินเทอร์เฟซสำหรับพารามิเตอร์ของ query
-interface QueryParams {
-  page?: string;
-  limit?: string;
-}
-
-// ตัวจัดการสำหรับ GET request
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { username: string } }
-): Promise<NextResponse> {
-  try {
-    // เชื่อมต่อกับ MongoDB
-    await dbConnect();
-
-    const { username } = params;
-    const { searchParams } = new URL(req.url);
-    const queryParams: QueryParams = Object.fromEntries(searchParams);
-
-    // ตรวจสอบและแปลงพารามิเตอร์ pagination
-    const page = parseInt(queryParams.page || "1", 10);
-    const limit = parseInt(queryParams.limit || "10", 10);
-    if (isNaN(page) || page < 1) {
-      return NextResponse.json(
-        { error: "หน้าต้องเป็นตัวเลขมากกว่า 0" },
-        { status: 400 }
-      );
-    }
-    if (isNaN(limit) || limit < 1 || limit > 100) {
-      return NextResponse.json(
-        { error: "จำนวนต่อหน้าต้องอยู่ระหว่าง 1 ถึง 100" },
-        { status: 400 }
-      );
-    }
-
-    // ค้นหาผู้ใช้ในทั้งสองคอลเลกชัน
-    const user =
-      (await UserModel()
-        .findOne({ username, isActive: true, isBanned: false })
-        .lean()) ||
-      (await SocialMediaUserModel()
-        .findOne({ username, isActive: true, isBanned: false })
-        .lean());
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "ไม่พบผู้ใช้" },
-        { status: 404 }
-      );
-    }
-
-    // กำหนดประเภทของกิจกรรมที่ต้องการแสดง
-    const supportedActivityTypes = [
-      "EPISODE_READ",
-      "COMMENT_CREATED",
-      "RATING_GIVEN",
-      "USER_FOLLOWED",
-      "NOVEL_LIKED",
-      "COIN_SPENT_EPISODE",
-      "COIN_EARNED_WRITER_DONATION",
-    ];
-
-    // คำนวณการข้ามข้อมูลสำหรับ pagination
-    const skip = (page - 1) * limit;
-
-    // ค้นหากิจกรรมพร้อม populate ข้อมูลที่เกี่ยวข้อง
-    const activities = await ActivityHistoryModel()
-      .find({
-        user: user._id,
-        activityType: { $in: supportedActivityTypes },
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate([
-        {
-          path: "novel",
-          select: "title slug",
-        },
-        {
-          path: "episode",
-          select: "title episodeNumber",
-        },
-        {
-          path: "targetUser",
-          select: "username profile.displayName",
-        },
-      ])
-      .lean();
-
-    // นับจำนวนกิจกรรมทั้งหมด
-    const totalActivities = await ActivityHistoryModel().countDocuments({
-      user: user._id,
-      activityType: { $in: supportedActivityTypes },
-    });
-
-    // แปลงข้อมูลกิจกรรมให้ตรงกับ ActivityItem
-    const formattedActivities: ActivityItem[] = activities.map((activity) => {
-      const details = activity.details || {};
-      let description = activity.message || "";
-      let content = "";
-
-      // สร้างคำอธิบายตามประเภทกิจกรรม
-      switch (activity.activityType) {
-        case "EPISODE_READ":
-          description = "อ่านตอนใหม่";
-          break;
-        case "COMMENT_CREATED":
-          description = "แสดงความคิดเห็น";
-          content = details.commentText || "";
-          break;
-        case "RATING_GIVEN":
-          description = `ให้คะแนน ${details.ratingValue || "N/A"} ดาว`;
-          break;
-        case "USER_FOLLOWED":
-          description = "ติดตามผู้ใช้";
-          break;
-        case "NOVEL_LIKED":
-          description = "ถูกใจนิยาย";
-          break;
-        case "COIN_SPENT_EPISODE":
-          description = "ซื้อตอน";
-          break;
-        case "COIN_EARNED_WRITER_DONATION":
-          description = "ได้รับบริจาค";
-          break;
-        default:
-          description = activity.activityType;
-      }
-
-      return {
-        _id: activity._id.toString(),
-        userId: activity.user.toString(),
-        type: activity.activityType,
-        description,
-        novelId: details.novelId?.toString(),
-        episodeId: details.episodeId?.toString(),
-        commentId: details.commentId?.toString(),
-        ratingId: details.ratingId?.toString(),
-        followedUserId: details.targetUserId?.toString(),
-        likedNovelId: details.novelId?.toString(),
-        purchaseId: details.purchaseId?.toString(),
-        donationId: details.donationId?.toString(),
-        relatedUser: details.targetUserId?.toString(),
-        relatedNovel: details.novelId?.toString(),
-        relatedEpisode: details.episodeId?.toString(),
-        coinAmount: details.amountCoin,
-        content,
-        timestamp: activity.createdAt,
-        novelTitle: activity.novel?.title,
-        novelSlug: activity.novel?.slug,
-        episodeTitle: activity.episode?.title,
-        episodeNumber: activity.episode?.episodeNumber,
-        targetUserName: activity.targetUser?.profile?.displayName || activity.targetUser?.username,
-        targetUserSlug: activity.targetUser?.username,
-      };
-    });
-
-    // คำนวณจำนวนหน้าทั้งหมด
-    const totalPages = Math.ceil(totalActivities / limit);
-
-    // สร้างการตอบกลับ
-    const response: ActivityHistoryResponse = {
-      activities: formattedActivities,
-      currentPage: page,
-      totalPages,
-      totalActivities,
-    };
-
-    return NextResponse.json(response, { status: 200 });
-  } catch (error: any) {
-    console.error("ข้อผิดพลาดในการดึงประวัติกิจกรรม:", error);
-    return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
-      { status: 500 }
-    );
+const getActivityIcon = (type: string) => {
+  switch (type) {
+    case "READ_EPISODE": return <Clock className="w-5 h-5 text-blue-500" />;
+    case "COMMENT": return <MessageSquare className="w-5 h-5 text-green-500" />;
+    case "RATING": return <Star className="w-5 h-5 text-yellow-500" />;
+    case "FOLLOW_USER": return <UserPlus className="w-5 h-5 text-purple-500" />;
+    case "LIKE_NOVEL": return <ThumbsUp className="w-5 h-5 text-red-500" />;
+    case "PURCHASE_EPISODE": return <ShoppingCart className="w-5 h-5 text-indigo-500" />;
+    case "RECEIVE_DONATION": return <Gift className="w-5 h-5 text-pink-500" />;
+    default: return <Clock className="w-5 h-5 text-gray-500" />;
   }
-}
+};
+
+const UserHistorySection: React.FC<UserHistorySectionProps> = ({ viewedUser, initialActivities, isOwnProfile }) => {
+  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1); // Will be updated from API
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchActivities = useCallback(async (pageToFetch: number) => {
+    if (!viewedUser) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/users/${viewedUser.username}/activity-history?page=${pageToFetch}&limit=10`);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch activity history: ${res.statusText}`);
+      }
+      const data: ActivityHistoryResponse = await res.json();
+      setActivities(prev => pageToFetch === 1 ? data.activities : [...prev, ...data.activities]);
+      setCurrentPage(data.currentPage);
+      setTotalPages(data.totalPages);
+    } catch (err: any) {
+      setError(err.message || "Failed to load activity history.");
+      console.error("Error fetching activities:", err);
+    }
+    setIsLoading(false);
+  }, [viewedUser]);
+
+  useEffect(() => {
+    // Set initial state from props, and fetch totalPages if initialActivities is not empty
+    // This assumes initialActivities is the first page.
+    // If initialActivities is empty and viewedUser exists, fetch the first page.
+    if (viewedUser && initialActivities.length > 0) {
+        // A bit of a hack to get totalPages if not provided initially
+        // Ideally, the parent page.tsx would fetch the full ActivityHistoryResponse for the first page
+        const fetchInitialMeta = async () => {
+            try {
+                const res = await fetch(`/api/users/${viewedUser.username}/activity-history?page=1&limit=10`);
+                if (res.ok) {
+                    const data: ActivityHistoryResponse = await res.json();
+                    setTotalPages(data.totalPages);
+                }
+            } catch (e) { console.error("Failed to fetch initial meta for history", e); }
+        };
+        fetchInitialMeta();
+    } else if (viewedUser && initialActivities.length === 0) {
+        fetchActivities(1);
+    }
+  }, [viewedUser, initialActivities, fetchActivities]);
+
+  const handleLoadMore = () => {
+    if (currentPage < totalPages) {
+      fetchActivities(currentPage + 1);
+    }
+  };
+
+  if (!viewedUser) {
+    return <div className="p-4 bg-secondary rounded-lg shadow-md my-4">Loading history...</div>;
+  }
+
+  return (
+    <div className="p-4 bg-card shadow-lg rounded-lg my-4">
+      <h2 className="text-xl font-semibold text-foreground mb-4">Activity History</h2>
+      {error && <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md mb-4">Error: {error}</div>}
+      {activities.length === 0 && !isLoading && (
+        <p className="text-muted-foreground">No activities found.</p>
+      )}
+      <ul className="space-y-4">
+        {activities.map((activity) => (
+          <li key={activity._id} className="flex items-start space-x-3 p-3 bg-background rounded-md shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex-shrink-0 pt-1">
+              {getActivityIcon(activity.type)}
+            </div>
+            <div className="flex-grow">
+              <p className="text-sm text-foreground">
+                {activity.description || activity.content || `Activity: ${activity.type}`}
+                {activity.novelTitle && <span className="font-semibold"> on "{activity.novelTitle}"</span>}
+                {activity.episodeTitle && <span className="italic"> - {activity.episodeTitle}</span>}
+                {activity.targetUserName && <span className="font-semibold"> with {activity.targetUserName}</span>}
+                {activity.coinAmount && <span className="text-yellow-600"> ({activity.coinAmount} coins)</span>}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(activity.timestamp).toLocaleString()}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {isLoading && <div className="text-center py-4 text-primary">Loading more activities...</div>}
+      {!isLoading && currentPage < totalPages && (
+        <div className="mt-6 text-center">
+          <button 
+            onClick={handleLoadMore} 
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+            disabled={isLoading}
+          >
+            Load More
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UserHistorySection;
