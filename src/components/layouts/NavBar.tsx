@@ -1,4 +1,4 @@
-"use client";
+// src/components/layouts/NavBar.tsx
 
 "use client";
 
