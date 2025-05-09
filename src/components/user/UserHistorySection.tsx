@@ -282,7 +282,7 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
               <p className="text-sm text-foreground">
                 {activity.content || `กิจกรรม: ${activity.type}`}
                 {activity.novelTitle && (
-                  <span className="font-semibold"> ใน "{activity.novelTitle}"</span>
+                  <span className="font-semibold"> ใน &quot;{activity.novelTitle}&quot;</span>
                 )}
                 {activity.episodeTitle && (
                   <span className="italic"> - {activity.episodeTitle}</span>
