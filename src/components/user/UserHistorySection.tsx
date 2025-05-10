@@ -15,6 +15,7 @@ import {
 // อินเทอร์เฟซสำหรับ props ของคอมโพเนนต์
 interface UserHistorySectionProps {
   viewedUser: CombinedUser | null;
+  initialActivities: ActivityItem[];
   isOwnProfile: boolean;
 }
 
@@ -42,7 +43,7 @@ interface ActivityItem {
   relatedNovel?: string;
   relatedEpisode?: string;
   coinAmount?: number;
-  timestamp: Date;
+  timestamp: string; // เปลี่ยนเป็น string เพื่อให้สอดคล้องกับ API และ UserProfilePage
   novelTitle?: string;
   novelSlug?: string;
   episodeTitle?: string;
@@ -85,10 +86,11 @@ const getActivityIcon = (type: string) => {
 // คอมโพเนนต์หลัก
 const UserHistorySection: React.FC<UserHistorySectionProps> = ({
   viewedUser,
+  initialActivities,
   isOwnProfile,
 }) => {
   // สถานะสำหรับจัดการข้อมูลและการโหลด
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -126,12 +128,19 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
     [viewedUser]
   );
 
-  // ดึงข้อมูลเมื่อ viewedUser เปลี่ยน
+  // อัปเดตข้อมูลเมื่อ viewedUser หรือ initialActivities เปลี่ยน
   useEffect(() => {
     if (viewedUser) {
-      fetchActivities(1);
+      setActivities(initialActivities);
+      // ถ้า initialActivities มีข้อมูลอยู่แล้ว ให้คำนวณ totalPages
+      if (initialActivities.length > 0) {
+        setTotalPages(Math.ceil(initialActivities.length / 10));
+      } else {
+        // ถ้าไม่มี initialActivities ให้ดึงข้อมูลจาก API
+        fetchActivities(1);
+      }
     }
-  }, [viewedUser, fetchActivities]);
+  }, [viewedUser, initialActivities, fetchActivities]);
 
   // ฟังก์ชันสำหรับโหลดข้อมูลเพิ่ม
   const handleLoadMore = () => {
