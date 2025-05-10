@@ -28,7 +28,7 @@ interface CombinedUser {
     avatar?: string;
     coverImage?: string;
   };
-  createdAt: string; // เปลี่ยนเป็น string เพื่อให้สอดคล้องกับ API
+  createdAt: Date; // เปลี่ยนเป็น Date เพื่อให้สอดคล้องกับ interface อื่น
 }
 
 // อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
@@ -86,8 +86,12 @@ async function getUserData(username: string): Promise<CombinedUser | null> {
       throw new Error(`ไม่สามารถดึงข้อมูลผู้ใช้ได้: ${res.statusText}`);
     }
 
-    const data: CombinedUser = await res.json();
-    return data;
+    const data = await res.json();
+    // แปลง string เป็น Date object ก่อนส่งคืน
+    return {
+      ...data,
+      createdAt: new Date(data.createdAt)
+    };
   } catch (error) {
     console.error(`❌ [UserProfilePage] ข้อผิดพลาดในการดึงข้อมูลผู้ใช้ ${username}:`, error);
     return null;
