@@ -231,7 +231,7 @@ const SocialMediaUserSchema = new Schema<ISocialMediaUser>(
     preferences: {
       _id: false,
       language: { type: String, default: "th", trim: true },
-      theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
+      theme: { type: String, enum: ["light", "dark", "system", "sepia"], default: "system" },
       notifications: {
         _id: false,
         email: { type: Boolean, default: true },
