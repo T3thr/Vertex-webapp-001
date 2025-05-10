@@ -1,6 +1,6 @@
 // src/backend/models/UserFollow.ts
 
-import mongoose, { Schema, model, models, Types, Document, LeanDocument } from "mongoose";
+import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IUser } from "./User"; // Import IUser interface
 import { ISocialMediaUser } from "./SocialMediaUser"; // Import ISocialMediaUser interface
 
@@ -210,7 +210,7 @@ UserFollowSchema.pre("deleteMany", async function (next) {
 UserFollowSchema.statics.createUserMap = async function (
   userIds: Types.ObjectId[],
   socialMediaUserIds: Types.ObjectId[]
-): Promise<Map<string, LeanDocument<IUser | ISocialMediaUser>>> {
+): Promise<Map<string, IUser | ISocialMediaUser>> {
   const UserModel = model("User");
   const SocialMediaUserModel = model("SocialMediaUser");
 
@@ -219,18 +219,20 @@ UserFollowSchema.statics.createUserMap = async function (
     _id: { $in: userIds },
     isActive: true,
     isBanned: false,
-  }).lean();
+  }).exec();
 
   const socialMediaUsers = await SocialMediaUserModel.find({
     _id: { $in: socialMediaUserIds },
     isActive: true,
     isBanned: false,
-  }).lean();
+  }).exec();
 
   // สร้าง Map ของผู้ใช้โดยใช้ _id เป็น key
-  const userMap = new Map<string, LeanDocument<IUser | ISocialMediaUser>>();
-  users.forEach((user) => userMap.set(user._id.toString(), user));
-  socialMediaUsers.forEach((user) => userMap.set(user._id.toString(), user));
+  const userMap = new Map<string, IUser | ISocialMediaUser>();
+  users.forEach((user: IUser) => userMap.set(user._id.toString(), user));
+  socialMediaUsers.forEach((user: ISocialMediaUser) =>
+    userMap.set(user._id.toString(), user)
+  );
 
   return userMap;
 };
