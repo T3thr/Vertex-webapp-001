@@ -1,11 +1,19 @@
-// src/app/api/users/[username]/profile/route.ts
+// src/app/api/[username]/profile/route.ts
+// API สำหรับดึงข้อมูลโปรไฟล์ผู้ใช้
+// รองรับการตรวจสอบความเป็นส่วนตัวและคำนวณสถิติโซเชียลแบบเรียลไทม์
+
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
+import { getServerSession } from "next-auth";
+import dbConnect from "@/backend/lib/mongodb";
 import UserModel, { IUser } from "@/backend/models/User";
 import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
+import UserFollowModel from "@/backend/models/UserFollow";
+import NovelModel from "@/backend/models/Novel";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import mongoose from "mongoose";
 
-// อินเทอร์เฟซสำหรับการตอบกลับของโปรไฟล์ผู้ใช้
-interface UserProfileResponse {
+// อินเทอร์เฟซสำหรับข้อมูลโปรไฟล์ที่ส่งกลับ
+interface UserProfile {
   _id: string;
   username: string;
   email?: string;
@@ -21,82 +29,131 @@ interface UserProfileResponse {
     followingCount: number;
     novelsCreatedCount: number;
   };
-  createdAt: string; // ISO string
-  isSocialMediaUser: boolean; // ระบุว่าเป็น SocialMediaUser หรือไม่
+  createdAt: string;
+  isSocialMediaUser: boolean;
 }
 
-// ฟังก์ชัน GET สำหรับดึงโปรไฟล์ผู้ใช้
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { username: string } }
-) {
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่รวมกัน
+interface BaseUser {
+  _id: mongoose.Types.ObjectId;
+  username: string;
+  email?: string;
+  role: "Reader" | "Writer" | "Admin";
+  profile?: {
+    displayName?: string;
+    bio?: string;
+    avatar?: string;
+    coverImage?: string;
+  };
+  image?: string;
+  preferences?: {
+    privacy?: {
+      profileVisibility?: "public" | "private" | "followersOnly";
+    };
+  };
+  createdAt: Date;
+}
+
+/**
+ * GET: ดึงข้อมูลโปรไฟล์ผู้ใช้ตาม username
+ * @param req ข้อมูลคำขอจาก Next.js
+ * @returns JSON response พร้อมข้อมูลโปรไฟล์ผู้ใช้
+ */
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const username = params.username;
+    // เชื่อมต่อฐานข้อมูล
+    await dbConnect();
 
-    // ดึงโมเดล User และ SocialMediaUser
-    const User = UserModel();
-    const SocialMediaUser = SocialMediaUserModel();
+    // ดึง username จาก URL
+    const { pathname } = req.nextUrl;
+    const username = pathname.split("/")[3]; // /api/[username]/profile -> [username]
+    if (!username) {
+      return NextResponse.json({ error: "ต้องระบุ username" }, { status: 400 });
+    }
 
-    // ตัวแปรสำหรับเก็บข้อมูลผู้ใช้ (รองรับทั้ง IUser และ ISocialMediaUser)
-    let user: mongoose.FlattenMaps<IUser | ISocialMediaUser> & { _id: mongoose.Types.ObjectId; __v: number } | null = null;
+    // รับ session เพื่อตรวจสอบการยืนยันตัวตน
+    const session = await getServerSession(authOptions);
+    const currentUserId = session?.user?.id;
+
+    // ค้นหาผู้ใช้
+    let user: BaseUser | null = await UserModel()
+      .findOne({ username, isActive: true, isBanned: false })
+      .lean<BaseUser>();
+
     let isSocialMediaUser = false;
 
-    // ค้นหาผู้ใช้ใน User model
-    user = await User.findOne({
-      username,
-      isActive: true,
-      isBanned: false,
-    }).lean();
-
-    // ถ้าไม่พบใน User model ให้ลองค้นหาใน SocialMediaUser model
     if (!user) {
-      user = await SocialMediaUser.findOne({
-        username,
-        isActive: true,
-        isBanned: false,
-        isDeleted: false,
-      }).lean();
-      isSocialMediaUser = !!user;
+      user = await SocialMediaUserModel()
+        .findOne({ username, isActive: true, isBanned: false, isDeleted: false })
+        .lean<BaseUser>();
+      isSocialMediaUser = true;
     }
 
-    // ถ้าไม่พบผู้ใช้
     if (!user) {
-      return NextResponse.json(
-        { message: "ไม่พบผู้ใช้" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
 
-    // สร้างอ็อบเจ็กต์ตอบกลับที่เป็นมาตรฐาน
-    const userProfile: UserProfileResponse = {
+    // ตรวจสอบการมองเห็นโปรไฟล์
+    const profileVisibility = user.preferences?.privacy?.profileVisibility || "public";
+    if (profileVisibility !== "public") {
+      if (!currentUserId) {
+        return NextResponse.json({ error: "ต้องล็อกอินเพื่อดูโปรไฟล์นี้" }, { status: 401 });
+      }
+      if (profileVisibility === "private" && currentUserId !== user._id.toString()) {
+        return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
+      }
+      if (profileVisibility === "followersOnly" && currentUserId !== user._id.toString()) {
+        const isFollower = await UserFollowModel().exists({
+          followerId: currentUserId,
+          followingId: user._id,
+        });
+        if (!isFollower) {
+          return NextResponse.json(
+            { error: "ต้องติดตามผู้ใช้เพื่อดูโปรไฟล์นี้" },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    // คำนวณ socialStats
+    const followersCount = await UserFollowModel().countDocuments({
+      followingId: user._id,
+    });
+    const followingCount = await UserFollowModel().countDocuments({
+      followerId: user._id,
+    });
+    const novelsCreatedCount = await NovelModel().countDocuments({
+      author: user._id,
+      isPublished: true,
+    });
+
+    // สร้างข้อมูลโปรไฟล์
+    const userProfile: UserProfile = {
       _id: user._id.toString(),
       username: user.username,
       email: user.email,
       role: user.role,
       profile: {
-        displayName: user.profile?.displayName || user.username,
+        displayName: user.profile?.displayName,
         bio: user.profile?.bio,
-        avatar: isSocialMediaUser
-          ? (user as mongoose.FlattenMaps<ISocialMediaUser>).image || user.profile?.avatar || "/placeholder-avatar.png"
-          : user.profile?.avatar || "/placeholder-avatar.png",
-        coverImage: user.profile?.coverImage || "/placeholder-cover.jpg",
+        avatar: user.profile?.avatar || user.image,
+        coverImage: user.profile?.coverImage,
       },
       socialStats: {
-        followersCount: user.socialStats?.followersCount || 0,
-        followingCount: user.socialStats?.followingCount || 0,
-        novelsCreatedCount: user.socialStats?.novelsCreatedCount || 0,
+        followersCount,
+        followingCount,
+        novelsCreatedCount,
       },
-      createdAt: isSocialMediaUser
-        ? (user as mongoose.FlattenMaps<ISocialMediaUser>).joinedAt.toISOString()
-        : (user as mongoose.FlattenMaps<IUser>).createdAt.toISOString(),
+      createdAt: user.createdAt.toISOString(),
       isSocialMediaUser,
     };
 
     return NextResponse.json(userProfile, { status: 200 });
   } catch (error) {
-    console.error("ข้อผิดพลาดในการดึงโปรไฟล์ผู้ใช้:", error);
+    console.error("❌ [API] ข้อผิดพลาดใน /api/[username]/profile:", error);
     return NextResponse.json(
-      { message: "ข้อผิดพลาดภายในเซิร์ฟเวอร์" },
+      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
     );
   }

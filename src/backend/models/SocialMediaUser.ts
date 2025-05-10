@@ -1,11 +1,11 @@
 // src/backend/models/SocialMediaUser.ts
 // SocialMediaUser Model - ศูนย์กลางข้อมูลผู้ใช้ที่เข้าสู่ระบบผ่าน OAuth providers (Google, Twitter, etc.)
 // โมเดลผู้ใช้โซเชียลมีเดีย - จัดการข้อมูลผู้ใช้ที่เข้าสู่ระบบผ่านผู้ให้บริการ OAuth
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-// Interface สำหรับ Account ที่เชื่อมโยงกับ SocialMediaUser (สำหรับ OAuth providers)
 // อินเทอร์เฟซสำหรับบัญชีที่เชื่อมโยงกับผู้ใช้ (สำหรับผู้ให้บริการ OAuth)
 export interface IAccount {
   provider: string; // เช่น "google", "twitter"
@@ -21,125 +21,121 @@ export interface IAccount {
   providerData?: Record<string, any>; // ข้อมูลเพิ่มเติมจาก provider
 }
 
-// Interface สำหรับ SocialMediaUser document
 // อินเทอร์เฟซสำหรับเอกสารผู้ใช้โซเชียลมีเดีย
 export interface ISocialMediaUser extends Document {
   _id: Types.ObjectId;
-  email?: string; // อีเมล (ตัวเลือก, ไม่ซ้ำกัน, อาจไม่มี)
+  email?: string; // อีเมล (ตัวเลือก, ไม่ซ้ำกัน)
   username: string; // ชื่อผู้ใช้ (ต้องไม่ซ้ำกัน)
-  password?: string; // รหัสผ่าน (hashed) - select: false (ถ้ามีการใช้ credentials)
-  accounts: IAccount[]; // บัญชีที่เชื่อมโยง (OAuth providers)
+  password?: string; // รหัสผ่าน (hashed) - select: false
+  accounts: IAccount[]; // บัญชีที่เชื่อมโยง
   role: "Reader" | "Writer" | "Admin"; // บทบาทของผู้ใช้
   profile: {
-    displayName?: string; // ชื่อที่แสดง (จาก provider)
-    avatar?: string; // URL รูปโปรไฟล์ (จาก provider)
-    bio?: string; // คำอธิบาย (อาจไม่มี)
+    displayName?: string; // ชื่อที่แสดง
+    avatar?: string; // URL รูปโปรไฟล์
+    bio?: string; // คำอธิบาย
     coverImage?: string; // รูปปกโปรไฟล์
     gender?: "male" | "female" | "other" | "preferNotToSay"; // เพศ
-    preferredGenres?: Types.ObjectId[]; // หมวดหมู่นิยายที่ชื่นชอบ (อ้างอิง Category model)
+    preferredGenres?: Types.ObjectId[]; // หมวดหมู่นิยายที่ชื่นชอบ
   };
-  // สถิติการใช้งานและการมีส่วนร่วมของผู้ใช้
   trackingStats: {
-    totalLoginDays: number; // จำนวนวันที่เข้าสู่ระบบทั้งหมด
-    totalNovelsRead: number; // จำนวนนิยายที่อ่านจบหรือเริ่มอ่าน
-    totalEpisodesRead: number; // จำนวนตอนที่อ่านทั้งหมด
-    totalCoinSpent: number; // จำนวนเหรียญทั้งหมดที่ใช้จ่าย
-    totalRealMoneySpent: number; // จำนวนเงินจริงทั้งหมดที่ใช้จ่าย
-    lastNovelReadId?: Types.ObjectId; // ID ของนิยายที่อ่านล่าสุด (อ้างอิง Novel)
+    totalLoginDays: number; // จำนวนวันที่เข้าสู่ระบบ
+    totalNovelsRead: number; // จำนวนนิยายที่อ่าน
+    totalEpisodesRead: number; // จำนวนตอนที่อ่าน
+    totalCoinSpent: number; // จำนวนเหรียญที่ใช้
+    totalRealMoneySpent: number; // จำนวนเงินจริงที่ใช้
+    lastNovelReadId?: Types.ObjectId; // ID นิยายที่อ่านล่าสุด
     lastNovelReadAt?: Date; // วันที่อ่านนิยายล่าสุด
-    joinDate: Date; // วันที่สมัครใช้งาน (คือ createdAt)
+    joinDate: Date; // วันที่สมัคร
   };
-  // สถิติเกี่ยวกับผู้ติดตามและการสร้างสรรค์
   socialStats: {
     followersCount: number; // จำนวนผู้ติดตาม
-    followingCount: number; // จำนวนที่กำลังติดตาม
-    novelsCreatedCount: number; // จำนวนนิยายที่เขียน (สำหรับ Writer)
-    commentsMadeCount: number; // จำนวนความคิดเห็นที่สร้าง
-    ratingsGivenCount: number; // จำนวนเรตติ้งที่ให้
-    likesGivenCount: number; // จำนวนไลค์ที่ให้
+    followingCount: number; // จำนวนที่ติดตาม
+    novelsCreatedCount: number; // จำนวนนิยายที่เขียน
+    commentsMadeCount: number; // จำนวนความคิดเห็น
+    ratingsGivenCount: number; // จำนวนเรตติ้ง
+    likesGivenCount: number; // จำนวนไลค์
   };
   preferences: {
-    language: string; // ภาษาที่ต้องการใช้งาน
-    theme: "light" | "dark" | "system"; // ธีมที่ต้องการใช้งาน
+    language: string; // ภาษาที่ใช้งาน
+    theme: "light" | "dark" | "system" | "sepia"; // ธีม
     notifications: {
-      email: boolean; // รับการแจ้งเตือนทางอีเมล
-      push: boolean; // รับการแจ้งเตือนแบบ push
-      novelUpdates: boolean; // รับการแจ้งเตือนเมื่อนิยายที่ติดตามมีการอัพเดต
-      comments: boolean; // รับการแจ้งเตือนเมื่อมีคนแสดงความคิดเห็น
-      donations: boolean; // รับการแจ้งเตือนเมื่อได้รับการบริจาค
-      newFollowers: boolean; // การแจ้งเตือนเมื่อมีผู้ติดตามใหม่
-      systemAnnouncements: boolean; // การแจ้งเตือนการอัปเดตระบบ
+      email: boolean; // การแจ้งเตือนอีเมล
+      push: boolean; // การแจ้งเตือน push
+      novelUpdates: boolean; // การแจ้งเตือนอัพเดตนิยาย
+      comments: boolean; // การแจ้งเตือนความคิดเห็น
+      donations: boolean; // การแจ้งเตือนบริจาค
+      newFollowers: boolean; // การแจ้งเตือนผู้ติดตามใหม่
+      systemAnnouncements: boolean; // การแจ้งเตือนระบบ
     };
     contentFilters?: {
-      showMatureContent: boolean; // แสดงเนื้อหาสำหรับผู้ใหญ่หรือไม่
+      showMatureContent: boolean; // แสดงเนื้อหาสำหรับผู้ใหญ่
       blockedGenres?: Types.ObjectId[]; // หมวดหมู่ที่บล็อก
       blockedTags?: string[]; // แท็กที่บล็อก
     };
     privacy: {
-      showActivityStatus: boolean; // แสดงสถานะกิจกรรมหรือไม่
+      showActivityStatus: boolean; // แสดงสถานะกิจกรรม
       profileVisibility: "public" | "followersOnly" | "private"; // การมองเห็นโปรไฟล์
       readingHistoryVisibility: "public" | "followersOnly" | "private"; // การมองเห็นประวัติการอ่าน
     };
   };
   wallet: {
-    coinBalance: number; // ยอดเหรียญคงเหลือ
-    lastCoinTransactionAt?: Date; // วันที่ทำธุรกรรมเหรียญล่าสุด
+    coinBalance: number; // ยอดเหรียญ
+    lastCoinTransactionAt?: Date; // วันที่ทำธุรกรรมล่าสุด
   };
   gamification: {
-    level: number; // ระดับของผู้ใช้
+    level: number; // ระดับ
     experiencePoints: number; // คะแนนประสบการณ์
-    achievements: Types.ObjectId[]; // ID ของ Achievements ที่ปลดล็อค (อ้างอิง Achievement model)
-    badges: Types.ObjectId[]; // ID ของ Badges ที่ได้รับ (อ้างอิง Badge model)
+    achievements: Types.ObjectId[]; // ความสำเร็จ
+    badges: Types.ObjectId[]; // เหรียญรางวัล
     streaks: {
-      currentLoginStreak: number; // จำนวนวันที่เข้าสู่ระบบติดต่อกันปัจจุบัน
-      longestLoginStreak: number; // จำนวนวันที่เข้าสู่ระบบติดต่อกันนานที่สุด
-      lastLoginDate?: Date; // วันที่เข้าสู่ระบบล่าสุด
+      currentLoginStreak: number; // สตรีคการล็อกอิน
+      longestLoginStreak: number; // สตรีคการล็อกอินนานที่สุด
+      lastLoginDate?: Date; // วันที่ล็อกอินล่าสุด
     };
     dailyCheckIn?: {
       lastCheckInDate?: Date; // วันที่เช็คอินล่าสุด
-      currentStreak: number; // สตรีคการเช็คอินปัจจุบัน
+      currentStreak: number; // สตรีคเช็คอิน
     };
   };
   writerVerification?: {
-    status: "none" | "pending" | "verified" | "rejected"; // สถานะการยืนยันตัวตน
-    submittedAt?: Date; // วันที่ส่งเอกสารยืนยัน
-    verifiedAt?: Date; // วันที่ได้รับการยืนยัน
-    rejectedReason?: string; // เหตุผลที่ถูกปฏิเสธ
-    documents?: { // เอกสารยืนยันตัวตน
+    status: "none" | "pending" | "verified" | "rejected"; // สถานะยืนยันนักเขียน
+    submittedAt?: Date; // วันที่ส่งยืนยัน
+    verifiedAt?: Date; // วันที่ยืนยัน
+    rejectedReason?: string; // เหตุผลที่ปฏิเสธ
+    documents?: {
       type: string; // ประเภทเอกสาร
-      url: string; // URL ของเอกสาร
+      url: string; // URL เอกสาร
       uploadedAt: Date; // วันที่อัพโหลด
     }[];
   };
   donationSettings?: {
-    isDonationEnabled: boolean; // สถานะการเปิดรับบริจาค
-    donationApplicationId?: Types.ObjectId; // ID ของใบสมัครขอเปิดรับบริจาค (อ้างอิง DonationApplication)
-    customMessage?: string; // ข้อความส่วนตัวสำหรับการบริจาค
+    isDonationEnabled: boolean; // เปิดรับบริจาค
+    donationApplicationId?: Types.ObjectId; // ID ใบสมัครบริจาค
+    customMessage?: string; // ข้อความบริจาค
   };
-  writerApplication?: Types.ObjectId; // ID ของ WriterApplication (อ้างอิง WriterApplication model)
-  writerStats?: Types.ObjectId; // ID ของ WriterStats (อ้างอิง WriterStats model)
-  isEmailVerified: boolean; // สถานะการยืนยันอีเมล
-  emailVerificationToken?: string; // Token สำหรับยืนยันอีเมล (select: false)
-  emailVerificationTokenExpiry?: Date; // วันหมดอายุของ Token (select: false)
-  resetPasswordToken?: string; // Token สำหรับรีเซ็ตรหัสผ่าน (select: false)
-  resetPasswordTokenExpiry?: Date; // วันหมดอายุของ Token รีเซ็ตรหัสผ่าน (select: false)
-  isActive: boolean; // สถานะการใช้งาน (active/inactive)
-  isBanned: boolean; // ถูกแบนหรือไม่
-  banReason?: string; // เหตุผลที่ถูกแบน
-  bannedUntil?: Date; // วันที่ถูกแบนจนถึง (ถ้ามี)
-  lastLoginAt?: Date; // วันที่เข้าสู่ระบบล่าสุด
-  joinedAt: Date; // วันที่สมัครสมาชิก
-  isDeleted: boolean; // ถูกลบแบบ soft delete หรือไม่
-  deletedAt?: Date; // วันที่ถูกลบ
-  image?: string; // รูปโปรไฟล์จาก NextAuth (มักใช้เป็น avatar)
+  writerApplication?: Types.ObjectId; // ID ใบสมัครนักเขียน
+  writerStats?: Types.ObjectId; // ID สถิตินักเขียน
+  isEmailVerified: boolean; // ยืนยันอีเมล
+  emailVerificationToken?: string; // โทเค็นยืนยันอีเมล
+  emailVerificationTokenExpiry?: Date; // วันหมดอายุโทเค็น
+  resetPasswordToken?: string; // โทเค็นรีเซ็ตรหัสผ่าน
+  resetPasswordTokenExpiry?: Date; // วันหมดอายุโทเค็น
+  isActive: boolean; // สถานะใช้งาน
+  isBanned: boolean; // สถานะแบน
+  banReason?: string; // เหตุผลแบน
+  bannedUntil?: Date; // วันที่แบนถึง
+  lastLoginAt?: Date; // ล็อกอินล่าสุด
+  joinedAt: Date; // วันที่สมัคร
+  isDeleted: boolean; // ลบแบบ soft
+  deletedAt?: Date; // วันที่ลบ
+  image?: string; // รูปโปรไฟล์จาก NextAuth
 
-  // Methods
+  // เมธอด
   matchPassword(enteredPassword: string): Promise<boolean>;
   getResetPasswordToken(): string;
   getEmailVerificationToken(): string;
 }
 
-// สร้าง Account Schema สำหรับบัญชีที่เชื่อมโยง
 // สร้าง Schema สำหรับบัญชีที่เชื่อมโยง
 const AccountSchema = new Schema<IAccount>(
   {
@@ -158,10 +154,10 @@ const AccountSchema = new Schema<IAccount>(
   { _id: false }
 );
 
-// สร้าง SocialMediaUser Schema
 // สร้าง Schema สำหรับ SocialMediaUser
 const SocialMediaUserSchema = new Schema<ISocialMediaUser>(
   {
+    _id: { type: Schema.Types.ObjectId, auto: true },
     email: {
       type: String,
       unique: true,
@@ -181,7 +177,10 @@ const SocialMediaUserSchema = new Schema<ISocialMediaUser>(
       trim: true,
       minlength: [3, "ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร"],
       maxlength: [30, "ชื่อผู้ใช้ต้องมีไม่เกิน 30 ตัวอักษร"],
-      match: [/^[a-zA-Z0-9_\.]+$/, "ชื่อผู้ใช้สามารถประกอบด้วยตัวอักษร (a-z, A-Z), ตัวเลข (0-9), จุด (.) และขีดล่าง (_) เท่านั้น"],
+      match: [
+        /^[a-zA-Z0-9_\.]+$/,
+        "ชื่อผู้ใช้สามารถประกอบด้วยตัวอักษร (a-z, A-Z), ตัวเลข (0-9), จุด (.) และขีดล่าง (_) เท่านั้น",
+      ],
       index: true,
     },
     password: {
@@ -231,7 +230,7 @@ const SocialMediaUserSchema = new Schema<ISocialMediaUser>(
     preferences: {
       _id: false,
       language: { type: String, default: "th", trim: true },
-      theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
+      theme: { type: String, enum: ["light", "dark", "system", "sepia"], default: "system" },
       notifications: {
         _id: false,
         email: { type: Boolean, default: true },
@@ -324,31 +323,19 @@ const SocialMediaUserSchema = new Schema<ISocialMediaUser>(
 );
 
 // ----- Indexes -----
-// ดัชนีผสมสำหรับบัญชีที่เชื่อมโยง
 SocialMediaUserSchema.index({ "accounts.provider": 1, "accounts.providerAccountId": 1 }, { unique: true, sparse: true });
-// ดัชนีสำหรับบทบาทและสถานะการยืนยันนักเขียน
 SocialMediaUserSchema.index({ role: 1, "writerVerification.status": 1 });
-// ดัชนีสำหรับสถานะการใช้งานและการแบน
 SocialMediaUserSchema.index({ isActive: 1, isBanned: 1 });
-// ดัชนีสำหรับการค้นหาตามจำนวนผู้ติดตาม
 SocialMediaUserSchema.index({ "socialStats.followersCount": -1 });
-// ดัชนีสำหรับยอดเหรียญ
 SocialMediaUserSchema.index({ "wallet.coinBalance": -1 });
-// ดัชนีสำหรับการตั้งค่าการบริจาค
 SocialMediaUserSchema.index({ role: 1, "donationSettings.isDonationEnabled": 1 });
-// ดัชนีสำหรับการอ่านนิยายล่าสุด
 SocialMediaUserSchema.index({ "trackingStats.lastNovelReadAt": -1 });
-// ดัชนีสำหรับการใช้จ่ายเหรียญ
 SocialMediaUserSchema.index({ "trackingStats.totalCoinSpent": -1 });
-// ดัชนีสำหรับการใช้จ่ายเงินจริง
 SocialMediaUserSchema.index({ "trackingStats.totalRealMoneySpent": -1 });
-// ดัชนีสำหรับระดับและคะแนนประสบการณ์
 SocialMediaUserSchema.index({ "gamification.level": -1, "gamification.experiencePoints": -1 });
-// ดัชนีสำหรับการค้นหาด้วยข้อความ
 SocialMediaUserSchema.index({ username: "text", "profile.displayName": "text" });
 
 // ----- Middleware: Password Hashing -----
-// Middleware: แฮชรหัสผ่านก่อนบันทึก
 SocialMediaUserSchema.pre("save", async function (next) {
   if (!this.isModified("password") || !this.password) {
     return next();
@@ -359,7 +346,9 @@ SocialMediaUserSchema.pre("save", async function (next) {
       const salt = await bcrypt.genSalt(12);
       this.password = await bcrypt.hash(this.password, salt);
       if (!credentialsAccount && this.email) {
-        const existingCredentials = this.accounts.find((acc) => acc.provider === "credentials" && acc.providerAccountId === this.email);
+        const existingCredentials = this.accounts.find(
+          (acc) => acc.provider === "credentials" && acc.providerAccountId === this.email
+        );
         if (!existingCredentials) {
           this.accounts.push({
             provider: "credentials",
@@ -378,7 +367,6 @@ SocialMediaUserSchema.pre("save", async function (next) {
 });
 
 // ----- Middleware: Update Login Streaks and Total Login Days -----
-// Middleware: อัปเดตสตรีคการเข้าสู่ระบบและจำนวนวันเข้าสู่ระบบทั้งหมดเมื่อมีการอัปเดต lastLoginAt
 SocialMediaUserSchema.pre("save", function (next) {
   if (this.isModified("lastLoginAt")) {
     const now = new Date();
@@ -396,7 +384,8 @@ SocialMediaUserSchema.pre("save", function (next) {
         const yesterdayMidnightTimestamp = yesterdayMidnight.setHours(0, 0, 0, 0);
 
         if (lastLoginMidnight === yesterdayMidnightTimestamp) {
-          this.gamification.streaks.currentLoginStreak = (this.gamification.streaks.currentLoginStreak || 0) + 1;
+          this.gamification.streaks.currentLoginStreak =
+            (this.gamification.streaks.currentLoginStreak || 0) + 1;
         } else {
           this.gamification.streaks.currentLoginStreak = 1;
         }
@@ -404,17 +393,25 @@ SocialMediaUserSchema.pre("save", function (next) {
         this.trackingStats.totalLoginDays = 1;
         this.gamification.streaks.currentLoginStreak = 1;
       }
-      if (this.gamification.streaks.currentLoginStreak > (this.gamification.streaks.longestLoginStreak || 0)) {
-        this.gamification.streaks.longestLoginStreak = this.gamification.streaks.currentLoginStreak;
+      if (
+        this.gamification.streaks.currentLoginStreak >
+        (this.gamification.streaks.longestLoginStreak || 0)
+      ) {
+        this.gamification.streaks.longestLoginStreak =
+          this.gamification.streaks.currentLoginStreak;
       }
       this.gamification.streaks.lastLoginDate = now;
     } else if (this.gamification) {
       this.trackingStats.totalLoginDays = 1;
-      this.gamification.streaks = { currentLoginStreak: 1, longestLoginStreak: 1, lastLoginDate: now };
+      this.gamification.streaks = {
+        currentLoginStreak: 1,
+        longestLoginStreak: 1,
+        lastLoginDate: now,
+      };
     }
   }
 
-  // Soft delete handling - การจัดการการลบแบบ soft delete
+  // Soft delete handling
   if (this.isModified("isDeleted") && this.isDeleted && !this.deletedAt) {
     this.deletedAt = new Date();
   }
@@ -425,13 +422,13 @@ SocialMediaUserSchema.pre("save", function (next) {
 });
 
 // ----- Methods -----
-// เมธอดสำหรับตรวจสอบรหัสผ่าน
-SocialMediaUserSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
+SocialMediaUserSchema.methods.matchPassword = async function (
+  enteredPassword: string
+): Promise<boolean> {
   if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// เมธอดสำหรับสร้างโทเค็นรีเซ็ตรหัสผ่าน
 SocialMediaUserSchema.methods.getResetPasswordToken = function (): string {
   const resetToken = crypto.randomBytes(32).toString("hex");
   this.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
@@ -439,7 +436,6 @@ SocialMediaUserSchema.methods.getResetPasswordToken = function (): string {
   return resetToken;
 };
 
-// เมธอดสำหรับสร้างโทเค็นยืนยันอีเมล
 SocialMediaUserSchema.methods.getEmailVerificationToken = function (): string {
   const verificationToken = crypto.randomBytes(32).toString("hex");
   this.emailVerificationToken = crypto.createHash("sha256").update(verificationToken).digest("hex");
@@ -448,7 +444,6 @@ SocialMediaUserSchema.methods.getEmailVerificationToken = function (): string {
 };
 
 // ----- Virtuals -----
-// Virtual fields สำหรับการ populate ข้อมูลที่เกี่ยวข้อง
 SocialMediaUserSchema.virtual("writtenNovels", {
   ref: "Novel",
   localField: "_id",
@@ -514,7 +509,6 @@ SocialMediaUserSchema.virtual("donationApplication", {
 });
 
 // ----- Model Export -----
-// รูปแบบนี้ช่วยให้มั่นใจว่าโมเดลจะไม่ถูกคอมไพล์ซ้ำในโหมด dev ของ Next.js
 const SocialMediaUserModel = () =>
   models.SocialMediaUser as mongoose.Model<ISocialMediaUser> ||
   model<ISocialMediaUser>("SocialMediaUser", SocialMediaUserSchema);

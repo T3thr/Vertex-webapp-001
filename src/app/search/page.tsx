@@ -1,6 +1,5 @@
 "use client";
 
-import { NavBar } from "@/components/layouts/NavBar";
 import { Book, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -51,7 +50,6 @@ const SearchPageContent = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavBar />
       
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-foreground mb-2">

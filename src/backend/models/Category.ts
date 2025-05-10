@@ -142,7 +142,7 @@ CategorySchema.index({ isFeatured: 1, isVisible: 1, isDeleted: 1, displayOrder: 
 CategorySchema.pre("save", async function (next) {
   // Auto-generate slug from name if not provided or if name changed
   if ((this.isModified("name") || this.isNew) && (!this.slug || this.isModified("name"))) {
-    let baseSlug = (this.name || "")
+    const baseSlug = (this.name || "")
       .toLowerCase()
       .replace(/\s+/g, "-")      // แทนที่ช่องว่างด้วย -
       .replace(/[^a-z0-9ก-๙เ-ไ\-]+/g, "") // ลบอักขระที่ไม่ใช่ alphanumeric ไทย อังกฤษ หรือ -
@@ -153,7 +153,6 @@ CategorySchema.pre("save", async function (next) {
     // This is a basic implementation; a more robust solution might use a separate counter or UUIDs for extremely high collision scenarios.
     let slug = baseSlug;
     let count = 0;
-    // @ts-ignore
     const Category = this.constructor as mongoose.Model<ICategory>; // Get the model constructor
     while (await Category.findOne({ slug: slug, _id: { $ne: this._id }, isDeleted: this.isDeleted })) {
       count++;
@@ -165,8 +164,8 @@ CategorySchema.pre("save", async function (next) {
   // Manage ancestorPath and level
   if (this.isModified("parentCategory") || this.isNew) {
     if (this.parentCategory) {
-      // @ts-ignore
-      const parent = await (this.constructor as mongoose.Model<ICategory>).findById(this.parentCategory).select("ancestorPath level");
+      const Category = this.constructor as mongoose.Model<ICategory>;
+      const parent = await Category.findById(this.parentCategory).select("ancestorPath level");
       if (parent) {
         this.ancestorPath = [...(parent.ancestorPath || []), this.parentCategory];
         this.level = parent.level + 1;
@@ -205,4 +204,3 @@ CategorySchema.virtual("children", {
 const CategoryModel = () => models.Category as mongoose.Model<ICategory> || model<ICategory>("Category", CategorySchema);
 
 export default CategoryModel;
-
