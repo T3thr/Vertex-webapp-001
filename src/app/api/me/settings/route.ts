@@ -152,48 +152,38 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ message: validationErrors.join(', ') }, { status: 400 });
     }
 
-    let user = await UserModel().findOne({ _id: session.user.id, isActive: true, isBanned: false });
-    let isSocialMediaUser = false;
+    // แก้ไขส่วนนี้เพื่อแยกการเรียกใช้ updateOne สำหรับแต่ละโมเดล
+    const updateUserData = async () => {
+      const update: any = {};
+      if (settings.displayName !== undefined) update['profile.displayName'] = settings.displayName;
+      if (settings.bio !== undefined) update['profile.bio'] = settings.bio;
+      if (settings.avatarUrl !== undefined) update['profile.avatar'] = settings.avatarUrl;
+      if (settings.coverImageUrl !== undefined) update['profile.coverImage'] = settings.coverImageUrl;
+      if (settings.emailNotifications !== undefined)
+        update['preferences.notifications.email'] = settings.emailNotifications;
+      if (settings.pushNotifications !== undefined)
+        update['preferences.notifications.push'] = settings.pushNotifications;
+      if (settings.novelUpdatesNotifications !== undefined)
+        update['preferences.notifications.novelUpdates'] = settings.novelUpdatesNotifications;
+      if (settings.profileVisibility !== undefined)
+        update['preferences.privacy.profileVisibility'] = settings.profileVisibility;
+      if (settings.showActivityStatus !== undefined)
+        update['preferences.privacy.showActivityStatus'] = settings.showActivityStatus;
+      if (settings.readingHistoryVisibility !== undefined)
+        update['preferences.privacy.readingHistoryVisibility'] = settings.readingHistoryVisibility;
 
-    if (!user) {
-      user = await SocialMediaUserModel().findOne({
-        _id: session.user.id,
-        isActive: true,
-        isBanned: false,
-        isDeleted: false,
-      });
-      isSocialMediaUser = true;
-    }
+      if (Object.keys(update).length > 0) {
+        // ตรวจสอบก่อนว่าผู้ใช้เป็นประเภทไหน
+        const userExists = await UserModel().exists({ _id: session.user.id });
+        if (userExists) {
+          await UserModel().updateOne({ _id: session.user.id }, { $set: update });
+        } else {
+          await SocialMediaUserModel().updateOne({ _id: session.user.id }, { $set: update });
+        }
+      }
+    };
 
-    if (!user) {
-      return NextResponse.json({ message: 'ไม่พบผู้ใช้' }, { status: 404 });
-    }
-
-    // อัปเดตฟิลด์ที่ส่งมา
-    const update: any = {};
-    if (settings.displayName !== undefined) update['profile.displayName'] = settings.displayName;
-    if (settings.bio !== undefined) update['profile.bio'] = settings.bio;
-    if (settings.avatarUrl !== undefined) update['profile.avatar'] = settings.avatarUrl;
-    if (settings.coverImageUrl !== undefined) update['profile.coverImage'] = settings.coverImageUrl;
-    if (settings.emailNotifications !== undefined)
-      update['preferences.notifications.email'] = settings.emailNotifications;
-    if (settings.pushNotifications !== undefined)
-      update['preferences.notifications.push'] = settings.pushNotifications;
-    if (settings.novelUpdatesNotifications !== undefined)
-      update['preferences.notifications.novelUpdates'] = settings.novelUpdatesNotifications;
-    if (settings.profileVisibility !== undefined)
-      update['preferences.privacy.profileVisibility'] = settings.profileVisibility;
-    if (settings.showActivityStatus !== undefined)
-      update['preferences.privacy.showActivityStatus'] = settings.showActivityStatus;
-    if (settings.readingHistoryVisibility !== undefined)
-      update['preferences.privacy.readingHistoryVisibility'] = settings.readingHistoryVisibility;
-
-    if (Object.keys(update).length > 0) {
-      await (isSocialMediaUser ? SocialMediaUserModel() : UserModel()).updateOne(
-        { _id: session.user.id },
-        { $set: update }
-      );
-    }
+    await updateUserData();
 
     // อัปเดต UserPreference
     const preferenceUpdate: any = {};
