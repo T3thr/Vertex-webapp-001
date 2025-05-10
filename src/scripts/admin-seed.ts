@@ -95,7 +95,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       };
       existingAdmin.gamification = {
         level: existingAdmin.gamification.level || 1,
-        experience: existingAdmin.gamification.experience || 0,
+        experiencePoints: existingAdmin.gamification.experiencePoints || 0, // Fixed: Changed `experience` to `experiencePoints`
         achievements: existingAdmin.gamification.achievements || [],
         badges: existingAdmin.gamification.badges || [],
         streaks: {
@@ -173,7 +173,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       },
       gamification: {
         level: 1,
-        experience: 0,
+        experiencePoints: 0, // Fixed: Changed `experience` to `experiencePoints`
         achievements: [],
         badges: [],
         streaks: {
@@ -270,7 +270,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
         },
         gamification: {
           level: 1,
-          experience: 0,
+          experiencePoints: 0, // Fixed: Changed `experience` to `experiencePoints`
           achievements: [],
           badges: [],
           streaks: {
@@ -346,7 +346,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
       };
       author.gamification = {
         level: author.gamification.level || 1,
-        experience: author.gamification.experience || 0,
+        experiencePoints: author.gamification.experiencePoints || 0, // Fixed: Changed `experience` to `experiencePoints`
         achievements: author.gamification.achievements || [],
         badges: author.gamification.badges || [],
         streaks: {
