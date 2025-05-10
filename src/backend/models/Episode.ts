@@ -1,7 +1,7 @@
 // src/backend/models/Episode.ts
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import ActivityHistoryModel,{ IActivityHistory }  from "./ActivityHistory"; // Import ActivityHistory for logging
+import ActivityHistoryModel, { IActivityHistory } from "./ActivityHistory"; // Import ActivityHistory for logging
 
 // Interface สำหรับ Scene (ฉาก) ภายใน Episode
 // This is a subdocument, not a standalone model.
@@ -269,7 +269,6 @@ EpisodeSchema.pre("save", async function (next) {
       .substring(0, 70);
     this.slug = `${baseSlug || "episode"}-${this.episodeNumber}`;
     // Basic uniqueness check, for more robust, consider a dedicated slug service or more complex logic
-    // @ts-expect-error The type of 'this.constructor' is unknown
     const Episode = this.constructor as mongoose.Model<IEpisode>; 
     let count = 0;
     let finalSlug = this.slug;
@@ -410,7 +409,6 @@ EpisodeSchema.post("findOneAndDelete", async function(doc) {
         }
     }
 });
-
 
 // ----- Model Export -----
 const EpisodeModel = () => models.Episode as mongoose.Model<IEpisode> || model<IEpisode>("Episode", EpisodeSchema);
