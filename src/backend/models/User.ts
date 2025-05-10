@@ -64,7 +64,7 @@ export interface IUser extends Document {
   // การตั้งค่าการแจ้งเตือนและความเป็นส่วนตัว
   preferences: {
     language: string; // ภาษาที่ต้องการใช้งาน (เช่น "th", "en")
-    theme: "light" | "dark" | "system"; // ธีมที่ต้องการใช้งาน
+    theme: "light" | "dark" | "system" | "sepia"; // ธีมที่ต้องการใช้งาน
     notifications: {
       email: boolean; // รับการแจ้งเตือนทางอีเมล
       push: boolean; // รับการแจ้งเตือนแบบ push
