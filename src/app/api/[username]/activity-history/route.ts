@@ -4,13 +4,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
+import UserModel, { IUser } from "@/backend/models/User";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
+import ActivityHistoryModel, { IActivityHistory } from "@/backend/models/ActivityHistory";
+import NovelModel, { INovel } from "@/backend/models/Novel";
+import EpisodeModel, { IEpisode } from "@/backend/models/Episode";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
-import ActivityHistoryModel from "@/backend/models/ActivityHistory";
-import NovelModel from "@/backend/models/Novel";
-import EpisodeModel from "@/backend/models/Episode";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
 // อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
@@ -79,12 +79,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ดึง session เพื่อตรวจสอบการยืนยันตัวตน
     const session = await getServerSession(authOptions);
-    const currentUserId = session?.user?.id ? new mongoose.Types.ObjectId(session.user.id) : null;
+    const currentUserId = session?.user?.id
+      ? new mongoose.Types.ObjectId(session.user.id)
+      : null;
 
     // ค้นหาผู้ใช้
-    let viewedUser = await UserModel().findOne({ username, isDeleted: false }).lean();
+    let viewedUser: IUser | ISocialMediaUser | null = await UserModel()
+      .findOne({ username, isDeleted: false })
+      .exec();
     if (!viewedUser) {
-      viewedUser = await SocialMediaUserModel().findOne({ username, isDeleted: false }).lean();
+      viewedUser = await SocialMediaUserModel()
+        .findOne({ username, isDeleted: false })
+        .exec();
     }
     if (!viewedUser) {
       return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
@@ -140,7 +146,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate([
+      .populate<{ details: { novelId?: INovel; episodeId?: IEpisode; targetUserId?: IUser | ISocialMediaUser } }>([
         {
           path: "details.novelId",
           model: NovelModel(),
@@ -164,7 +170,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           match: { isDeleted: false },
         },
       ])
-      .lean();
+      .exec();
 
     // นับจำนวนกิจกรรมทั้งหมด
     const totalActivities = await ActivityHistoryModel().countDocuments({
@@ -175,27 +181,29 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // แปลงข้อมูลกิจกรรม
     const formattedActivities: ActivityItem[] = activities.map((activity) => {
-      const novel = activity.details.novelId as any;
-      const episode = activity.details.episodeId as any;
-      const targetUser = activity.details.targetUserId as any;
+      const novel = activity.details.novelId;
+      const episode = activity.details.episodeId;
+      const targetUser = activity.details.targetUserId;
 
       return {
         _id: activity._id.toString(),
         userId: activity.user.toString(),
         type: activity.activityType,
         content: activity.content,
-        novelId: activity.details.novelId?.toString(),
-        episodeId: activity.details.episodeId?.toString(),
+        novelId: activity.details.novelId?._id.toString(),
+        episodeId: activity.details.episodeId?._id.toString(),
         commentId: activity.details.commentId?.toString(),
         ratingId: activity.details.ratingId?.toString(),
-        followedUserId: activity.details.targetUserId?.toString(),
+        followedUserId: activity.details.targetUserId?._id.toString(),
         likedNovelId:
-          activity.activityType === "NOVEL_LIKED" ? activity.details.novelId?.toString() : undefined,
+          activity.activityType === "NOVEL_LIKED"
+            ? activity.details.novelId?._id.toString()
+            : undefined,
         purchaseId: activity.details.purchaseId?.toString(),
         donationId: activity.details.donationId?.toString(),
-        relatedUser: targetUser?._id?.toString(),
-        relatedNovel: novel?._id?.toString(),
-        relatedEpisode: episode?._id?.toString(),
+        relatedUser: targetUser?._id.toString(),
+        relatedNovel: novel?._id.toString(),
+        relatedEpisode: episode?._id.toString(),
         coinAmount: activity.details.amountCoin,
         timestamp: activity.createdAt,
         novelTitle: novel?.title,
