@@ -1,5 +1,6 @@
 // src/app/api/[username]/writer-analytics/route.ts
-// API สำหรับดึงข้อมูลวิเคราะห์โดยละเอียดสำหรับนักเขียน (รองรับทั้ง User และ SocialMediaUser)
+// API สำหรับดึงข้อมูลวิเคราะห์โดยละเอียดสำหรับนักเขียน
+// รองรับการดึงข้อมูลจากทั้ง User และ SocialMediaUser พร้อมประมวลผลสถิติ
 
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -10,7 +11,7 @@ import WriterStatsModel from "@/backend/models/WriterStats";
 import DonationModel from "@/backend/models/Donation";
 import NovelModel from "@/backend/models/Novel";
 
-// Interface สำหรับการตอบกลับของ API
+// อินเทอร์เฟซสำหรับการตอบกลับ API
 interface WriterAnalyticsResponse {
   overview: {
     totalNovelViews: number;
@@ -42,27 +43,34 @@ interface WriterAnalyticsResponse {
   };
 }
 
-// ฟังก์ชันหลักสำหรับ GET request
-export async function GET(req: NextRequest, { params }: { params: { username: string } }) {
+/**
+ * GET: ดึงข้อมูลวิเคราะห์สำหรับนักเขียนตาม username
+ * @param req ข้อมูลคำขอจาก Next.js
+ * @returns JSON response พร้อมข้อมูลวิเคราะห์นักเขียน
+ */
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
+    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
 
-    const { username } = params;
+    // ดึง username จาก URL
+    const { pathname } = req.nextUrl;
+    const username = pathname.split("/")[3]; // /api/[username]/writer-analytics -> [username]
     if (!username) {
       return NextResponse.json({ error: "ต้องระบุชื่อผู้ใช้" }, { status: 400 });
     }
 
-    // ค้นหาผู้ใช้จาก username ในทั้งสองคอลเลกชัน
+    // ค้นหาผู้ใช้
     let user = await UserModel()
       .findOne({ username, role: "Writer", isActive: true, isBanned: false })
-      .select("_id writerStats");
-    
+      .select("_id writerStats")
+      .lean();
     if (!user) {
       user = await SocialMediaUserModel()
         .findOne({ username, role: "Writer", isActive: true, isBanned: false })
-        .select("_id writerStats socialStats");
+        .select("_id writerStats socialStats")
+        .lean();
     }
-
     if (!user) {
       return NextResponse.json({ error: "ไม่พบนักเขียน" }, { status: 404 });
     }
@@ -72,8 +80,8 @@ export async function GET(req: NextRequest, { params }: { params: { username: st
       .findOne({ user: user._id })
       .select(
         "totalNovelViews_Lifetime totalCoinEarned_Lifetime totalFollowers_Lifetime averageRating_AllNovels novelPerformance monthlyCoinEarnings lastCalculatedAt"
-      );
-
+      )
+      .lean();
     if (!writerStats) {
       return NextResponse.json({ error: "ไม่พบข้อมูลสถิตินักเขียน" }, { status: 404 });
     }
@@ -94,19 +102,21 @@ export async function GET(req: NextRequest, { params }: { params: { username: st
             totalDonations: { $sum: "$netAmountToRecipient" },
           },
         },
-      ]);
-
-    const donationMap = new Map(donations.map(d => [d._id?.toString() || "general", d.totalDonations]));
+      ])
+      .exec();
+    const donationMap = new Map(
+      donations.map((d) => [d._id?.toString() || "general", d.totalDonations])
+    );
 
     // ดึงข้อมูลนิยาย
-    const novelIds = writerStats.novelPerformance.map((np: any) => np.novelId);
+    const novelIds = writerStats.novelPerformance.map((np) => new mongoose.Types.ObjectId(np.novelId));
     const novels = await NovelModel()
       .find({ _id: { $in: novelIds }, isDeleted: false })
-      .select("title");
+      .select("title")
+      .lean();
+    const novelTitleMap = new Map(novels.map((novel) => [novel._id.toString(), novel.title]));
 
-    const novelTitleMap = new Map(novels.map(novel => [novel._id.toString(), novel.title]));
-
-    // สร้าง response
+    // สร้างข้อมูลสำหรับการตอบกลับ
     const response: WriterAnalyticsResponse = {
       overview: {
         totalNovelViews: writerStats.totalNovelViews_Lifetime || 0,
@@ -116,7 +126,7 @@ export async function GET(req: NextRequest, { params }: { params: { username: st
         averageRating: writerStats.averageRating_AllNovels || 0,
         lastCalculatedAt: writerStats.lastCalculatedAt.toISOString(),
       },
-      novelPerformance: writerStats.novelPerformance.map((np: any) => ({
+      novelPerformance: writerStats.novelPerformance.map((np) => ({
         novelId: np.novelId.toString(),
         title: novelTitleMap.get(np.novelId.toString()) || "นิยายไม่มีชื่อ",
         totalViews: np.totalViews || 0,
@@ -125,10 +135,10 @@ export async function GET(req: NextRequest, { params }: { params: { username: st
         totalCoinRevenue: np.totalCoinRevenue || 0,
         totalDonations: donationMap.get(np.novelId.toString()) || 0,
       })),
-      monthlyEarnings: writerStats.monthlyCoinEarnings?.map((me: any) => ({
+      monthlyEarnings: writerStats.monthlyCoinEarnings?.map((me) => ({
         date: me.date.toISOString(),
         coinValue: me.value || 0,
-        donationValue: 0, // เพิ่มการคำนวณจาก Donation ในอนาคต
+        donationValue: 0, // รอการคำนวณจาก Donation ในอนาคต
       })) || [],
       socialStats: {
         followersCount: user.socialStats?.followersCount || writerStats.totalFollowers_Lifetime || 0,
@@ -140,7 +150,7 @@ export async function GET(req: NextRequest, { params }: { params: { username: st
 
     return NextResponse.json(response, { status: 200 });
   } catch (error) {
-    console.error("ข้อผิดพลาดใน API /writer-analytics:", error);
+    console.error("❌ [API] ข้อผิดพลาดใน /api/[username]/writer-analytics:", error);
     return NextResponse.json(
       { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
