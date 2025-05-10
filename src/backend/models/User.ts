@@ -1,6 +1,7 @@
 // src/backend/models/User.ts
 // User Model - ศูนย์กลางข้อมูลผู้ใช้, การยืนยันตัวตน, สถิติ, และการตั้งค่า
 // โมเดลผู้ใช้ - ศูนย์กลางข้อมูลผู้ใช้, การยืนยันตัวตน, สถิติ, และการตั้งค่า
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -24,6 +25,7 @@ export interface IAccount {
 // Interface สำหรับ User document
 // อินเทอร์เฟซสำหรับเอกสารผู้ใช้
 export interface IUser extends Document {
+  _id: Types.ObjectId;
   email?: string; // อีเมล (บังคับถ้า provider เป็น "credentials" หรือถ้า OAuth provider ให้มาและไม่ซ้ำ)
   username: string; // ชื่อผู้ใช้ (บังคับและไม่ซ้ำกัน)
   password?: string; // รหัสผ่าน (hashed) - select: false (เฉพาะ provider "credentials")
@@ -37,8 +39,6 @@ export interface IUser extends Document {
     gender?: "male" | "female" | "other" | "preferNotToSay"; // เพศ
     preferredGenres?: Types.ObjectId[]; // หมวดหมู่นิยายที่ชื่นชอบ (อ้างอิง Category)
   };
-  // สถิติการใช้งานและการมีส่วนร่วมของผู้ใช้
-  // สถิติการใช้งานและการมีส่วนร่วมของผู้ใช้
   trackingStats: {
     totalLoginDays: number; // จำนวนวันที่เข้าสู่ระบบทั้งหมด (นับจาก ActivityHistory หรือคำนวณ)
     totalNovelsRead: number; // จำนวนนิยายที่อ่านจบหรือเริ่มอ่าน (นับจาก ActivityHistory)
@@ -48,10 +48,7 @@ export interface IUser extends Document {
     lastNovelReadId?: Types.ObjectId; // ID ของนิยายที่อ่านล่าสุด (อ้างอิง Novel)
     lastNovelReadAt?: Date; // วันที่อ่านนิยายล่าสุด
     joinDate: Date; // วันที่สมัครใช้งาน (คือ createdAt)
-    // commentHistory จะ query จาก ActivityHistory โดยตรง
   };
-  // สถิติเกี่ยวกับผู้ติดตามและการสร้างสรรค์ (ถ้ามี)
-  // สถิติเกี่ยวกับผู้ติดตามและการสร้างสรรค์ (ถ้ามี)
   socialStats: {
     followersCount: number; // จำนวนผู้ติดตาม
     followingCount: number; // จำนวนที่กำลังติดตาม
@@ -60,8 +57,6 @@ export interface IUser extends Document {
     ratingsGivenCount: number; // จำนวนเรตติ้งที่ให้
     likesGivenCount: number; // จำนวนไลค์ที่ให้
   };
-  // การตั้งค่าการแจ้งเตือนและความเป็นส่วนตัว
-  // การตั้งค่าการแจ้งเตือนและความเป็นส่วนตัว
   preferences: {
     language: string; // ภาษาที่ต้องการใช้งาน (เช่น "th", "en")
     theme: "light" | "dark" | "system" | "sepia"; // ธีมที่ต้องการใช้งาน
@@ -80,45 +75,35 @@ export interface IUser extends Document {
       readingHistoryVisibility: "public" | "followersOnly" | "private"; // การมองเห็นประวัติการอ่าน
     };
   };
-  // ข้อมูลเกี่ยวกับกระเป๋าเงินและเหรียญ
-  // ข้อมูลเกี่ยวกับกระเป๋าเงินและเหรียญ
   wallet: {
     coinBalance: number; // ยอดเหรียญคงเหลือ
-    // currency field removed as system uses COIN only
     lastCoinTransactionAt?: Date; // วันที่ทำธุรกรรมเหรียญล่าสุด
-    // paymentMethodIds: Types.ObjectId[]; // อ้างอิง PaymentMethod model (ถ้ามี)
   };
-  // ข้อมูลเกี่ยวกับ Gamification
-  // ข้อมูลเกี่ยวกับ Gamification
   gamification: {
     level: number; // ระดับของผู้ใช้
     experience: number; // คะแนนประสบการณ์
     achievements: Types.ObjectId[]; // ID ของ UserAchievement ที่ปลดล็อค
-    badges: Types.ObjectId[]; // ID ของ Badge ที่ได้รับ (อาจซ้ำซ้อนกับ achievements ถ้า badge คือ achievement)
+    badges: Types.ObjectId[]; // ID ของ Badge ที่ได้รับ
     streaks: {
       currentLoginStreak: number; // จำนวนวันที่เข้าสู่ระบบติดต่อกัน
       longestLoginStreak: number; // จำนวนวันที่เข้าสู่ระบบติดต่อกันนานที่สุด
       lastLoginDate?: Date; // วันที่เข้าสู่ระบบล่าสุด
     };
   };
-  // การยืนยันตัวตนสำหรับนักเขียน
-  // การยืนยันตัวตนสำหรับนักเขียน
   writerVerification?: {
     status: "none" | "pending" | "verified" | "rejected"; // สถานะการยืนยันตัวตน
     submittedAt?: Date; // วันที่ส่งเอกสารยืนยัน
     verifiedAt?: Date; // วันที่ได้รับการยืนยัน
     rejectedReason?: string; // เหตุผลที่ถูกปฏิเสธ
-    documents?: { // เอกสารยืนยันตัวตน
+    documents?: {
       type: string; // ประเภทเอกสาร
       url: string; // URL ของเอกสาร
       uploadedAt: Date; // วันที่อัพโหลด
     }[];
   };
-  // การตั้งค่าการรับบริจาค (สำหรับนักเขียน)
-  // การตั้งค่าการรับบริจาค (สำหรับนักเขียน)
   donationSettings?: {
     isDonationEnabled: boolean; // สถานะการเปิดรับบริจาค
-    donationApplicationId?: Types.ObjectId; // ID ของใบสมัครขอเปิดรับบริจาค (อ้างอิง DonationApplication)
+    donationApplicationId?: Types.ObjectId; // ID ของใบสมัครขอเปิดรับบริจาค
     customMessage?: string; // ข้อความส่วนตัวสำหรับการบริจาค
   };
   isEmailVerified: boolean; // สถานะการยืนยันอีเมล
@@ -206,10 +191,10 @@ const UserSchema = new Schema<IUser>(
       totalNovelsRead: { type: Number, default: 0, min: 0 },
       totalEpisodesRead: { type: Number, default: 0, min: 0 },
       totalCoinSpent: { type: Number, default: 0, min: 0 },
-      totalRealMoneySpent: { type: Number, default: 0, min: 0 }, // อาจต้องมีระบบแปลงหน่วยหรือการบันทึกที่ซับซ้อนขึ้น
+      totalRealMoneySpent: { type: Number, default: 0, min: 0 },
       lastNovelReadId: { type: Schema.Types.ObjectId, ref: "Novel" },
       lastNovelReadAt: Date,
-      joinDate: { type: Date, default: Date.now, immutable: true }, // ตั้งค่าเมื่อสร้างและไม่เปลี่ยน
+      joinDate: { type: Date, default: Date.now, immutable: true },
     },
     socialStats: {
       followersCount: { type: Number, default: 0, min: 0 },
@@ -312,7 +297,9 @@ UserSchema.pre("save", async function (next) {
       const salt = await bcrypt.genSalt(12);
       this.password = await bcrypt.hash(this.password, salt);
       if (!credentialsAccount && this.email) {
-        const existingCredentials = this.accounts.find((acc) => acc.provider === "credentials" && acc.providerAccountId === this.email);
+        const existingCredentials = this.accounts.find(
+          (acc) => acc.provider === "credentials" && acc.providerAccountId === this.email
+        );
         if (!existingCredentials) {
           this.accounts.push({
             provider: "credentials",
@@ -341,30 +328,36 @@ UserSchema.pre("save", function (next) {
       const lastLoginMidnight = lastLogin ? new Date(lastLogin).setHours(0, 0, 0, 0) : null;
 
       if (lastLoginMidnight && lastLoginMidnight !== todayMidnight) {
-        // Increment total login days only if it's a new day
         this.trackingStats.totalLoginDays = (this.trackingStats.totalLoginDays || 0) + 1;
 
         const yesterdayMidnight = new Date(now);
         yesterdayMidnight.setDate(yesterdayMidnight.getDate() - 1);
-        const yesterdayMidnightTimestamp = yesterdayMidnight.setHours(0,0,0,0);
+        const yesterdayMidnightTimestamp = yesterdayMidnight.setHours(0, 0, 0, 0);
 
         if (lastLoginMidnight === yesterdayMidnightTimestamp) {
-          this.gamification.streaks.currentLoginStreak = (this.gamification.streaks.currentLoginStreak || 0) + 1;
+          this.gamification.streaks.currentLoginStreak =
+            (this.gamification.streaks.currentLoginStreak || 0) + 1;
         } else {
-          this.gamification.streaks.currentLoginStreak = 1; // Reset if not consecutive day
+          this.gamification.streaks.currentLoginStreak = 1;
         }
-      } else if (!lastLoginMidnight) { // First login ever for this tracking
+      } else if (!lastLoginMidnight) {
         this.trackingStats.totalLoginDays = 1;
         this.gamification.streaks.currentLoginStreak = 1;
       }
-      // Update longest streak
-      if (this.gamification.streaks.currentLoginStreak > (this.gamification.streaks.longestLoginStreak || 0)) {
+      if (
+        this.gamification.streaks.currentLoginStreak >
+        (this.gamification.streaks.longestLoginStreak || 0)
+      ) {
         this.gamification.streaks.longestLoginStreak = this.gamification.streaks.currentLoginStreak;
       }
       this.gamification.streaks.lastLoginDate = now;
-    } else if (this.gamification) { // Should not happen if gamification object is initialized
-        this.trackingStats.totalLoginDays = 1;
-        this.gamification.streaks = { currentLoginStreak: 1, longestLoginStreak: 1, lastLoginDate: now };
+    } else if (this.gamification) {
+      this.trackingStats.totalLoginDays = 1;
+      this.gamification.streaks = {
+        currentLoginStreak: 1,
+        longestLoginStreak: 1,
+        lastLoginDate: now,
+      };
     }
   }
   next();
@@ -391,18 +384,55 @@ UserSchema.methods.getEmailVerificationToken = function (): string {
 };
 
 // ----- Virtuals (Populated Fields) -----
-UserSchema.virtual("writtenNovels", { ref: "Novel", localField: "_id", foreignField: "author" });
-UserSchema.virtual("userFollowers", { ref: "UserFollow", localField: "_id", foreignField: "followingUser" });
-UserSchema.virtual("userFollowing", { ref: "UserFollow", localField: "_id", foreignField: "followerUser" });
-UserSchema.virtual("novelFollows", { ref: "NovelFollow", localField: "_id", foreignField: "user" });
-UserSchema.virtual("purchases", { ref: "Purchase", localField: "_id", foreignField: "user" });
-UserSchema.virtual("donationsMade", { ref: "Donation", localField: "_id", foreignField: "donorUser" });
-UserSchema.virtual("donationsReceived", { ref: "Donation", localField: "_id", foreignField: "recipientUser" });
-UserSchema.virtual("userAchievements", { ref: "UserAchievement", localField: "_id", foreignField: "user" });
-UserSchema.virtual("donationApplication", { ref: "DonationApplication", localField: "_id", foreignField: "userId", justOne: true });
+UserSchema.virtual("writtenNovels", {
+  ref: "Novel",
+  localField: "_id",
+  foreignField: "author",
+});
+UserSchema.virtual("userFollowers", {
+  ref: "UserFollow",
+  localField: "_id",
+  foreignField: "followingUser",
+});
+UserSchema.virtual("userFollowing", {
+  ref: "UserFollow",
+  localField: "_id",
+  foreignField: "followerUser",
+});
+UserSchema.virtual("novelFollows", {
+  ref: "NovelFollow",
+  localField: "_id",
+  foreignField: "user",
+});
+UserSchema.virtual("purchases", {
+  ref: "Purchase",
+  localField: "_id",
+  foreignField: "user",
+});
+UserSchema.virtual("donationsMade", {
+  ref: "Donation",
+  localField: "_id",
+  foreignField: "donorUser",
+});
+UserSchema.virtual("donationsReceived", {
+  ref: "Donation",
+  localField: "_id",
+  foreignField: "recipientUser",
+});
+UserSchema.virtual("userAchievements", {
+  ref: "UserAchievement",
+  localField: "_id",
+  foreignField: "user",
+});
+UserSchema.virtual("donationApplication", {
+  ref: "DonationApplication",
+  localField: "_id",
+  foreignField: "userId",
+  justOne: true,
+});
 
 // ----- Model Export -----
-const UserModel = () => models.User as mongoose.Model<IUser> || model<IUser>("User", UserSchema);
+const UserModel = () =>
+  models.User as mongoose.Model<IUser> || model<IUser>("User", UserSchema);
 
 export default UserModel;
-
