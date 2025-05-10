@@ -22,7 +22,7 @@ interface UserSettingsData {
   profileVisibility?: 'public' | 'followersOnly' | 'private';
   showActivityStatus?: boolean;
   readingHistoryVisibility?: 'public' | 'followersOnly' | 'private';
-  theme?: 'light' | 'dark' | 'system';
+  theme?: 'light' | 'dark' | 'system' | 'sepia';
   language?: string;
 }
 
