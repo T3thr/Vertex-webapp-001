@@ -74,7 +74,7 @@ const validateSettings = (settings: UserSettingsData) => {
   ) {
     errors.push('การมองเห็นประวัติการอ่านไม่ถูกต้อง');
   }
-  if (settings.theme && !['light', 'dark', 'system'].includes(settings.theme)) {
+  if (settings.theme && !['light', 'dark', 'system', 'sepia'].includes(settings.theme)) {
     errors.push('ธีมไม่ถูกต้อง');
   }
   if (settings.language && !['th', 'en'].includes(settings.language)) {
