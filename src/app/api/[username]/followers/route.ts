@@ -6,7 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
 import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
-import UserFollowModel from "@/backend/models/UserFollow";
+import UserFollowModel, { IUserFollow } from "@/backend/models/UserFollow";
+import mongoose from "mongoose";
 
 // อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่ส่งกลับ
 interface FollowUser {
@@ -15,6 +16,18 @@ interface FollowUser {
   profile?: {
     displayName?: string;
     avatar?: string;
+  };
+}
+
+// อินเทอร์เฟซสำหรับข้อมูลผู้ติดตามที่ populate แล้ว
+interface PopulatedUserFollow extends mongoose.FlattenMaps<IUserFollow> {
+  follower?: {
+    _id: mongoose.Types.ObjectId;
+    username: string;
+    profile?: {
+      displayName?: string;
+      avatar?: string;
+    };
   };
 }
 
@@ -82,7 +95,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         path: "follower",
         select: "username profile.displayName profile.avatar",
       })
-      .lean();
+      .lean<PopulatedUserFollow[]>();
 
     // นับจำนวนผู้ติดตามทั้งหมด
     const totalFollowers = await UserFollowModel().countDocuments({
