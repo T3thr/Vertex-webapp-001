@@ -13,6 +13,20 @@ import EpisodeModel, { IEpisode } from "@/backend/models/Episode";
 import dbConnect from "@/backend/lib/mongodb";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
+// อินเทอร์เฟซสำหรับผู้ใช้ที่มี _id ชัดเจน
+interface UserWithId {
+  _id: Types.ObjectId;
+  preferences: {
+    privacy: {
+      profileVisibility: "public" | "followersOnly" | "private";
+    };
+  };
+  username: string;
+  profile: {
+    displayName?: string;
+  };
+}
+
 // อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
 interface ActivityItem {
   _id: string;
@@ -58,7 +72,23 @@ const ALLOWED_ACTIVITY_TYPES = [
   "COIN_SPENT_EPISODE",
   "COIN_SPENT_DONATION_WRITER",
   "COIN_EARNED_WRITER_DONATION",
-];
+] as const;
+
+// ฟังก์ชันแปลงผู้ใช้ให้เป็น UserWithId
+const toUserWithId = (
+  user: (IUser | ISocialMediaUser) & { _id: Types.ObjectId }
+): UserWithId => ({
+  _id: user._id,
+  preferences: {
+    privacy: {
+      profileVisibility: user.preferences?.privacy?.profileVisibility ?? "public",
+    },
+  },
+  username: user.username,
+  profile: {
+    displayName: user.profile?.displayName,
+  },
+});
 
 /**
  * GET: ดึงประวัติกิจกรรมของผู้ใช้ตาม username
@@ -72,7 +102,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ดึง username จาก URL
     const { pathname } = req.nextUrl;
-    const username = pathname.split("/")[3]; // /api/[username]/activity-history -> [username]
+    const username = pathname.split("/")[3];
     if (!username) {
       return NextResponse.json({ error: "ต้องระบุชื่อผู้ใช้" }, { status: 400 });
     }
@@ -84,34 +114,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : null;
 
     // ค้นหาผู้ใช้
-    let viewedUser: IUser | ISocialMediaUser | null = await UserModel()
-      .findOne({ username, isDeleted: false })
-      .exec();
-    if (!viewedUser) {
-      viewedUser = await SocialMediaUserModel()
+    let viewedUserDoc: (IUser & { _id: Types.ObjectId }) | (ISocialMediaUser & { _id: Types.ObjectId }) | null =
+      await UserModel()
+        .findOne({ username, isDeleted: false })
+        .exec();
+    if (!viewedUserDoc) {
+      viewedUserDoc = await SocialMediaUserModel()
         .findOne({ username, isDeleted: false })
         .exec();
     }
-    if (!viewedUser) {
+    if (!viewedUserDoc) {
       return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
 
+    const viewedUser = toUserWithId(viewedUserDoc);
+
     // ตรวจสอบสิทธิ์การเข้าถึง
     const isOwnProfile = currentUserId ? currentUserId.equals(viewedUser._id) : false;
-    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility ?? "public";
+    const profileVisibility = viewedUser.preferences.privacy.profileVisibility;
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
         return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
       }
       if (profileVisibility === "followersOnly" && currentUserId) {
-        const isFollower = await mongoose
-          .model("UserFollow")
-          .findOne({
-            followerId: currentUserId,
-            followingId: viewedUser._id,
-            status: "active",
-          })
-          .exec();
+        const isFollower = await mongoose.model("UserFollow").findOne({
+          followerId: currentUserId,
+          followingId: viewedUser._id,
+          status: "active",
+        });
         if (!isFollower) {
           return NextResponse.json(
             { error: "ต้องติดตามผู้ใช้เพื่อดูประวัติกิจกรรม" },
@@ -123,17 +153,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ดึง query parameters
     const { searchParams } = req.nextUrl;
-    const page = parseInt(searchParams.get("page") ?? "1", 10);
-    const limit = parseInt(searchParams.get("limit") ?? "10", 10);
-    if (page < 1 || limit < 1) {
-      return NextResponse.json({ error: "page และ limit ต้องมากกว่า 0" }, { status: 400 });
-    }
+    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+    const limit = Math.max(1, parseInt(searchParams.get("limit") ?? "10", 10));
 
     // กำหนดประเภทกิจกรรมที่แสดง
     const activityFilter = isOwnProfile
       ? ALLOWED_ACTIVITY_TYPES
       : ALLOWED_ACTIVITY_TYPES.filter(
-          (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
+          (type) =>
+            !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
         );
 
     // คำนวณการข้ามข้อมูลสำหรับการแบ่งหน้า
@@ -150,9 +178,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .limit(limit)
       .populate<{
         details: {
-          novelId?: INovel;
-          episodeId?: IEpisode;
-          targetUserId?: IUser | ISocialMediaUser;
+          novelId?: INovel & { _id: Types.ObjectId };
+          episodeId?: IEpisode & { _id: Types.ObjectId };
+          targetUserId?: (IUser | ISocialMediaUser) & { _id: Types.ObjectId };
+          commentId?: Types.ObjectId;
+          ratingId?: Types.ObjectId;
+          purchaseId?: Types.ObjectId;
+          donationId?: Types.ObjectId;
+          amountCoin?: number;
         };
       }>([
         {
@@ -167,13 +200,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         },
         {
           path: "details.targetUserId",
-          model: UserModel(),
-          select: "username profile.displayName",
-          match: { isDeleted: false },
-        },
-        {
-          path: "details.targetUserId",
-          model: SocialMediaUserModel(),
           select: "username profile.displayName",
           match: { isDeleted: false },
         },
@@ -181,12 +207,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .exec();
 
     // นับจำนวนกิจกรรมทั้งหมด
-    const totalActivities = await ActivityHistoryModel()
-      .countDocuments({
-        user: viewedUser._id,
-        activityType: { $in: activityFilter },
-      })
-      .exec();
+    const totalActivities = await ActivityHistoryModel().countDocuments({
+      user: viewedUser._id,
+      activityType: { $in: activityFilter },
+    });
     const totalPages = Math.ceil(totalActivities / limit);
 
     // แปลงข้อมูลกิจกรรม
@@ -206,7 +230,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         commentId: details.commentId?.toString(),
         ratingId: details.ratingId?.toString(),
         followedUserId: targetUser?._id.toString(),
-        likedNovelId: activity.activityType === "NOVEL_LIKED" ? novel?._id.toString() : undefined,
+        likedNovelId:
+          activity.activityType === "NOVEL_LIKED" ? novel?._id.toString() : undefined,
         purchaseId: details.purchaseId?.toString(),
         donationId: details.donationId?.toString(),
         relatedUser: targetUser?._id.toString(),
