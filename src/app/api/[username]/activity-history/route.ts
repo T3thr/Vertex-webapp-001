@@ -114,8 +114,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : null;
 
     // ค้นหาผู้ใช้
-    let viewedUserDoc: (IUser & { _id: Types.ObjectId }) | (ISocialMediaUser & { _id: Types.ObjectId }) | null =
-      await UserModel()
+    let viewedUserDoc:
+      | (IUser & { _id: Types.ObjectId })
+      | (ISocialMediaUser & { _id: Types.ObjectId })
+      | null = await UserModel()
         .findOne({ username, isDeleted: false })
         .exec();
     if (!viewedUserDoc) {
@@ -200,6 +202,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         },
         {
           path: "details.targetUserId",
+          model: UserModel(), // ใช้ User เป็นโมเดลหลักก่อน
+          select: "username profile.displayName",
+          match: { isDeleted: false },
+        },
+        {
+          path: "details.targetUserId",
+          model: SocialMediaUserModel(), // ใช้ SocialMediaUser เป็นโมเดลสำรอง
           select: "username profile.displayName",
           match: { isDeleted: false },
         },
