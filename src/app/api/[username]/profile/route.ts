@@ -5,11 +5,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
+import UserModel, { IUser } from "@/backend/models/User";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
 import UserFollowModel from "@/backend/models/UserFollow";
 import NovelModel from "@/backend/models/Novel";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import mongoose from "mongoose";
 
 // อินเทอร์เฟซสำหรับข้อมูลโปรไฟล์ที่ส่งกลับ
 interface UserProfile {
@@ -31,6 +32,27 @@ interface UserProfile {
   createdAt: string;
   isSocialMediaUser: boolean;
 }
+
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่รวมกัน
+type CombinedUser = (IUser | ISocialMediaUser) & {
+  _id: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt?: Date;
+  preferences?: {
+    privacy?: {
+      profileVisibility?: "public" | "private" | "followersOnly";
+    };
+  };
+  profile?: {
+    displayName?: string;
+    bio?: string;
+    avatar?: string;
+    coverImage?: string;
+  };
+  image?: string;
+  role: "Reader" | "Writer" | "Admin";
+  email?: string;
+};
 
 /**
  * GET: ดึงข้อมูลโปรไฟล์ผู้ใช้ตาม username
@@ -54,13 +76,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const currentUserId = session?.user?.id;
 
     // ค้นหาผู้ใช้
-    let user = await UserModel().findOne({ username, isActive: true, isBanned: false }).lean();
+    let user: CombinedUser | null = await UserModel()
+      .findOne({ username, isActive: true, isBanned: false })
+      .exec()
+      .then(doc => doc?.toObject() as CombinedUser | null);
+
     let isSocialMediaUser = false;
 
     if (!user) {
       user = await SocialMediaUserModel()
         .findOne({ username, isActive: true, isBanned: false, isDeleted: false })
-        .lean();
+        .exec()
+        .then(doc => doc?.toObject() as CombinedUser | null);
       isSocialMediaUser = true;
     }
 
