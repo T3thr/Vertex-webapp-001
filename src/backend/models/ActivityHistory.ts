@@ -126,7 +126,7 @@ const DetailsSchema = new Schema<ActivityDetails>(
     characterId: { type: Schema.Types.ObjectId, ref: "Character" },
     commentId: { type: Schema.Types.ObjectId, ref: "Comment" },
     ratingId: { type: Schema.Types.ObjectId, ref: "Rating" },
-    targetUserId: { type: Schema.Types.ObjectId, ref: ["User", "SocialMediaUser"] },
+    targetUserId: { type: Schema.Types.ObjectId, ref: "User" }, // เปลี่ยนเป็น ref เดียว แต่จะจัดการใน API
     amountCoin: Number,
     amountRealMoney: Number,
     currencyRealMoney: String,
@@ -148,7 +148,7 @@ const ActivityHistorySchema = new Schema<IActivityHistory>(
     _id: { type: Schema.Types.ObjectId, auto: true },
     user: {
       type: Schema.Types.ObjectId,
-      ref: ["User", "SocialMediaUser"],
+      ref: "User", // เปลี่ยนเป็น ref เดียว แต่จัดการ polymorphism ใน API
       required: [true, "ต้องระบุผู้ใช้สำหรับกิจกรรม"],
       index: true,
     },
