@@ -4,91 +4,80 @@ import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
 // Interface สำหรับ Novel document
 export interface INovel extends Document {
-  title: string; // ชื่อนิยาย (ต้องไม่ซ้ำกันภายในผู้เขียนคนเดียวกัน หรือ ทั่วทั้งระบบ? พิจารณา unique index)
-  slug: string; // URL slug (ต้อง unique ทั่วทั้งระบบ)
-  description: string; // คำอธิบายนิยาย (รองรับ markdown หรือ rich text ได้)
-  coverImage: string; // URL รูปปกนิยาย
-  author: Types.ObjectId; // ผู้เขียน (อ้างอิงไปยัง User model ที่รวมศูนย์แล้ว)
-  categories: Types.ObjectId[]; // หมวดหมู่หลัก (อ้างอิงไปยัง Category model)
-  subCategories?: Types.ObjectId[]; // หมวดหมู่ย่อย (อ้างอิงไปยัง Category model, optional)
-  tags: string[]; // แท็กคำค้น (ผู้เขียนกำหนดเอง, ช่วยในการค้นหาและ AI recommendations)
-  status: "draft" | "published" | "completed" | "onHiatus" | "archived" | "discount"; // สถานะนิยาย (เพิ่ม archived)
-  visibility: "public" | "unlisted" | "private" | "followersOnly"; // การมองเห็น (เพิ่ม followersOnly)
-  language: string; // ภาษาของนิยาย (เช่น "th", "en", ISO 639-1 codes)
-  isExplicitContent: boolean; // เนื้อหาสำหรับผู้ใหญ่ (18+)
-  ageRating?: "everyone" | "teen" | "mature17+" | "adult18+"; // การจัดเรทอายุ (ละเอียดขึ้น)
-  isOriginalWork: boolean; // เป็นงานต้นฉบับของผู้เขียนหรือไม่ (true) หรือเป็นงานแปล/ดัดแปลง (false)
-  originalLanguage?: string; // ภาษาต้นฉบับ (กรณีเป็นงานแปล)
-  translationSource?: string; // แหล่งที่มาของงานแปล (ถ้ามี)
-  isPremium: boolean; // เป็นนิยายพรีเมียมหรือไม่ (อาจมีผลต่อการเข้าถึงหรือการสร้างรายได้)
-  averageRating: number; // คะแนนเฉลี่ย (คำนวณจาก Rating model, 0-5)
-  ratingsCount: number; // จำนวนผู้ให้คะแนน
-  viewsCount: number; // จำนวนการเข้าชมทั้งหมด (อาจแยกเป็น unique views / total views)
-  likesCount: number; // จำนวนไลค์ (จาก NovelLike model)
-  followersCount: number; // จำนวนผู้ติดตามนิยาย (จาก NovelFollow model)
-  commentsCount: number; // จำนวนความคิดเห็น (จาก Comment model)
-  episodesCount: number; // จำนวนตอนทั้งหมด (คำนวณจาก Episode model)
-  publishedEpisodesCount: number; // จำนวนตอนที่เผยแพร่แล้ว
-  wordsCount?: number; // จำนวนคำโดยประมาณทั้งหมดในนิยาย (อัปเดตเมื่อมีการเพิ่ม/แก้ไขตอน)
-  // สถิติสำหรับการวิเคราะห์และการแสดงผล
+  title: string;
+  slug: string;
+  description: string;
+  coverImage: string;
+  author: Types.ObjectId;
+  categories: Types.ObjectId[];
+  subCategories?: Types.ObjectId[];
+  tags: string[];
+  status: "draft" | "published" | "completed" | "onHiatus" | "archived" | "discount";
+  visibility: "public" | "unlisted" | "private" | "followersOnly";
+  language: string;
+  isExplicitContent: boolean;
+  ageRating?: "everyone" | "teen" | "mature17+" | "adult18+";
+  isOriginalWork: boolean;
+  originalLanguage?: string;
+  translationSource?: string;
+  isPremium: boolean;
+  averageRating: number;
+  ratingsCount: number;
+  viewsCount: number;
+  totalReads: number; // จำนวนครั้งที่นิยายถูกอ่าน (เพิ่มฟิลด์นี้)
+  likesCount: number;
+  followersCount: number;
+  commentsCount: number;
+  episodesCount: number;
+  publishedEpisodesCount: number;
+  wordsCount?: number;
   stats: {
-    totalPurchasesAmount?: number; // ยอดขายรวมจากนิยายนี้ (ถ้ามีตอนที่ขาย)
-    totalDonationsAmount?: number; // ยอดบริจาคทั้งหมดที่นิยายนี้ได้รับ
-    completionRate?: number; // อัตราการอ่านจบโดยเฉลี่ย (%)
-    // สามารถเพิ่มสถิติอื่นๆ ที่เกี่ยวข้องกับ AI/ML เช่น engagement score
-    lastViewedAt?: Date; // วันที่ถูกเข้าชมล่าสุด (สำหรับ sorting "recently viewed")
+    totalPurchasesAmount?: number;
+    totalDonationsAmount?: number;
+    completionRate?: number;
+    lastViewedAt?: Date;
   };
-  // การตั้งค่าที่เกี่ยวข้องกับนิยาย
   settings: {
-    allowComments: boolean; // อนุญาตให้แสดงความคิดเห็นหรือไม่
-    showContentWarnings?: boolean; // แสดงคำเตือนเนื้อหาหรือไม่
-    contentWarnings?: string[]; // รายการคำเตือนเนื้อหา (เช่น violence, gore)
-    enableMonetization: boolean; // เปิดใช้งานการสร้างรายได้จากนิยายนี้ (เช่น ขายตอน, รับบริจาค)
-    enableDonations: boolean; // เปิดใช้งานการรับบริจาคสำหรับนิยายนี้โดยตรง
-    enableCharacterDonations: boolean; // อนุญาตให้บริจาคให้ตัวละครในนิยายนี้
+    allowComments: boolean;
+    showContentWarnings?: boolean;
+    contentWarnings?: string[];
+    enableMonetization: boolean;
+    enableDonations: boolean;
+    enableCharacterDonations: boolean;
   };
-  // ตารางการเผยแพร่ตอน (ถ้ามี)
   releaseSchedule?: {
-    frequency: "asReady" | "daily" | "weekly" | "biweekly" | "monthly"; // ความถี่ (เพิ่ม asReady)
-    dayOfWeek?: 0 | 1 | 2 | 3 | 4 | 5 | 6; // วันในสัปดาห์ (0 = Sunday, ... , 6 = Saturday)
-    timeOfDay?: string; // เวลาในวัน (HH:MM ในโซนของผู้เขียน หรือ UTC)
-    nextExpectedReleaseAt?: Date; // วันที่คาดว่าจะเผยแพร่ตอนถัดไป
+    frequency: "asReady" | "daily" | "weekly" | "biweekly" | "monthly";
+    dayOfWeek?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+    timeOfDay?: string;
+    nextExpectedReleaseAt?: Date;
   };
-  // องค์ประกอบเกมในนิยาย (สรุปจาก StoryMaps หรือตั้งค่าระดับ Novel)
   gameElementsSummary?: {
     hasChoices: boolean;
     hasMultipleEndings: boolean;
     hasStatSystem: boolean;
     hasRelationshipSystem: boolean;
     hasInventorySystem: boolean;
-    // อาจเพิ่ม game mechanics อื่นๆ ที่สำคัญ
   };
-  // คลังมีเดียที่ใช้ในนิยายนี้ (อาจเป็น subset ของ OfficialMedia หรือ Media ที่ผู้เขียนอัปโหลด)
-  // การเก็บ ObjectId ตรงนี้อาจจะซ้ำซ้อนกับสิ่งที่อยู่ใน Episode/Scene
-  // พิจารณาการ query ผ่าน Episode/Scene หรือเก็บเฉพาะ Official Media ที่เด่นๆ
-  featuredOfficialMedia?: Types.ObjectId[]; // สื่อทางการที่เด่นๆ ที่ใช้ (อ้างอิง OfficialMedia)
-  // การตั้งค่า SEO
+  featuredOfficialMedia?: Types.ObjectId[];
   seo?: {
     metaTitle?: string;
     metaDescription?: string;
-    keywords?: string[]; // คำสำคัญสำหรับ SEO
-    socialImage?: string; // รูปภาพสำหรับแชร์บนโซเชียล
-    // structuredData อาจจะ generate ตอน render page
+    keywords?: string[];
+    socialImage?: string;
   };
-  // สำหรับ AI/ML
-  embeddingVector?: number[]; // Vector embedding ของเนื้อหานิยาย (สำหรับ similarity search, recommendations)
-  genreDistribution?: Record<string, number>; // การกระจายของหมวดหมู่ (เช่น { action: 0.7, romance: 0.3 })
+  embeddingVector?: number[];
+  genreDistribution?: Record<string, number>;
   sentimentAnalysis?: {
-    overallScore: number; // คะแนนความรู้สึกโดยรวม (-1 ถึง 1)
-    dominantEmotion?: string; // อารมณ์เด่น
+    overallScore: number;
+    dominantEmotion?: string;
   };
-  isDeleted: boolean; // สถานะการลบ (soft delete)
+  isDeleted: boolean;
   deletedAt?: Date;
-  lastEpisodePublishedAt?: Date; // วันที่เผยแพร่ตอนล่าสุด (สำคัญสำหรับ sorting "recently updated")
-  firstPublishedAt?: Date; // วันที่เผยแพร่ครั้งแรก (ถ้า status เป็น published)
+  lastEpisodePublishedAt?: Date;
+  firstPublishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
-  lastSignificantUpdateAt?: Date; // วันที่มีการอัปเดตเนื้อหาสำคัญ (เช่น เพิ่มตอน, แก้ไขเนื้อเรื่องหลัก)
+  lastSignificantUpdateAt?: Date;
 }
 
 const NovelSchema = new Schema<INovel>(
@@ -168,6 +157,7 @@ const NovelSchema = new Schema<INovel>(
     averageRating: { type: Number, default: 0, min: 0, max: 5, index: true },
     ratingsCount: { type: Number, default: 0, min: 0 },
     viewsCount: { type: Number, default: 0, min: 0, index: true },
+    totalReads: { type: Number, default: 0, min: 0, index: true }, // เพิ่มฟิลด์ totalReads
     likesCount: { type: Number, default: 0, min: 0, index: true },
     followersCount: { type: Number, default: 0, min: 0, index: true },
     commentsCount: { type: Number, default: 0, min: 0 },
@@ -239,6 +229,7 @@ NovelSchema.index({ categories: 1, status: 1, isDeleted: 1 });
 NovelSchema.index({ isPremium: 1, status: 1, isDeleted: 1 });
 NovelSchema.index({ averageRating: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 NovelSchema.index({ viewsCount: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
+NovelSchema.index({ totalReads: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } }); // เพิ่ม index สำหรับ totalReads
 NovelSchema.index({ lastSignificantUpdateAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 NovelSchema.index({ firstPublishedAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 
