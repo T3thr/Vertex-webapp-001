@@ -60,10 +60,7 @@ UserFollowSchema.index({ followingId: 1, createdAt: -1 });
 // ----- Virtuals สำหรับการ populate ข้อมูลผู้ใช้ -----
 // Virtual สำหรับผู้ติดตาม
 UserFollowSchema.virtual("follower", {
-  ref: [
-    { model: "User", match: { isActive: true, isBanned: false } },
-    { model: "SocialMediaUser", match: { isActive: true, isBanned: false } },
-  ],
+  ref: "User", // Use 'User' as the primary reference
   localField: "followerId",
   foreignField: "_id",
   justOne: true,
@@ -71,14 +68,66 @@ UserFollowSchema.virtual("follower", {
 
 // Virtual สำหรับผู้ที่ถูกติดตาม
 UserFollowSchema.virtual("following", {
-  ref: [
-    { model: "User", match: { isActive: true, isBanned: false } },
-    { model: "SocialMediaUser", match: { isActive: true, isBanned: false } },
-  ],
+  ref: "User", // Use 'User' as the primary reference
   localField: "followingId",
   foreignField: "_id",
   justOne: true,
 });
+
+// ----- Static Method สำหรับการ populate ผู้ใช้ที่อาจเป็น User หรือ SocialMediaUser -----
+UserFollowSchema.statics.populateUsers = async function (
+  docs: IUserFollow | IUserFollow[],
+  fields: string[] = ["follower", "following"]
+) {
+  const isArray = Array.isArray(docs);
+  const documents = isArray ? docs : [docs];
+
+  const userIds = new Set<string>();
+  const socialMediaUserIds = new Set<string>();
+
+  // Collect all followerId and followingId
+  documents.forEach((doc) => {
+    if (doc.followerId) userIds.add(doc.followerId.toString());
+    if (doc.followingId) userIds.add(doc.followingId.toString());
+  });
+
+  // Query both User and SocialMediaUser models
+  const UserModel = model("User") as mongoose.Model<any>;
+  const SocialMediaUserModel = model("SocialMediaUser") as mongoose.Model<any>;
+
+  const users = await UserModel.find({
+    _id: { $in: Array.from(userIds) },
+    isActive: true,
+    isBanned: false,
+  }).lean();
+
+  const socialMediaUsers = await SocialMediaUserModel.find({
+    _id: { $in: Array.from(userIds) },
+    isActive: true,
+    isBanned: false,
+  }).lean();
+
+  // Create a map of users by _id
+  const userMap = new Map<string, any>();
+  users.forEach((user) => userMap.set(user._id.toString(), user));
+  socialMediaUsers.forEach((user) =>
+    userMap.set(user._id.toString(), user)
+  );
+
+  // Manually populate the virtual fields
+  const populatedDocs = documents.map((doc) => {
+    const docLean = doc.toObject({ virtuals: true });
+    if (fields.includes("follower") && doc.followerId) {
+      docLean.follower = userMap.get(doc.followerId.toString()) || null;
+    }
+    if (fields.includes("following") && doc.followingId) {
+      docLean.following = userMap.get(doc.followingId.toString()) || null;
+    }
+    return docLean;
+  });
+
+  return isArray ? populatedDocs : populatedDocs[0];
+};
 
 // ----- Middleware สำหรับอัปเดตจำนวนผู้ติดตาม/กำลังติดตาม -----
 async function updateUserFollowCounts(
@@ -87,14 +136,24 @@ async function updateUserFollowCounts(
   increment: boolean
 ) {
   const User = model("User"); // สมมติว่าได้ลงทะเบียนโมเดล User แล้ว
+  const SocialMediaUser = model("SocialMediaUser");
   const change = increment ? 1 : -1;
   try {
-    await User.findByIdAndUpdate(followerId, {
-      $inc: { "statistics.followingUsersCount": change },
-    });
-    await User.findByIdAndUpdate(followingId, {
-      $inc: { "statistics.followersCount": change },
-    });
+    // Update both User and SocialMediaUser models
+    await Promise.all([
+      User.findByIdAndUpdate(followerId, {
+        $inc: { "socialStats.followingCount": change },
+      }),
+      User.findByIdAndUpdate(followingId, {
+        $inc: { "socialStats.followersCount": change },
+      }),
+      SocialMediaUser.findByIdAndUpdate(followerId, {
+        $inc: { "socialStats.followingCount": change },
+      }),
+      SocialMediaUser.findByIdAndUpdate(followingId, {
+        $inc: { "socialStats.followersCount": change },
+      }),
+    ]);
   } catch (error) {
     console.error(
       `เกิดข้อผิดพลาดในการอัปเดตจำนวนผู้ติดตาม/กำลังติดตาม:`,
