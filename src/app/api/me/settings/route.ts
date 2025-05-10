@@ -4,10 +4,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import dbConnect from '@/backend/lib/mongodb';
-import UserModel from '@/backend/models/User';
-import SocialMediaUserModel from '@/backend/models/SocialMediaUser';
+import UserModel, { IUser } from '@/backend/models/User';
+import SocialMediaUserModel, { ISocialMediaUser } from '@/backend/models/SocialMediaUser';
 import UserPreferenceModel from '@/backend/models/UserPreference';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import mongoose from 'mongoose';
 
 // อินเทอร์เฟซสำหรับข้อมูลการตั้งค่า
 interface UserSettingsData {
@@ -23,6 +24,30 @@ interface UserSettingsData {
   readingHistoryVisibility?: 'public' | 'followersOnly' | 'private';
   theme?: 'light' | 'dark' | 'system';
   language?: string;
+}
+
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่ใช้ใน API นี้
+interface BaseUser {
+  _id: mongoose.Types.ObjectId;
+  profile?: {
+    displayName?: string;
+    bio?: string;
+    avatar?: string;
+    coverImage?: string;
+  };
+  preferences?: {
+    notifications?: {
+      email?: boolean;
+      push?: boolean;
+      novelUpdates?: boolean;
+    };
+    privacy?: {
+      profileVisibility?: 'public' | 'followersOnly' | 'private';
+      showActivityStatus?: boolean;
+      readingHistoryVisibility?: 'public' | 'followersOnly' | 'private';
+    };
+  };
+  image?: string;
 }
 
 // ฟังก์ชันตรวจสอบข้อมูล
@@ -70,14 +95,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let user = await UserModel()
       .findOne({ _id: session.user.id, isActive: true, isBanned: false })
       .select('profile preferences')
-      .lean();
+      .lean<BaseUser>();
     let isSocialMediaUser = false;
 
     if (!user) {
       user = await SocialMediaUserModel()
         .findOne({ _id: session.user.id, isActive: true, isBanned: false, isDeleted: false })
         .select('profile preferences image')
-        .lean();
+        .lean<BaseUser>();
       isSocialMediaUser = true;
     }
 
@@ -93,7 +118,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const settings: UserSettingsData = {
       displayName: user.profile?.displayName,
       bio: user.profile?.bio,
-      avatarUrl: user.profile?.avatar || (isSocialMediaUser ? (user as any).image : undefined),
+      avatarUrl: user.profile?.avatar || (isSocialMediaUser ? user.image : undefined),
       coverImageUrl: user.profile?.coverImage,
       emailNotifications: user.preferences?.notifications?.email,
       pushNotifications: user.preferences?.notifications?.push,
@@ -106,7 +131,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
 
     return NextResponse.json({ settings }, { status: 200 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('ข้อผิดพลาดในการดึงข้อมูลการตั้งค่า:', error);
     return NextResponse.json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' }, { status: 500 });
   }
@@ -184,7 +209,7 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json({ message: 'อัปเดตการตั้งค่าสำเร็จ' }, { status: 200 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('ข้อผิดพลาดในการอัปเดตการตั้งค่า:', error);
     return NextResponse.json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' }, { status: 500 });
   }
