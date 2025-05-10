@@ -39,7 +39,7 @@ export interface ISocialMediaUser extends Document {
   };
   trackingStats: {
     totalLoginDays: number; // จำนวนวันที่เข้าสู่ระบบ
-    totalNovelsRead: number; // จำนวนนิยาย หมวดหมู่นิยายที่อ่าน
+    totalNovelsRead: number; // จำนวนนิยายที่อ่าน
     totalEpisodesRead: number; // จำนวนตอนที่อ่าน
     totalCoinSpent: number; // จำนวนเหรียญที่ใช้
     totalRealMoneySpent: number; // จำนวนเงินจริงที่ใช้
