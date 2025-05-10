@@ -51,6 +51,11 @@ interface DashboardResponse {
   readerActivity?: ReaderActivityData;
 }
 
+// อินเทอร์เฟซสำหรับข้อมูลนิยายที่ใช้ในแดชบอร์ด
+interface DashboardNovel extends Pick<INovel, "title" | "slug" | "viewsCount" | "totalReads" | "likesCount" | "stats" | "averageRating"> {
+  _id: mongoose.Types.ObjectId;
+}
+
 /**
  * GET: ดึงข้อมูลแดชบอร์ดสำหรับผู้ใช้ตาม username
  * @param req ข้อมูลคำขอจาก Next.js
@@ -76,8 +81,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ค้นหาผู้ใช้ใน User หรือ SocialMediaUser
     const user =
-      (await UserModel().findOne({ username }).lean()) ||
-      (await SocialMediaUserModel().findOne({ username }).lean());
+      (await UserModel().findOne({ username }).lean<IUser>()) ||
+      (await SocialMediaUserModel().findOne({ username }).lean<ISocialMediaUser>());
     if (!user) {
       return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
@@ -95,7 +100,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const novels = await NovelModel()
         .find({ author: user._id, isDeleted: false })
         .select("title slug viewsCount totalReads likesCount stats averageRating")
-        .lean() as Pick<INovel, "title" | "slug" | "viewsCount" | "totalReads" | "likesCount" | "stats" | "averageRating" | "_id">[];
+        .lean<DashboardNovel[]>();
 
       // คำนวณข้อมูลภาพรวม
       const totalNovelViews = novels.reduce((sum, novel) => sum + (novel.viewsCount || 0), 0);
@@ -173,7 +178,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const novel = await NovelModel()
           .findById(lastReadActivity.details.novelId)
           .select("title slug")
-          .lean();
+          .lean<Pick<INovel, "title" | "slug"> & { _id: mongoose.Types.ObjectId }>();
         if (novel) {
           readerActivity.lastNovelRead = {
             _id: novel._id.toString(),
@@ -189,7 +194,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const novel = await NovelModel()
           .findById(lastLikedActivity.details.novelId)
           .select("title slug")
-          .lean();
+          .lean<Pick<INovel, "title" | "slug"> & { _id: mongoose.Types.ObjectId }>();
         if (novel) {
           readerActivity.lastNovelLiked = {
             _id: novel._id.toString(),
@@ -206,11 +211,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           (await UserModel()
             .findById(lastFollowedActivity.details.targetUserId)
             .select("username profile.displayName")
-            .lean()) ||
+            .lean<Pick<IUser, "username" | "profile"> & { _id: mongoose.Types.ObjectId }>()) ||
           (await SocialMediaUserModel()
             .findById(lastFollowedActivity.details.targetUserId)
             .select("username profile.displayName")
-            .lean());
+            .lean<Pick<ISocialMediaUser, "username" | "profile"> & { _id: mongoose.Types.ObjectId }>());
         if (followedUser) {
           readerActivity.lastWriterFollowed = {
             _id: followedUser._id.toString(),
