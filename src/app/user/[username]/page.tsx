@@ -1,6 +1,6 @@
 // src/app/user/[username]/page.tsx
 // หน้าโปรไฟล์ผู้ใช้แบบไดนามิก
-// แสดงข้อมูลโปรไฟล์ผู้ใช้ ประวัติกิจกรรม และการตั้งค่าสำหรับเจ้าของโปรไฟล์
+// แสดงข้อมูลโปรไฟล์ กิจกรรม และการตั้งค่าสำหรับผู้ใช้ตาม username
 
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
@@ -13,7 +13,7 @@ import UserFollowSystemSection from "@/components/user/UserFollowSystemSection";
 
 // อินเทอร์เฟซสำหรับ props ของหน้าโปรไฟล์
 interface UserProfilePageProps {
-  params: { username: string };
+  params: Promise<{ username: string }>; // รองรับ async params ใน Next.js 15
 }
 
 // อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่รวมจาก User และ SocialMediaUser
@@ -28,7 +28,7 @@ interface CombinedUser {
     avatar?: string;
     coverImage?: string;
   };
-  createdAt: string;
+  createdAt: string; // เปลี่ยนเป็น string เพื่อให้สอดคล้องกับ API
 }
 
 // อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
@@ -36,7 +36,7 @@ interface ActivityItem {
   _id: string;
   userId: string;
   type: string;
-  description?: string;
+  content?: string;
   novelId?: string;
   episodeId?: string;
   commentId?: string;
@@ -49,8 +49,7 @@ interface ActivityItem {
   relatedNovel?: string;
   relatedEpisode?: string;
   coinAmount?: number;
-  content?: string;
-  timestamp: string;
+  timestamp: string; // เปลี่ยนเป็น string เพื่อให้สอดคล้องกับ API
   novelTitle?: string;
   novelSlug?: string;
   episodeTitle?: string;
@@ -59,7 +58,7 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
-// อินเทอร์เฟซสำหรับการตอบกลับจาก API ประวัติกิจกรรม
+// อินเทอร์เฟซสำหรับการตอบกลับจาก API กิจกรรม
 interface ActivityHistoryResponse {
   activities: ActivityItem[];
   currentPage: number;
@@ -69,61 +68,56 @@ interface ActivityHistoryResponse {
 
 /**
  * ดึงข้อมูลผู้ใช้จาก API ตาม username
- * @param username ชื่อผู้ใช้จาก URL
+ * @param username ชื่อผู้ใช้ที่ต้องการค้นหา
  * @returns ข้อมูลผู้ใช้หรือ null หากไม่พบ
  */
 async function getUserData(username: string): Promise<CombinedUser | null> {
   try {
-    // ส่งคำขอไปยัง API เพื่อดึงข้อมูลโปรไฟล์
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/${username}/profile`,
-      {
-        cache: "no-store",
-      }
-    );
+    console.log(`📡 [UserProfilePage] กำลังดึงข้อมูลผู้ใช้: ${username} จาก API`);
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/${username}/profile`, {
+      cache: "no-store", // ใช้ข้อมูลล่าสุดเสมอ
+    });
 
-    // ตรวจสอบสถานะการตอบกลับ
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.warn(`❌ [Page] ไม่พบผู้ใช้ ${username} จาก API`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        console.warn(`⚠️ [UserProfilePage] ไม่พบผู้ใช้: ${username}`);
         return null;
       }
-      throw new Error(`ไม่สามารถดึงข้อมูลผู้ใช้: ${response.statusText}`);
+      throw new Error(`ไม่สามารถดึงข้อมูลผู้ใช้ได้: ${res.statusText}`);
     }
 
-    const data: CombinedUser = await response.json();
+    const data: CombinedUser = await res.json();
     return data;
   } catch (error) {
-    console.error(`❌ [Page] ข้อผิดพลาดใน getUserData สำหรับ ${username}:`, error);
+    console.error(`❌ [UserProfilePage] ข้อผิดพลาดในการดึงข้อมูลผู้ใช้ ${username}:`, error);
     return null;
   }
 }
 
 /**
  * ดึงประวัติกิจกรรมของผู้ใช้จาก API
- * @param username ชื่อผู้ใช้จาก URL
+ * @param username ชื่อผู้ใช้ที่ต้องการดึงประวัติ
  * @returns รายการกิจกรรมหรือ array ว่างหากเกิดข้อผิดพลาด
  */
 async function getUserActivityHistory(username: string): Promise<ActivityItem[]> {
   try {
-    // ส่งคำขอไปยัง API เพื่อดึงประวัติกิจกรรม
-    const response = await fetch(
+    console.log(`📡 [UserProfilePage] กำลังดึงประวัติกิจกรรมสำหรับผู้ใช้: ${username}`);
+    const res = await fetch(
       `${process.env.NEXT_PUBLIC_APP_URL}/api/${username}/activity-history?page=1&limit=10`,
       {
-        cache: "no-store",
+        cache: "no-store", // ใช้ข้อมูลล่าสุด
       }
     );
 
-    // ตรวจสอบสถานะการตอบกลับ
-    if (!response.ok) {
-      throw new Error(`ไม่สามารถดึงประวัติกิจกรรม: ${response.statusText}`);
+    if (!res.ok) {
+      throw new Error(`ไม่สามารถดึงประวัติกิจกรรมได้: ${res.statusText}`);
     }
 
-    const data: ActivityHistoryResponse = await response.json();
+    const data: ActivityHistoryResponse = await res.json();
     return data.activities;
   } catch (error) {
     console.error(
-      `❌ [Page] ข้อผิดพลาดใน getUserActivityHistory สำหรับ ${username}:`,
+      `❌ [UserProfilePage] ข้อผิดพลาดในการดึงประวัติกิจกรรมสำหรับ ${username}:`,
       error
     );
     return [];
@@ -131,29 +125,29 @@ async function getUserActivityHistory(username: string): Promise<ActivityItem[]>
 }
 
 /**
- * หน้าโปรไฟล์ผู้ใช้
- * @param props Props ที่มีพารามิเตอร์ username
+ * หน้าโปรไฟล์ผู้ใช้หลัก
+ * @param props พารามิเตอร์ของหน้า รวมถึง params ที่มี username
  * @returns JSX element สำหรับหน้าโปรไฟล์
  */
 export default async function UserProfilePage({ params }: UserProfilePageProps) {
   try {
-    // ดึง username จาก params
-    const { username } = params;
+    // แก้ไข params ให้รองรับ Promise
+    const { username } = await params;
     if (!username) {
-      throw new Error("ต้องระบุชื่อผู้ใช้");
+      console.error("❌ [UserProfilePage] ไม่พบ username ใน params");
+      notFound();
     }
 
     // ดึงข้อมูลผู้ใช้
     const user = await getUserData(username);
     if (!user) {
+      console.warn(`⚠️ [UserProfilePage] ไม่พบผู้ใช้สำหรับ username: ${username}`);
       notFound();
     }
 
     // ดึงข้อมูลเซสชันของผู้ใช้ที่ล็อกอิน
     const session = await getServerSession(authOptions);
-    const loggedInUser = session?.user as
-      | { id: string; username: string; role: string }
-      | undefined;
+    const loggedInUser = session?.user as { id: string; username: string; role: string } | undefined;
     const loggedInUserId = loggedInUser?.id;
 
     // ตรวจสอบว่าเป็นโปรไฟล์ของผู้ใช้ที่ล็อกอินหรือไม่
@@ -162,7 +156,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
     // ดึงประวัติกิจกรรมเริ่มต้น
     const initialActivities = await getUserActivityHistory(username);
 
-    // สร้าง JSX สำหรับหน้าโปรไฟล์
+    // แสดงผลหน้าโปรไฟล์
     return (
       <div className="container-custom py-6 md:py-8">
         <UserProfileHeader username={username} />
@@ -181,7 +175,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
       </div>
     );
   } catch (error) {
-    console.error("❌ [Page] ข้อผิดพลาดใน /user/[username]:", error);
+    console.error("❌ [UserProfilePage] ข้อผิดพลาดในหน้าโปรไฟล์:", error);
     notFound();
   }
 }
