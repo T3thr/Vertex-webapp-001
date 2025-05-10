@@ -73,7 +73,7 @@ const getActivityIcon = (type: string) => {
       return <UserPlus className="w-5 h-5 text-purple-500" />;
     case 'NOVEL_LIKED':
       return <ThumbsUp className="w-5 h-5 text-red-500" />;
-    case 'COIN_SPENT_EPISODE':
+    case 'COIN_SPENT_EP ประวัติกิจกรรมISODE':
       return <ShoppingCart className="w-5 h-5 text-indigo-500" />;
     case 'COIN_SPENT_DONATION_WRITER':
     case 'COIN_EARNED_WRITER_DONATION':
@@ -120,7 +120,7 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
         const errorMessage =
           err instanceof Error ? err.message : 'ไม่สามารถโหลดประวัติกิจกรรมได้';
         setError(errorMessage);
-        console.error('ข้อผิดพลาดในการดึงข้อมูลกิจกรรม:', err);
+        console.error('ข้อสูญหายในการดึงข้อมูลกิจกรรม:', err);
       } finally {
         setIsLoading(false);
       }
