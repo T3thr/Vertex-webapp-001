@@ -75,7 +75,7 @@ export type ActivityType =
   | "NOTIFICATION_SETTINGS_UPDATED"
   | "PRIVACY_SETTINGS_UPDATED";
 
-// อินเทอร์เฟซสำหรับรายละเอiadยอดกิจกรรม
+// อินเทอร์เฟซสำหรับรายละเอียดกิจกรรม
 interface ActivityDetails {
   // General details
   ipAddress?: string;
@@ -107,6 +107,7 @@ interface ActivityDetails {
 
 // อินเทอร์เฟซสำหรับเอกสารประวัติกิจกรรม
 export interface IActivityHistory extends Document {
+  _id: Types.ObjectId;
   user: Types.ObjectId;
   activityType: ActivityType;
   content?: string;
@@ -125,7 +126,7 @@ const DetailsSchema = new Schema<ActivityDetails>(
     characterId: { type: Schema.Types.ObjectId, ref: "Character" },
     commentId: { type: Schema.Types.ObjectId, ref: "Comment" },
     ratingId: { type: Schema.Types.ObjectId, ref: "Rating" },
-    targetUserId: { type: Schema.Types.ObjectId, ref: "User" },
+    targetUserId: { type: Schema.Types.ObjectId, ref: ["User", "SocialMediaUser"] },
     amountCoin: Number,
     amountRealMoney: Number,
     currencyRealMoney: String,
@@ -144,9 +145,10 @@ const DetailsSchema = new Schema<ActivityDetails>(
 
 const ActivityHistorySchema = new Schema<IActivityHistory>(
   {
+    _id: { type: Schema.Types.ObjectId, auto: true },
     user: {
       type: Schema.Types.ObjectId,
-      ref: "User",
+      ref: ["User", "SocialMediaUser"],
       required: [true, "ต้องระบุผู้ใช้สำหรับกิจกรรม"],
       index: true,
     },
@@ -261,7 +263,7 @@ ActivityHistorySchema.pre("save", function (next) {
   const required = requiredFields[type];
   if (required) {
     for (const field of required) {
-      if (!details[field]) {
+      if (details[field] === undefined || details[field] === null) {
         return next(new Error(`ฟิลด์ ${field} จำเป็นสำหรับ ${type}`));
       }
     }
