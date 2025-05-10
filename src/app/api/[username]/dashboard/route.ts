@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import mongoose, { Document } from "mongoose";
+import mongoose from "mongoose";
 import UserModel, { IUser } from "@/backend/models/User";
 import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
 import NovelModel, { INovel } from "@/backend/models/Novel";
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const novels = await NovelModel()
         .find({ author: user._id, isDeleted: false })
         .select("title slug viewsCount totalReads likesCount stats averageRating")
-        .lean() as Document<INovel>[];
+        .lean() as (INovel & { _id: mongoose.Types.ObjectId })[];
 
       // คำนวณข้อมูลภาพรวม
       const totalNovelViews = novels.reduce((sum, novel) => sum + (novel.viewsCount || 0), 0);
