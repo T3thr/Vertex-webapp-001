@@ -46,7 +46,7 @@ interface SignInResponseUser {
   };
   preferences: {
     language: string;
-    theme: "light" | "dark" | "system";
+    theme: "light" | "dark" | "system" | "sepia";
     notifications: {
       email: boolean;
       push: boolean;
