@@ -13,20 +13,6 @@ import EpisodeModel, { IEpisode } from "@/backend/models/Episode";
 import dbConnect from "@/backend/lib/mongodb";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
-// อินเทอร์เฟซสำหรับผู้ใช้ที่มี _id ชัดเจน
-interface UserWithId {
-  _id: Types.ObjectId;
-  preferences?: {
-    privacy?: {
-      profileVisibility?: string;
-    };
-  };
-  username: string;
-  profile?: {
-    displayName?: string;
-  };
-}
-
 // อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
 interface ActivityItem {
   _id: string;
@@ -98,7 +84,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : null;
 
     // ค้นหาผู้ใช้
-    let viewedUser: (IUser & UserWithId) | (ISocialMediaUser & UserWithId) | null = await UserModel()
+    let viewedUser: IUser | ISocialMediaUser | null = await UserModel()
       .findOne({ username, isDeleted: false })
       .exec();
     if (!viewedUser) {
@@ -111,8 +97,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ตรวจสอบสิทธิ์การเข้าถึง
-    const isOwnProfile = currentUserId && viewedUser && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
+    const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
+    const profileVisibility = viewedUser.preferences.privacy.profileVisibility || "public";
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
         return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
@@ -141,12 +127,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // กำหนดประเภทกิจกรรมที่แสดง
-    let activityFilter: string[] = ALLOWED_ACTIVITY_TYPES;
-    if (!isOwnProfile) {
-      activityFilter = activityFilter.filter(
-        (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
-      );
-    }
+    const activityFilter = isOwnProfile
+      ? ALLOWED_ACTIVITY_TYPES
+      : ALLOWED_ACTIVITY_TYPES.filter(
+          (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
+        );
 
     // คำนวณการข้ามข้อมูลสำหรับการแบ่งหน้า
     const skip = (page - 1) * limit;
@@ -160,7 +145,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate<{ details: { novelId?: INovel; episodeId?: IEpisode; targetUserId?: IUser | ISocialMediaUser } }>([
+      .populate<{
+        details: {
+          novelId?: INovel;
+          episodeId?: IEpisode;
+          targetUserId?: IUser | ISocialMediaUser;
+        };
+      }>([
         {
           path: "details.novelId",
           model: NovelModel(),
@@ -204,15 +195,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         userId: activity.user.toString(),
         type: activity.activityType,
         content: activity.content,
-        novelId: activity.details.novelId?._id.toString(),
-        episodeId: activity.details.episodeId?._id.toString(),
+        novelId: novel?._id.toString(),
+        episodeId: episode?._id.toString(),
         commentId: activity.details.commentId?.toString(),
         ratingId: activity.details.ratingId?.toString(),
-        followedUserId: activity.details.targetUserId?._id.toString(),
-        likedNovelId:
-          activity.activityType === "NOVEL_LIKED"
-            ? activity.details.novelId?._id.toString()
-            : undefined,
+        followedUserId: targetUser?._id.toString(),
+        likedNovelId: activity.activityType === "NOVEL_LIKED" ? novel?._id.toString() : undefined,
         purchaseId: activity.details.purchaseId?.toString(),
         donationId: activity.details.donationId?.toString(),
         relatedUser: targetUser?._id.toString(),
