@@ -34,15 +34,11 @@ interface UserProfile {
 }
 
 // อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่รวมกัน
-type CombinedUser = (IUser | ISocialMediaUser) & {
+interface BaseUser {
   _id: mongoose.Types.ObjectId;
-  createdAt: Date;
-  updatedAt?: Date;
-  preferences?: {
-    privacy?: {
-      profileVisibility?: "public" | "private" | "followersOnly";
-    };
-  };
+  username: string;
+  email?: string;
+  role: "Reader" | "Writer" | "Admin";
   profile?: {
     displayName?: string;
     bio?: string;
@@ -50,9 +46,13 @@ type CombinedUser = (IUser | ISocialMediaUser) & {
     coverImage?: string;
   };
   image?: string;
-  role: "Reader" | "Writer" | "Admin";
-  email?: string;
-};
+  preferences?: {
+    privacy?: {
+      profileVisibility?: "public" | "private" | "followersOnly";
+    };
+  };
+  createdAt: Date;
+}
 
 /**
  * GET: ดึงข้อมูลโปรไฟล์ผู้ใช้ตาม username
@@ -76,18 +76,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const currentUserId = session?.user?.id;
 
     // ค้นหาผู้ใช้
-    let user: CombinedUser | null = await UserModel()
+    let user: BaseUser | null = await UserModel()
       .findOne({ username, isActive: true, isBanned: false })
-      .exec()
-      .then(doc => doc?.toObject() as CombinedUser | null);
+      .lean<BaseUser>();
 
     let isSocialMediaUser = false;
 
     if (!user) {
       user = await SocialMediaUserModel()
         .findOne({ username, isActive: true, isBanned: false, isDeleted: false })
-        .exec()
-        .then(doc => doc?.toObject() as CombinedUser | null);
+        .lean<BaseUser>();
       isSocialMediaUser = true;
     }
 
