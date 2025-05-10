@@ -5,11 +5,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
+import UserModel, { IUser } from "@/backend/models/User";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
 import WriterStatsModel from "@/backend/models/WriterStats";
 import DonationModel from "@/backend/models/Donation";
 import NovelModel from "@/backend/models/Novel";
+
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่ใช้ใน API นี้
+interface WriterUser {
+  _id: mongoose.Types.ObjectId;
+  writerStats?: mongoose.Types.ObjectId;
+  socialStats?: {
+    followersCount: number;
+    followingCount: number;
+    commentsMadeCount: number;
+    likesGivenCount: number;
+  };
+}
 
 // อินเทอร์เฟซสำหรับการตอบกลับ API
 interface WriterAnalyticsResponse {
@@ -61,16 +73,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ค้นหาผู้ใช้
-    let user = await UserModel()
+    let user: WriterUser | null = await UserModel()
       .findOne({ username, role: "Writer", isActive: true, isBanned: false })
-      .select("_id writerStats")
-      .lean();
+      .select("_id writerStats socialStats")
+      .lean<WriterUser>();
+
     if (!user) {
       user = await SocialMediaUserModel()
         .findOne({ username, role: "Writer", isActive: true, isBanned: false })
         .select("_id writerStats socialStats")
-        .lean();
+        .lean<WriterUser>();
     }
+
     if (!user) {
       return NextResponse.json({ error: "ไม่พบนักเขียน" }, { status: 404 });
     }
@@ -82,6 +96,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "totalNovelViews_Lifetime totalCoinEarned_Lifetime totalFollowers_Lifetime averageRating_AllNovels novelPerformance monthlyCoinEarnings lastCalculatedAt"
       )
       .lean();
+
     if (!writerStats) {
       return NextResponse.json({ error: "ไม่พบข้อมูลสถิตินักเขียน" }, { status: 404 });
     }
@@ -104,6 +119,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         },
       ])
       .exec();
+
     const donationMap = new Map(
       donations.map((d) => [d._id?.toString() || "general", d.totalDonations])
     );
