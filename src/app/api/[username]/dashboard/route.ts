@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import mongoose, { Document, Types } from "mongoose";
+import mongoose from "mongoose";
 import UserModel, { IUser } from "@/backend/models/User";
 import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
 import NovelModel, { INovel } from "@/backend/models/Novel";
@@ -76,8 +76,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ค้นหาผู้ใช้ใน User หรือ SocialMediaUser
     const user =
-      (await UserModel().findOne({ username })) ||
-      (await SocialMediaUserModel().findOne({ username }));
+      (await UserModel().findOne({ username }).lean()) ||
+      (await SocialMediaUserModel().findOne({ username }).lean());
     if (!user) {
       return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
@@ -95,13 +95,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const novels = await NovelModel()
         .find({ author: user._id, isDeleted: false })
         .select("title slug viewsCount totalReads likesCount stats averageRating")
-        .exec();
+        .lean() as Pick<INovel, "title" | "slug" | "viewsCount" | "totalReads" | "likesCount" | "stats" | "averageRating" | "_id">[];
 
       // คำนวณข้อมูลภาพรวม
-      const totalNovelViews = novels.reduce(
-        (sum, novel) => sum + (novel.viewsCount || 0),
-        0
-      );
+      const totalNovelViews = novels.reduce((sum, novel) => sum + (novel.viewsCount || 0), 0);
       const totalCoinRevenue = novels.reduce(
         (sum, novel) => sum + (novel.stats?.totalPurchasesAmount || 0),
         0
@@ -113,8 +110,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const totalFollowers = user.socialStats?.followersCount || 0;
       const averageRating =
         novels.length > 0
-          ? novels.reduce((sum, novel) => sum + (novel.averageRating || 0), 0) /
-            novels.length
+          ? novels.reduce((sum, novel) => sum + (novel.averageRating || 0), 0) / novels.length
           : 0;
 
       // สร้าง novelPerformance
@@ -131,30 +127,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // คำนวณ monthlyEarnings
       const monthlyEarnings = novels
         .flatMap((novel) => novel.stats?.monthlyEarnings || [])
-        .reduce(
-          (
-            acc: { [key: string]: { coinValue: number; donationValue: number } },
-            earning
-          ) => {
-            const key = `${earning.year}-${earning.month
-              .toString()
-              .padStart(2, "0")}`;
-            if (!acc[key]) {
-              acc[key] = { coinValue: 0, donationValue: 0 };
-            }
-            acc[key].coinValue += earning.coinValue;
-            acc[key].donationValue += earning.donationValue;
-            return acc;
-          },
-          {}
-        );
-      const monthlyEarningsArray = Object.entries(monthlyEarnings).map(
-        ([key, value]) => ({
-          date: key, // รูปแบบ YYYY-MM
-          coinValue: value.coinValue,
-          donationValue: value.donationValue,
-        })
-      );
+        .reduce((acc: { [key: string]: { coinValue: number; donationValue: number } }, earning) => {
+          const key = `${earning.year}-${earning.month.toString().padStart(2, "0")}`;
+          if (!acc[key]) {
+            acc[key] = { coinValue: 0, donationValue: 0 };
+          }
+          acc[key].coinValue += earning.coinValue;
+          acc[key].donationValue += earning.donationValue;
+          return acc;
+        }, {});
+      const monthlyEarningsArray = Object.entries(monthlyEarnings).map(([key, value]) => ({
+        date: key, // รูปแบบ YYYY-MM
+        coinValue: value.coinValue,
+        donationValue: value.donationValue,
+      }));
 
       response.writerAnalytics = {
         overview: {
@@ -177,19 +163,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .find({ user: user._id })
         .sort({ createdAt: -1 })
         .limit(50)
-        .exec();
+        .lean();
 
       const readerActivity: ReaderActivityData = {};
 
       // ค้นหา lastNovelRead
-      const lastReadActivity = activities.find(
-        (act) => act.activityType === "EPISODE_READ"
-      );
+      const lastReadActivity = activities.find((act) => act.activityType === "EPISODE_READ");
       if (lastReadActivity && lastReadActivity.details?.novelId) {
         const novel = await NovelModel()
           .findById(lastReadActivity.details.novelId)
           .select("title slug")
-          .exec();
+          .lean();
         if (novel) {
           readerActivity.lastNovelRead = {
             _id: novel._id.toString(),
@@ -200,14 +184,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
 
       // ค้นหา lastNovelLiked
-      const lastLikedActivity = activities.find(
-        (act) => act.activityType === "NOVEL_LIKED"
-      );
+      const lastLikedActivity = activities.find((act) => act.activityType === "NOVEL_LIKED");
       if (lastLikedActivity && lastLikedActivity.details?.novelId) {
         const novel = await NovelModel()
           .findById(lastLikedActivity.details.novelId)
           .select("title slug")
-          .exec();
+          .lean();
         if (novel) {
           readerActivity.lastNovelLiked = {
             _id: novel._id.toString(),
@@ -218,19 +200,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
 
       // ค้นหา lastWriterFollowed
-      const lastFollowedActivity = activities.find(
-        (act) => act.activityType === "USER_FOLLOWED"
-      );
+      const lastFollowedActivity = activities.find((act) => act.activityType === "USER_FOLLOWED");
       if (lastFollowedActivity && lastFollowedActivity.details?.targetUserId) {
         const followedUser =
           (await UserModel()
             .findById(lastFollowedActivity.details.targetUserId)
             .select("username profile.displayName")
-            .exec()) ||
+            .lean()) ||
           (await SocialMediaUserModel()
             .findById(lastFollowedActivity.details.targetUserId)
             .select("username profile.displayName")
-            .exec());
+            .lean());
         if (followedUser) {
           readerActivity.lastWriterFollowed = {
             _id: followedUser._id.toString(),
