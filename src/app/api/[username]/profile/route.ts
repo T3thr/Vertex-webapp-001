@@ -1,5 +1,6 @@
-// src/app/api/users/[username]/profile/route.ts
+// src/app/api/[username]/profile/route.ts
 // API สำหรับดึงข้อมูลโปรไฟล์ผู้ใช้
+// รองรับการตรวจสอบความเป็นส่วนตัวและคำนวณสถิติโซเชียลแบบเรียลไทม์
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -31,25 +32,29 @@ interface UserProfile {
   isSocialMediaUser: boolean;
 }
 
-// ตัวจัดการสำหรับ GET request
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { username: string } }
-): Promise<NextResponse> {
+/**
+ * GET: ดึงข้อมูลโปรไฟล์ผู้ใช้ตาม username
+ * @param req ข้อมูลคำขอจาก Next.js
+ * @returns JSON response พร้อมข้อมูลโปรไฟล์ผู้ใช้
+ */
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    // เชื่อมต่อกับ MongoDB
+    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
 
-    const { username } = params;
+    // ดึง username จาก URL
+    const { pathname } = req.nextUrl;
+    const username = pathname.split("/")[3]; // /api/[username]/profile -> [username]
+    if (!username) {
+      return NextResponse.json({ error: "ต้องระบุ username" }, { status: 400 });
+    }
 
     // รับ session เพื่อตรวจสอบการยืนยันตัวตน
     const session = await getServerSession(authOptions);
     const currentUserId = session?.user?.id;
 
-    // ค้นหาผู้ใช้ใน User หรือ SocialMediaUser
-    let user = await UserModel()
-      .findOne({ username, isActive: true, isBanned: false })
-      .lean();
+    // ค้นหาผู้ใช้
+    let user = await UserModel().findOne({ username, isActive: true, isBanned: false }).lean();
     let isSocialMediaUser = false;
 
     if (!user) {
@@ -60,26 +65,17 @@ export async function GET(
     }
 
     if (!user) {
-      return NextResponse.json(
-        { message: "ไม่พบผู้ใช้" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
 
     // ตรวจสอบการมองเห็นโปรไฟล์
     const profileVisibility = user.preferences?.privacy?.profileVisibility || "public";
     if (profileVisibility !== "public") {
       if (!currentUserId) {
-        return NextResponse.json(
-          { message: "ต้องล็อกอินเพื่อดูโปรไฟล์นี้" },
-          { status: 401 }
-        );
+        return NextResponse.json({ error: "ต้องล็อกอินเพื่อดูโปรไฟล์นี้" }, { status: 401 });
       }
       if (profileVisibility === "private" && currentUserId !== user._id.toString()) {
-        return NextResponse.json(
-          { message: "โปรไฟล์นี้เป็นส่วนตัว" },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
       }
       if (profileVisibility === "followersOnly" && currentUserId !== user._id.toString()) {
         const isFollower = await UserFollowModel().exists({
@@ -88,14 +84,14 @@ export async function GET(
         });
         if (!isFollower) {
           return NextResponse.json(
-            { message: "ต้องติดตามผู้ใช้เพื่อดูโปรไฟล์นี้" },
+            { error: "ต้องติดตามผู้ใช้เพื่อดูโปรไฟล์นี้" },
             { status: 403 }
           );
         }
       }
     }
 
-    // คำนวณ socialStats แบบเรียลไทม์
+    // คำนวณ socialStats
     const followersCount = await UserFollowModel().countDocuments({
       followingId: user._id,
     });
@@ -107,7 +103,7 @@ export async function GET(
       isPublished: true,
     });
 
-    // สร้างข้อมูลโปรไฟล์สำหรับการตอบกลับ
+    // สร้างข้อมูลโปรไฟล์
     const userProfile: UserProfile = {
       _id: user._id.toString(),
       username: user.username,
@@ -116,7 +112,7 @@ export async function GET(
       profile: {
         displayName: user.profile?.displayName,
         bio: user.profile?.bio,
-        avatar: user.profile?.avatar || user.image, // ใช้ image จาก SocialMediaUser ถ้าไม่มี avatar
+        avatar: user.profile?.avatar || user.image,
         coverImage: user.profile?.coverImage,
       },
       socialStats: {
@@ -129,10 +125,10 @@ export async function GET(
     };
 
     return NextResponse.json(userProfile, { status: 200 });
-  } catch (error: any) {
-    console.error("ข้อผิดพลาดในการดึงข้อมูลโปรไฟล์:", error);
+  } catch (error) {
+    console.error("❌ [API] ข้อผิดพลาดใน /api/[username]/profile:", error);
     return NextResponse.json(
-      { message: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
+      { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
     );
   }
