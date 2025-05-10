@@ -103,6 +103,8 @@ interface ActivityDetails {
   // Other specific details
   previousValue?: any;
   newValue?: any;
+  // เพิ่ม index signature เพื่อให้ TypeScript รองรับการเข้าถึงฟิลด์แบบ dynamic
+  [key: string]: any;
 }
 
 // อินเทอร์เฟซสำหรับเอกสารประวัติกิจกรรม
@@ -126,7 +128,7 @@ const DetailsSchema = new Schema<ActivityDetails>(
     characterId: { type: Schema.Types.ObjectId, ref: "Character" },
     commentId: { type: Schema.Types.ObjectId, ref: "Comment" },
     ratingId: { type: Schema.Types.ObjectId, ref: "Rating" },
-    targetUserId: { type: Schema.Types.ObjectId, ref: "User" }, // เปลี่ยนเป็น ref เดียว แต่จะจัดการใน API
+    targetUserId: { type: Schema.Types.ObjectId, ref: "User" }, // ใช้ "User" เป็น ref หลักและจัดการ polymorphism ในโค้ด
     amountCoin: Number,
     amountRealMoney: Number,
     currencyRealMoney: String,
@@ -148,7 +150,7 @@ const ActivityHistorySchema = new Schema<IActivityHistory>(
     _id: { type: Schema.Types.ObjectId, auto: true },
     user: {
       type: Schema.Types.ObjectId,
-      ref: "User", // เปลี่ยนเป็น ref เดียว แต่จัดการ polymorphism ใน API
+      ref: "User", // ใช้ "User" เป็น ref หลักและจัดการ polymorphism ในโค้ด
       required: [true, "ต้องระบุผู้ใช้สำหรับกิจกรรม"],
       index: true,
     },
@@ -263,7 +265,8 @@ ActivityHistorySchema.pre("save", function (next) {
   const required = requiredFields[type];
   if (required) {
     for (const field of required) {
-      if (details[field] === undefined || details[field] === null) {
+      // ใช้ type assertion เพื่อให้ TypeScript มองว่า field เป็น keyof ActivityDetails
+      if ((details as any)[field] === undefined || (details as any)[field] === null) {
         return next(new Error(`ฟิลด์ ${field} จำเป็นสำหรับ ${type}`));
       }
     }
