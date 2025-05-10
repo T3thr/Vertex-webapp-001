@@ -13,6 +13,20 @@ import EpisodeModel, { IEpisode } from "@/backend/models/Episode";
 import dbConnect from "@/backend/lib/mongodb";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
+// อินเทอร์เฟซสำหรับผู้ใช้ที่มี _id ชัดเจน
+interface UserWithId {
+  _id: Types.ObjectId;
+  preferences?: {
+    privacy?: {
+      profileVisibility?: string;
+    };
+  };
+  username: string;
+  profile?: {
+    displayName?: string;
+  };
+}
+
 // อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
 interface ActivityItem {
   _id: string;
@@ -84,7 +98,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : null;
 
     // ค้นหาผู้ใช้
-    let viewedUser: IUser | ISocialMediaUser | null = await UserModel()
+    let viewedUser: (IUser & UserWithId) | (ISocialMediaUser & UserWithId) | null = await UserModel()
       .findOne({ username, isDeleted: false })
       .exec();
     if (!viewedUser) {
@@ -97,7 +111,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ตรวจสอบสิทธิ์การเข้าถึง
-    const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
+    const isOwnProfile = currentUserId && viewedUser && currentUserId.equals(viewedUser._id);
     const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
