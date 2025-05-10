@@ -1,13 +1,16 @@
 // src/app/layout.tsx
-
 import { Metadata } from "next";
 import dbConnect from "@/backend/lib/mongodb";
 import NavBarWrapper from "@/components/layouts/NavBarWrapper";
 import { GlobalProvider } from "@/context/GlobalContext";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/next"
-import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { randomBytes } from "crypto";
+
+// สร้าง nonce สำหรับ CSP
+const nonce = randomBytes(16).toString("base64");
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,7 +22,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Define static metadata for the entire application
+// กำหนด metadata คงที่สำหรับแอปพลิเคชันทั้งหมด
 export const metadata: Metadata = {
   title: {
     default: "NovelMaze",
@@ -33,7 +36,7 @@ export const metadata: Metadata = {
     siteName: "NovelMaze",
     images: [
       {
-        url: "/opengraph-image.jpg", 
+        url: "/opengraph-image.jpg",
         width: 1200,
         height: 630,
         alt: "NovelMaze - Your Gateway to Novels",
@@ -44,11 +47,42 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "NovelMaze",
     description: "Dive into a world of novels with NovelMaze.",
-    images: ["/twitter-image.jpg"], 
+    images: ["/twitter-image.jpg"],
   },
   icons: {
-    icon: "/favicon.ico", 
+    icon: "/favicon.ico",
   },
+};
+
+// กำหนด CSP header
+export const generateViewport = () => {
+  return {
+    themeColor: [
+      { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+      { media: "(prefers-color-scheme: dark)", color: "#1a1a1a" },
+    ],
+  };
+};
+
+export const headers = () => {
+  return [
+    {
+      key: "Content-Security-Policy",
+      value: `
+        default-src 'self';
+        script-src 'self' 'nonce-${nonce}' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: https://*.vercel.app;
+        connect-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/;
+        frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/;
+        font-src 'self';
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        upgrade-insecure-requests;
+      `.replace(/\s+/g, " ").trim(),
+    },
+  ];
 };
 
 // ปรับปรุงฟังก์ชันเพื่อจัดการธีมก่อนที่เพจจะถูกเรนเดอร์ (ป้องกัน flickering)
@@ -56,39 +90,30 @@ function ThemeScript() {
   return (
     <script
       id="theme-initializer"
+      nonce={nonce}
       dangerouslySetInnerHTML={{
         __html: `
           (function() {
-            // เพิ่มฟังก์ชันตรวจสอบว่าเป็น dark mode หรือไม่
             function isSystemDarkMode() {
               return window.matchMedia('(prefers-color-scheme: dark)').matches;
             }
-
-            // ตั้งค่า theme class ทันทีเพื่อป้องกัน flickering
             function applyTheme(theme) {
               document.documentElement.classList.remove('light', 'dark');
               document.documentElement.classList.add(theme);
             }
-
             try {
-              // พยายามเรียกค่า theme จาก localStorage ก่อน
               const storedTheme = localStorage.getItem('novelmaze-theme');
-              
               if (storedTheme === 'light') {
                 applyTheme('light');
                 return;
               }
-              
               if (storedTheme === 'dark') {
-                applyTheme('dark'); 
+                applyTheme('dark');
                 return;
               }
-              
-              // ถ้าเป็น system theme หรือไม่ได้ตั้งค่า, ตรวจสอบ system preference
               const theme = isSystemDarkMode() ? 'dark' : 'light';
               applyTheme(theme);
             } catch (e) {
-              // ถ้าเกิด error (เช่น localStorage ไม่สามารถเข้าถึงได้), ใช้ light theme เป็นค่าเริ่มต้น
               applyTheme('light');
             }
           })();
@@ -108,12 +133,21 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        {/* โหลด reCAPTCHA script ด้วย nonce */}
+        <script
+          nonce={nonce}
+          src="https://www.google.com/recaptcha/api.js?render=explicit&hl=th"
+          async
+          defer
+        ></script>
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}>
         <GlobalProvider>
           <NavBarWrapper />
           {children}
         </GlobalProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

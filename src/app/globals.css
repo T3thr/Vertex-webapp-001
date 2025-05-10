@@ -38,6 +38,12 @@
   --border: #e2e8f0;
   --input: #f1f5f9;
   --ring: #2563eb;
+  --alert-error: #fef2f2;
+  --alert-error-foreground: #b91c1c;
+  --alert-error-border: #fee2e2;
+  --alert-success: #f0fdf4;
+  --alert-success-foreground: #15803d;
+  --alert-success-border: #dcfce7;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --container-padding: 1rem;
@@ -73,6 +79,12 @@
   --border: #334155;
   --input: #1e293b;
   --ring: #3b82f6;
+  --alert-error: #7f1d1d;
+  --alert-error-foreground: #fee2e2;
+  --alert-error-border: #991b1b;
+  --alert-success: #14532d;
+  --alert-success-foreground: #dcfce7;
+  --alert-success-border: #15803d;
 }
 
 /* กำหนดธีมสำหรับ Tailwind CSS */
@@ -91,6 +103,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-alert-error: var(--alert-error);
+  --color-alert-error-foreground: var(--alert-error-foreground);
+  --color-alert-error-border: var(--alert-error-border);
+  --color-alert-success: var(--alert-success);
+  --color-alert-success-foreground: var(--alert-success-foreground);
+  --color-alert-success-border: var(--alert-success-border);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --container-padding: var(--container-padding);
@@ -146,6 +164,31 @@ body {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+/* คลาสสำหรับการแจ้งเตือน */
+.bg-alert-error {
+  background-color: var(--alert-error);
+}
+
+.text-alert-error {
+  color: var(--alert-error-foreground);
+}
+
+.border-alert-error {
+  border-color: var(--alert-error-border);
+}
+
+.bg-alert-success {
+  background-color: var(--alert-success);
+}
+
+.text-alert-success {
+  color: var(--alert-success-foreground);
+}
+
+.border-alert-success {
+  border-color: var(--alert-success-border);
 }
 
 /* การปรับแต่ง scrollbar */

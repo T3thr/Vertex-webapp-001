@@ -1,6 +1,6 @@
-// backend/services/sendemail.ts
+// src/backend/services/sendemail.ts
 import nodemailer from 'nodemailer';
-import crypto from 'crypto'; // Use crypto for token generation
+import crypto from 'crypto';
 
 interface MailOptions {
   from: string;
@@ -9,7 +9,6 @@ interface MailOptions {
   html: string;
 }
 
-// Configure the transporter (ensure EMAIL_USERNAME and EMAIL_PASSWORD are set in .env)
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -18,16 +17,19 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Function to generate a secure random token (used in signup and resend)
-export const generateVerificationToken = (): { token: string; expiry: Date } => {
+// Function to generate a secure random token and its hashed version
+// คืนค่า plain token สำหรับอีเมล, hashed token สำหรับ DB, และวันหมดอายุ
+export const generateVerificationToken = (): { token: string; hashedToken: string; expiry: Date } => {
   const token = crypto.randomBytes(32).toString("hex");
-  const expiry = new Date(Date.now() + 3600000); // Token expires in 1 hour
-  return { token, expiry };
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex"); // Hash a copy
+  const expiry = new Date(Date.now() + 3600000 * 24); // Token expires in 24 hours (ปรับตามต้องการ)
+  console.log(`🔑 [TokenUtil] Generated plain token (for email): ${token.substring(0,10)}... , hashed token (for DB): ${hashedToken.substring(0,10)}...`);
+  return { token, hashedToken, expiry };
 };
 
-// Function to send the verification email
+
 export const sendVerificationEmail = async (email: string, token: string): Promise<void> => {
-  if (!process.env.NEXTAUTH_URL) { // Use NEXTAUTH_URL for base URL consistency
+  if (!process.env.NEXTAUTH_URL) {
     console.error('❌ Missing NEXTAUTH_URL in environment variables for verification email.');
     throw new Error('Server configuration error: Missing base URL.');
   }
@@ -36,35 +38,36 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
       throw new Error('Server configuration error: Missing sender email.');
   }
 
+  // token ที่รับเข้ามาในฟังก์ชันนี้คือ token
   const verificationUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`;
 
   const mailOptions: MailOptions = {
     from: `"NOVELMAZE - GAME VISUAL NOVEL PLATFORM" <${process.env.EMAIL_USERNAME}>`,
     to: email,
-    subject: '🔹 Verify Your Email to Get Started!',
+    subject: '🔹 ยืนยันอีเมลของคุณเพื่อเริ่มต้นใช้งาน!', // แปลเป็นไทย
     html: `
       <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #0e0e10; color: #ffffff; border-radius: 8px;">
         <div style="text-align: center;">
           <img src="https://novelmaze.vercel.app/logo.png" alt="Brand Logo" style="width: 120px; margin-bottom: 20px;" />
-          <h2 style="color: #ff5b00;">Welcome to Our Platform! 🎉</h2>
-          <p style="color: #c0c0c0;">You're just one step away from unlocking exclusive content, special perks, and an immersive experience.</p>
+          <h2 style="color: #ff5b00;">ยินดีต้อนรับสู่แพลตฟอร์มของเรา! 🎉</h2>
+          <p style="color: #c0c0c0;">อีกเพียงขั้นตอนเดียวคุณก็จะสามารถเข้าถึงเนื้อหาพิเศษ, สิทธิประโยชน์, และประสบการณ์ที่น่าประทับใจ</p>
         </div>
 
         <div style="text-align: center; margin: 30px 0;">
           <a href="${verificationUrl}" style="display: inline-block; padding: 14px 28px; background-color: #ff5b00; color: white; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 6px;">
-            ✅ Verify My Email
+            ✅ ยืนยันอีเมลของฉัน
           </a>
         </div>
 
         <p style="text-align: center; font-size: 14px; color: #c0c0c0;">
-          If the button above doesn’t work, copy and paste this link into your browser:
+          หากปุ่มด้านบนไม่ทำงาน, คัดลอกและวางลิงก์นี้ในเบราว์เซอร์ของคุณ:
         </p>
         <p style="word-break: break-all; text-align: center; color: #ff5b00; font-size: 14px;">${verificationUrl}</p>
 
         <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;" />
 
         <div style="text-align: center;">
-          <p style="font-size: 12px; color: #888;">Stay connected with us:</p>
+          <p style="font-size: 12px; color: #888;">เชื่อมต่อกับเรา:</p>
           <p>
             <a href="#" style="margin: 0 8px; text-decoration: none; color: #ff5b00;">Facebook</a> |
             <a href="#" style="margin: 0 8px; text-decoration: none; color: #ff5b00;">Twitter</a> |
@@ -73,7 +76,7 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
         </div>
 
         <p style="text-align: center; font-size: 12px; color: #666; margin-top: 20px;">
-          &copy; ${new Date().getFullYear()} Pathy. All Rights Reserved.
+          &copy; ${new Date().getFullYear()} Pathy. สงวนลิขสิทธิ์.
         </p>
       </div>
     `,
@@ -81,11 +84,9 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
 
   try {
       await transporter.sendMail(mailOptions);
-      console.log(`📧 Verification email sent to ${email}`);
+      console.log(`📧 อีเมลยืนยันถูกส่งไปยัง ${email}`);
   } catch (error) {
-      console.error(`❌ Failed to send verification email to ${email}:`, error);
-      // Re-throw the error so the calling function knows sending failed
-      throw new Error("Failed to send verification email.");
+      console.error(`❌ ไม่สามารถส่งอีเมลยืนยันไปยัง ${email}:`, error);
+      throw new Error("ไม่สามารถส่งอีเมลยืนยันได้");
   }
 };
-
