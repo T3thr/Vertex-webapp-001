@@ -97,8 +97,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ตรวจสอบสิทธิ์การเข้าถึง
-    const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
+    const isOwnProfile = currentUserId && viewedUser && currentUserId.equals(viewedUser._id);
+    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility ?? "public";
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
         return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
@@ -127,12 +127,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // กำหนดประเภทกิจกรรมที่แสดง
-    let activityFilter: string[] = ALLOWED_ACTIVITY_TYPES;
-    if (!isOwnProfile) {
-      activityFilter = activityFilter.filter(
-        (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
-      );
-    }
+    const activityFilter = isOwnProfile
+      ? ALLOWED_ACTIVITY_TYPES
+      : ALLOWED_ACTIVITY_TYPES.filter(
+          (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
+        );
 
     // คำนวณการข้ามข้อมูลสำหรับการแบ่งหน้า
     const skip = (page - 1) * limit;
@@ -147,7 +146,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .skip(skip)
       .limit(limit)
       .populate<{
-        details: { novelId?: INovel; episodeId?: IEpisode; targetUserId?: IUser | ISocialMediaUser }
+        details: {
+          novelId?: INovel;
+          episodeId?: IEpisode;
+          targetUserId?: IUser | ISocialMediaUser;
+        };
       }>([
         {
           path: "details.novelId",
@@ -212,7 +215,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         novelSlug: novel?.slug,
         episodeTitle: episode?.title,
         episodeNumber: episode?.episodeNumber,
-        targetUserName: targetUser?.profile?.displayName || targetUser?.username,
+        targetUserName: targetUser?.profile?.displayName ?? targetUser?.username,
         targetUserSlug: targetUser?.username,
       };
     });
