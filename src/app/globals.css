@@ -61,6 +61,12 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
+  --social-button-bg: #f1f5f9; /* สีพื้นฐานสำหรับปุ่มโซเชียล (อิงจาก --secondary) */
+  --social-button-google: #db4437; /* สีพื้นฐานสำหรับปุ่ม google */
+  --social-button-hover: #e2e8f0; /* สีเมื่อ hover */
+  --social-button-text: #1e293b; /* สีข้อความ */
+  --modal-gradient-start: #2563eb; /* เริ่ม gradient สำหรับ header modal */
+  --modal-gradient-end: #60a5fa; /* สิ้นสุด gradient */
 }
 
 /* รูปแบบสำหรับโหมดมืด */
@@ -85,6 +91,12 @@
   --alert-success: #14532d;
   --alert-success-foreground: #dcfce7;
   --alert-success-border: #15803d;
+  --social-button-bg: #1e293b;
+  --social-button-google: #db4437;
+  --social-button-hover: #334155;
+  --social-button-text: #f1f5f9;
+  --modal-gradient-start: #3b82f6;
+  --modal-gradient-end: #93c5fd;
 }
 
 /* กำหนดธีมสำหรับ Tailwind CSS */
@@ -126,6 +138,12 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
+  --color-social-button-bg: var(--social-button-bg);
+  --color-social-button-google: var(--social-button-google);
+  --color-social-button-hover: var(--social-button-hover);
+  --color-social-button-text: var(--social-button-text);
+  --color-modal-gradient-start: var(--modal-gradient-start);
+  --color-modal-gradient-end: var(--modal-gradient-end);
 }
 
 /* ใช้รูปแบบพื้นฐานกับ body */
@@ -196,6 +214,32 @@ body {
   scrollbar-width: thin;
 }
 
+/* Scrollbar เฉพาะสำหรับ AuthModal */
+.auth-modal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) var(--secondary);
+}
+
+.auth-modal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.auth-modal-scrollbar::-webkit-scrollbar-track {
+  background: var(--secondary);
+  border-radius: var(--radius-full);
+}
+
+.auth-modal-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  transition: background var(--animation-fast);
+}
+
+.auth-modal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* การปรับแต่ง scrollbar เดิม */
 .scrollbar-thumb-accent::-webkit-scrollbar-thumb {
   background-color: var(--accent);
   border-radius: var(--radius-full);

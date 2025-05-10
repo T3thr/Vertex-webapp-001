@@ -1,7 +1,10 @@
 // src/scripts/admin-seed.ts
+// สคริปต์สำหรับ seed ผู้ใช้แอดมินและผู้เขียนใน MongoDB
+// Script for seeding admin and author users in MongoDB
 
 import mongoose from "mongoose";
 import { config } from "dotenv";
+import bcrypt from "bcryptjs";
 import dbConnect from "@/backend/lib/mongodb";
 import { IUser } from "@/backend/models/User";
 
@@ -33,6 +36,11 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       );
     }
 
+    // Hash รหัสผ่านก่อนบันทึก
+    // Hash password before saving
+    const salt = await bcrypt.genSalt(12);
+    const hashedAdminPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
+
     // ตรวจสอบว่ามีผู้ใช้แอดมินอยู่แล้วหรือไม่
     // Check if admin user already exists
     const existingAdmin = await User.findOne({
@@ -46,7 +54,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       // Update admin user information
       existingAdmin.email = ADMIN_EMAIL.toLowerCase();
       existingAdmin.username = ADMIN_USERNAME;
-      existingAdmin.password = ADMIN_PASSWORD; // รหัสผ่านจะถูกแฮชใน pre("save") middleware
+      existingAdmin.password = hashedAdminPassword; // อัปเดตรหัสผ่านที่ถูก hash
       existingAdmin.role = "Admin";
       existingAdmin.profile = {
         displayName: ADMIN_USERNAME,
@@ -95,7 +103,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       };
       existingAdmin.gamification = {
         level: existingAdmin.gamification.level || 1,
-        experiencePoints: existingAdmin.gamification.experiencePoints || 0, // Fixed: Changed `experience` to `experiencePoints`
+        experiencePoints: existingAdmin.gamification.experiencePoints || 0,
         achievements: existingAdmin.gamification.achievements || [],
         badges: existingAdmin.gamification.badges || [],
         streaks: {
@@ -127,7 +135,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
     const adminUser = await User.create({
       email: ADMIN_EMAIL.toLowerCase(),
       username: ADMIN_USERNAME,
-      password: ADMIN_PASSWORD, // รหัสผ่านจะถูกแฮชใน pre("save") middleware
+      password: hashedAdminPassword, // ใช้รหัสผ่านที่ถูก hash
       role: "Admin",
       profile: {
         displayName: ADMIN_USERNAME,
@@ -173,7 +181,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
       },
       gamification: {
         level: 1,
-        experiencePoints: 0, // Fixed: Changed `experience` to `experiencePoints`
+        experiencePoints: 0,
         achievements: [],
         badges: [],
         streaks: {
@@ -214,6 +222,11 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
       );
     }
 
+    // Hash รหัสผ่านก่อนบันทึก
+    // Hash password before saving
+    const salt = await bcrypt.genSalt(12);
+    const hashedAuthorPassword = await bcrypt.hash(AUTHOR_PASSWORD, salt);
+
     // ตรวจสอบว่ามีผู้เขียนอยู่แล้วหรือไม่
     // Check if author user already exists
     let author = await User.findOne({ username: AUTHOR_USERNAME });
@@ -224,7 +237,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
       author = await User.create({
         username: AUTHOR_USERNAME,
         email: AUTHOR_EMAIL.toLowerCase(),
-        password: AUTHOR_PASSWORD, // รหัสผ่านจะถูกแฮชใน pre("save") middleware
+        password: hashedAuthorPassword, // ใช้รหัสผ่านที่ถูก hash
         role: "Writer",
         profile: {
           displayName: "นักเขียนนิยาย",
@@ -270,7 +283,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
         },
         gamification: {
           level: 1,
-          experiencePoints: 0, // Fixed: Changed `experience` to `experiencePoints`
+          experiencePoints: 0,
           achievements: [],
           badges: [],
           streaks: {
@@ -297,7 +310,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
       // Update author information if already exists
       author.email = AUTHOR_EMAIL.toLowerCase();
       author.username = AUTHOR_USERNAME;
-      author.password = AUTHOR_PASSWORD; // รหัสผ่านจะถูกแฮชใน pre("save") middleware
+      author.password = hashedAuthorPassword; // อัปเดตรหัสผ่านที่ถูก hash
       author.role = "Writer";
       author.profile = {
         displayName: "นักเขียนนิยาย",
@@ -346,7 +359,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
       };
       author.gamification = {
         level: author.gamification.level || 1,
-        experiencePoints: author.gamification.experiencePoints || 0, // Fixed: Changed `experience` to `experiencePoints`
+        experiencePoints: author.gamification.experiencePoints || 0,
         achievements: author.gamification.achievements || [],
         badges: author.gamification.badges || [],
         streaks: {

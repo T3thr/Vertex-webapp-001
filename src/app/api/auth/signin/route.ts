@@ -1,6 +1,7 @@
 // src/app/api/auth/signin/route.ts
 // API สำหรับการลงชื่อเข้าใช้ด้วย Credentials
-// รองรับการตรวจสอบอีเมลหรือชื่อผู้ใช้และรหัสผ่าน
+// รองรับการตรวจสอบทั้งอีเมลและชื่อผู้ใช้ผ่าน identifier
+// อัปเดต: ปรับให้ทำงานเฉพาะกับ User model โดยไม่มี provider หรือ accounts, ส่งข้อมูลครบถ้วนตาม SessionUser
 
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
@@ -9,8 +10,7 @@ import { Types } from "mongoose";
 
 // ประเภทสำหรับ Request Body
 interface SignInRequestBody {
-  email?: string;
-  username?: string;
+  identifier: string; // อีเมลหรือชื่อผู้ใช้
   password: string;
 }
 
@@ -19,6 +19,7 @@ interface SignInResponseUser {
   id: string;
   email?: string;
   username: string;
+  name: string;
   role: "Reader" | "Writer" | "Admin";
   profile: {
     displayName?: string;
@@ -26,7 +27,7 @@ interface SignInResponseUser {
     bio?: string;
     coverImage?: string;
     gender?: "male" | "female" | "other" | "preferNotToSay";
-    preferredGenres?: string[];
+    preferredGenres?: Types.ObjectId[];
   };
   trackingStats: {
     totalLoginDays: number;
@@ -34,7 +35,7 @@ interface SignInResponseUser {
     totalEpisodesRead: number;
     totalCoinSpent: number;
     totalRealMoneySpent: number;
-    lastNovelReadId?: string;
+    lastNovelReadId?: Types.ObjectId;
     lastNovelReadAt?: Date;
     joinDate: Date;
   };
@@ -58,6 +59,11 @@ interface SignInResponseUser {
       newFollowers: boolean;
       systemAnnouncements: boolean;
     };
+    contentFilters?: {
+      showMatureContent: boolean;
+      blockedGenres?: Types.ObjectId[];
+      blockedTags?: string[];
+    };
     privacy: {
       showActivityStatus: boolean;
       profileVisibility: "public" | "followersOnly" | "private";
@@ -70,13 +76,17 @@ interface SignInResponseUser {
   };
   gamification: {
     level: number;
-    experiencePoints: number; // เปลี่ยนจาก experience เป็น experiencePoints เพื่อให้ตรงกับโมเดล
-    achievements?: string[];
-    badges?: string[];
+    experiencePoints: number;
+    achievements: Types.ObjectId[];
+    badges: Types.ObjectId[];
     streaks: {
       currentLoginStreak: number;
       longestLoginStreak: number;
       lastLoginDate?: Date;
+    };
+    dailyCheckIn?: {
+      lastCheckInDate?: Date;
+      currentStreak: number;
     };
   };
   writerVerification?: {
@@ -88,137 +98,105 @@ interface SignInResponseUser {
   };
   donationSettings?: {
     isDonationEnabled: boolean;
-    donationApplicationId?: string;
+    donationApplicationId?: Types.ObjectId;
     customMessage?: string;
   };
+  writerApplication?: Types.ObjectId;
+  writerStats?: Types.ObjectId;
   isActive: boolean;
   isEmailVerified: boolean;
   isBanned: boolean;
   bannedUntil?: Date;
 }
 
-// ฟังก์ชัน Handler สำหรับ HTTP POST request (การลงชื่อเข้าใช้ด้วย Credentials)
-export async function POST(request: Request): Promise<NextResponse> {
-  await dbConnect();
-
+// ฟังก์ชันจัดการ POST request สำหรับการลงชื่อเข้าใช้
+export async function POST(request: Request) {
   try {
-    const body = await request.json() as SignInRequestBody;
-    const { email, username, password } = body;
+    // เชื่อมต่อฐานข้อมูล MongoDB
+    await dbConnect();
+    console.log("🔵 [API:signin] เชื่อมต่อ MongoDB สำเร็จ");
 
-    // ตรวจสอบข้อมูลที่จำเป็น
-    if ((!email && !username) || !password) {
-      console.error(
-        `❌ ข้อมูลไม่ครบถ้วน: email=${email}, username=${username}, password=${
-          password ? "provided" : "missing"
-        }`
-      );
+    // อ่าน body ของ request
+    const body: SignInRequestBody = await request.json();
+    const { identifier, password } = body;
+
+    // ตรวจสอบว่ามีการส่งข้อมูลครบถ้วนและถูกต้อง
+    if (!identifier?.trim() || !password?.trim()) {
+      console.warn("⚠️ [API:signin] ขาดข้อมูล identifier หรือ password");
       return NextResponse.json(
-        { error: "กรุณากรอกอีเมลหรือชื่อผู้ใช้ และรหัสผ่าน" },
+        { error: "กรุณาระบุอีเมล/ชื่อผู้ใช้ และรหัสผ่าน" },
         { status: 400 }
       );
     }
 
-    // ป้องกันการฉีดโค้ดด้วยการตรวจสอบรูปแบบ
-    if (email && !/^\S+@\S+\.\S+$/.test(email)) {
-      console.error(`❌ รูปแบบอีเมลไม่ถูกต้อง: ${email}`);
-      return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
-    }
-    if (username && !/^[a-zA-Z0-9_]+$/.test(username)) {
-      console.error(`❌ รูปแบบชื่อผู้ใช้ไม่ถูกต้อง: ${username}`);
-      return NextResponse.json(
-        { error: "ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร, ตัวเลข หรือเครื่องหมาย _ เท่านั้น" },
-        { status: 400 }
-      );
-    }
-
-    // ค้นหาผู้ใช้ด้วย email หรือ username
-    const user = await UserModel()
+    // ค้นหาผู้ใช้โดยใช้ identifier (email หรือ username)
+    const user: (IUser & { _id: Types.ObjectId }) | null = await UserModel()
       .findOne({
         $or: [
-          email ? { email: email.toLowerCase() } : {},
-          username ? { username } : {},
-        ].filter((condition) => Object.keys(condition).length > 0),
+          { email: identifier.trim().toLowerCase() },
+          { username: identifier.trim() },
+        ],
       })
-      .select("+password")
-      .lean() as (IUser & { _id: Types.ObjectId }) | null;
+      .select("+password");
 
+    // ตรวจสอบว่าพบผู้ใช้หรือไม่
     if (!user) {
-      console.error(`❌ ไม่พบผู้ใช้: email=${email}, username=${username}`);
+      console.warn(`⚠️ [API:signin] ไม่พบผู้ใช้ด้วย identifier: ${identifier}`);
       return NextResponse.json(
-        { error: "ไม่พบผู้ใช้ที่ตรงกับอีเมลหรือชื่อผู้ใช้นี้" },
-        { status: 404 }
+        { error: "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง" },
+        { status: 401 }
       );
     }
 
-    // ตรวจสอบว่าบัญชีใช้ Credentials หรือไม่
-    if (!user.password) {
-      console.error(`❌ บัญชีไม่มีรหัสผ่าน: ${user.email || user.username}`);
+    // ตรวจสอบรหัสผ่าน
+    const isPasswordValid = await user.matchPassword(password);
+    if (!isPasswordValid) {
+      console.warn(`⚠️ [API:signin] รหัสผ่านไม่ถูกต้องสำหรับ identifier: ${identifier}`);
       return NextResponse.json(
-        {
-          error: "บัญชีนี้อาจถูกสร้างผ่าน Social Login กรุณาลองเข้าสู่ระบบด้วยวิธีอื่น",
-        },
-        { status: 400 }
+        { error: "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง" },
+        { status: 401 }
       );
     }
 
     // ตรวจสอบสถานะบัญชี
     if (!user.isActive) {
-      console.error(`❌ บัญชีถูกระงับ: ${user.email || user.username}`);
+      console.warn(`⚠️ [API:signin] บัญชีไม่ใช้งาน: ${identifier}`);
       return NextResponse.json(
-        { error: "บัญชีนี้ถูกระงับการใช้งาน" },
+        { error: "บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแล" },
         { status: 403 }
       );
     }
 
-    // ตรวจสอบการแบน
-    if (user.bannedUntil && user.bannedUntil > new Date()) {
-      console.error(
-        `❌ บัญชีถูกแบน: ${user.email || user.username}, จนถึง ${user.bannedUntil}`
-      );
+    if (user.isBanned) {
+      const banMessage = user.bannedUntil
+        ? `บัญชีนี้ถูกระงับจนถึง ${new Date(user.bannedUntil).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}`
+        : "บัญชีนี้ถูกระงับถาวร";
+      console.warn(`⚠️ [API:signin] บัญชีถูกแบน: ${identifier}`);
       return NextResponse.json(
-        {
-          error: `บัญชีนี้ถูกแบนจนถึง ${user.bannedUntil.toLocaleDateString("th-TH")}`,
-        },
+        { error: banMessage, banReason: user.banReason || "ไม่ระบุสาเหตุ" },
         { status: 403 }
       );
     }
 
     // ตรวจสอบการยืนยันอีเมล
-    if (!user.isEmailVerified) {
-      console.error(`❌ อีเมลยังไม่ยืนยัน: ${user.email || user.username}`);
+    if (!user.isEmailVerified && user.email) {
+      console.warn(`⚠️ [API:signin] อีเมลยังไม่ได้รับการยืนยัน: ${identifier}`);
       return NextResponse.json(
-        { error: "ยังไม่ได้ยืนยันอีเมล" },
+        { error: "ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมาย" },
         { status: 403 }
       );
     }
 
-    // ตรวจสอบรหัสผ่าน
-    const isPasswordMatch = await UserModel()
-      .findById(user._id)
-      .select("+password")
-      .then((doc) => doc?.matchPassword(password) ?? false);
+    // อัปเดตเวลา login ล่าสุด (middleware ใน User model จะจัดการ streaks)
+    user.lastLoginAt = new Date();
+    await user.save();
 
-    if (!isPasswordMatch) {
-      console.error(`❌ รหัสผ่านไม่ถูกต้อง: ${user.email || user.username}`);
-      return NextResponse.json(
-        { error: "รหัสผ่านไม่ถูกต้อง" },
-        { status: 401 }
-      );
-    }
-
-    // อัปเดตวันที่เข้าสู่ระบบ
-    await UserModel().updateOne(
-      { _id: user._id },
-      { lastLoginAt: new Date() }
-    );
-
-    console.log(`✅ การลงชื่อเข้าใช้สำเร็จ: ${user.email || user.username}`);
-
-    // สร้าง response user สอดคล้องกับ SessionUser
+    // เตรียมข้อมูลผู้ใช้สำหรับ response (สอดคล้องกับ SessionUser)
     const userResponse: SignInResponseUser = {
       id: user._id.toString(),
       email: user.email,
       username: user.username,
+      name: user.profile?.displayName || user.username,
       role: user.role,
       profile: {
         displayName: user.profile?.displayName,
@@ -226,7 +204,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         bio: user.profile?.bio,
         coverImage: user.profile?.coverImage,
         gender: user.profile?.gender,
-        preferredGenres: user.profile?.preferredGenres?.map((id) => id.toString()) ?? [],
+        preferredGenres: user.profile?.preferredGenres,
       },
       trackingStats: {
         totalLoginDays: user.trackingStats.totalLoginDays,
@@ -234,7 +212,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         totalEpisodesRead: user.trackingStats.totalEpisodesRead,
         totalCoinSpent: user.trackingStats.totalCoinSpent,
         totalRealMoneySpent: user.trackingStats.totalRealMoneySpent,
-        lastNovelReadId: user.trackingStats.lastNovelReadId?.toString(),
+        lastNovelReadId: user.trackingStats.lastNovelReadId,
         lastNovelReadAt: user.trackingStats.lastNovelReadAt,
         joinDate: user.trackingStats.joinDate,
       },
@@ -258,6 +236,13 @@ export async function POST(request: Request): Promise<NextResponse> {
           newFollowers: user.preferences.notifications.newFollowers,
           systemAnnouncements: user.preferences.notifications.systemAnnouncements,
         },
+        contentFilters: user.preferences.contentFilters
+          ? {
+              showMatureContent: user.preferences.contentFilters.showMatureContent,
+              blockedGenres: user.preferences.contentFilters.blockedGenres,
+              blockedTags: user.preferences.contentFilters.blockedTags,
+            }
+          : undefined,
         privacy: {
           showActivityStatus: user.preferences.privacy.showActivityStatus,
           profileVisibility: user.preferences.privacy.profileVisibility,
@@ -270,34 +255,54 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
       gamification: {
         level: user.gamification.level,
-        experiencePoints: user.gamification.experiencePoints, // เปลี่ยนจาก experience เป็น experiencePoints
-        achievements: user.gamification.achievements?.map((id) => id.toString()) ?? [],
-        badges: user.gamification.badges?.map((id) => id.toString()) ?? [],
+        experiencePoints: user.gamification.experiencePoints,
+        achievements: user.gamification.achievements,
+        badges: user.gamification.badges,
         streaks: {
           currentLoginStreak: user.gamification.streaks.currentLoginStreak,
           longestLoginStreak: user.gamification.streaks.longestLoginStreak,
           lastLoginDate: user.gamification.streaks.lastLoginDate,
         },
+        dailyCheckIn: user.gamification.dailyCheckIn
+          ? {
+              lastCheckInDate: user.gamification.dailyCheckIn.lastCheckInDate,
+              currentStreak: user.gamification.dailyCheckIn.currentStreak,
+            }
+          : undefined,
       },
-      writerVerification: user.writerVerification,
+      writerVerification: user.writerVerification
+        ? {
+            status: user.writerVerification.status,
+            submittedAt: user.writerVerification.submittedAt,
+            verifiedAt: user.writerVerification.verifiedAt,
+            rejectedReason: user.writerVerification.rejectedReason,
+            documents: user.writerVerification.documents,
+          }
+        : undefined,
       donationSettings: user.donationSettings
         ? {
             isDonationEnabled: user.donationSettings.isDonationEnabled,
-            donationApplicationId: user.donationSettings.donationApplicationId?.toString(),
+            donationApplicationId: user.donationSettings.donationApplicationId,
             customMessage: user.donationSettings.customMessage,
           }
         : undefined,
+      writerApplication: user.writerApplication,
+      writerStats: user.writerStats,
       isActive: user.isActive,
       isEmailVerified: user.isEmailVerified,
-      isBanned: user.bannedUntil ? user.bannedUntil > new Date() : false,
+      isBanned: user.isBanned,
       bannedUntil: user.bannedUntil,
     };
 
-    return NextResponse.json({ user: userResponse }, { status: 200 });
-  } catch (error: unknown) {
-    console.error("❌ ข้อผิดพลาดในการลงชื่อเข้าใช้:", error);
+    console.log(`✅ [API:signin] การลงชื่อเข้าใช้สำเร็จ: ${identifier} (role: ${user.role})`);
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดบางอย่างบนเซิร์ฟเวอร์" },
+      { success: true, user: userResponse },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error("❌ [API:signin] ข้อผิดพลาด:", error.message || error);
+    return NextResponse.json(
+      { error: "เกิดข้อผิดพลาดในการลงชื่อเข้าใช้" },
       { status: 500 }
     );
   }

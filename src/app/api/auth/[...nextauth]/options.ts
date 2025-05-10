@@ -1,4 +1,6 @@
 // src/app/api/auth/[...nextauth]/options.ts
+// การกำหนดค่า NextAuth สำหรับการยืนยันตัวตน
+// รองรับการล็อกอินด้วยอีเมลหรือชื่อผู้ใช้ผ่าน Credentials และ OAuth providers ต่างๆ
 
 import { NextAuthOptions, Profile, User as NextAuthUser } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -10,11 +12,11 @@ import LineProvider from "next-auth/providers/line";
 import { JWT } from "next-auth/jwt";
 import { Types } from "mongoose";
 
-// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน (สอดคล้องกับ IUser และ ISocialMediaUser)
+// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน (สอดคล้องกับ ISocialMediaUser และ IUser)
 export type SessionUser = {
   id: string;
   name: string;
-  email?: string;
+  email?: string; // อีเมลเป็นตัวเลือกสำหรับ SocialMediaUser
   username: string;
   role: "Reader" | "Writer" | "Admin";
   profile: {
@@ -23,7 +25,7 @@ export type SessionUser = {
     bio?: string;
     coverImage?: string;
     gender?: "male" | "female" | "other" | "preferNotToSay";
-    preferredGenres?: string[];
+    preferredGenres?: Types.ObjectId[];
   };
   trackingStats: {
     totalLoginDays: number;
@@ -31,7 +33,7 @@ export type SessionUser = {
     totalEpisodesRead: number;
     totalCoinSpent: number;
     totalRealMoneySpent: number;
-    lastNovelReadId?: string;
+    lastNovelReadId?: Types.ObjectId;
     lastNovelReadAt?: Date;
     joinDate: Date;
   };
@@ -45,7 +47,7 @@ export type SessionUser = {
   };
   preferences: {
     language: string;
-    theme: "light" | "dark" | "system";
+    theme: "light" | "dark" | "system" | "sepia";
     notifications: {
       email: boolean;
       push: boolean;
@@ -54,6 +56,11 @@ export type SessionUser = {
       donations: boolean;
       newFollowers: boolean;
       systemAnnouncements: boolean;
+    };
+    contentFilters?: {
+      showMatureContent: boolean;
+      blockedGenres?: Types.ObjectId[];
+      blockedTags?: string[];
     };
     privacy: {
       showActivityStatus: boolean;
@@ -67,13 +74,17 @@ export type SessionUser = {
   };
   gamification: {
     level: number;
-    experience: number;
-    achievements?: string[];
-    badges?: string[];
+    experiencePoints: number;
+    achievements: Types.ObjectId[];
+    badges: Types.ObjectId[];
     streaks: {
       currentLoginStreak: number;
       longestLoginStreak: number;
       lastLoginDate?: Date;
+    };
+    dailyCheckIn?: {
+      lastCheckInDate?: Date;
+      currentStreak: number;
     };
   };
   writerVerification?: {
@@ -85,9 +96,11 @@ export type SessionUser = {
   };
   donationSettings?: {
     isDonationEnabled: boolean;
-    donationApplicationId?: string;
+    donationApplicationId?: Types.ObjectId;
     customMessage?: string;
   };
+  writerApplication?: Types.ObjectId;
+  writerStats?: Types.ObjectId;
   isActive: boolean;
   isEmailVerified: boolean;
   isBanned: boolean;
@@ -213,6 +226,8 @@ export const authOptions: NextAuthOptions = {
             gamification: data.user.gamification,
             writerVerification: data.user.writerVerification,
             donationSettings: data.user.donationSettings,
+            writerApplication: data.user.writerApplication,
+            writerStats: data.user.writerStats,
             isActive: data.user.isActive,
             isEmailVerified: data.user.isEmailVerified,
             isBanned: data.user.isBanned,
@@ -313,6 +328,8 @@ export const authOptions: NextAuthOptions = {
         token.gamification = user.gamification;
         token.writerVerification = user.writerVerification;
         token.donationSettings = user.donationSettings;
+        token.writerApplication = user.writerApplication;
+        token.writerStats = user.writerStats;
         token.isActive = user.isActive;
         token.isEmailVerified = user.isEmailVerified;
         token.isBanned = user.isBanned;
@@ -323,7 +340,7 @@ export const authOptions: NextAuthOptions = {
             let displayName = "";
             let username = "";
             let avatar = "";
-            let email = profile?.email || "";
+            let email = profile?.email || undefined;
 
             switch (account.provider) {
               case "google":
@@ -331,7 +348,7 @@ export const authOptions: NextAuthOptions = {
                 displayName = googleProfile?.name || "";
                 username = googleProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
                 avatar = googleProfile?.picture || "";
-                email = googleProfile?.email || "";
+                email = googleProfile?.email || undefined;
                 break;
 
               case "twitter":
@@ -339,7 +356,7 @@ export const authOptions: NextAuthOptions = {
                 displayName = twitterProfile?.data?.name || twitterProfile?.name || "";
                 username = twitterProfile?.data?.username || twitterProfile?.username || displayName.replace(/\s+/g, "").toLowerCase();
                 avatar = twitterProfile?.data?.profile_image_url || twitterProfile?.profile_image_url || "";
-                email = twitterProfile?.email || "";
+                email = twitterProfile?.email || undefined;
                 break;
 
               case "facebook":
@@ -347,7 +364,7 @@ export const authOptions: NextAuthOptions = {
                 displayName = facebookProfile?.name || "";
                 username = facebookProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
                 avatar = facebookProfile?.picture?.data?.url || "";
-                email = facebookProfile?.email || "";
+                email = facebookProfile?.email || undefined;
                 break;
 
               case "apple":
@@ -358,7 +375,7 @@ export const authOptions: NextAuthOptions = {
                     : "";
                 username = appleProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
                 avatar = "";
-                email = appleProfile?.email || "";
+                email = appleProfile?.email || undefined;
                 break;
 
               case "line":
@@ -366,7 +383,7 @@ export const authOptions: NextAuthOptions = {
                 displayName = lineProfile?.displayName || "";
                 username = lineProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
                 avatar = lineProfile?.pictureUrl || "";
-                email = lineProfile?.email || "";
+                email = lineProfile?.email || undefined;
                 break;
             }
 
@@ -424,6 +441,8 @@ export const authOptions: NextAuthOptions = {
             token.gamification = data.user.gamification;
             token.writerVerification = data.user.writerVerification;
             token.donationSettings = data.user.donationSettings;
+            token.writerApplication = data.user.writerApplication;
+            token.writerStats = data.user.writerStats;
             token.isActive = data.user.isActive;
             token.isEmailVerified = data.user.isEmailVerified;
             token.isBanned = data.user.bannedUntil ? new Date(data.user.bannedUntil) > new Date() : false;
@@ -462,6 +481,8 @@ export const authOptions: NextAuthOptions = {
           gamification: token.gamification as SessionUser["gamification"],
           writerVerification: token.writerVerification as SessionUser["writerVerification"],
           donationSettings: token.donationSettings as SessionUser["donationSettings"],
+          writerApplication: token.writerApplication as Types.ObjectId | undefined,
+          writerStats: token.writerStats as Types.ObjectId | undefined,
           isActive: token.isActive as boolean,
           isEmailVerified: token.isEmailVerified as boolean,
           isBanned: token.isBanned as boolean,
@@ -488,7 +509,7 @@ declare module "next-auth" {
   interface User {
     id: string;
     name: string;
-    email?: string;
+    email?: string; // อีเมลเป็นตัวเลือกสำหรับ SocialMediaUser
     username: string;
     role: "Reader" | "Writer" | "Admin";
     profile: {
@@ -497,7 +518,7 @@ declare module "next-auth" {
       bio?: string;
       coverImage?: string;
       gender?: "male" | "female" | "other" | "preferNotToSay";
-      preferredGenres?: string[];
+      preferredGenres?: Types.ObjectId[];
     };
     trackingStats: {
       totalLoginDays: number;
@@ -505,7 +526,7 @@ declare module "next-auth" {
       totalEpisodesRead: number;
       totalCoinSpent: number;
       totalRealMoneySpent: number;
-      lastNovelReadId?: string;
+      lastNovelReadId?: Types.ObjectId;
       lastNovelReadAt?: Date;
       joinDate: Date;
     };
@@ -519,7 +540,7 @@ declare module "next-auth" {
     };
     preferences: {
       language: string;
-      theme: "light" | "dark" | "system";
+      theme: "light" | "dark" | "system" | "sepia";
       notifications: {
         email: boolean;
         push: boolean;
@@ -528,6 +549,11 @@ declare module "next-auth" {
         donations: boolean;
         newFollowers: boolean;
         systemAnnouncements: boolean;
+      };
+      contentFilters?: {
+        showMatureContent: boolean;
+        blockedGenres?: Types.ObjectId[];
+        blockedTags?: string[];
       };
       privacy: {
         showActivityStatus: boolean;
@@ -541,13 +567,17 @@ declare module "next-auth" {
     };
     gamification: {
       level: number;
-      experience: number;
-      achievements?: string[];
-      badges?: string[];
+      experiencePoints: number;
+      achievements: Types.ObjectId[];
+      badges: Types.ObjectId[];
       streaks: {
         currentLoginStreak: number;
         longestLoginStreak: number;
         lastLoginDate?: Date;
+      };
+      dailyCheckIn?: {
+        lastCheckInDate?: Date;
+        currentStreak: number;
       };
     };
     writerVerification?: {
@@ -559,9 +589,11 @@ declare module "next-auth" {
     };
     donationSettings?: {
       isDonationEnabled: boolean;
-      donationApplicationId?: string;
+      donationApplicationId?: Types.ObjectId;
       customMessage?: string;
     };
+    writerApplication?: Types.ObjectId;
+    writerStats?: Types.ObjectId;
     isActive: boolean;
     isEmailVerified: boolean;
     isBanned: boolean;
@@ -577,7 +609,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
     name?: string;
-    email?: string;
+    email?: string; // อีเมลเป็นตัวเลือกสำหรับ SocialMediaUser
     username?: string;
     role?: "Reader" | "Writer" | "Admin";
     profile?: {
@@ -586,7 +618,7 @@ declare module "next-auth/jwt" {
       bio?: string;
       coverImage?: string;
       gender?: "male" | "female" | "other" | "preferNotToSay";
-      preferredGenres?: string[];
+      preferredGenres?: Types.ObjectId[];
     };
     trackingStats?: {
       totalLoginDays: number;
@@ -594,7 +626,7 @@ declare module "next-auth/jwt" {
       totalEpisodesRead: number;
       totalCoinSpent: number;
       totalRealMoneySpent: number;
-      lastNovelReadId?: string;
+      lastNovelReadId?: Types.ObjectId;
       lastNovelReadAt?: Date;
       joinDate: Date;
     };
@@ -608,7 +640,7 @@ declare module "next-auth/jwt" {
     };
     preferences?: {
       language: string;
-      theme: "light" | "dark" | "system";
+      theme: "light" | "dark" | "system" | "sepia";
       notifications: {
         email: boolean;
         push: boolean;
@@ -617,6 +649,11 @@ declare module "next-auth/jwt" {
         donations: boolean;
         newFollowers: boolean;
         systemAnnouncements: boolean;
+      };
+      contentFilters?: {
+        showMatureContent: boolean;
+        blockedGenres?: Types.ObjectId[];
+        blockedTags?: string[];
       };
       privacy: {
         showActivityStatus: boolean;
@@ -630,13 +667,17 @@ declare module "next-auth/jwt" {
     };
     gamification?: {
       level: number;
-      experience: number;
-      achievements?: string[];
-      badges?: string[];
+      experiencePoints: number;
+      achievements: Types.ObjectId[];
+      badges: Types.ObjectId[];
       streaks: {
         currentLoginStreak: number;
         longestLoginStreak: number;
         lastLoginDate?: Date;
+      };
+      dailyCheckIn?: {
+        lastCheckInDate?: Date;
+        currentStreak: number;
       };
     };
     writerVerification?: {
@@ -648,9 +689,11 @@ declare module "next-auth/jwt" {
     };
     donationSettings?: {
       isDonationEnabled: boolean;
-      donationApplicationId?: string;
+      donationApplicationId?: Types.ObjectId;
       customMessage?: string;
     };
+    writerApplication?: Types.ObjectId;
+    writerStats?: Types.ObjectId;
     isActive?: boolean;
     isEmailVerified?: boolean;
     isBanned?: boolean;

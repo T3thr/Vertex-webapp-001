@@ -1,10 +1,11 @@
 // src/context/AuthContext.tsx
 // คอนเท็กซ์สำหรับจัดการการยืนยันตัวตนของผู้ใช้
 // รองรับการลงชื่อเข้าใช้ สมัครสมาชิก และออกจากระบบ
+// อัปเดต: ปรับ signInWithCredentials ให้ทำงานกับ /api/auth/signin, signInWithSocial กับ /api/auth/social, และ signUp กับ /api/auth/signup
 
 import { createContext, useContext, useCallback, ReactNode, useState, useEffect } from "react";
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
-import { SessionUser } from "@/app/api/auth/[...nextauth]/options"; // ตรวจสอบ path
+import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
 import { useQueryClient } from "@tanstack/react-query";
 
 // อินเทอร์เฟซสำหรับ AuthContext
@@ -13,14 +14,14 @@ interface AuthContextType {
   status: "authenticated" | "loading" | "unauthenticated";
   signInWithCredentials: (
     identifier: string,
-    password?: string
+    password: string
   ) => Promise<{ error?: string; success?: boolean; verificationRequired?: boolean; ok?: boolean }>;
   signInWithSocial: (provider: string) => Promise<void>;
-  signUp: ( // ฟังก์ชันสมัครสมาชิก
+  signUp: (
     email: string,
     username: string,
     password: string,
-    recaptchaToken: string // reCAPTCHA token ที่ได้จาก client-side และถูก verify *เบื้องต้น* โดย /api/verify-recaptcha แล้ว
+    recaptchaToken: string
   ) => Promise<{ error?: string; success?: boolean; message?: string }>;
   signOut: () => Promise<void>;
   loading: boolean;
@@ -42,53 +43,67 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (user || nextAuthStatus !== 'loading') { // ล้าง error เมื่อ user เปลี่ยน หรือ auth status ไม่ใช่ loading
-        setAuthError(null);
+    if (user || nextAuthStatus !== 'loading') {
+      setAuthError(null);
     }
   }, [user, nextAuthStatus]);
 
   const signInWithCredentials = useCallback(
     async (
       identifier: string,
-      password?: string
+      password: string
     ): Promise<{ error?: string; success?: boolean; verificationRequired?: boolean; ok?: boolean }> => {
       setLoading(true);
       setAuthError(null);
-      console.log(`🔵 [AuthContext] กำลังพยายามลงชื่อเข้าใช้ด้วย credentials: ${identifier}`);
+      console.log(`🔵 [AuthContext] พยายามลงชื่อเข้าใช้ด้วย identifier: ${identifier}`);
+
       try {
-        const result = await nextAuthSignIn("credentials", {
+        // เรียก API /api/auth/signin เพื่อตรวจสอบข้อมูลกับ User model
+        const response = await fetch("/api/auth/signin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier, password }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          let errorMessage = data.error || "การลงชื่อเข้าใช้ล้มเหลว";
+          let verificationRequired = false;
+          if (errorMessage.includes("ยังไม่ได้ยืนยันอีเมล")) {
+            errorMessage = "บัญชีของคุณยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมาย";
+            verificationRequired = true;
+          } else if (errorMessage.includes("ไม่ถูกต้อง")) {
+            errorMessage = "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง";
+          } else if (errorMessage.includes("ถูกปิดใช้งาน")) {
+            errorMessage = "บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแล";
+          } else if (errorMessage.includes("ถูกระงับ")) {
+            errorMessage = data.error; // ใช้ข้อความจาก API เช่น "บัญชีนี้ถูกระงับจนถึง..."
+          }
+          console.warn(`⚠️ [AuthContext] ลงชื่อเข้าใช้ล้มเหลว: ${errorMessage}`);
+          setAuthError(errorMessage);
+          return { error: errorMessage, success: false, verificationRequired, ok: false };
+        }
+
+        // ถ้าสำเร็จ ใช้ nextAuthSignIn เพื่อสร้าง session
+        const signInResult = await nextAuthSignIn("credentials", {
           redirect: false,
           identifier,
           password,
         });
 
-        if (result?.error) {
-          let errorMessage = result.error;
-          let verificationRequired = false;
-          if (errorMessage.includes("ยังไม่ได้ยืนยันอีเมล") || errorMessage.toLowerCase().includes("email not verified")) {
-            errorMessage = "บัญชีของคุณยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ";
-            verificationRequired = true;
-          } else if (errorMessage === "CredentialsSignin") {
-            errorMessage = "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง";
-          }
-          console.warn(`⚠️ [AuthContext] ลงชื่อเข้าใช้ด้วย credentials ล้มเหลว: ${errorMessage}`);
-          setAuthError(errorMessage);
-          return { error: errorMessage, success: false, verificationRequired, ok: false };
+        if (signInResult?.error) {
+          console.warn(`⚠️ [AuthContext] การสร้าง session ล้มเหลว: ${signInResult.error}`);
+          setAuthError(signInResult.error);
+          return { error: signInResult.error, success: false, ok: false };
         }
 
-        if (result?.ok) {
-          console.log(`✅ [AuthContext] ลงชื่อเข้าใช้ด้วย credentials สำเร็จ: ${identifier}`);
-          await queryClient.invalidateQueries({ queryKey: ["session"] });
-          return { success: true, ok: true };
-        }
-
-        const defaultError = "การลงชื่อเข้าใช้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
-        console.warn(`⚠️ [AuthContext] ลงชื่อเข้าใช้ด้วย credentials ล้มเหลว (ไม่ทราบสาเหตุ): ${JSON.stringify(result)}`);
-        setAuthError(defaultError);
-        return { error: defaultError, success: false, ok: false };
+        console.log(`✅ [AuthContext] ลงชื่อเข้าใช้สำเร็จ: ${identifier}`);
+        await queryClient.invalidateQueries({ queryKey: ["session"] });
+        return { success: true, ok: true };
       } catch (error: any) {
-        console.error("❌ [AuthContext] ข้อผิดพลาดระหว่างการ signInWithCredentials:", error);
-        const message = error.message || "เกิดข้อผิดพลาดที่ไม่คาดคิดระหว่างการลงชื่อเข้าใช้";
+        console.error("❌ [AuthContext] ข้อผิดพลาดระหว่าง signInWithCredentials:", error);
+        const message = error.message || "เกิดข้อผิดพลาดระหว่างการลงชื่อเข้าใช้";
         setAuthError(message);
         return { error: message, success: false, ok: false };
       } finally {
@@ -101,45 +116,44 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signInWithSocial = useCallback(async (provider: string): Promise<void> => {
     setLoading(true);
     setAuthError(null);
-    console.log(`🔵 [AuthContext] กำลังพยายามลงชื่อเข้าใช้ด้วย social provider: ${provider}`);
+    console.log(`🔵 [AuthContext] พยายามลงชื่อเข้าใช้ด้วย social provider: ${provider}`);
     try {
+      // เรียก NextAuth social provider ผ่าน /api/auth/social (สมมติว่าใช้ [...nextauth])
       const result = await nextAuthSignIn(provider, {
         redirect: true,
         callbackUrl: "/",
       });
 
-      if (result?.error) { // ส่วนนี้อาจไม่ถูกเรียกถ้า redirect เกิดขึ้น
+      if (result?.error) {
         console.warn(`⚠️ [AuthContext] Social sign-in (${provider}) ล้มเหลว: ${result.error}`);
         let errorMessage = result.error;
         if (errorMessage.includes("OAuthAccountNotLinked")) {
-             errorMessage = "บัญชีโซเชียลนี้ยังไม่ได้เชื่อมโยง หรืออีเมลอาจถูกใช้กับบัญชีอื่นแล้ว";
+          errorMessage = "บัญชีโซเชียลนี้ยังไม่ได้เชื่อมโยง หรืออีเมลอาจถูกใช้กับบัญชีอื่น";
         }
         setAuthError(errorMessage);
-      } else if (result?.ok) {
-        console.log(`✅ [AuthContext] Social sign-in (${provider}) สำเร็จ (หรือกำลัง redirect)`);
+      } else {
+        console.log(`✅ [AuthContext] Social sign-in (${provider}) สำเร็จ`);
         await queryClient.invalidateQueries({ queryKey: ["session"] });
       }
     } catch (error: any) {
-      console.error(`❌ [AuthContext] ข้อผิดพลาดระหว่างการ signInWithSocial (${provider}):`, error);
+      console.error(`❌ [AuthContext] ข้อผิดพลาดระหว่าง signInWithSocial (${provider}):`, error);
       setAuthError(error.message || `เกิดข้อผิดพลาดในการลงชื่อเข้าใช้ด้วย ${provider}`);
     } finally {
-      // ไม่ตั้ง setLoading(false) ที่นี่ เพราะหน้าจะ redirect
+      // ไม่ตั้ง setLoading(false) เพราะจะ redirect
     }
   }, [queryClient]);
 
-  // ฟังก์ชันสมัครสมาชิก
   const signUp = useCallback(
     async (
       email: string,
       username: string,
       password: string,
-      recaptchaToken: string // reCAPTCHA token ที่ถูก verify เบื้องต้นโดย /api/verify-recaptcha แล้ว
+      recaptchaToken: string
     ): Promise<{ error?: string; success?: boolean; message?: string }> => {
       setLoading(true);
       setAuthError(null);
-      console.log(`🔵 [AuthContext] กำลังส่งคำขอสมัครสมาชิกไปยัง /api/auth/signup สำหรับ: ${username} (${email})`);
+      console.log(`🔵 [AuthContext] ส่งคำขอสมัครสมาชิก: ${username} (${email})`);
       try {
-        // API endpoint /api/auth/signup จะทำการ verify reCAPTCHA token กับ Google *อีกครั้ง*
         const response = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -150,23 +164,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         if (!response.ok || !data.success) {
           const errorMessage = data.error || `การสมัครสมาชิกล้มเหลว (สถานะ: ${response.status})`;
-          console.warn(`⚠️ [AuthContext] การสมัครสมาชิกผ่าน /api/auth/signup ล้มเหลว: ${errorMessage}`);
+          console.warn(`⚠️ [AuthContext] การสมัครสมาชิกล้มเหลว: ${errorMessage}`);
           setAuthError(errorMessage);
           return { error: errorMessage, success: false };
         }
 
-        console.log(`✅ [AuthContext] การสมัครสมาชิกผ่าน /api/auth/signup สำเร็จ: ${username} (${email})`);
+        console.log(`✅ [AuthContext] สมัครสมาชิกสำเร็จ: ${username} (${email})`);
         return { success: true, message: data.message || "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี" };
       } catch (error: any) {
-        console.error("❌ [AuthContext] ข้อผิดพลาดระหว่างการเรียก signUp API:", error);
-        const errorMessage = error.message || "เกิดข้อผิดพลาดที่ไม่คาดคิดระหว่างการสมัครสมาชิก";
+        console.error("❌ [AuthContext] ข้อผิดพลาดระหว่าง signUp:", error);
+        const errorMessage = error.message || "เกิดข้อผิดพลาดระหว่างการสมัครสมาชิก";
         setAuthError(errorMessage);
         return { error: errorMessage, success: false };
       } finally {
         setLoading(false);
       }
     },
-    [] // Dependencies
+    []
   );
 
   const signOut = useCallback(async () => {
@@ -175,15 +189,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     console.log(`🔵 [AuthContext] กำลังออกจากระบบ...`);
     try {
       await nextAuthSignOut({ redirect: true, callbackUrl: "/" });
-      // queryClient.invalidateQueries({ queryKey: ["session"] }); // NextAuth จัดการ session update เองเมื่อ redirect
-      // queryClient.removeQueries({ queryKey: ["session"] });
-      console.log(`✅ [AuthContext] ออกจากระบบ (กำลัง redirect)`);
+      console.log(`✅ [AuthContext] ออกจากระบบสำเร็จ`);
     } catch (error: any) {
-      console.error("❌ [AuthContext] ข้อผิดพลาดระหว่างการ signOut:", error);
+      console.error("❌ [AuthContext] ข้อผิดพลาดระหว่าง signOut:", error);
       setAuthError(error.message || "เกิดข้อผิดพลาดในการออกจากระบบ");
       setLoading(false);
     }
-  }, [queryClient]);
+  }, []);
 
   const contextValue: AuthContextType = {
     user,
@@ -192,7 +204,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signInWithSocial,
     signUp,
     signOut,
-    loading, // State loading นี้จะถูกควบคุมโดยแต่ละฟังก์ชัน async
+    loading,
     authError,
     setAuthError,
   };
