@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import mongoose, { Types, HydratedDocument } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import UserModel, { IUser } from "@/backend/models/User";
 import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
 import ActivityHistoryModel, { IActivityHistory } from "@/backend/models/ActivityHistory";
@@ -80,14 +80,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // ดึง session เพื่อตรวจสอบการยืนยันตัวตน
     const session = await getServerSession(authOptions);
     const currentUserId = session?.user?.id
-      ? new Types.ObjectId(session.user.id)
+      ? new mongoose.Types.ObjectId(session.user.id)
       : null;
 
     // ค้นหาผู้ใช้
-    let viewedUser: HydratedDocument<IUser> | HydratedDocument<ISocialMediaUser> | null =
-      await UserModel()
-        .findOne({ username, isDeleted: false })
-        .exec();
+    let viewedUser: IUser | ISocialMediaUser | null = await UserModel()
+      .findOne({ username, isDeleted: false })
+      .exec();
     if (!viewedUser) {
       viewedUser = await SocialMediaUserModel()
         .findOne({ username, isDeleted: false })
@@ -98,18 +97,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ตรวจสอบสิทธิ์การเข้าถึง
-    const isOwnProfile = currentUserId && viewedUser && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
+    const isOwnProfile = currentUserId ? currentUserId.equals(viewedUser._id) : false;
+    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility ?? "public";
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
         return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
       }
       if (profileVisibility === "followersOnly" && currentUserId) {
-        const isFollower = await mongoose.model("UserFollow").findOne({
-          followerId: currentUserId,
-          followingId: viewedUser._id,
-          status: "active",
-        });
+        const isFollower = await mongoose
+          .model("UserFollow")
+          .findOne({
+            followerId: currentUserId,
+            followingId: viewedUser._id,
+            status: "active",
+          })
+          .exec();
         if (!isFollower) {
           return NextResponse.json(
             { error: "ต้องติดตามผู้ใช้เพื่อดูประวัติกิจกรรม" },
@@ -121,19 +123,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ดึง query parameters
     const { searchParams } = req.nextUrl;
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const page = parseInt(searchParams.get("page") ?? "1", 10);
+    const limit = parseInt(searchParams.get("limit") ?? "10", 10);
     if (page < 1 || limit < 1) {
       return NextResponse.json({ error: "page และ limit ต้องมากกว่า 0" }, { status: 400 });
     }
 
     // กำหนดประเภทกิจกรรมที่แสดง
-    let activityFilter: string[] = ALLOWED_ACTIVITY_TYPES;
-    if (!isOwnProfile) {
-      activityFilter = activityFilter.filter(
-        (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
-      );
-    }
+    const activityFilter = isOwnProfile
+      ? ALLOWED_ACTIVITY_TYPES
+      : ALLOWED_ACTIVITY_TYPES.filter(
+          (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
+        );
 
     // คำนวณการข้ามข้อมูลสำหรับการแบ่งหน้า
     const skip = (page - 1) * limit;
@@ -141,7 +142,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // ดึงประวัติกิจกรรม
     const activities = await ActivityHistoryModel()
       .find({
-        user: viewed...user._id,
+        user: viewedUser._id,
         activityType: { $in: activityFilter },
       })
       .sort({ createdAt: -1 })
@@ -149,9 +150,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .limit(limit)
       .populate<{
         details: {
-          novelId?: HydratedDocument<INovel>;
-          episodeId?: HydratedDocument<IEpisode>;
-          targetUserId?: HydratedDocument<IUser> | HydratedDocument<ISocialMediaUser>;
+          novelId?: INovel;
+          episodeId?: IEpisode;
+          targetUserId?: IUser | ISocialMediaUser;
         };
       }>([
         {
@@ -180,17 +181,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .exec();
 
     // นับจำนวนกิจกรรมทั้งหมด
-    const totalActivities = await ActivityHistoryModel().countDocuments({
-      user: viewedUser._id,
-      activityType: { $in: activityFilter },
-    });
+    const totalActivities = await ActivityHistoryModel()
+      .countDocuments({
+        user: viewedUser._id,
+        activityType: { $in: activityFilter },
+      })
+      .exec();
     const totalPages = Math.ceil(totalActivities / limit);
 
     // แปลงข้อมูลกิจกรรม
     const formattedActivities: ActivityItem[] = activities.map((activity) => {
-      const novel = activity.details.novelId;
-      const episode = activity.details.episodeId;
-      const targetUser = activity.details.targetUserId;
+      const { details } = activity;
+      const novel = details.novelId;
+      const episode = details.episodeId;
+      const targetUser = details.targetUserId;
 
       return {
         _id: activity._id.toString(),
@@ -199,23 +203,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         content: activity.content,
         novelId: novel?._id.toString(),
         episodeId: episode?._id.toString(),
-        commentId: activity.details.commentId?.toString(),
-        ratingId: activity.details.ratingId?.toString(),
+        commentId: details.commentId?.toString(),
+        ratingId: details.ratingId?.toString(),
         followedUserId: targetUser?._id.toString(),
-        likedNovelId:
-          activity.activityType === "NOVEL_LIKED" ? novel?._id.toString() : undefined,
-        purchaseId: activity.details.purchaseId?.toString(),
-        donationId: activity.details.donationId?.toString(),
+        likedNovelId: activity.activityType === "NOVEL_LIKED" ? novel?._id.toString() : undefined,
+        purchaseId: details.purchaseId?.toString(),
+        donationId: details.donationId?.toString(),
         relatedUser: targetUser?._id.toString(),
         relatedNovel: novel?._id.toString(),
         relatedEpisode: episode?._id.toString(),
-        coinAmount: activity.details.amountCoin,
+        coinAmount: details.amountCoin,
         timestamp: activity.createdAt,
         novelTitle: novel?.title,
         novelSlug: novel?.slug,
         episodeTitle: episode?.title,
         episodeNumber: episode?.episodeNumber,
-        targetUserName: targetUser?.profile?.displayName || targetUser?.username,
+        targetUserName: targetUser?.profile?.displayName ?? targetUser?.username,
         targetUserSlug: targetUser?.username,
       };
     });
