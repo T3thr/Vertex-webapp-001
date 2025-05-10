@@ -98,7 +98,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // ตรวจสอบสิทธิ์การเข้าถึง
     const isOwnProfile = currentUserId && currentUserId.equals(viewedUser._id);
-    const profileVisibility = viewedUser.preferences.privacy.profileVisibility || "public";
+    const profileVisibility = viewedUser.preferences?.privacy?.profileVisibility || "public";
     if (!isOwnProfile) {
       if (profileVisibility === "private") {
         return NextResponse.json({ error: "โปรไฟล์นี้เป็นส่วนตัว" }, { status: 403 });
@@ -127,11 +127,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // กำหนดประเภทกิจกรรมที่แสดง
-    const activityFilter = isOwnProfile
-      ? ALLOWED_ACTIVITY_TYPES
-      : ALLOWED_ACTIVITY_TYPES.filter(
-          (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
-        );
+    let activityFilter: string[] = ALLOWED_ACTIVITY_TYPES;
+    if (!isOwnProfile) {
+      activityFilter = activityFilter.filter(
+        (type) => !["COIN_SPENT_DONATION_WRITER", "COIN_EARNED_WRITER_DONATION"].includes(type)
+      );
+    }
 
     // คำนวณการข้ามข้อมูลสำหรับการแบ่งหน้า
     const skip = (page - 1) * limit;
@@ -146,11 +147,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .skip(skip)
       .limit(limit)
       .populate<{
-        details: {
-          novelId?: INovel;
-          episodeId?: IEpisode;
-          targetUserId?: IUser | ISocialMediaUser;
-        };
+        details: { novelId?: INovel; episodeId?: IEpisode; targetUserId?: IUser | ISocialMediaUser }
       }>([
         {
           path: "details.novelId",
@@ -195,12 +192,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         userId: activity.user.toString(),
         type: activity.activityType,
         content: activity.content,
-        novelId: novel?._id.toString(),
-        episodeId: episode?._id.toString(),
+        novelId: activity.details.novelId?._id.toString(),
+        episodeId: activity.details.episodeId?._id.toString(),
         commentId: activity.details.commentId?.toString(),
         ratingId: activity.details.ratingId?.toString(),
-        followedUserId: targetUser?._id.toString(),
-        likedNovelId: activity.activityType === "NOVEL_LIKED" ? novel?._id.toString() : undefined,
+        followedUserId: activity.details.targetUserId?._id.toString(),
+        likedNovelId:
+          activity.activityType === "NOVEL_LIKED"
+            ? activity.details.novelId?._id.toString()
+            : undefined,
         purchaseId: activity.details.purchaseId?.toString(),
         donationId: activity.details.donationId?.toString(),
         relatedUser: targetUser?._id.toString(),
