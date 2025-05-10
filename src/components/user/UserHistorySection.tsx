@@ -15,7 +15,6 @@ import {
 // อินเทอร์เฟซสำหรับ props ของคอมโพเนนต์
 interface UserHistorySectionProps {
   viewedUser: CombinedUser | null;
-  initialActivities: ActivityItem[];
   isOwnProfile: boolean;
 }
 
@@ -52,7 +51,7 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
-// อินเทอร์เฟซสำหรับการตอบกลับจาก API (เก็บไว้สำหรับอนาคต)
+// อินเทอร์เฟซสำหรับการตอบกลับจาก API
 interface ActivityHistoryResponse {
   activities: ActivityItem[];
   currentPage: number;
@@ -83,86 +82,19 @@ const getActivityIcon = (type: string) => {
   }
 };
 
-// ข้อมูลจำลองสำหรับทดสอบ (เลียนแบบข้อมูลจาก API)
-const generateMockActivities = (userId: string, count: number): ActivityItem[] => {
-  const activities: ActivityItem[] = [];
-  const now = new Date();
-  const activityTypes = [
-    'EPISODE_READ',
-    'COMMENT_CREATED',
-    'RATING_GIVEN',
-    'USER_FOLLOWED',
-    'NOVEL_LIKED',
-    'COIN_SPENT_EPISODE',
-    'COIN_SPENT_DONATION_WRITER',
-    'COIN_EARNED_WRITER_DONATION',
-  ];
-
-  for (let i = 0; i < count; i++) {
-    const type = activityTypes[i % activityTypes.length];
-    const activity: ActivityItem = {
-      _id: `mock_${i}`,
-      userId,
-      type,
-      content: `จำลอง: ${type.replace('_', ' ').toLowerCase()}`,
-      timestamp: new Date(now.getTime() - i * 60 * 60 * 1000), // ลดเวลาลง 1 ชั่วโมงต่อกิจกรรม
-    };
-
-    // เพิ่มข้อมูลเพิ่มเติมตามประเภทกิจกรรม
-    if (type.includes('NOVEL') || type.includes('EPISODE')) {
-      activity.novelId = `novel_${i}`;
-      activity.novelTitle = `นิยายตัวอย่าง ${i + 1}`;
-      activity.novelSlug = `novel-sample-${i + 1}`;
-    }
-    if (type.includes('EPISODE')) {
-      activity.episodeId = `episode_${i}`;
-      activity.episodeTitle = `ตอนที่ ${i + 1}: การผจญภัย`;
-      activity.episodeNumber = i + 1;
-    }
-    if (type === 'COMMENT_CREATED') {
-      activity.commentId = `comment_${i}`;
-    }
-    if (type === 'RATING_GIVEN') {
-      activity.ratingId = `rating_${i}`;
-    }
-    if (type === 'USER_FOLLOWED') {
-      activity.followedUserId = `user_${i}`;
-      activity.targetUserName = `ผู้ใช้ตัวอย่าง ${i + 1}`;
-      activity.targetUserSlug = `user-sample-${i + 1}`;
-    }
-    if (type === 'NOVEL_LIKED') {
-      activity.likedNovelId = `novel_${i}`;
-    }
-    if (type.includes('COIN')) {
-      activity.coinAmount = (i + 1) * 10;
-      if (type === 'COIN_SPENT_EPISODE') {
-        activity.purchaseId = `purchase_${i}`;
-      } else if (type.includes('DONATION')) {
-        activity.donationId = `donation_${i}`;
-      }
-    }
-
-    activities.push(activity);
-  }
-
-  return activities;
-};
-
 // คอมโพเนนต์หลัก
 const UserHistorySection: React.FC<UserHistorySectionProps> = ({
   viewedUser,
-  initialActivities,
   isOwnProfile,
 }) => {
   // สถานะสำหรับจัดการข้อมูลและการโหลด
-  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ฟังก์ชันสำหรับดึงข้อมูลจาก API (ถูกคอมเมนต์ไว้เนื่องจาก API มีปัญหา)
-  /*
+  // ฟังก์ชันสำหรับดึงข้อมูลจาก API
   const fetchActivities = useCallback(
     async (pageToFetch: number) => {
       if (!viewedUser) return;
@@ -173,7 +105,8 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
           `/api/${viewedUser.username}/activity-history?page=${pageToFetch}&limit=10`
         );
         if (!res.ok) {
-          throw new Error(`Failed to fetch activity history: ${res.statusText}`);
+          const errorData = await res.json();
+          throw new Error(errorData.error || `Failed to fetch activity history: ${res.statusText}`);
         }
         const data: ActivityHistoryResponse = await res.json();
         setActivities((prev) =>
@@ -183,68 +116,27 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
         setTotalPages(data.totalPages);
       } catch (err) {
         const errorMessage =
-          err instanceof Error ? err.message : 'Failed to load activity history.';
+          err instanceof Error ? err.message : 'ไม่สามารถโหลดประวัติกิจกรรมได้';
         setError(errorMessage);
-        console.error('Error fetching activities:', err);
+        console.error('ข้อผิดพลาดในการดึงข้อมูลกิจกรรม:', err);
       } finally {
         setIsLoading(false);
       }
     },
     [viewedUser]
   );
-  */
 
-  // จำลองการโหลดข้อมูลเพิ่มเติม (เลียนแบบพฤติกรรม API)
-  const loadMoreMockActivities = useCallback(() => {
-    if (!viewedUser) return;
-    setIsLoading(true);
-    setTimeout(() => {
-      const newActivities = generateMockActivities(viewedUser._id, 10).slice(0, 10);
-      setActivities((prev) => [...prev, ...newActivities]);
-      setCurrentPage((prev) => prev + 1);
-      setIsLoading(false);
-    }, 1000); // จำลองความล่าช้าของเครือข่าย
-  }, [viewedUser]);
-
-  // อัปเดตข้อมูลเมื่อ viewedUser หรือ initialActivities เปลี่ยน
+  // ดึงข้อมูลเมื่อ viewedUser เปลี่ยน
   useEffect(() => {
     if (viewedUser) {
-      // จำลองการตั้งค่าเริ่มต้น
-      const mockActivities = generateMockActivities(viewedUser._id, 25); // สร้าง 25 รายการเพื่อทดสอบ pagination
-      setActivities(mockActivities.slice(0, 10)); // แสดง 10 รายการแรก
-      setTotalPages(Math.ceil(mockActivities.length / 10)); // คำนวณจำนวนหน้าทั้งหมด
-      setCurrentPage(1);
-    }
-  }, [viewedUser]);
-
-  // ลอจิกเดิมสำหรับการดึงข้อมูล API (ถูกคอมเมนต์ไว้)
-  /*
-  useEffect(() => {
-    if (viewedUser && initialActivities.length > 0) {
-      const fetchInitialMeta = async () => {
-        try {
-          const res = await fetch(
-            `/api/${viewedUser.username}/activity-history?page=1&limit=10`
-          );
-          if (res.ok) {
-            const data: ActivityHistoryResponse = await res.json();
-            setTotalPages(data.totalPages);
-          }
-        } catch (e) {
-          console.error('Failed to fetch initial meta for history', e);
-        }
-      };
-      fetchInitialMeta();
-    } else if (viewedUser && initialActivities.length === 0) {
       fetchActivities(1);
     }
-  }, [viewedUser, initialActivities, fetchActivities]);
-  */
+  }, [viewedUser, fetchActivities]);
 
   // ฟังก์ชันสำหรับโหลดข้อมูลเพิ่ม
   const handleLoadMore = () => {
     if (currentPage < totalPages && !isLoading) {
-      loadMoreMockActivities();
+      fetchActivities(currentPage + 1);
     }
   };
 
@@ -268,7 +160,7 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
           ข้อผิดพลาด: {error}
         </div>
       )}
-      {activities.length === 0 && !isLoading && (
+      {activities.length === 0 && !isLoading && !error && (
         <p className="text-muted-foreground">ไม่พบกิจกรรม</p>
       )}
       <ul className="space-y-4">
@@ -282,7 +174,7 @@ const UserHistorySection: React.FC<UserHistorySectionProps> = ({
               <p className="text-sm text-foreground">
                 {activity.content || `กิจกรรม: ${activity.type}`}
                 {activity.novelTitle && (
-                  <span className="font-semibold"> ใน &quot;{activity.novelTitle}&quot;</span>
+                  <span className="font-semibold"> ใน "{activity.novelTitle}"</span>
                 )}
                 {activity.episodeTitle && (
                   <span className="italic"> - {activity.episodeTitle}</span>
