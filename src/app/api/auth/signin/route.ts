@@ -1,4 +1,6 @@
 // src/app/api/auth/signin/route.ts
+// API สำหรับการลงชื่อเข้าใช้ด้วย Credentials
+// รองรับการตรวจสอบอีเมลหรือชื่อผู้ใช้และรหัสผ่าน
 
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
@@ -68,7 +70,7 @@ interface SignInResponseUser {
   };
   gamification: {
     level: number;
-    experience: number;
+    experiencePoints: number; // เปลี่ยนจาก experience เป็น experiencePoints เพื่อให้ตรงกับโมเดล
     achievements?: string[];
     badges?: string[];
     streaks: {
@@ -105,7 +107,11 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // ตรวจสอบข้อมูลที่จำเป็น
     if ((!email && !username) || !password) {
-      console.error(`❌ ข้อมูลไม่ครบถ้วน: email=${email}, username=${username}, password=${password ? "provided" : "missing"}`);
+      console.error(
+        `❌ ข้อมูลไม่ครบถ้วน: email=${email}, username=${username}, password=${
+          password ? "provided" : "missing"
+        }`
+      );
       return NextResponse.json(
         { error: "กรุณากรอกอีเมลหรือชื่อผู้ใช้ และรหัสผ่าน" },
         { status: 400 }
@@ -148,7 +154,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!user.password) {
       console.error(`❌ บัญชีไม่มีรหัสผ่าน: ${user.email || user.username}`);
       return NextResponse.json(
-        { error: "บัญชีนี้อาจถูกสร้างผ่าน Social Login กรุณาลองเข้าสู่ระบบด้วยวิธีอื่น" },
+        {
+          error: "บัญชีนี้อาจถูกสร้างผ่าน Social Login กรุณาลองเข้าสู่ระบบด้วยวิธีอื่น",
+        },
         { status: 400 }
       );
     }
@@ -164,9 +172,13 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // ตรวจสอบการแบน
     if (user.bannedUntil && user.bannedUntil > new Date()) {
-      console.error(`❌ บัญชีถูกแบน: ${user.email || user.username}, จนถึง ${user.bannedUntil}`);
+      console.error(
+        `❌ บัญชีถูกแบน: ${user.email || user.username}, จนถึง ${user.bannedUntil}`
+      );
       return NextResponse.json(
-        { error: `บัญชีนี้ถูกแบนจนถึง ${user.bannedUntil.toLocaleDateString("th-TH")}` },
+        {
+          error: `บัญชีนี้ถูกแบนจนถึง ${user.bannedUntil.toLocaleDateString("th-TH")}`,
+        },
         { status: 403 }
       );
     }
@@ -258,7 +270,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
       gamification: {
         level: user.gamification.level,
-        experience: user.gamification.experience,
+        experiencePoints: user.gamification.experiencePoints, // เปลี่ยนจาก experience เป็น experiencePoints
         achievements: user.gamification.achievements?.map((id) => id.toString()) ?? [],
         badges: user.gamification.badges?.map((id) => id.toString()) ?? [],
         streaks: {
