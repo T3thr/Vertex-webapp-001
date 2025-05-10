@@ -210,7 +210,7 @@ const UserSchema = new Schema<IUser>(
       joinDate: { type: Date, default: Date.now, immutable: true },
     },
     socialStats: {
-      _互_id: false,
+      _id: false, // แก้ไขจาก _互_id เป็น _id
       followersCount: { type: Number, default: 0, min: 0 },
       followingCount: { type: Number, default: 0, min: 0 },
       novelsCreatedCount: { type: Number, default: 0, min: 0 },
