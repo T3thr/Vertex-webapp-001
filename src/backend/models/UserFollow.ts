@@ -6,7 +6,9 @@ import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 export interface IUserFollow extends Document {
   $isNew: boolean;
   followerId: Types.ObjectId; // ผู้ใช้ที่ทำการติดตาม
+  followerModel: "User" | "SocialMediaUser"; // โมเดลของผู้ติดตาม
   followingId: Types.ObjectId; // ผู้ใช้ที่ถูกติดตาม
+  followingModel: "User" | "SocialMediaUser"; // โมเดลของผู้ที่ถูกติดตาม
   notifications?: {
     onNewNovelByFollowing?: boolean; // แจ้งเตือนเมื่อผู้ที่ถูกติดตามสร้างนิยายใหม่
     onFollowingActivity?: boolean; // แจ้งเตือนเกี่ยวกับกิจกรรมอื่นๆ
@@ -22,14 +24,26 @@ const UserFollowSchema = new Schema<IUserFollow>(
   {
     followerId: {
       type: Schema.Types.ObjectId,
-      ref: ["User", "SocialMediaUser"],
+      refPath: "followerModel",
       required: [true, "กรุณาระบุ ID ของผู้ติดตาม (followerId)"],
+      index: true,
+    },
+    followerModel: {
+      type: String,
+      required: true,
+      enum: ["User", "SocialMediaUser"],
       index: true,
     },
     followingId: {
       type: Schema.Types.ObjectId,
-      ref: ["User", "SocialMediaUser"],
+      refPath: "followingModel",
       required: [true, "กรุณาระบุ ID ของผู้ที่ถูกติดตาม (followingId)"],
+      index: true,
+    },
+    followingModel: {
+      type: String,
+      required: true,
+      enum: ["User", "SocialMediaUser"],
       index: true,
     },
     notifications: {
@@ -52,15 +66,15 @@ const UserFollowSchema = new Schema<IUserFollow>(
 );
 
 // ----- ดัชนี -----
-UserFollowSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
-UserFollowSchema.index({ followerId: 1, status: 1, followedAt: -1 });
-UserFollowSchema.index({ followingId: 1, status: 1, followedAt: -1 });
-UserFollowSchema.index({ followingId: 1, createdAt: -1 });
+UserFollowSchema.index({ followerId: 1, followerModel: 1, followingId: 1, followingModel: 1 }, { unique: true });
+UserFollowSchema.index({ followerId: 1, followerModel: 1, status: 1, followedAt: -1 });
+UserFollowSchema.index({ followingId: 1, followingModel: 1, status: 1, followedAt: -1 });
+UserFollowSchema.index({ followingId: 1, followingModel: 1, createdAt: -1 });
 
 // ----- Virtuals สำหรับการ populate ข้อมูลผู้ใช้ -----
 // Virtual สำหรับผู้ติดตาม
 UserFollowSchema.virtual("follower", {
-  ref: ["User", "SocialMediaUser"],
+  ref: "followerModel", // Dynamic reference based on followerModel field
   localField: "followerId",
   foreignField: "_id",
   justOne: true,
@@ -69,7 +83,7 @@ UserFollowSchema.virtual("follower", {
 
 // Virtual สำหรับผู้ที่ถูกติดตาม
 UserFollowSchema.virtual("following", {
-  ref: ["User", "SocialMediaUser"],
+  ref: "followingModel", // Dynamic reference based on followingModel field
   localField: "followingId",
   foreignField: "_id",
   justOne: true,
@@ -79,27 +93,34 @@ UserFollowSchema.virtual("following", {
 // ----- Middleware สำหรับอัปเดตจำนวนผู้ติดตาม/กำลังติดตาม -----
 async function updateUserFollowCounts(
   followerId: Types.ObjectId,
+  followerModel: "User" | "SocialMediaUser",
   followingId: Types.ObjectId,
+  followingModel: "User" | "SocialMediaUser",
   increment: boolean
 ) {
-  const User = model("User"); // สมมติว่าได้ลงทะเบียนโมเดล User แล้ว
-  const SocialMediaUser = model("SocialMediaUser"); // สมมติว่าได้ลงทะเบียนโมเดล SocialMediaUser แล้ว
+  const UserModel = model("User");
+  const SocialMediaUserModel = model("SocialMediaUser");
   const change = increment ? 1 : -1;
   try {
-    await Promise.all([
-      User.findByIdAndUpdate(followerId, {
-        $inc: { "socialStats.followingCount": change },
-      }),
-      User.findByIdAndUpdate(followingId, {
-        $inc: { "socialStats.followersCount": change },
-      }),
-      SocialMediaUser.findByIdAndUpdate(followerId, {
-        $inc: { "socialStats.followingCount": change },
-      }),
-      SocialMediaUser.findByIdAndUpdate(followingId, {
-        $inc: { "socialStats.followersCount": change },
-      }),
-    ]);
+    const followerUpdate =
+      followerModel === "User"
+        ? UserModel.findByIdAndUpdate(followerId, {
+            $inc: { "socialStats.followingCount": change },
+          })
+        : SocialMediaUserModel.findByIdAndUpdate(followerId, {
+            $inc: { "socialStats.followingCount": change },
+          });
+
+    const followingUpdate =
+      followingModel === "User"
+        ? UserModel.findByIdAndUpdate(followingId, {
+            $inc: { "socialStats.followersCount": change },
+          })
+        : SocialMediaUserModel.findByIdAndUpdate(followingId, {
+            $inc: { "socialStats.followersCount": change },
+          });
+
+    await Promise.all([followerUpdate, followingUpdate]);
   } catch (error) {
     console.error(
       `เกิดข้อผิดพลาดในการอัปเดตจำนวนผู้ติดตาม/กำลังติดตาม:`,
@@ -110,7 +131,13 @@ async function updateUserFollowCounts(
 
 UserFollowSchema.post("save", async function (doc: IUserFollow) {
   if (doc.$isNew && doc.status === "active") {
-    await updateUserFollowCounts(doc.followerId, doc.followingId, true);
+    await updateUserFollowCounts(
+      doc.followerId,
+      doc.followerModel,
+      doc.followingId,
+      doc.followingModel,
+      true
+    );
   }
 
   if (!doc.$isNew && doc.isModified("status") && doc.status === "active") {
@@ -118,7 +145,13 @@ UserFollowSchema.post("save", async function (doc: IUserFollow) {
       .findOne({ _id: doc._id })
       .lean();
     if (previousState && previousState.status !== "active") {
-      await updateUserFollowCounts(doc.followerId, doc.followingId, true);
+      await updateUserFollowCounts(
+        doc.followerId,
+        doc.followerModel,
+        doc.followingId,
+        doc.followingModel,
+        true
+      );
     }
   }
 
@@ -127,7 +160,13 @@ UserFollowSchema.post("save", async function (doc: IUserFollow) {
       .findOne({ _id: doc._id })
       .lean();
     if (previousState && previousState.status === "active") {
-      await updateUserFollowCounts(doc.followerId, doc.followingId, false);
+      await updateUserFollowCounts(
+        doc.followerId,
+        doc.followerModel,
+        doc.followingId,
+        doc.followingModel,
+        false
+      );
     }
   }
 });
@@ -137,7 +176,13 @@ UserFollowSchema.pre(
   { document: true, query: false },
   async function (next) {
     if (this.status === "active") {
-      await updateUserFollowCounts(this.followerId, this.followingId, false);
+      await updateUserFollowCounts(
+        this.followerId,
+        this.followerModel,
+        this.followingId,
+        this.followingModel,
+        false
+      );
     }
     next();
   }
@@ -147,11 +192,50 @@ UserFollowSchema.pre("deleteMany", async function (next) {
   const docsToDelete = await this.model.find(this.getFilter()).lean();
   for (const doc of docsToDelete) {
     if (doc.status === "active") {
-      await updateUserFollowCounts(doc.followerId, doc.followingId, false);
+      await updateUserFollowCounts(
+        doc.followerId,
+        doc.followerModel,
+        doc.followingId,
+        doc.followingModel,
+        false
+      );
     }
   }
   next();
 });
+
+// ----- Static Method สำหรับการสร้าง Map ของผู้ใช้ (แก้ไขปัญหา 'user._id' is of type 'unknown') -----
+UserFollowSchema.statics.createUserMap = async function (
+  userIds: Types.ObjectId[],
+  socialMediaUserIds: Types.ObjectId[]
+): Promise<Map<string, any>> {
+  const UserModel = model("User");
+  const SocialMediaUserModel = model("SocialMediaUser");
+
+  // ดึงข้อมูลผู้ใช้จากทั้งสองโมเดล
+  const users = await UserModel.find({
+    _id: { $in: userIds },
+    isActive: true,
+    isBanned: false,
+  }).lean();
+
+  const socialMediaUsers = await SocialMediaUserModel.find({
+    _id: { $in: socialMediaUserIds },
+    isActive: true,
+    isBanned: false,
+  }).lean();
+
+  // สร้าง Map ของผู้ใช้โดยใช้ _id เป็น key
+  const userMap = new Map<string, any>();
+  users.forEach((user: { _id: Types.ObjectId }) =>
+    userMap.set(user._id.toString(), user)
+  );
+  socialMediaUsers.forEach((user: { _id: Types.ObjectId }) =>
+    userMap.set(user._id.toString(), user)
+  );
+
+  return userMap;
+};
 
 // ----- โมเดล Export -----
 const UserFollowModel = () =>
