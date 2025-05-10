@@ -1,22 +1,22 @@
 // src/app/user/[username]/page.tsx
 // หน้าโปรไฟล์ผู้ใช้แบบไดนามิก
+// แสดงข้อมูลโปรไฟล์ผู้ใช้ ประวัติกิจกรรม และการตั้งค่าสำหรับเจ้าของโปรไฟล์
 
 import { notFound } from "next/navigation";
-import { getServerSession } from "next-auth"; // สำหรับ NextAuth
-import { authOptions } from "@/app/api/auth/[...nextauth]/options"; // นำเข้า authOptions
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import UserProfileHeader from "@/components/user/UserProfileHeader";
 import UserDashboardSection from "@/components/user/UserDashboardSection";
 import UserHistorySection from "@/components/user/UserHistorySection";
 import UserSettingsSection from "@/components/user/UserSettingsSection";
 import UserFollowSystemSection from "@/components/user/UserFollowSystemSection";
 
-// Interface for User Profile Page Props (params from URL)
+// อินเทอร์เฟซสำหรับ props ของหน้าโปรไฟล์
 interface UserProfilePageProps {
-  params: { username: string }; // username is directly available
+  params: { username: string };
 }
 
-// Interface for combined User data (User + SocialMediaUser)
-// This should be consistent with the API response from /api/users/[username]/profile
+// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ที่รวมจาก User และ SocialMediaUser
 interface CombinedUser {
   _id: string;
   username: string;
@@ -28,16 +28,15 @@ interface CombinedUser {
     avatar?: string;
     coverImage?: string;
   };
-  createdAt: Date;
+  createdAt: string;
 }
 
-// Interface for ActivityItem (for UserHistorySection)
-// This should be consistent with the API response from /api/users/[username]/activity-history
+// อินเทอร์เฟซสำหรับข้อมูลกิจกรรม
 interface ActivityItem {
-  _id: string; // Assuming API returns _id
+  _id: string;
   userId: string;
-  type: "READ_EPISODE" | "COMMENT" | "RATING" | "FOLLOW_USER" | "LIKE_NOVEL" | "PURCHASE_EPISODE" | "RECEIVE_DONATION" | string; // Allow for other types
-  description?: string; // Made optional as per ActivityHistory model
+  type: string;
+  description?: string;
   novelId?: string;
   episodeId?: string;
   commentId?: string;
@@ -50,9 +49,8 @@ interface ActivityItem {
   relatedNovel?: string;
   relatedEpisode?: string;
   coinAmount?: number;
-  content?: string; // For comments etc.
-  timestamp: Date;
-  // For UI display, these might be populated or constructed
+  content?: string;
+  timestamp: string;
   novelTitle?: string;
   novelSlug?: string;
   episodeTitle?: string;
@@ -61,6 +59,7 @@ interface ActivityItem {
   targetUserSlug?: string;
 }
 
+// อินเทอร์เฟซสำหรับการตอบกลับจาก API ประวัติกิจกรรม
 interface ActivityHistoryResponse {
   activities: ActivityItem[];
   currentPage: number;
@@ -68,78 +67,121 @@ interface ActivityHistoryResponse {
   totalActivities: number;
 }
 
-// Fetch user data by username from the API
+/**
+ * ดึงข้อมูลผู้ใช้จาก API ตาม username
+ * @param username ชื่อผู้ใช้จาก URL
+ * @returns ข้อมูลผู้ใช้หรือ null หากไม่พบ
+ */
 async function getUserData(username: string): Promise<CombinedUser | null> {
-  console.log(`[UserProfilePage] Fetching data for user: ${username} from API`);
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/users/${username}/profile`, {
-      cache: "no-store", // เพื่อข้อมูลล่าสุด
-    });
-    if (!res.ok) {
-      if (res.status === 404) {
-        console.warn(`User ${username} not found via API.`);
+    // ส่งคำขอไปยัง API เพื่อดึงข้อมูลโปรไฟล์
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/${username}/profile`,
+      {
+        cache: "no-store",
+      }
+    );
+
+    // ตรวจสอบสถานะการตอบกลับ
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn(`❌ [Page] ไม่พบผู้ใช้ ${username} จาก API`);
         return null;
       }
-      throw new Error(`Failed to fetch user data: ${res.statusText}`);
+      throw new Error(`ไม่สามารถดึงข้อมูลผู้ใช้: ${response.statusText}`);
     }
-    const data: CombinedUser = await res.json();
+
+    const data: CombinedUser = await response.json();
     return data;
   } catch (error) {
-    console.error(`Error in getUserData for ${username}:`, error);
+    console.error(`❌ [Page] ข้อผิดพลาดใน getUserData สำหรับ ${username}:`, error);
     return null;
   }
 }
 
-// Fetch user activity history from the API
+/**
+ * ดึงประวัติกิจกรรมของผู้ใช้จาก API
+ * @param username ชื่อผู้ใช้จาก URL
+ * @returns รายการกิจกรรมหรือ array ว่างหากเกิดข้อผิดพลาด
+ */
 async function getUserActivityHistory(username: string): Promise<ActivityItem[]> {
-  console.log(`[UserProfilePage] Fetching activity history for user: ${username} from API`);
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/users/${username}/activity-history?page=1&limit=10`, {
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to fetch activity history: ${res.statusText}`);
+    // ส่งคำขอไปยัง API เพื่อดึงประวัติกิจกรรม
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/${username}/activity-history?page=1&limit=10`,
+      {
+        cache: "no-store",
+      }
+    );
+
+    // ตรวจสอบสถานะการตอบกลับ
+    if (!response.ok) {
+      throw new Error(`ไม่สามารถดึงประวัติกิจกรรม: ${response.statusText}`);
     }
-    const data: ActivityHistoryResponse = await res.json();
-    return data.activities; // คืนค่าเฉพาะ array ของ activities สำหรับการโหลดครั้งแรก
+
+    const data: ActivityHistoryResponse = await response.json();
+    return data.activities;
   } catch (error) {
-    console.error(`Error in getUserActivityHistory for ${username}:`, error);
-    return []; // คืนค่า array ว่างเมื่อเกิดข้อผิดพลาด
+    console.error(
+      `❌ [Page] ข้อผิดพลาดใน getUserActivityHistory สำหรับ ${username}:`,
+      error
+    );
+    return [];
   }
 }
 
+/**
+ * หน้าโปรไฟล์ผู้ใช้
+ * @param props Props ที่มีพารามิเตอร์ username
+ * @returns JSX element สำหรับหน้าโปรไฟล์
+ */
 export default async function UserProfilePage({ params }: UserProfilePageProps) {
-  const { username } = params; // username is directly available
-  const user = await getUserData(username);
+  try {
+    // ดึง username จาก params
+    const { username } = params;
+    if (!username) {
+      throw new Error("ต้องระบุชื่อผู้ใช้");
+    }
 
-  if (!user) {
+    // ดึงข้อมูลผู้ใช้
+    const user = await getUserData(username);
+    if (!user) {
+      notFound();
+    }
+
+    // ดึงข้อมูลเซสชันของผู้ใช้ที่ล็อกอิน
+    const session = await getServerSession(authOptions);
+    const loggedInUser = session?.user as
+      | { id: string; username: string; role: string }
+      | undefined;
+    const loggedInUserId = loggedInUser?.id;
+
+    // ตรวจสอบว่าเป็นโปรไฟล์ของผู้ใช้ที่ล็อกอินหรือไม่
+    const isOwnProfile = loggedInUserId === user._id;
+
+    // ดึงประวัติกิจกรรมเริ่มต้น
+    const initialActivities = await getUserActivityHistory(username);
+
+    // สร้าง JSX สำหรับหน้าโปรไฟล์
+    return (
+      <div className="container-custom py-6 md:py-8">
+        <UserProfileHeader username={username} />
+        <UserDashboardSection user={user} isOwnProfile={isOwnProfile} />
+        <UserHistorySection
+          viewedUser={user}
+          initialActivities={initialActivities}
+          isOwnProfile={isOwnProfile}
+        />
+        {isOwnProfile && <UserSettingsSection userId={user._id} />}
+        <UserFollowSystemSection
+          viewedUserId={user._id}
+          viewedUsername={user.username}
+          currentLoggedInUserId={loggedInUserId}
+        />
+      </div>
+    );
+  } catch (error) {
+    console.error("❌ [Page] ข้อผิดพลาดใน /user/[username]:", error);
     notFound();
   }
-
-  // ดึงข้อมูลเซสชันของผู้ใช้ที่ล็อกอินด้วย NextAuth
-  const session = await getServerSession(authOptions);
-  const loggedInUser = session?.user as { id: string; username: string; role: string } | undefined;
-  const loggedInUserId = loggedInUser?.id;
-
-  // ตรวจสอบว่าเป็นโปรไฟล์ของผู้ใช้ที่ล็อกอินหรือไม่
-  const isOwnProfile = loggedInUserId === user._id;
-
-  // ดึง activities เริ่มต้นสำหรับหน้าโปรไฟล์ผู้ใช้
-  // หมายเหตุ: การแบ่งหน้าและการกรองจะถูกจัดการที่ฝั่ง client ใน UserHistorySection
-  const initialActivities = await getUserActivityHistory(username);
-
-  return (
-    <div className="container-custom py-6 md:py-8">
-      <UserProfileHeader username={username} />
-      {/* ส่ง isOwnProfile ไปยัง UserDashboardSection หากต้องการเปลี่ยนการแสดงผลตามความเป็นเจ้าของ */}
-      <UserDashboardSection user={user} isOwnProfile={isOwnProfile} />
-      <UserHistorySection viewedUser={user} initialActivities={initialActivities} isOwnProfile={isOwnProfile} />
-      
-      {/* User Settings - แสดงเฉพาะเมื่อเป็นโปรไฟล์ของผู้ใช้เอง */}
-      {isOwnProfile && <UserSettingsSection userId={user._id} />}
-
-      {/* Follow System - แสดงเสมอ แต่ฟังก์ชันอาจแตกต่างตาม isOwnProfile */}
-      <UserFollowSystemSection viewedUserId={user._id} viewedUsername={user.username} currentLoggedInUserId={loggedInUserId} />
-    </div>
-  );
 }
