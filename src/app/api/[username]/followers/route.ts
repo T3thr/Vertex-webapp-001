@@ -1,5 +1,6 @@
-// src/app/api/users/[username]/followers/route.ts
+// src/app/api/[username]/followers/route.ts
 // API สำหรับดึงรายการผู้ติดตามของผู้ใช้
+// รองรับการแบ่งหน้าและการกรองผู้ใช้ที่ใช้งานอยู่
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
@@ -17,7 +18,7 @@ interface FollowUser {
   };
 }
 
-// อินเทอร์เฟซสำหรับการตอบกลับของ API
+// อินเทอร์เฟซสำหรับการตอบกลับ API
 interface FollowListResponse {
   followers: FollowUser[];
   currentPage: number;
@@ -25,33 +26,31 @@ interface FollowListResponse {
   totalFollowers: number;
 }
 
-// อินเทอร์เฟซสำหรับพารามิเตอร์ของ query
-interface QueryParams {
-  page?: string;
-  limit?: string;
-}
-
-// ตัวจัดการสำหรับ GET request
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { username: string } }
-): Promise<NextResponse> {
+/**
+ * GET: ดึงรายการผู้ติดตามของผู้ใช้ตาม username
+ * @param req ข้อมูลคำขอจาก Next.js
+ * @returns JSON response พร้อมรายการผู้ติดตามและข้อมูลการแบ่งหน้า
+ */
+export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    // เชื่อมต่อกับ MongoDB
+    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
 
-    const { username } = params;
-    const { searchParams } = new URL(req.url);
-    const queryParams: QueryParams = Object.fromEntries(searchParams);
+    // ดึง username จาก URL
+    const { pathname } = req.nextUrl;
+    const username = pathname.split("/")[3]; // /api/[username]/followers -> [username]
+    if (!username) {
+      return NextResponse.json({ error: "ต้องระบุ username" }, { status: 400 });
+    }
 
-    // ตรวจสอบและแปลงพารามิเตอร์ pagination
-    const page = parseInt(queryParams.page || "1", 10);
-    const limit = parseInt(queryParams.limit || "10", 10);
+    // ดึง query parameters
+    const { searchParams } = req.nextUrl;
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "10", 10);
+
+    // ตรวจสอบความถูกต้องของพารามิเตอร์
     if (isNaN(page) || page < 1) {
-      return NextResponse.json(
-        { error: "หน้าต้องเป็นตัวเลขมากกว่า 0" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "หน้าต้องเป็นตัวเลขมากกว่า 0" }, { status: 400 });
     }
     if (isNaN(limit) || limit < 1 || limit > 100) {
       return NextResponse.json(
@@ -60,26 +59,20 @@ export async function GET(
       );
     }
 
-    // ค้นหาผู้ใช้ในทั้งสองคอลเลกชัน
+    // ค้นหาผู้ใช้
     const user =
-      (await UserModel()
-        .findOne({ username, isActive: true, isBanned: false })
-        .lean()) ||
+      (await UserModel().findOne({ username, isActive: true, isBanned: false }).lean()) ||
       (await SocialMediaUserModel()
         .findOne({ username, isActive: true, isBanned: false })
         .lean());
-
     if (!user) {
-      return NextResponse.json(
-        { error: "ไม่พบผู้ใช้" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "ไม่พบผู้ใช้" }, { status: 404 });
     }
 
-    // คำนวณการข้ามข้อมูลสำหรับ pagination
+    // คำนวณการข้ามข้อมูลสำหรับการแบ่งหน้า
     const skip = (page - 1) * limit;
 
-    // ค้นหารายการผู้ติดตามพร้อม populate ข้อมูลผู้ใช้
+    // ค้นหารายการผู้ติดตาม
     const followers = await UserFollowModel()
       .find({ followingId: user._id })
       .sort({ createdAt: -1 })
@@ -96,9 +89,9 @@ export async function GET(
       followingId: user._id,
     });
 
-    // แปลงข้อมูลผู้ติดตามให้ตรงกับ FollowUser
+    // แปลงข้อมูลผู้ติดตาม
     const formattedFollowers: FollowUser[] = followers
-      .filter((follow) => follow.follower) // กรองเฉพาะที่มีข้อมูลผู้ติดตาม
+      .filter((follow) => follow.follower)
       .map((follow) => ({
         _id: follow.follower!._id.toString(),
         username: follow.follower!.username,
@@ -111,7 +104,6 @@ export async function GET(
     // คำนวณจำนวนหน้าทั้งหมด
     const totalPages = Math.ceil(totalFollowers / limit);
 
-    // สร้างการตอบกลับ
     const response: FollowListResponse = {
       followers: formattedFollowers,
       currentPage: page,
@@ -120,8 +112,8 @@ export async function GET(
     };
 
     return NextResponse.json(response, { status: 200 });
-  } catch (error: any) {
-    console.error("ข้อผิดพลาดในการดึงรายการผู้ติดตาม:", error);
+  } catch (error) {
+    console.error("❌ [API] ข้อผิดพลาดใน /api/[username]/followers:", error);
     return NextResponse.json(
       { error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" },
       { status: 500 }
