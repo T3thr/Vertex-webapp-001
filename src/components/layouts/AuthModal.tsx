@@ -887,7 +887,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <motion.div
             ref={modalRef}
             variants={modalVariants}
-            className="bg-card w-full sm:w-[90%] md:w-[650px] lg:w-[750px] rounded-3xl shadow-2xl overflow-hidden border border-accent/20 flex flex-col max-h-[90vh]"
+            className="bg-card w-full sm:w-[90%] md:w-[650px] lg:w-[750px] rounded-3xl shadow-2xl overflow-hidden border border-accent/20 flex flex-col max-h-[80vh]"
           >
             {/* Modal Header - ส่วนหัวของหน้าต่าง */}
             <div className="relative w-full py-7 px-8 border-b border-accent/50 bg-gradient-to-r from-primary/15 to-blue-500/15">
