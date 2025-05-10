@@ -221,7 +221,7 @@ const UserSchema = new Schema<IUser>(
     },
     preferences: {
       language: { type: String, default: "th" },
-      theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
+      theme: { type: String, enum: ["light", "dark", "sepia", "system"], default: "system" },
       notifications: {
         email: { type: Boolean, default: true },
         push: { type: Boolean, default: true },
