@@ -60,7 +60,7 @@ export interface ISocialMediaUser extends Document {
   };
   preferences: {
     language: string; // ภาษาที่ต้องการใช้งาน
-    theme: "light" | "dark" | "system"; // ธีมที่ต้องการใช้งาน
+    theme: "light" | "dark" | "system" | "sepia"; // ธีมที่ต้องการใช้งาน
     notifications: {
       email: boolean; // รับการแจ้งเตือนทางอีเมล
       push: boolean; // รับการแจ้งเตือนแบบ push
