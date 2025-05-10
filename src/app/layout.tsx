@@ -6,6 +6,8 @@ import NavBarWrapper from "@/components/layouts/NavBarWrapper";
 import { GlobalProvider } from "@/context/GlobalContext";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
