@@ -63,8 +63,10 @@ interface ReaderActivityData {
   lastWriterFollowed?: { name: string; username: string; _id: string };
 }
 
+// Interface สำหรับ props ของคอมโพเนนต์
 interface UserDashboardSectionProps {
   user: CombinedUser;
+  isOwnProfile: boolean;
 }
 
 // คอมโพเนนต์สำหรับการ์ดสถิติ
@@ -100,7 +102,7 @@ const StatCard = ({
 );
 
 // คอมโพเนนต์หลักของแดชบอร์ด
-const UserDashboardSection = ({ user }: UserDashboardSectionProps) => {
+const UserDashboardSection = ({ user, isOwnProfile }: UserDashboardSectionProps) => {
   const [writerAnalytics, setWriterAnalytics] = useState<WriterAnalyticsData | null>(null);
   const [readerActivity, setReaderActivity] = useState<ReaderActivityData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
