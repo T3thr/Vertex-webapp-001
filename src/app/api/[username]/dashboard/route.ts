@@ -5,9 +5,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import mongoose from "mongoose";
-import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
-import NovelModel from "@/backend/models/Novel";
+import UserModel, { IUser } from "@/backend/models/User";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
+import NovelModel, { INovel } from "@/backend/models/Novel";
 import ActivityHistoryModel from "@/backend/models/ActivityHistory";
 import dbConnect from "@/backend/lib/mongodb";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
@@ -30,11 +30,6 @@ interface WriterAnalyticsData {
     totalLikes: number;
     totalCoinRevenue: number;
     totalDonations: number;
-  }>;
-  monthlyEarnings: Array<{
-    date: string;
-    coinValue: number;
-    donationValue: number;
   }>;
 }
 
@@ -75,7 +70,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ค้นหาผู้ใช้ใน User หรือ SocialMediaUser
-    const user =
+    const user: IUser | ISocialMediaUser | null =
       (await UserModel().findOne({ username }).lean()) ||
       (await SocialMediaUserModel().findOne({ username }).lean());
     if (!user) {
@@ -95,7 +90,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const novels = await NovelModel()
         .find({ author: user._id, isDeleted: false })
         .select("title slug viewsCount totalReads likesCount stats averageRating")
-        .lean();
+        .lean() as Array<INovel>;
 
       // คำนวณข้อมูลภาพรวม
       const totalNovelViews = novels.reduce((sum, novel) => sum + (novel.viewsCount || 0), 0);
@@ -124,24 +119,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         totalDonations: novel.stats?.totalDonationsAmount || 0,
       }));
 
-      // คำนวณ monthlyEarnings (สมมติว่าใช้ stats.monthlyEarnings หรือคำนวณจาก ActivityHistory)
-      const monthlyEarnings = novels
-        .flatMap((novel) => novel.stats?.monthlyEarnings || [])
-        .reduce((acc: { [key: string]: { coinValue: number; donationValue: number } }, earning) => {
-          const key = `${earning.year}-${earning.month}`;
-          if (!acc[key]) {
-            acc[key] = { coinValue: 0, donationValue: 0 };
-          }
-          acc[key].coinValue += earning.coinValue;
-          acc[key].donationValue += earning.donationValue;
-          return acc;
-        }, {});
-      const monthlyEarningsArray = Object.entries(monthlyEarnings).map(([key, value]) => ({
-        date: key, // รูปแบบ YYYY-MM
-        coinValue: value.coinValue,
-        donationValue: value.donationValue,
-      }));
-
       response.writerAnalytics = {
         overview: {
           totalNovelViews,
@@ -152,7 +129,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           lastCalculatedAt: new Date().toISOString(),
         },
         novelPerformance,
-        monthlyEarnings: monthlyEarningsArray,
       };
     }
 
