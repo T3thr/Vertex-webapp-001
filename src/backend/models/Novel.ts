@@ -1,6 +1,13 @@
 // src/backend/models/Novel.ts
-
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+
+// Interface สำหรับข้อมูลรายเดือนของรายได้
+interface MonthlyEarning {
+  year: number; // ปี (เช่น 2025)
+  month: number; // เดือน (1-12)
+  coinValue: number; // รายได้จากเหรียญ
+  donationValue: number; // รายได้จากการบริจาค
+}
 
 // Interface สำหรับ Novel document
 export interface INovel extends Document {
@@ -24,7 +31,7 @@ export interface INovel extends Document {
   averageRating: number;
   ratingsCount: number;
   viewsCount: number;
-  totalReads: number; // จำนวนครั้งที่นิยายถูกอ่าน (เพิ่มฟิลด์นี้)
+  totalReads: number; // เพิ่มฟิลด์สำหรับจำนวนการอ่านทั้งหมด
   likesCount: number;
   followersCount: number;
   commentsCount: number;
@@ -36,6 +43,7 @@ export interface INovel extends Document {
     totalDonationsAmount?: number;
     completionRate?: number;
     lastViewedAt?: Date;
+    monthlyEarnings?: MonthlyEarning[]; // เพิ่มฟิลด์สำหรับรายได้รายเดือน
   };
   settings: {
     allowComments: boolean;
@@ -79,6 +87,16 @@ export interface INovel extends Document {
   updatedAt: Date;
   lastSignificantUpdateAt?: Date;
 }
+
+const MonthlyEarningSchema = new Schema<MonthlyEarning>(
+  {
+    year: { type: Number, required: true },
+    month: { type: Number, required: true, min: 1, max: 12 },
+    coinValue: { type: Number, default: 0, min: 0 },
+    donationValue: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
 
 const NovelSchema = new Schema<INovel>(
   {
@@ -131,13 +149,13 @@ const NovelSchema = new Schema<INovel>(
       type: [String],
       validate: [
         { validator: (v: string[]) => v.length <= 15, message: "สามารถใส่แท็กได้สูงสุด 15 แท็ก" },
-        { validator: (v: string[]) => v.every(tag => tag.length <= 50), message: "แต่ละแท็กต้องมีความยาวไม่เกิน 50 ตัวอักษร" },
+        { validator: (v: string[]) => v.every((tag) => tag.length <= 50), message: "แต่ละแท็กต้องมีความยาวไม่เกิน 50 ตัวอักษร" },
       ],
       index: true,
     },
     status: {
       type: String,
-      enum: ["draft", "published", "completed", "onHiatus", "archived"],
+      enum: ["draft", "published", "completed", "onHiatus", "archived", "discount"],
       default: "draft",
       index: true,
     },
@@ -157,7 +175,7 @@ const NovelSchema = new Schema<INovel>(
     averageRating: { type: Number, default: 0, min: 0, max: 5, index: true },
     ratingsCount: { type: Number, default: 0, min: 0 },
     viewsCount: { type: Number, default: 0, min: 0, index: true },
-    totalReads: { type: Number, default: 0, min: 0, index: true }, // เพิ่มฟิลด์ totalReads
+    totalReads: { type: Number, default: 0, min: 0 }, // เพิ่มฟิลด์ totalReads
     likesCount: { type: Number, default: 0, min: 0, index: true },
     followersCount: { type: Number, default: 0, min: 0, index: true },
     commentsCount: { type: Number, default: 0, min: 0 },
@@ -169,6 +187,7 @@ const NovelSchema = new Schema<INovel>(
       totalDonationsAmount: { type: Number, default: 0, min: 0 },
       completionRate: { type: Number, default: 0, min: 0, max: 100 },
       lastViewedAt: { type: Date, index: true },
+      monthlyEarnings: [MonthlyEarningSchema], // เพิ่มฟิลด์ monthlyEarnings
     },
     settings: {
       allowComments: { type: Boolean, default: true },
@@ -229,7 +248,6 @@ NovelSchema.index({ categories: 1, status: 1, isDeleted: 1 });
 NovelSchema.index({ isPremium: 1, status: 1, isDeleted: 1 });
 NovelSchema.index({ averageRating: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 NovelSchema.index({ viewsCount: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-NovelSchema.index({ totalReads: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } }); // เพิ่ม index สำหรับ totalReads
 NovelSchema.index({ lastSignificantUpdateAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 NovelSchema.index({ firstPublishedAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 
@@ -262,7 +280,7 @@ NovelSchema.pre("save", async function (next) {
       .replace(/[\s\W-]+/g, "-")
       .replace(/^-+|-+$/g, "");
   }
-  
+
   if (this.isModified("status") && this.status === "published" && !this.firstPublishedAt) {
     this.firstPublishedAt = new Date();
   }
