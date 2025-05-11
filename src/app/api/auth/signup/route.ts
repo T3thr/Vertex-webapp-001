@@ -1,20 +1,21 @@
 // src/app/api/auth/signup/route.ts
 // API สำหรับการสมัครสมาชิกผู้ใช้ใหม่ด้วย Credentials-based authentication
 // จัดการการสร้างผู้ใช้ใน User collection พร้อมส่งอีเมลยืนยัน
-// API นี้จะทำการ verify reCAPTCHA token ที่ได้รับจาก client อีกครั้งกับ Google
+// API นี้จะทำการ verify reCAPTCHA token อีกครั้งกับ Google
+// อัปเดต: เพิ่ม console log สำหรับ debug และปรับปรุงการ parse JSON
 
 import { NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบ path ให้ถูกต้อง
-import UserModel from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser"; // ตรวจสอบ path ให้ถูกต้อง
-import { sendVerificationEmail, generateVerificationToken } from "@/backend/services/sendemail"; // ตรวจสอบ path ให้ถูกต้อง
-import { validateEmail, validatePassword, validateUsername } from "@/backend/utils/validation"; // ตรวจสอบ path ให้ถูกต้อง
+import dbConnect from "@/backend/lib/mongodb";
+import UserModel from "@/backend/models/User";
+import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
+import { sendVerificationEmail, generateVerificationToken } from "@/backend/services/sendemail";
+import { validateEmail, validatePassword, validateUsername } from "@/backend/utils/validation";
 
 interface SignUpRequestBody {
   email: string;
   username: string;
   password: string;
-  recaptchaToken: string; // โทเค็นที่ได้จาก client-side reCAPTCHA
+  recaptchaToken: string;
 }
 
 interface RecaptchaResponseFromGoogle {
@@ -27,11 +28,29 @@ interface RecaptchaResponseFromGoogle {
 export async function POST(request: Request): Promise<NextResponse> {
   console.log("🔵 [Signup API] ได้รับคำขอสมัครสมาชิก...");
   try {
-    await dbConnect(); // เชื่อมต่อฐานข้อมูล
-    const body = await request.json() as SignUpRequestBody;
+    await dbConnect();
+    console.log("✅ [Signup API] เชื่อมต่อ MongoDB สำเร็จ");
+
+    let body: SignUpRequestBody;
+    try {
+      body = await request.json();
+      console.log(`ℹ️ [Signup API] Body ที่ได้รับ:`, {
+        email: body.email,
+        username: body.username,
+        password: body.password ? '[มีรหัสผ่าน]' : '[ไม่มีรหัสผ่าน]',
+        recaptchaToken: body.recaptchaToken ? `${body.recaptchaToken.substring(0, 15)}...` : 'ไม่มี token'
+      });
+    } catch (jsonError: any) {
+      console.error("❌ [Signup API] JSON parse error:", jsonError.message);
+      return NextResponse.json(
+        { error: `รูปแบบ JSON ไม่ถูกต้อง: ${jsonError.message}`, success: false },
+        { status: 400 }
+      );
+    }
+
     const { email, username, password, recaptchaToken } = body;
 
-    // 1. ตรวจสอบฟิลด์ที่จำเป็น
+    // ตรวจสอบฟิลด์ที่จำเป็น
     if (!email || !username || !password || !recaptchaToken) {
       const missingFields = [];
       if (!email) missingFields.push("อีเมล");
@@ -40,24 +59,22 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (!recaptchaToken) missingFields.push("reCAPTCHA token");
       console.error(`❌ [Signup API] ข้อมูลไม่ครบถ้วน: ${missingFields.join(", ")}`);
       return NextResponse.json(
-        { error: `กรุณากรอกข้อมูลให้ครบถ้วน: ${missingFields.join(", ")}` },
+        { error: `กรุณากรอกข้อมูลให้ครบถ้วน: ${missingFields.join(", ")}`, success: false },
         { status: 400 }
       );
     }
-    console.log(`ℹ️ [Signup API] ข้อมูลที่ได้รับ: email=${email}, username=${username}, recaptchaToken=${recaptchaToken ? 'มี' : 'ไม่มี'}`);
 
-
-    // 2. ตรวจสอบความถูกต้องของข้อมูลที่ป้อนเข้ามา
+    // ตรวจสอบความถูกต้องของข้อมูล
     if (!validateEmail(email)) {
       console.error(`❌ [Signup API] รูปแบบอีเมลไม่ถูกต้อง: ${email}`);
-      return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง" }, { status: 400 });
+      return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง", success: false }, { status: 400 });
     }
 
     const usernameValidation = validateUsername(username);
     if (!usernameValidation.valid) {
       console.error(`❌ [Signup API] ชื่อผู้ใช้ไม่ถูกต้อง: ${username}, เหตุผล: ${usernameValidation.message}`);
       return NextResponse.json(
-        { error: usernameValidation.message || "ชื่อผู้ใช้ไม่ถูกต้อง" },
+        { error: usernameValidation.message || "ชื่อผู้ใช้ไม่ถูกต้อง", success: false },
         { status: 400 }
       );
     }
@@ -66,15 +83,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!passwordValidation.valid) {
       console.error(`❌ [Signup API] รหัสผ่านไม่ถูกต้อง: ${passwordValidation.message}`);
       return NextResponse.json(
-        { error: passwordValidation.message || "รหัสผ่านไม่ถูกต้อง" },
+        { error: passwordValidation.message || "รหัสผ่านไม่ถูกต้อง", success: false },
         { status: 400 }
       );
     }
 
-    // 3. ตรวจสอบ reCAPTCHA token กับ Google (server-side verification)
+    // ตรวจสอบ reCAPTCHA
     const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+    console.log(`ℹ️ [Signup API] RECAPTCHA_SECRET_KEY: ${secretKey ? 'มี' : 'ไม่มี'}`);
     if (!secretKey) {
-      console.error("❌ [Signup API] RECAPTCHA_SECRET_KEY ไม่ได้ถูกตั้งค่าใน environment variables!");
+      console.error("❌ [Signup API] RECAPTCHA_SECRET_KEY ไม่ได้ตั้งค่า");
       return NextResponse.json(
         { error: "การตั้งค่า reCAPTCHA ของเซิร์ฟเวอร์ไม่ถูกต้อง (SK)", success: false },
         { status: 500 }
@@ -82,32 +100,34 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${recaptchaToken}`;
-    console.log("🔄 [Signup API] กำลังส่งคำขอตรวจสอบ reCAPTCHA token ไปยัง Google (server-side)...");
+    console.log("🔄 [Signup API] ส่งคำขอตรวจสอบ reCAPTCHA ไปยัง Google...");
     const googleResponse = await fetch(verificationUrl, { method: "POST" });
     const googleRecaptchaData: RecaptchaResponseFromGoogle = await googleResponse.json();
 
     if (!googleRecaptchaData.success) {
-      console.warn(
-        `❌ [Signup API] การยืนยัน reCAPTCHA โดย Google ล้มเหลว (server-side): Success=${googleRecaptchaData.success}, Error Codes=${googleRecaptchaData["error-codes"]?.join(", ") || "ไม่ระบุ"}`
-      );
-      let userFriendlyError = "การยืนยัน reCAPTCHA โดย Google ล้มเหลว";
+      console.warn(`❌ [Signup API] การยืนยัน reCAPTCHA ล้มเหลว:`, {
+        success: googleRecaptchaData.success,
+        errorCodes: googleRecaptchaData["error-codes"]?.join(", ") || "ไม่ระบุ"
+      });
+      let userFriendlyError = "การยืนยัน reCAPTCHA ล้มเหลว";
       if (googleRecaptchaData["error-codes"]?.includes("timeout-or-duplicate")) {
-          userFriendlyError = "การยืนยัน reCAPTCHA หมดเวลาหรือซ้ำซ้อน กรุณาลองใหม่";
+        userFriendlyError = "การยืนยัน reCAPTCHA หมดเวลาหรือซ้ำซ้อน กรุณาลองใหม่";
       } else if (googleRecaptchaData["error-codes"]?.includes("invalid-input-response")) {
-          userFriendlyError = "โทเค็น reCAPTCHA ไม่ถูกต้องหรือไม่สมบูรณ์";
+        userFriendlyError = "โทเค็น reCAPTCHA ไม่ถูกต้อง";
       }
       return NextResponse.json(
         { success: false, error: userFriendlyError, "error-codes": googleRecaptchaData["error-codes"] || [] },
         { status: 400 }
       );
     }
-    console.log(`✅ [Signup API] การยืนยัน reCAPTCHA token (server-side) สำเร็จโดย Google Hostname: ${googleRecaptchaData.hostname}`);
+    console.log(`✅ [Signup API] reCAPTCHA ผ่านการยืนยัน, Hostname: ${googleRecaptchaData.hostname}`);
 
-    // 4. ตรวจสอบผู้ใช้ซ้ำ (ทั้งใน User และ SocialMediaUser collection)
+    // ตรวจสอบผู้ใช้ซ้ำ
     const lowerCaseEmail = email.toLowerCase();
     const User = UserModel();
     const SocialMediaUser = SocialMediaUserModel();
 
+    console.log(`🔍 [Signup API] ตรวจสอบผู้ใช้ซ้ำ: email=${lowerCaseEmail}, username=${username}`);
     const existingUserInUsers = await User.findOne({
       $or: [{ email: lowerCaseEmail }, { username }],
     }).lean();
@@ -118,26 +138,28 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (existingUserInUsers || existingUserInSocialMediaUsers) {
       let conflictField = "ข้อมูล";
-      if (existingUserInUsers?.email === lowerCaseEmail || (existingUserInSocialMediaUsers as any)?.email === lowerCaseEmail) {
+      if (existingUserInUsers?.email === lowerCaseEmail || existingUserInSocialMediaUsers?.email === lowerCaseEmail) {
         conflictField = "อีเมล";
       } else if (existingUserInUsers?.username === username || existingUserInSocialMediaUsers?.username === username) {
         conflictField = "ชื่อผู้ใช้";
       }
-      console.error(`❌ [Signup API] ${conflictField} นี้ถูกใช้งานแล้ว: ${conflictField === "อีเมล" ? lowerCaseEmail : username}`);
+      console.error(`❌ [Signup API] ${conflictField} ถูกใช้งานแล้ว: ${conflictField === "อีเมล" ? lowerCaseEmail : username}`);
       return NextResponse.json(
         { error: `${conflictField} นี้ถูกใช้งานแล้ว`, success: false },
-        { status: 409 } // Conflict
+        { status: 409 }
       );
     }
 
-    // 5. สร้าง token สำหรับยืนยันอีเมล
+    // สร้าง token สำหรับยืนยันอีเมล
+    console.log("🔄 [Signup API] สร้าง token สำหรับยืนยันอีเมล...");
     const { token: verificationToken, hashedToken: hashedVerificationToken, expiry: verificationTokenExpiry } = generateVerificationToken();
 
-    // 6. สร้างผู้ใช้ใหม่ใน User collection
+    // สร้างผู้ใช้ใหม่
+    console.log("🔄 [Signup API] สร้างผู้ใช้ใหม่ใน User collection...");
     const newUser = new User({
       email: lowerCaseEmail,
       username,
-      password, // Mongoose pre-save hook จะทำการ hash รหัสผ่าน
+      password,
       role: "Reader",
       isEmailVerified: false,
       emailVerificationToken: hashedVerificationToken,
@@ -189,7 +211,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     await newUser.save();
     console.log(`✅ [Signup API] สร้างผู้ใช้ใหม่ (ยังไม่ยืนยันอีเมล): ${username} (${lowerCaseEmail})`);
 
-    // 7. ส่งอีเมลยืนยัน (ใช้ plain token)
+    // 7. ส่งอีเมลยืนยัน
     try {
       await sendVerificationEmail(lowerCaseEmail, verificationToken);
       console.log(`✅ [Signup API] ส่งอีเมลยืนยันไปยัง ${lowerCaseEmail} สำเร็จ`);
@@ -197,10 +219,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       console.error("❌ [Signup API] ไม่สามารถส่งอีเมลยืนยันได้:", emailError);
       return NextResponse.json(
         {
-          success: true, // การสร้างบัญชีสำเร็จ
+          success: true,
           message: "สมัครสมาชิกสำเร็จ แต่มีปัญหาในการส่งอีเมลยืนยัน กรุณาลองขอส่งอีเมลยืนยันใหม่อีกครั้งในภายหลัง",
         },
-        { status: 201 } // Created, but with a notice
+        { status: 201 }
       );
     }
 
@@ -215,25 +237,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     let status = 500;
 
     if (error instanceof Error) {
-      if ((error as any).code === 11000) { // Duplicate key error
+      if ((error as any).code === 11000) {
         const field = Object.keys((error as any).keyValue)[0];
         const value = (error as any).keyValue[field];
         errorMessage = `${field === "email" ? "อีเมล" : "ชื่อผู้ใช้"} '${value}' นี้ถูกใช้งานแล้ว`;
-        status = 409; // Conflict
+        status = 409;
       } else if (error.name === "ValidationError") {
         const errors = Object.values((error as any).errors).map((e: any) => e.message);
         errorMessage = `ข้อมูลไม่ถูกต้อง: ${errors.join(", ")}`;
-        status = 400; // Bad Request
+        status = 400;
       } else {
         errorMessage = error.message;
       }
     } else if (typeof error === 'string') {
-        errorMessage = error;
+      errorMessage = error;
     }
 
     if (error instanceof SyntaxError && error.message.includes("JSON")) {
-        errorMessage = "ข้อมูลที่ส่งมาไม่ถูกต้อง (รูปแบบ JSON ไม่ถูกต้อง)";
-        status = 400; // Bad Request
+      errorMessage = "ข้อมูลที่ส่งมาไม่ถูกต้อง (รูปแบบ JSON ไม่ถูกต้อง)";
+      status = 400;
     }
 
     return NextResponse.json(

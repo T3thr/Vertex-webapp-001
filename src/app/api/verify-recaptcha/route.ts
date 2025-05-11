@@ -1,61 +1,64 @@
 // src/app/api/verify-recaptcha/route.ts
 // API สำหรับตรวจสอบโทเค็น reCAPTCHA v2 Invisible
 // ส่งคำขอไปยัง Google reCAPTCHA API เพื่อยืนยันความถูกต้องของโทเค็น
+// อัปเดต: เพิ่ม console log สำหรับการ debug และการจัดการ error ที่ครอบคลุม
 
 import { NextResponse } from "next/server";
 
 interface VerifyRecaptchaRequestBody {
-  token: string; // โทเค็นที่ได้จาก client-side reCAPTCHA
+  token: string;
 }
 
 interface RecaptchaResponseFromGoogle {
   success: boolean;
-  challenge_ts?: string; // Timestamp of the challenge load (ISO format YYYY-MM-DD'T'HH:mm:ssZZ)
-  hostname?: string;     // The hostname of the site where the reCAPTCHA was solved
-  "error-codes"?: string[]; // Optional: https://developers.google.com/recaptcha/docs/verify#error_code_reference
-  score?: number; // For v3
-  action?: string; // For v3
+  challenge_ts?: string;
+  hostname?: string;
+  "error-codes"?: string[];
+  score?: number;
+  action?: string;
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  console.log("🔵 [reCAPTCHA Verify API] ได้รับคำขอ..."); // ได้รับคำขอ...
+  console.log("🔵 [reCAPTCHA Verify API] ได้รับคำขอตรวจสอบ reCAPTCHA...");
   try {
     const contentType = request.headers.get("content-type");
+    console.log(`ℹ️ [reCAPTCHA Verify API] Content-Type: ${contentType}`);
     if (!contentType || !contentType.includes("application/json")) {
-      console.error("❌ [reCAPTCHA Verify API] Content-Type ไม่ถูกต้อง:", contentType); // Content-Type ไม่ถูกต้อง
+      console.error("❌ [reCAPTCHA Verify API] Content-Type ไม่ถูกต้อง:", contentType);
       return NextResponse.json(
-        { success: false, error: "คำขอต้องเป็น JSON (Invalid Content-Type)" }, // คำขอต้องเป็น JSON
-        { status: 415 } // Unsupported Media Type
+        { success: false, error: "คำขอต้องเป็น JSON (Invalid Content-Type)" },
+        { status: 415 }
       );
     }
 
     let body: VerifyRecaptchaRequestBody;
     try {
       body = await request.json();
+      console.log(`ℹ️ [reCAPTCHA Verify API] Body ที่ได้รับ:`, { token: body.token ? `${body.token.substring(0, 15)}...` : 'ไม่มี token' });
     } catch (jsonError: any) {
-      console.error("❌ [reCAPTCHA Verify API] JSON ใน body ของคำขอไม่ถูกต้อง:", jsonError.message); // JSON ใน body ของคำขอไม่ถูกต้อง
+      console.error("❌ [reCAPTCHA Verify API] JSON parse error:", jsonError.message);
       return NextResponse.json(
-        { success: false, error: `รูปแบบ JSON ของคำขอไม่ถูกต้อง: ${jsonError.message}` }, // รูปแบบ JSON ของคำขอไม่ถูกต้อง
-        { status: 400 } // Bad Request
+        { success: false, error: `รูปแบบ JSON ไม่ถูกต้อง: ${jsonError.message}` },
+        { status: 400 }
       );
     }
 
     const { token } = body;
     if (!token || typeof token !== "string" || token.trim() === "") {
-      console.error("❌ [reCAPTCHA Verify API] ไม่มี token หรือ token ไม่ถูกต้องใน body ของคำขอ"); // ไม่มี token หรือ token ไม่ถูกต้องใน body ของคำขอ
+      console.error("❌ [reCAPTCHA Verify API] token ไม่ถูกต้องหรือขาดหาย");
       return NextResponse.json(
-        { success: false, error: "กรุณาระบุโทเค็น reCAPTCHA ที่ถูกต้อง" }, // กรุณาระบุโทเค็น reCAPTCHA ที่ถูกต้อง
-        { status: 400 } // Bad Request
+        { success: false, error: "กรุณาระบุโทเค็น reCAPTCHA ที่ถูกต้อง" },
+        { status: 400 }
       );
     }
-    // console.log("ℹ️ [reCAPTCHA Verify API] Token ที่ได้รับจาก client:", token.substring(0, 30) + "..."); // Token ที่ได้รับจาก client (แสดงบางส่วน)
 
     const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+    console.log(`ℹ️ [reCAPTCHA Verify API] RECAPTCHA_SECRET_KEY: ${secretKey ? 'มี' : 'ไม่มี'}`);
     if (!secretKey) {
-      console.error("❌ [reCAPTCHA Verify API] RECAPTCHA_SECRET_KEY ไม่ได้ถูกตั้งค่าใน environment variables!"); // RECAPTCHA_SECRET_KEY ไม่ได้ถูกตั้งค่า
+      console.error("❌ [reCAPTCHA Verify API] RECAPTCHA_SECRET_KEY ไม่ได้ตั้งค่า");
       return NextResponse.json(
-        { success: false, error: "การตั้งค่า reCAPTCHA ของเซิร์ฟเวอร์ไม่ถูกต้อง (SK)" }, // การตั้งค่า reCAPTCHA ของเซิร์ฟเวอร์ไม่ถูกต้อง
-        { status: 500 } // Internal Server Error
+        { success: false, error: "การตั้งค่า reCAPTCHA ของเซิร์ฟเวอร์ไม่ถูกต้อง (SK)" },
+        { status: 500 }
       );
     }
 
@@ -63,10 +66,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     const params = new URLSearchParams({
       secret: secretKey,
       response: token,
-      // remoteip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') // (Optional but recommended) User's IP address
     });
+    console.log("🔄 [reCAPTCHA Verify API] ส่งคำขอไปยัง Google reCAPTCHA API...");
 
-    console.log("🔄 [reCAPTCHA Verify API] กำลังส่งคำขอตรวจสอบ reCAPTCHA token ไปยัง Google..."); // กำลังส่งคำขอตรวจสอบ reCAPTCHA token ไปยัง Google...
     const googleResponse = await fetch(verificationUrl, {
       method: "POST",
       headers: {
@@ -80,40 +82,44 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     try {
       const googleContentType = googleResponse.headers.get("content-type");
+      console.log(`ℹ️ [reCAPTCHA Verify API] Google Response Content-Type: ${googleContentType}`);
       if (googleContentType && googleContentType.includes("application/json")) {
         googleRecaptchaData = await googleResponse.json();
+        console.log(`ℹ️ [reCAPTCHA Verify API] การตอบกลับจาก Google:`, googleRecaptchaData);
       } else {
         rawGoogleResponseText = await googleResponse.text();
-        console.error(`❌ [reCAPTCHA Verify API] การตอบกลับจาก Google ไม่ใช่ JSON Content-Type: ${googleContentType}, Body: ${rawGoogleResponseText}`); // การตอบกลับจาก Google ไม่ใช่ JSON
+        console.error(`❌ [reCAPTCHA Verify API] การตอบกลับไม่ใช่ JSON: ${rawGoogleResponseText}`);
         googleRecaptchaData = { success: false, "error-codes": ["google-non-json-response", `status-${googleResponse.status}`] };
       }
     } catch (parseError: any) {
-      console.error("❌ [reCAPTCHA Verify API] ไม่สามารถ parse การตอบกลับจาก Google (คาดหวัง JSON):", parseError.message); // ไม่สามารถ parse การตอบกลับจาก Google
+      console.error("❌ [reCAPTCHA Verify API] ไม่สามารถ parse การตอบกลับจาก Google:", parseError.message);
       if (!rawGoogleResponseText) {
         try {
           rawGoogleResponseText = await googleResponse.text();
         } catch (textReadError: any) {
-            console.error("❌ [reCAPTCHA Verify API] ไม่สามารถอ่าน body การตอบกลับจาก Google เป็น text หลัง JSON parse error:", textReadError.message); // ไม่สามารถอ่าน body การตอบกลับจาก Google
-          rawGoogleResponseText = "[ไม่สามารถอ่าน body การตอบกลับจาก Google ได้]";
+          console.error("❌ [reCAPTCHA Verify API] ไม่สามารถอ่าน body:", textReadError.message);
+          rawGoogleResponseText = "[ไม่สามารถอ่าน body ได้]";
         }
       }
       return NextResponse.json(
-        { success: false, error: `การตอบกลับจาก Google reCAPTCHA API ไม่ถูกต้องหรือไม่ใช่ JSON: ${rawGoogleResponseText}` }, // การตอบกลับจาก Google reCAPTCHA API ไม่ถูกต้อง
-        { status: 502 } // Bad Gateway
+        { success: false, error: `การตอบกลับจาก Google ไม่ถูกต้อง: ${rawGoogleResponseText}` },
+        { status: 502 }
       );
     }
 
     if (!googleRecaptchaData.success) {
-      console.warn(
-        `❌ [reCAPTCHA Verify API] การยืนยัน reCAPTCHA โดย Google ล้มเหลว: Success=${googleRecaptchaData.success}, Error Codes=${googleRecaptchaData["error-codes"]?.join(", ") || "ไม่ระบุ"}, Hostname: ${googleRecaptchaData.hostname}`
-      ); // การยืนยัน reCAPTCHA โดย Google ล้มเหลว
-      let userFriendlyError = "การยืนยัน reCAPTCHA โดย Google ล้มเหลว"; // การยืนยัน reCAPTCHA โดย Google ล้มเหลว
+      console.warn(`❌ [reCAPTCHA Verify API] การยืนยันล้มเหลว:`, {
+        success: googleRecaptchaData.success,
+        errorCodes: googleRecaptchaData["error-codes"]?.join(", ") || "ไม่ระบุ",
+        hostname: googleRecaptchaData.hostname
+      });
+      let userFriendlyError = "การยืนยัน reCAPTCHA ล้มเหลว";
       if (googleRecaptchaData["error-codes"]?.includes("timeout-or-duplicate")) {
-          userFriendlyError = "การยืนยัน reCAPTCHA หมดเวลาหรือซ้ำซ้อน กรุณาลองใหม่"; // การยืนยัน reCAPTCHA หมดเวลาหรือซ้ำซ้อน
+        userFriendlyError = "การยืนยัน reCAPTCHA หมดเวลาหรือซ้ำซ้อน กรุณาลองใหม่";
       } else if (googleRecaptchaData["error-codes"]?.includes("invalid-input-response")) {
-          userFriendlyError = "โทเค็น reCAPTCHA ไม่ถูกต้องหรือไม่สมบูรณ์"; // โทเค็น reCAPTCHA ไม่ถูกต้อง
+        userFriendlyError = "โทเค็น reCAPTCHA ไม่ถูกต้อง";
       } else if (googleRecaptchaData["error-codes"]?.includes("bad-request")) {
-           userFriendlyError = "คำขอ reCAPTCHA ไม่ถูกต้อง"; // คำขอ reCAPTCHA ไม่ถูกต้อง
+        userFriendlyError = "คำขอ reCAPTCHA ไม่ถูกต้อง";
       }
 
       return NextResponse.json(
@@ -122,29 +128,33 @@ export async function POST(request: Request): Promise<NextResponse> {
           error: userFriendlyError,
           "error-codes": googleRecaptchaData["error-codes"] || [],
         },
-        { status: 400 } // Bad Request จาก client ถ้า token ไม่ผ่าน, หรือ status จาก Google ถ้าเป็นปัญหาอื่น
+        { status: 400 }
       );
     }
 
-    // ถ้าทุกอย่างสำเร็จ
-    console.log(`✅ [reCAPTCHA Verify API] โทเค็น reCAPTCHA ได้รับการยืนยันสำเร็จโดย Google Hostname: ${googleRecaptchaData.hostname}, Timestamp: ${googleRecaptchaData.challenge_ts}`); // โทเค็น reCAPTCHA ได้รับการยืนยันสำเร็จ
+    console.log(`✅ [reCAPTCHA Verify API] การยืนยันสำเร็จ:`, {
+      hostname: googleRecaptchaData.hostname,
+      timestamp: googleRecaptchaData.challenge_ts
+    });
     return NextResponse.json(
-      { success: true, message: "การยืนยัน reCAPTCHA สำเร็จ", hostname: googleRecaptchaData.hostname, timestamp: googleRecaptchaData.challenge_ts }, // ส่งข้อมูล hostname และ timestamp กลับไปด้วย
+      {
+        success: true,
+        message: "การยืนยัน reCAPTCHA สำเร็จ",
+        hostname: googleRecaptchaData.hostname,
+        timestamp: googleRecaptchaData.challenge_ts
+      },
       { status: 200 }
     );
 
   } catch (error: unknown) {
-    console.error("❌ [reCAPTCHA Verify API] เกิดข้อผิดพลาดที่ไม่คาดคิดใน POST handler:", error); // เกิดข้อผิดพลาดที่ไม่คาดคิด
-    let errorMessage = "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ขณะตรวจสอบ reCAPTCHA"; // เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์
+    console.error("❌ [reCAPTCHA Verify API] ข้อผิดพลาดที่ไม่คาดคิด:", error);
+    let errorMessage = "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ขณะตรวจสอบ reCAPTCHA";
     if (error instanceof Error) {
-        errorMessage = error.message;
+      errorMessage = error.message;
     }
     return NextResponse.json(
-      {
-        success: false,
-        error: "เกิดข้อผิดพลาดที่ไม่คาดคิดในการตรวจสอบ reCAPTCHA: " + errorMessage, // เกิดข้อผิดพลาดที่ไม่คาดคิดในการตรวจสอบ reCAPTCHA
-      },
-      { status: 500 } // Internal Server Error
+      { success: false, error: `ข้อผิดพลาดในการตรวจสอบ reCAPTCHA: ${errorMessage}` },
+      { status: 500 }
     );
   }
 }
