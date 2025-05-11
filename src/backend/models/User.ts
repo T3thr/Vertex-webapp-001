@@ -1,17 +1,33 @@
 // src/backend/models/User.ts
+// User Model - ศูนย์กลางข้อมูลผู้ใช้, การยืนยันตัวตน, สถิติ, และการตั้งค่า
 // โมเดลผู้ใช้ - ศูนย์กลางข้อมูลผู้ใช้, การยืนยันตัวตน, สถิติ, และการตั้งค่า
-// รองรับการล็อกอินด้วยอีเมลหรือชื่อผู้ใช้เท่านั้น โดยไม่มี provider หรือ credential ภายนอก
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
+// อินเทอร์เฟซสำหรับบัญชีที่เชื่อมโยงกับผู้ใช้ (สำหรับผู้ให้บริการ OAuth และข้อมูลประจำตัว)
+export interface IAccount {
+  provider?: string; // เช่น "google", "facebook", "credentials"
+  providerAccountId?: string; // ID จาก provider (สำหรับ credentials อาจเป็น email หรือ username)
+  type: string; // ประเภทของ account เช่น "oauth", "credentials"
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  tokenType?: string;
+  scope?: string;
+  idToken?: string;
+  sessionState?: string;
+  providerData?: Record<string, any>; // ข้อมูลเพิ่มเติมจาก provider
+}
+
 // อินเทอร์เฟซสำหรับเอกสารผู้ใช้
 export interface IUser extends Document {
   _id: Types.ObjectId;
-  email: string; // อีเมล (บังคับ)
+  email?: string; // อีเมล (บังคับถ้า provider เป็น "credentials")
   username: string; // ชื่อผู้ใช้ (บังคับและไม่ซ้ำกัน)
-  password: string; // รหัสผ่าน (hashed) - select: false
+  password?: string; // รหัสผ่าน (hashed) - select: false
+  accounts: IAccount[]; // บัญชีที่เชื่อมโยง
   role: "Reader" | "Writer" | "Admin"; // บทบาทของผู้ใช้
   profile: {
     displayName?: string; // ชื่อที่แสดง
@@ -119,14 +135,30 @@ export interface IUser extends Document {
   getEmailVerificationToken(): string;
 }
 
-// สคีมาผู้ใช้
+const AccountSchema = new Schema<IAccount>(
+  {
+    provider: { type: String, required: true },
+    providerAccountId: { type: String, required: true },
+    type: { type: String, required: true },
+    accessToken: { type: String, select: false },
+    refreshToken: { type: String, select: false },
+    expiresAt: Number,
+    tokenType: { type: String, select: false },
+    scope: String,
+    idToken: { type: String, select: false },
+    sessionState: { type: String, select: false },
+    providerData: Schema.Types.Mixed,
+  },
+  { _id: false }
+);
+
 const UserSchema = new Schema<IUser>(
   {
     _id: { type: Schema.Types.ObjectId, auto: true },
     email: {
       type: String,
-      required: [true, "กรุณาระบุอีเมล"],
       unique: true,
+      sparse: true,
       trim: true,
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "รูปแบบอีเมลไม่ถูกต้อง"],
@@ -144,10 +176,10 @@ const UserSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, "กรุณาระบุรหัสผ่าน"],
       minlength: [8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร"],
       select: false,
     },
+    accounts: [AccountSchema],
     role: {
       type: String,
       enum: {
@@ -178,7 +210,7 @@ const UserSchema = new Schema<IUser>(
       joinDate: { type: Date, default: Date.now, immutable: true },
     },
     socialStats: {
-      _id: false,
+      _id: false, // แก้ไขจาก _互_id เป็น _id
       followersCount: { type: Number, default: 0, min: 0 },
       followingCount: { type: Number, default: 0, min: 0 },
       novelsCreatedCount: { type: Number, default: 0, min: 0 },
@@ -281,6 +313,7 @@ const UserSchema = new Schema<IUser>(
 );
 
 // ----- Indexes -----
+UserSchema.index({ "accounts.provider": 1, "accounts.providerAccountId": 1 }, { unique: true, sparse: true });
 UserSchema.index({ role: 1, "writerVerification.status": 1 });
 UserSchema.index({ isActive: 1, isBanned: 1 });
 UserSchema.index({ "socialStats.followersCount": -1, role: 1 });
@@ -297,12 +330,29 @@ UserSchema.pre("save", async function (next) {
   if (!this.isModified("password") || !this.password) {
     return next();
   }
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
+  const credentialsAccount = this.accounts.find((acc) => acc.provider === "credentials");
+  if (credentialsAccount || (this.isNew && this.email && this.password)) {
+    try {
+      const salt = await bcrypt.genSalt(12);
+      this.password = await bcrypt.hash(this.password, salt);
+      if (!credentialsAccount && this.email) {
+        const existingCredentials = this.accounts.find(
+          (acc) => acc.provider === "credentials" && acc.providerAccountId === this.email
+        );
+        if (!existingCredentials) {
+          this.accounts.push({
+            provider: "credentials",
+            providerAccountId: this.email,
+            type: "credentials",
+          });
+        }
+      }
+      next();
+    } catch (error) {
+      next(error as Error);
+    }
+  } else {
     next();
-  } catch (error) {
-    next(error as Error);
   }
 });
 

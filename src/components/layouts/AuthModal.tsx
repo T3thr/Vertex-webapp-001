@@ -6,6 +6,8 @@
 // อัปเดต: ปรับ handleSigninSubmit ให้ส่ง POST request ไปยัง /api/auth/signin โดยตรง
 // อัปเดต: เพิ่ม console log สำหรับ debug และตรวจสอบการส่งข้อมูลไป AuthContext
 // แก้ไข: ปัญหา Stale Closure ใน reCAPTCHA callback ทำให้ข้อมูลฟอร์มที่ส่งไปไม่ถูกต้อง
+// อัปเดต (แก้ไข reCAPTCHA ทับซ้อน): นำการเรียก /api/verify-recaptcha ออกจาก doActualSignupSubmission
+// ให้ /api/auth/signup เป็นผู้ตรวจสอบ reCAPTCHA token เพียงผู้เดียว
 
 "use client";
 
@@ -300,14 +302,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   console.log(`ℹ️ [AuthModal] reCAPTCHA Site Key: ${siteKey ? 'มี' : 'ไม่มี'}`);
 
   const modalRef = useRef<HTMLDivElement>(null);
-  // const identifierInputRef = useRef<HTMLInputElement>(null); // ไม่ได้ถูกใช้งาน อาจลบออกได้
 
-  const { signUp: authContextSignUp, signInWithSocial } = useAuth();
+  const { signUp: authContextSignUp, signInWithSocial, signInWithCredentials } = useAuth(); // Added signInWithCredentials
 
   // อัปเดต formData
   const updateFormData = (field: keyof FormDataFields, value: string) => {
     console.log(`🔄 [AuthModal] อัปเดต formData[${mode}].${field}: ${value}`);
-    setFormDataState(prev => ({ // Use renamed setter
+    setFormDataState(prev => ({
       ...prev,
       [mode]: { ...prev[mode], [field]: value }
     }));
@@ -326,42 +327,22 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       return;
     }
 
-    // เข้าถึง formData.signup ล่าสุดโดยตรงจาก state ภายใน useCallback นี้
-    // เนื่องจาก formData.signup อยู่ใน dependency array ของ useCallback นี้
-    // instance ของฟังก์ชันนี้จะถูกสร้างใหม่เสมอเมื่อ formData.signup เปลี่ยนแปลง
-    // ทำให้ currentFormSignupData ที่นี่เป็นข้อมูลล่าสุดเสมอ ณ เวลาที่ฟังก์ชันถูกเรียก
     const currentFormSignupData = formData.signup;
 
     try {
-      console.log("🔄 [AuthModal] [doActualSignupSubmission] ส่งคำขอไปยัง /api/verify-recaptcha...");
-      const verifyResponse = await fetch('/api/verify-recaptcha', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: recaptchaClientToken }),
-      });
+      //  *** ส่วนที่ถูกนำออก: ไม่มีการเรียก /api/verify-recaptcha ที่นี่อีกต่อไป ***
+      // console.log("🔄 [AuthModal] [doActualSignupSubmission] ส่งคำขอไปยัง /api/verify-recaptcha...");
+      // const verifyResponse = await fetch('/api/verify-recaptcha', { ... });
+      // const verifyData = await verifyResponse.json();
+      // ... (ส่วนจัดการผลลัพธ์จาก verifyResponse) ...
+      // if (!verifyResponse.ok || !verifyData.success) { ... return; }
 
-      const verifyData = await verifyResponse.json();
-      console.log(`ℹ️ [AuthModal] [doActualSignupSubmission] การตอบกลับจาก /api/verify-recaptcha:`, verifyData);
-
-      if (!verifyResponse.ok || !verifyData.success) {
-        console.warn(`⚠️ [AuthModal] [doActualSignupSubmission] การยืนยัน reCAPTCHA ล้มเหลว: ${verifyData.error || 'ไม่ทราบสาเหตุ'}`);
-        setError(verifyData.error || 'การยืนยัน reCAPTCHA ล้มเหลว');
-        setIsLoading(false);
-        setRecaptchaAttempts(prev => prev + 1);
-        const win = window as ReCaptchaWindow;
-        if (widgetIdRef.current !== null && win.grecaptcha) {
-          win.grecaptcha.reset(widgetIdRef.current);
-          console.log("🔄 [AuthModal] [doActualSignupSubmission] รีเซ็ต reCAPTCHA widget หลังการยืนยันล้มเหลว");
-        }
-        return;
-      }
-
-      console.log("✅ [AuthModal] [doActualSignupSubmission] reCAPTCHA ผ่านการยืนยัน, เตรียมส่งข้อมูลสมัครสมาชิก...");
+      console.log("✅ [AuthModal] [doActualSignupSubmission] เตรียมส่งข้อมูลสมัครสมาชิกไปยัง AuthContext...");
       const signupData = {
         email: currentFormSignupData.identifier.trim(),
         username: currentFormSignupData.username?.trim() || '',
         password: currentFormSignupData.password?.trim() || '',
-        recaptchaToken: recaptchaClientToken
+        recaptchaToken: recaptchaClientToken // ส่ง token ที่ได้จาก reCAPTCHA โดยตรง
       };
       console.log(`ℹ️ [AuthModal] [doActualSignupSubmission] ข้อมูลที่จะส่งไป authContextSignUp:`, {
         email: signupData.email,
@@ -370,6 +351,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         recaptchaToken: signupData.recaptchaToken ? signupData.recaptchaToken.substring(0, 15) + '...' : 'ไม่มี Token'
       });
 
+      // เรียก authContextSignUp โดยตรง ซึ่งจะไปเรียก /api/auth/signup ที่มีการตรวจสอบ reCAPTCHA เพียงครั้งเดียว
       const signupResult = await authContextSignUp(
         signupData.email,
         signupData.username,
@@ -382,10 +364,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (signupResult.error) {
         console.warn(`⚠️ [AuthModal] [doActualSignupSubmission] การสมัครสมาชิกล้มเหลว: ${signupResult.error}`);
         setError(signupResult.error);
+        // หาก lỗiมาจาก reCAPTCHA ที่ /api/auth/signup, มันควรจะแสดงที่นี่
+        // และอาจจะต้อง reset reCAPTCHA widget
+        setRecaptchaAttempts(prev => prev + 1);
+        const win = window as ReCaptchaWindow;
+        if (widgetIdRef.current !== null && win.grecaptcha) {
+          win.grecaptcha.reset(widgetIdRef.current);
+          console.log("🔄 [AuthModal] [doActualSignupSubmission] รีเซ็ต reCAPTCHA widget หลังการสมัครล้มเหลว (จาก context)");
+        }
+
       } else {
         console.log(`✅ [AuthModal] [doActualSignupSubmission] สมัครสมาชิกสำเร็จ: ${signupData.email}`);
         setSuccessMessage(signupResult.message || "สร้างบัญชีสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยัน");
-        setFormDataState(prev => ({ // Use renamed setter
+        setFormDataState(prev => ({
           ...prev,
           signup: { identifier: '', username: '', password: '', confirmPassword: '' }
         }));
@@ -401,19 +392,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setError(err.message || 'เกิดข้อผิดพลาดในการสมัครสมาชิก');
     } finally {
       setIsLoading(false);
+      // รีเซ็ต reCAPTCHA widget หลังการพยายามสมัคร ไม่ว่าจะสำเร็จหรือล้มเหลว
+      // เพื่อให้พร้อมสำหรับการพยายามครั้งถัดไป (ถ้ามี) หรือการใช้งานอื่นๆ
       const win = window as ReCaptchaWindow;
       if (widgetIdRef.current !== null && win.grecaptcha) {
         win.grecaptcha.reset(widgetIdRef.current);
-        console.log("🔄 [AuthModal] [doActualSignupSubmission] รีเซ็ต reCAPTCHA widget หลังสมัคร");
+        console.log("🔄 [AuthModal] [doActualSignupSubmission] รีเซ็ต reCAPTCHA widget หลังจบการทำงาน");
       }
       recaptchaTokenRef.current = null; // เคลียร์ token ที่ใช้แล้ว
     }
   }, [
-    formData.signup, // สำคัญ: ทำให้ useCallback สร้าง instance ใหม่เมื่อ formData.signup เปลี่ยน
+    formData.signup,
     authContextSignUp,
     recaptchaAttempts,
-    // state setters (setError, setIsLoading, etc.) จาก useState มีความเสถียร ไม่ต้องใส่ใน deps ก็ได้
-    // แต่ใส่ไว้เพื่อความชัดเจน หรือถ้ามาจาก props/context อื่นที่อาจไม่เสถียร
     setError, setIsLoading, setRecaptchaAttempts, setSuccessMessage, setFormDataState, setTouchedFields, setValidationErrors, setMode
   ]);
 
@@ -426,20 +417,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
 
   // เมื่อ reCAPTCHA สำเร็จ (callback จาก Google)
-  // ใช้ useCallback เพื่อให้ instance เสถียรสำหรับส่งให้ reCAPTCHA render
   const onRecaptchaSuccess = useCallback((clientToken: string) => {
     console.log(`✅ [AuthModal] onRecaptchaSuccess: ได้รับ reCAPTCHA token: ${clientToken.substring(0, 15)}...`);
     recaptchaTokenRef.current = clientToken;
-    // เรียก instance ล่าสุดของฟังก์ชัน handler ผ่าน ref
     doActualSignupSubmissionRef.current(clientToken);
-  }, []); // Dependencies Array ว่าง เพราะเราใช้ ref ชี้ไปยัง instance ล่าสุดของ handler
+  }, []);
 
   // เมื่อ reCAPTCHA หมดอายุ
   const onRecaptchaExpired = useCallback(() => {
     console.warn("⚠️ [AuthModal] onRecaptchaExpired: reCAPTCHA token หมดอายุ");
     recaptchaTokenRef.current = null;
     setError('โทเค็น reCAPTCHA หมดอายุ กรุณาลองใหม่');
-    setIsLoading(false);
+    setIsLoading(false); // ปลด loading เพื่อให้ผู้ใช้สามารถลองใหม่ได้
     setRecaptchaAttempts(prev => prev + 1);
     const win = window as ReCaptchaWindow;
     if (widgetIdRef.current !== null && win.grecaptcha) {
@@ -453,7 +442,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     console.error("❌ [AuthModal] onRecaptchaError: เกิดข้อผิดพลาดจาก reCAPTCHA");
     recaptchaTokenRef.current = null;
     setError('การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่');
-    setIsLoading(false);
+    setIsLoading(false); // ปลด loading
     setRecaptchaAttempts(prev => prev + 1);
     const win = window as ReCaptchaWindow;
     if (widgetIdRef.current !== null && win.grecaptcha) {
@@ -465,15 +454,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   // เรนเดอร์ reCAPTCHA
   const renderRecaptcha = useCallback(() => {
-    if (isRecaptchaRenderedRef.current || !recaptchaRef.current) {
-      console.log(`ℹ️ [AuthModal] ข้ามการเรนเดอร์ reCAPTCHA. Rendered: ${isRecaptchaRenderedRef.current}, Ref: ${!!recaptchaRef.current}`);
+    if (isRecaptchaRenderedRef.current || !recaptchaRef.current || !siteKey) {
+      console.log(`ℹ️ [AuthModal] ข้ามการเรนเดอร์ reCAPTCHA. Rendered: ${isRecaptchaRenderedRef.current}, Ref: ${!!recaptchaRef.current}, SiteKey: ${!!siteKey}`);
+      if (!siteKey) {
+        setError('การตั้งค่า reCAPTCHA ไม่ถูกต้อง (Site Key)');
+        console.error('❌ [AuthModal] ไม่สามารถเรนเดอร์ reCAPTCHA: Site Key ไม่ได้ตั้งค่า');
+      }
       return;
     }
 
     const win = window as ReCaptchaWindow;
-    if (!win.grecaptcha || !siteKey) {
-      console.error('❌ [AuthModal] grecaptcha หรือ siteKey ไม่พร้อมใช้งาน');
-      if (!siteKey) setError('การตั้งค่า reCAPTCHA ไม่ถูกต้อง (Site Key)');
+    if (!win.grecaptcha || typeof win.grecaptcha.render !== 'function') {
+      console.error('❌ [AuthModal] grecaptcha.render ไม่พร้อมใช้งาน');
+      setError('เกิดข้อผิดพลาดในการโหลด reCAPTCHA (render)');
       setIsLoading(false);
       return;
     }
@@ -482,9 +475,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       console.log("🔄 [AuthModal] เริ่มเรนเดอร์ reCAPTCHA...");
       const widgetId = win.grecaptcha.render(recaptchaRef.current, {
         sitekey: siteKey,
-        callback: onRecaptchaSuccess, // ส่ง onRecaptchaSuccess ที่เป็น useCallback แล้ว
-        'expired-callback': onRecaptchaExpired, // ส่ง onRecaptchaExpired ที่เป็น useCallback แล้ว
-        'error-callback': onRecaptchaError, // ส่ง onRecaptchaError ที่เป็น useCallback แล้ว
+        callback: onRecaptchaSuccess,
+        'expired-callback': onRecaptchaExpired,
+        'error-callback': onRecaptchaError,
         size: 'invisible',
         badge: 'bottomright',
       });
@@ -498,101 +491,136 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setIsLoading(false);
       isRecaptchaRenderedRef.current = false;
     }
-  }, [siteKey, onRecaptchaSuccess, onRecaptchaExpired, onRecaptchaError]); // เพิ่ม dependencies ที่เป็น useCallback
+  }, [siteKey, onRecaptchaSuccess, onRecaptchaExpired, onRecaptchaError, setError, setIsLoading]);
 
 
   // โหลดสคริปต์ reCAPTCHA
   const loadRecaptchaScript = useCallback(() => {
     console.log("🔵 [AuthModal] เริ่มโหลดสคริปต์ reCAPTCHA...");
     const win = window as ReCaptchaWindow;
+
     if (win.grecaptcha && win.grecaptcha.ready) {
-      console.log("✅ [AuthModal] grecaptcha พร้อมใช้งาน, เรียก renderRecaptcha");
-      win.grecaptcha.ready(() => renderRecaptcha()); // renderRecaptcha ถูกเรียกจากที่นี่
+        console.log("✅ [AuthModal] grecaptcha พร้อมใช้งาน (โหลดแล้ว), เรียก renderRecaptcha ผ่าน ready");
+        win.grecaptcha.ready(() => {
+            console.log("🟢 [AuthModal] grecaptcha.ready callback: เรียก renderRecaptcha");
+            renderRecaptcha();
+        });
     } else if (!document.querySelector('script[src^="https://www.google.com/recaptcha/api.js"]')) {
-      console.log("🔄 [AuthModal] สร้างและโหลดสคริปต์ reCAPTCHA ใหม่...");
-      const script = document.createElement('script');
-      script.src = `https://www.google.com/recaptcha/api.js?render=explicit&hl=th`;
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-      script.onload = () => {
-        console.log("✅ [AuthModal] สคริปต์ reCAPTCHA โหลดสำเร็จ");
-        const winOnload = window as ReCaptchaWindow;
-        if (winOnload.grecaptcha && winOnload.grecaptcha.ready) {
-          winOnload.grecaptcha.ready(() => renderRecaptcha()); // renderRecaptcha ถูกเรียกจากที่นี่
-        } else {
-          console.warn("⚠️ [AuthModal] grecaptcha ไม่พร้อมใช้งานหลังโหลดสคริปต์");
-        }
-      };
-      script.onerror = () => {
-        console.error("❌ [AuthModal] ล้มเหลวในการโหลดสคริปต์ reCAPTCHA");
-        setError("ไม่สามารถโหลด reCAPTCHA ได้ กรุณาลองใหม่");
-      };
+        console.log("🔄 [AuthModal] สร้างและโหลดสคริปต์ reCAPTCHA ใหม่...");
+        const script = document.createElement('script');
+        script.src = `https://www.google.com/recaptcha/api.js?render=explicit&hl=th`; // hl=th เพื่อภาษาไทย
+        script.async = true;
+        script.defer = true;
+        script.id = "recaptcha-script"; // เพิ่ม id เพื่อตรวจสอบได้ง่าย
+        document.head.appendChild(script);
+
+        script.onload = () => {
+            console.log("✅ [AuthModal] สคริปต์ reCAPTCHA โหลดสำเร็จ");
+            const winOnload = window as ReCaptchaWindow;
+            if (winOnload.grecaptcha && winOnload.grecaptcha.ready) {
+                winOnload.grecaptcha.ready(() => {
+                    console.log("🟢 [AuthModal] grecaptcha.ready callback (หลังโหลดสคริปต์): เรียก renderRecaptcha");
+                    renderRecaptcha();
+                });
+            } else {
+                console.warn("⚠️ [AuthModal] grecaptcha ไม่พร้อมใช้งานหลังโหลดสคริปต์");
+                setError("ไม่สามารถเริ่มต้น reCAPTCHA ได้ (grecaptcha not ready)");
+            }
+        };
+        script.onerror = () => {
+            console.error("❌ [AuthModal] ล้มเหลวในการโหลดสคริปต์ reCAPTCHA");
+            setError("ไม่สามารถโหลด reCAPTCHA ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่");
+        };
     } else {
-      console.log("🟡 [AuthModal] สคริปต์ reCAPTCHA มีอยู่แล้ว, รอ grecaptcha พร้อม...");
-      const intervalId = setInterval(() => {
-        const winRetry = window as ReCaptchaWindow;
-        if (winRetry.grecaptcha && winRetry.grecaptcha.ready) {
-          console.log("✅ [AuthModal] grecaptcha พร้อมใช้งานหลังรอ");
-          clearInterval(intervalId);
-          winRetry.grecaptcha.ready(() => renderRecaptcha()); // renderRecaptcha ถูกเรียกจากที่นี่
-        }
-      }, 200);
+        console.log("🟡 [AuthModal] สคริปต์ reCAPTCHA มีอยู่แล้ว, รอ grecaptcha พร้อม...");
+        // เพิ่มการรอ grecaptcha.ready ถ้าสคริปต์มีอยู่แต่ grecaptcha object ยังไม่พร้อม
+        let attempts = 0;
+        const intervalId = setInterval(() => {
+            attempts++;
+            const winRetry = window as ReCaptchaWindow;
+            if (winRetry.grecaptcha && winRetry.grecaptcha.ready) {
+                clearInterval(intervalId);
+                console.log("✅ [AuthModal] grecaptcha พร้อมใช้งานหลังรอ (สคริปต์มีอยู่แล้ว)");
+                winRetry.grecaptcha.ready(() => {
+                     console.log("🟢 [AuthModal] grecaptcha.ready callback (หลังรอ, สคริปต์มีอยู่แล้ว): เรียก renderRecaptcha");
+                    renderRecaptcha();
+                });
+            } else if (attempts > 25) { // รอประมาณ 5 วินาที (25 * 200ms)
+                clearInterval(intervalId);
+                console.error("❌ [AuthModal] Timeout: grecaptcha ไม่พร้อมใช้งาน แม้สคริปต์จะโหลดแล้ว");
+                setError("ไม่สามารถเริ่มต้น reCAPTCHA ได้ (timeout)");
+            }
+        }, 200);
     }
-  }, [renderRecaptcha]); // renderRecaptcha เป็น dependency ของ loadRecaptchaScript
+  }, [renderRecaptcha, setError]);
 
 
   // เรียก execute reCAPTCHA
   const executeRecaptcha = useCallback(() => {
     console.log("🔄 [AuthModal] เริ่ม execute reCAPTCHA...");
     const win = window as ReCaptchaWindow;
-    if (!win.grecaptcha) {
-      console.error("❌ [AuthModal] grecaptcha ไม่พร้อมใช้งาน");
-      setError('reCAPTCHA ยังไม่พร้อมใช้งาน');
+
+    if (!siteKey) {
+        console.error("❌ [AuthModal] [executeRecaptcha] Site Key ไม่ได้ตั้งค่า");
+        setError('การตั้งค่า reCAPTCHA ไม่ถูกต้อง (Site Key)');
+        setIsLoading(false);
+        return;
+    }
+
+    if (!win.grecaptcha || typeof win.grecaptcha.execute !== 'function') {
+      console.error("❌ [AuthModal] [executeRecaptcha] grecaptcha.execute ไม่พร้อมใช้งาน");
+      setError('reCAPTCHA ยังไม่พร้อมใช้งาน (execute)');
       setIsLoading(false);
-      loadRecaptchaScript(); // พยายามโหลดใหม่ถ้ายังไม่มี
+      // ลองโหลดสคริปต์อีกครั้งหาก grecaptcha object ไม่มี
+      if (!win.grecaptcha) {
+        console.log("🔄 [AuthModal] [executeRecaptcha] พยายามโหลดสคริปต์ reCAPTCHA เนื่องจากยังไม่มี...");
+        loadRecaptchaScript();
+      }
       return;
     }
+
     if (!isRecaptchaRenderedRef.current || widgetIdRef.current === null) {
-      console.warn("⚠️ [AuthModal] reCAPTCHA ยังไม่เรนเดอร์, พยายามเรนเดอร์ใหม่...");
-      // ไม่ควรเรียก renderRecaptcha() โดยตรงที่นี่อีก ถ้า loadRecaptchaScript จัดการการเรียก renderRecaptcha() ผ่าน grecaptcha.ready() แล้ว
-      // การเรียก renderRecaptcha() โดยตรงอาจทำให้เกิดการ render ซ้ำซ้อนหรือ race condition
-      // ให้ loadRecaptchaScript จัดการ flow การ render ให้สมบูรณ์
+      console.warn("⚠️ [AuthModal] [executeRecaptcha] reCAPTCHA ยังไม่เรนเดอร์ หรือ widget ID ไม่มี, พยายามเรนเดอร์ใหม่...");
+      // การเรียก renderRecaptcha() โดยตรงที่นี่อาจจะไม่ใช่ flow ที่ดีที่สุด
+      // ควรให้ loadRecaptchaScript จัดการการ render ผ่าน grecaptcha.ready()
+      // หรือถ้ามั่นใจว่าสคริปต์โหลดแล้วแต่ยังไม่ render ก็เรียก renderRecaptcha()
+      // แต่ต้องระวังการเรียกซ้ำซ้อน
+      // ในกรณีนี้ ถ้ายังไม่ render อาจจะหมายถึงมีปัญหาในการโหลด script หรือ siteKey
+      // หรือ renderRecaptcha อาจจะยังไม่ถูกเรียกผ่าน ready()
+      // ทางที่ดีคือให้ loadRecaptchaScript จัดการ flow นี้
       loadRecaptchaScript(); // ให้ loadRecaptchaScript ตรวจสอบและ render หากจำเป็น
-      // อาจจะต้องมี logic รอสักครู่เพื่อให้ renderRecaptcha ทำงานเสร็จก่อน execute
-      // แต่ reCAPTCHA v2 invisible ควรจะ execute ได้หลังจาก render สำเร็จแล้ว
-      // การเรียก execute ทันทีหลัง loadRecaptchaScript อาจยังเร็วไป
-      // ปกติจะ execute เมื่อผู้ใช้กด submit form จริงๆ
-      // ในที่นี้ execute ถูกเรียกหลังจาก preSignupValidation ผ่านแล้ว
-      // ตรวจสอบให้แน่ใจว่า widgetIdRef.current ถูกตั้งค่าจริงๆ ก่อน execute
-      // อาจเพิ่มการตรวจสอบ widgetIdRef.current อีกครั้งก่อน win.grecaptcha.execute
+      // อาจจะยังไม่ execute ทันที รอให้ render เสร็จก่อน
+      // setError('reCAPTCHA กำลังเตรียมการ กรุณาลองอีกสักครู่');
+      // setIsLoading(false); // ปลด loading ถ้าต้องการให้ user ลองกดใหม่
+      // อย่างไรก็ตาม ถ้า preSignupValidation ผ่านแล้ว เราต้องการให้ flow ดำเนินต่อ
+      // การ execute อาจจะ fail ถ้า widgetId ยังไม่พร้อมจริงๆ
+      // เพิ่มการตรวจสอบ widgetId ก่อน execute อีกครั้ง
       if (win.grecaptcha && widgetIdRef.current !== null) {
-        try {
-          win.grecaptcha.execute(widgetIdRef.current);
-          console.log("🚀 [AuthModal] reCAPTCHA execute เรียกสำเร็จ (หลังตรวจสอบ widgetId)");
-        } catch (e) {
-          console.error('❌ [AuthModal] ข้อผิดพลาดในการ execute reCAPTCHA (หลังตรวจสอบ widgetId):', e);
-          setError('เกิดข้อผิดพลาดในการเริ่มต้น reCAPTCHA');
-          setIsLoading(false);
-        }
+          try {
+              console.log(`🚀 [AuthModal] [executeRecaptcha] พยายาม execute reCAPTCHA (Widget ID: ${widgetIdRef.current}) หลังเรียก loadRecaptchaScript`);
+              win.grecaptcha.execute(widgetIdRef.current);
+          } catch (e) {
+              console.error('❌ [AuthModal] [executeRecaptcha] ข้อผิดพลาดในการ execute reCAPTCHA (หลังเรียก loadRecaptchaScript):', e);
+              setError('เกิดข้อผิดพลาดในการเริ่มต้น reCAPTCHA');
+              setIsLoading(false);
+          }
       } else {
-          console.warn("⚠️ [AuthModal] ไม่สามารถ execute reCAPTCHA ได้ทันที, อาจกำลังรอ render...");
-          // อาจจะ retry execute หลังจาก delay สั้นๆ หรือให้ user ลองอีกครั้ง
-          // setError('reCAPTCHA กำลังเตรียมการ, กรุณาลองอีกสักครู่'); // Optional: user feedback
-          // setIsLoading(false); // ปลดล็อคปุ่มให้ผู้ใช้ลองอีกครั้ง
+           console.warn("⚠️ [AuthModal] [executeRecaptcha] ไม่สามารถ execute reCAPTCHA ได้ทันที, อาจกำลังรอ render หรือ widgetId ไม่ถูกต้อง...");
+           setError('reCAPTCHA กำลังเตรียมการ กรุณาลองคลิกปุ่มสมัครอีกครั้ง');
+           setIsLoading(false);
       }
       return; // ออกจากฟังก์ชันถ้ายังไม่ render หรือ widgetId ไม่มี
     }
 
     try {
+      console.log(`🚀 [AuthModal] [executeRecaptcha] เรียก win.grecaptcha.execute (Widget ID: ${widgetIdRef.current})`);
       win.grecaptcha.execute(widgetIdRef.current);
-      console.log("🚀 [AuthModal] reCAPTCHA execute เรียกสำเร็จ");
     } catch (error) {
-      console.error('❌ [AuthModal] ข้อผิดพลาดในการ execute reCAPTCHA:', error);
+      console.error('❌ [AuthModal] [executeRecaptcha] ข้อผิดพลาดในการ execute reCAPTCHA:', error);
       setError('เกิดข้อผิดพลาดในการเริ่มต้น reCAPTCHA');
       setIsLoading(false);
     }
-  }, [loadRecaptchaScript]); // loadRecaptchaScript เป็น dependency
+  }, [loadRecaptchaScript, siteKey, setError, setIsLoading]);
 
 
   // ตรวจสอบความถูกต้องของฟิลด์
@@ -717,16 +745,16 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     };
   }, [isOpen, onClose, mode]);
 
-  // รีเซ็ตเมื่อ modal เปลี่ยนสถานะ หรือ mode เปลี่ยน
+ // รีเซ็ตเมื่อ modal เปลี่ยนสถานะ หรือ mode เปลี่ยน
   useEffect(() => {
     console.log(`ℹ️ [AuthModal] รีเซ็ตสถานะเนื่องจาก isOpen: ${isOpen}, mode: ${mode}`);
     setError(null);
     setSuccessMessage(null);
-    setIsLoading(false); // รีเซ็ต isLoading เสมอ
+    setIsLoading(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
-    setRecaptchaAttempts(0); // รีเซ็ตจำนวนครั้งที่พยายาม
-    recaptchaTokenRef.current = null; // เคลียร์ token ที่อาจค้างอยู่
+    setRecaptchaAttempts(0);
+    recaptchaTokenRef.current = null;
 
     // รีเซ็ต reCAPTCHA widget ถ้ามี
     const win = window as ReCaptchaWindow;
@@ -738,16 +766,30 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         console.warn("⚠️ [AuthModal] ไม่สามารถรีเซ็ต reCAPTCHA widget (useEffect [isOpen, mode]):", e);
       }
     }
-    // isRecaptchaRenderedRef.current ควรถูกจัดการโดย renderRecaptcha และ loadRecaptchaScript
-    // ไม่ควร reset widgetIdRef.current ที่นี่ เพราะ renderRecaptcha อาจยังใช้ ID เดิมถ้า script โหลดแล้ว
-    // แต่ถ้า modal ปิดและเปิดใหม่ หรือ mode เปลี่ยนเป็น signup, loadRecaptchaScript จะถูกเรียกและจัดการ render ใหม่
+    // isRecaptchaRenderedRef.current ควรเป็น false เมื่อ modal ปิด หรือ mode เปลี่ยนไปที่ไม่ใช่ signup
+    // หรือเมื่อเปลี่ยนมาเป็น signup เพื่อให้ loadRecaptchaScript ทำงานใหม่
+    isRecaptchaRenderedRef.current = false;
+    // widgetIdRef.current = null; // การ reset widgetIdRef อาจทำให้เกิดปัญหาถ้า script ยังไม่ได้โหลดใหม่ทั้งหมด
 
     if (isOpen && mode === 'signup') {
       console.log("🔵 [AuthModal] โหมด signup และ modal เปิด, เรียก loadRecaptchaScript");
-      isRecaptchaRenderedRef.current = false; // อนุญาตให้ renderRecaptcha ทำงานใหม่
-      loadRecaptchaScript();
+       if (!siteKey) {
+        console.error("❌ [AuthModal] ไม่พบ RECAPTCHA_SITE_KEY สำหรับโหมด signup ใน useEffect");
+        setError("การตั้งค่า reCAPTCHA ไม่สมบูรณ์ (Site Key)");
+      } else {
+        loadRecaptchaScript();
+      }
+    } else if (!isOpen) {
+        // ถ้า modal ปิด, อาจจะต้องการลบ script reCAPTCHA ออกจาก DOM เพื่อความสะอาด
+        // แต่ต้องระวังถ้ามี instance อื่นของ modal ที่อาจจะใช้ script เดียวกัน
+        // const recaptchaScript = document.getElementById('recaptcha-script');
+        // if (recaptchaScript) recaptchaScript.remove();
+        // isRecaptchaRenderedRef.current = false;
+        // widgetIdRef.current = null;
+        // console.log("ℹ️ [AuthModal] Modal ปิด, สถานะ reCAPTCHA ถูกรีเซ็ต (เบื้องต้น)");
     }
-  }, [isOpen, mode, loadRecaptchaScript]); // loadRecaptchaScript เป็น dependency
+  }, [isOpen, mode, loadRecaptchaScript, siteKey]); // เพิ่ม siteKey ใน dependency
+
 
   // จัดการปุ่ม ESC
   useEffect(() => {
@@ -776,7 +818,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     console.log("🔍 [AuthModal] เริ่มตรวจสอบฟอร์มก่อนสมัคร...");
     setError(null);
     setSuccessMessage(null);
-    // มาร์คทุกฟิลด์ว่าถูก touched เพื่อแสดง error ถ้ามี
     setTouchedFields({
       identifier: true,
       username: true,
@@ -802,13 +843,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     console.log("🚀 [AuthModal] ส่งฟอร์มสมัครสมาชิก...");
     if (!preSignupValidation()) {
       console.warn("⚠️ [AuthModal] ฟอร์มไม่ผ่านการตรวจสอบ, ยกเลิกการส่ง");
-      setIsLoading(false); // หยุด loading ถ้า validation ไม่ผ่าน
+      setIsLoading(false);
       return;
     }
+    if (!siteKey) {
+        console.error("❌ [AuthModal] [handleSignupSubmit] ไม่พบ RECAPTCHA_SITE_KEY");
+        setError("การตั้งค่า reCAPTCHA ไม่สมบูรณ์ (Site Key). ไม่สามารถดำเนินการสมัครได้");
+        setIsLoading(false);
+        return;
+    }
     setIsLoading(true);
-    setError(null); // เคลียร์ error เก่า
-    setSuccessMessage(null); // เคลียร์ success message เก่า
-    // setRecaptchaAttempts(0); // ย้ายไป reset ใน useEffect [isOpen, mode] หรือเมื่อเริ่ม flow ใหม่
+    setError(null);
+    setSuccessMessage(null);
 
     console.log("🔄 [AuthModal] เรียก executeRecaptcha สำหรับ signup...");
     executeRecaptcha();
@@ -828,71 +874,39 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (formErrors.identifier || formErrors.password) {
       console.warn("⚠️ [AuthModal] ฟอร์มลงชื่อเข้าใช้มีข้อผิดพลาด:", formErrors);
       setError("กรุณากรอกอีเมล/ชื่อผู้ใช้ และรหัสผ่านให้ถูกต้อง");
-      setIsLoading(false); // หยุด loading ถ้า validation ไม่ผ่าน
+      setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     try {
-      const requestBody = {
-        identifier: formData.signin.identifier.trim(),
-        password: formData.signin.password.trim(),
-      };
-      console.log("🔵 [AuthModal] ส่ง request ไปยัง /api/auth/signin:", {
-        identifier: requestBody.identifier,
-        password: requestBody.password ? '[มีรหัสผ่าน]' : '[ไม่มีรหัสผ่าน]'
-      });
+        const result = await signInWithCredentials(
+            formData.signin.identifier.trim(),
+            formData.signin.password.trim()
+        );
 
-      // ไม่ควรเรียก signInWithCredentials ของ AuthContext ที่นี่โดยตรงถ้าต้องการ flow ผ่าน API ก่อน
-      // ควรเรียก API endpoint ของเราเอง แล้ว API นั้นค่อยจัดการ logic การยืนยันตัวตน
-      const response = await fetch('/api/auth/signin', { // Endpoint ที่ backend จัดการ
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+        console.log("🔵 [AuthModal] การตอบกลับจาก signInWithCredentials (AuthContext):", result);
 
-      const result = await response.json();
-      console.log("🔵 [AuthModal] การตอบกลับจาก /api/auth/signin:", result);
-
-      if (!response.ok || result.error) { // ตรวจสอบ result.error ด้วย
-        console.warn(`⚠️ [AuthModal] การลงชื่อเข้าใช้ล้มเหลว: ${result.error || 'ไม่ทราบสาเหตุ'}`);
-        setError(result.error || 'การลงชื่อเข้าใช้ล้มเหลว');
-      } else if (result.success) { // สมมติว่า API คืน { success: true, user: ... }
-        console.log("✅ [AuthModal] ลงชื่อเข้าใช้สำเร็จ (API ตรวจสอบผ่าน)");
-        // หลังจาก API ยืนยันสำเร็จ, เรียก NextAuth signIn เพื่อสร้าง session จริงๆ
-        // ส่งข้อมูลที่จำเป็น (เช่น username หรือ email ที่ยืนยันแล้ว) ไปให้ NextAuth provider "credentials"
-        // ที่ "authorize" method ใน NextAuth options จะถูกเรียกอีกครั้ง
-        // ต้องมั่นใจว่า authorize ไม่ได้ทำ logic ซ้ำซ้อน หรือสามารถรับ pre-validated user ได้
-        const nextAuthSignInResult = await nextAuthSignIn("credentials", {
-          redirect: false, // จัดการ redirect เอง หรือรอให้ onClose ทำงาน
-          identifier: result.user.username, // หรือ email ตามที่ NextAuth provider คาดหวัง
-          // ไม่ส่ง password ไปอีกถ้า NextAuth provider ไม่ได้ใช้ password ในขั้นตอนนี้
-          // หรือถ้า authorize method ของ NextAuth provider ต้องการแค่ identifier ที่ pre-validated
-          // อาจต้องส่ง token หรือ flag บางอย่างแทน password
-          // ถ้า authorize ของ NextAuth ยังคงต้อง validate password อีกครั้ง, ก็ส่ง password ไป
-          password: requestBody.password, // ส่ง password ถ้า NextAuth provider's authorize ต้องการ
-        });
-
-        if (nextAuthSignInResult?.error) {
-            console.warn(`⚠️ [AuthModal] NextAuth signIn ล้มเหลวหลัง API success: ${nextAuthSignInResult.error}`);
-            setError(nextAuthSignInResult.error === "CredentialsSignin" ? "ข้อมูลการเข้าสู่ระบบไม่ถูกต้อง (NextAuth)" : "เกิดข้อผิดพลาดในการสร้างเซสชัน");
-        } else if (nextAuthSignInResult?.ok) {
-            console.log("✅ [AuthModal] NextAuth session สร้างสำเร็จ");
+        if (result.error) {
+            console.warn(`⚠️ [AuthModal] การลงชื่อเข้าใช้ล้มเหลว (จาก AuthContext): ${result.error}`);
+            setError(result.error);
+            if (result.verificationRequired) {
+                // สามารถจัดการ UI เพิ่มเติมสำหรับกรณีต้องยืนยันอีเมลได้ที่นี่
+                console.log("ℹ️ [AuthModal] ผู้ใช้ต้องยืนยันอีเมล");
+            }
+        } else if (result.success && result.ok) {
+            console.log("✅ [AuthModal] ลงชื่อเข้าใช้สำเร็จ (จาก AuthContext)");
             setSuccessMessage('ลงชื่อเข้าใช้สำเร็จ!');
             setTimeout(() => {
               console.log("ℹ️ [AuthModal] ปิด modal หลังลงชื่อเข้าใช้สำเร็จ");
               onClose();
             }, 1500);
         } else {
-            console.warn(`⚠️ [AuthModal] NextAuth signIn ไม่สำเร็จ (ไม่มี error แต่ไม่ ok)`);
-            setError("การสร้างเซสชันล้มเหลว กรุณาลองใหม่");
+            console.warn("⚠️ [AuthModal] การลงชื่อเข้าใช้ล้มเหลวโดยไม่ทราบสาเหตุ (จาก AuthContext)");
+            setError(result.error || 'การลงชื่อเข้าใช้ล้มเหลว');
         }
-      } else {
-        console.warn("⚠️ [AuthModal] การลงชื่อเข้าใช้ล้มเหลวโดยไม่ทราบสาเหตุ (API)");
-        setError(result.error || 'การลงชื่อเข้าใช้ล้มเหลว');
-      }
     } catch (err: any) {
-      console.error('❌ [AuthModal] ข้อผิดพลาดในการลงชื่อเข้าใช้:', err);
+      console.error('❌ [AuthModal] ข้อผิดพลาดในการลงชื่อเข้าใช้ (เรียก AuthContext):', err);
       setError(err.message || 'เกิดข้อผิดพลาดในการลงชื่อเข้าใช้');
     } finally {
       setIsLoading(false);
@@ -907,24 +921,21 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setSuccessMessage(null);
     setIsLoading(true);
     try {
-      await signInWithSocial(provider); // signInWithSocial จาก useAuth()
-      // signInWithSocial ควรจัดการ redirect เอง
+      await signInWithSocial(provider);
       console.log(`ℹ️ [AuthModal] เรียก signInWithSocial(${provider}) สำเร็จ, รอ redirect...`);
-      // ไม่จำเป็นต้อง setLoading(false) ที่นี่ถ้า redirect สำเร็จ
     } catch (error: any) {
       console.error(`❌ [AuthModal] ข้อผิดพลาด social sign-in (${provider}):`, error);
       setError(`ไม่สามารถลงชื่อเข้าใช้ด้วย ${provider}: ${error.message || 'เกิดข้อผิดพลาด'}`);
-      setIsLoading(false); // setLoading(false) ถ้ามี error และไม่ redirect
+      setIsLoading(false);
     }
   };
 
 
   if (!isOpen) return null;
 
-  // ตรวจสอบ siteKey อีกครั้งก่อน render ส่วนที่ต้องใช้
+  // ตรวจสอบ siteKey อีกครั้งก่อน render ส่วนที่ต้องใช้ (ส่วนนี้ไม่เปลี่ยน)
   if (mode === 'signup' && !siteKey) {
-    console.error("❌ [AuthModal] ไม่พบ RECAPTCHA_SITE_KEY สำหรับโหมด signup");
-    // แสดงข้อความผิดพลาดหรือ UI ทางเลือกถ้า siteKey ไม่มี
+    console.error("❌ [AuthModal] ไม่พบ RECAPTCHA_SITE_KEY สำหรับโหมด signup (ก่อน return UI)");
     return (
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -964,7 +975,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     exit: { opacity: 0, transition: { duration: 0.2 } }
   };
 
-  // UX/UI ส่วน return (ไม่เปลี่ยนแปลงตามข้อกำหนด)
+  // *** UX/UI return part (ไม่เปลี่ยนแปลงตามข้อกำหนด) ***
   return (
     <AnimatePresence>
       {isOpen && (
@@ -1016,7 +1027,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <div className="p-6 md:p-8 lg:p-10 overflow-y-auto auth-modal-scrollbar">
                 <motion.div
                   className="flex flex-col md:flex-row md:items-start gap-8 md:gap-10"
-                  key={mode} // Key ช่วยให้ Framer Motion ทำงานเมื่อ mode เปลี่ยน
+                  key={mode} 
                   initial={{ opacity: 0, x: mode === 'signin' ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3, ease: "easeOut" }}
@@ -1112,10 +1123,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         {successMessage && <Alert type="success" message={successMessage} />}
                       </AnimatePresence>
 
-                      {/* reCAPTCHA container: ควรจะมองไม่เห็น (invisible) และ badge จะแสดงผล */}
                       {mode === 'signup' && (
                         <div ref={recaptchaRef} id="recaptcha-container-signup" className="g-recaptcha">
-                          {/* Google reCAPTCHA v2 Invisible จะ render badge ที่นี่ หรือตาม config */}
                         </div>
                       )}
 
@@ -1149,7 +1158,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
                       {mode === 'signin' && (
                         <div className="text-center pt-1">
-                          <a href="/forgot-password" // ควรเป็น Link จาก next/link เพื่อ client-side navigation
+                          <a href="/forgot-password"
                              className="text-sm text-primary hover:text-primary/80 hover:underline transition-colors duration-200 cursor-pointer">
                             ลืมรหัสผ่าน?
                           </a>
@@ -1200,7 +1209,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                           setTouchedFields({});
                           setError(null);
                           setSuccessMessage(null);
-                          // ไม่จำเป็นต้อง reset formData ที่นี่ เพราะเมื่อ mode เปลี่ยน useEffect จะจัดการโหลด reCAPTCHA และผู้ใช้จะกรอกข้อมูลใหม่
                         }}
                         className="text-primary hover:text-primary/80 font-medium transition-colors duration-200 hover:underline cursor-pointer"
                         whileHover={{ scale: 1.05 }}

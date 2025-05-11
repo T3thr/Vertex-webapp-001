@@ -3,57 +3,58 @@
 import { NextResponse, NextRequest } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
+import crypto from "crypto";
 
+// API สำหรับยืนยันอีเมลโดยใช้โทเค็นที่ส่งมาทางลิงก์
+// ตรวจสอบโทเค็นที่แฮชแล้วในฐานข้อมูลและอัปเดตสถานะการยืนยัน
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token");
 
+  // 1. ตรวจสอบว่าโทเค็นมีอยู่
   if (!token) {
-    // Redirect to an error page or show an error message
-    // For now, returning JSON error
-    return NextResponse.json({ error: "Verification token is missing." }, { status: 400 });
-    // Alternatively, redirect:
-    // return NextResponse.redirect(new URL("/auth/error?error=MissingToken", request.url));
+    console.warn("⚠️ [VerifyEmail] ไม่พบโทเค็นยืนยันในคำขอ");
+    return NextResponse.redirect(new URL("/auth/error?error=MissingToken", request.url));
   }
 
   try {
+    // 2. เชื่อมต่อฐานข้อมูล
     await dbConnect();
+    console.log("✅ [VerifyEmail] เชื่อมต่อ MongoDB สำเร็จ");
+
+    // 3. สร้าง instance ของ User model
     const UserModelInstance = UserModel();
 
-    // Find user by the verification token
+    // 4. แฮชโทเค็นที่ได้รับเพื่อเปรียบเทียบกับฐานข้อมูล
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    console.log(`🔑 [VerifyEmail] ค้นหาด้วย hashed token: ${hashedToken.substring(0, 10)}...`);
+
+    // 5. ค้นหาผู้ใช้โดยใช้โทเค็นที่แฮชแล้วและตรวจสอบวันหมดอายุ
     const user = await UserModelInstance.findOne({
-      emailVerificationToken: token,
-      emailVerificationTokenExpiry: { $gt: new Date() }, // Check if token is not expired
+      emailVerificationToken: hashedToken,
+      emailVerificationTokenExpiry: { $gt: new Date() }, // ตรวจสอบว่าโทเค็นยังไม่หมดอายุ
     });
 
+    // 6. ตรวจสอบว่าพบผู้ใช้หรือไม่
     if (!user) {
-      // Token is invalid or expired
-      console.log(`⚠️ [VerifyEmail] Invalid or expired token: ${token}`);
-      // Redirect to an error page or show an error message
-      return NextResponse.json({ error: "Invalid or expired verification token." }, { status: 400 });
-      // Alternatively, redirect:
-      // return NextResponse.redirect(new URL("/auth/error?error=InvalidOrExpiredToken", request.url));
+      console.warn(`⚠️ [VerifyEmail] ไม่พบผู้ใช้หรือโทเค็นหมดอายุ: ${hashedToken.substring(0, 10)}...`);
+      return NextResponse.redirect(new URL("/auth/error?error=InvalidOrExpiredToken", request.url));
     }
 
-    // Mark user as verified and clear token fields
+    // 7. อัปเดตสถานะยืนยันอีเมลและล้างข้อมูลโทเค็น
     user.isEmailVerified = true;
     user.emailVerificationToken = undefined;
     user.emailVerificationTokenExpiry = undefined;
-
     await user.save();
 
-    console.log(`✅ [VerifyEmail] Email verified successfully for user: ${user.username}`);
+    console.log(`✅ [VerifyEmail] ยืนยันอีเมลสำเร็จสำหรับผู้ใช้: ${user.username} (${user.email})`);
 
-    // Redirect user to a success page or the sign-in page
-    // You might want to add a query param to show a success message on the sign-in page
-    return NextResponse.redirect(new URL("/auth/signin?verified=true", request.url));
+    // 8. เปลี่ยนเส้นทางไปยังหน้าล็อกอินพร้อมข้อความสำเร็จ
+    return NextResponse.redirect(new URL("/", request.url));
 
   } catch (error: any) {
-    console.error("❌ [VerifyEmail] Error during email verification:", error);
-    // Redirect to a generic error page
-    return NextResponse.json({ error: "An error occurred during email verification." }, { status: 500 });
-    // Alternatively, redirect:
-    // return NextResponse.redirect(new URL("/auth/error?error=VerificationFailed", request.url));
+    console.error("❌ [VerifyEmail] เกิดข้อผิดพลาดในการยืนยันอีเมล:", error.message);
+    // เปลี่ยนเส้นทางไปยังหน้าข้อผิดพลาดทั่วไป
+    return NextResponse.redirect(new URL("/auth/error?error=VerificationFailed", request.url));
   }
 }
-

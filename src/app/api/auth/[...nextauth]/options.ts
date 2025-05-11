@@ -180,20 +180,27 @@ export const authOptions: NextAuthOptions = {
       id: "credentials",
       name: "Credentials",
       credentials: {
-        email: { label: "อีเมล", type: "email" },
-        username: { label: "ชื่อผู้ใช้", type: "text" },
+        // แก้ไขตรงนี้: เปลี่ยนเป็น identifier เพื่อให้สอดคล้องกับ UI และ AuthContext
+        identifier: { label: "อีเมลหรือชื่อผู้ใช้", type: "text" },
         password: { label: "รหัสผ่าน", type: "password" },
       },
       async authorize(credentials) {
         try {
-          console.log(`⏳ เริ่มการตรวจสอบข้อมูลรับรองสำหรับ email=${credentials?.email}, username=${credentials?.username}`);
+          // แก้ไขการบันทึกเพื่อให้สอดคล้องกับความเปลี่ยนแปลง
+          console.log(`⏳ เริ่มการตรวจสอบข้อมูลรับรองสำหรับ identifier=${credentials?.identifier}`);
+          
+          if (!credentials?.identifier || !credentials?.password) {
+            console.error('❌ ขาดข้อมูลสำคัญ: identifier หรือ password ไม่มีค่า');
+            throw new Error("กรุณาระบุอีเมล/ชื่อผู้ใช้ และรหัสผ่าน");
+          }
+
+          // แก้ไขการส่งข้อมูลไปยัง API route เพื่อให้สอดคล้องกับพารามิเตอร์ที่ API คาดหวัง
           const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              email: credentials?.email,
-              username: credentials?.username,
-              password: credentials?.password,
+              identifier: credentials.identifier,
+              password: credentials.password,
             }),
           });
 
@@ -205,7 +212,7 @@ export const authOptions: NextAuthOptions = {
           }
 
           // ตรวจสอบการยืนยันอีเมล
-          if (!data.user.isEmailVerified) {
+          if (!data.user.isEmailVerified && data.user.email) {
             console.error(`❌ ผู้ใช้ ${data.user.email || data.user.username} ยังไม่ได้ยืนยันอีเมล`);
             throw new Error("ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ");
           }
