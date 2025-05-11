@@ -495,6 +495,9 @@ export const authOptions: NextAuthOptions = {
           isBanned: token.isBanned as boolean,
           bannedUntil: token.bannedUntil as Date | undefined,
         };
+        if (token.preferences) {
+          (session.user as SessionUser).preferences = token.preferences as SessionUser["preferences"];
+        }
         console.log(`✅ เซสชันสร้างสำเร็จสำหรับผู้ใช้ ${session.user.email || session.user.username}`);
       }
       return session;

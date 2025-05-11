@@ -22,85 +22,132 @@
   to { transform: rotate(360deg); }
 }
 
-/* กำหนดตัวแปรพื้นฐานใน :root */
+/* กำหนดตัวแปรพื้นฐานใน :root (Light Theme by default) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #1e293b;
-  --accent: #bfccdf;
-  --muted: #64748b;
-  --muted-foreground: #94a3b8;
-  --card: #f9f9f9;
-  --card-foreground: #171717;
-  --border: #e2e8f0;
-  --input: #f1f5f9;
-  --ring: #2563eb;
-  --alert-error: #fef2f2;
-  --alert-error-foreground: #b91c1c;
-  --alert-error-border: #fee2e2;
-  --alert-success: #f0fdf4;
-  --alert-success-foreground: #15803d;
-  --alert-success-border: #dcfce7;
+  --background: #ffffff; /* White */
+  --foreground: #111827; /* Gray 900 */
+  --primary: #3b82f6;    /* Blue 500 */
+  --primary-foreground: #ffffff; /* White */
+  --secondary: #f3f4f6;  /* Gray 100 */
+  --secondary-foreground: #1f2937; /* Gray 800 */
+  --accent: #a5b4fc;     /* Indigo 300 */
+  --muted: #6b7280;      /* Gray 500 */
+  --muted-foreground: #9ca3af; /* Gray 400 */
+  --card: #ffffff;       /* White */
+  --card-foreground: #111827; /* Gray 900 */
+  --border: #e5e7eb;     /* Gray 200 */
+  --input: #f3f4f6;      /* Gray 100 */
+  --ring: #60a5fa;       /* Blue 400 */
+
+  --alert-error: #fef2f2; /* Red 50 */
+  --alert-error-foreground: #b91c1c; /* Red 700 */
+  --alert-error-border: #fecaca; /* Red 300 */
+  --alert-success: #f0fdf4; /* Green 50 */
+  --alert-success-foreground: #15803d; /* Green 700 */
+  --alert-success-border: #bbf7d0; /* Green 300 */
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --container-padding: 1rem;
-  --container-max-width: 1536px;
+
+  --container-padding: 1rem; /* 16px */
+  --container-padding-sm: 1.5rem; /* 24px for sm screens and up */
+  --container-padding-lg: 2rem; /* 32px for lg screens and up */
+  --container-max-width: 80rem; /* 1280px, สามารถปรับตามต้องการ */
+
   --animation-fast: 150ms;
   --animation-normal: 300ms;
   --animation-slow: 500ms;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
+
+  --radius-sm: 0.25rem; /* 4px */
+  --radius-md: 0.375rem; /* 6px */
+  --radius-lg: 0.5rem;  /* 8px */
+  --radius-xl: 0.75rem; /* 12px */
+  --radius-2xl: 1rem; /* 16px */
   --radius-full: 9999px;
+
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
-  --social-button-bg: #f1f5f9; /* สีพื้นฐานสำหรับปุ่มโซเชียล (อิงจาก --secondary) */
-  --social-button-google: #db4437; /* สีพื้นฐานสำหรับปุ่ม google */
-  --social-button-hover: #e2e8f0; /* สีเมื่อ hover */
-  --social-button-text: #1e293b; /* สีข้อความ */
-  --modal-gradient-start: #2563eb; /* เริ่ม gradient สำหรับ header modal */
-  --modal-gradient-end: #60a5fa; /* สิ้นสุด gradient */
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  --social-button-bg: #f3f4f6;
+  --social-button-google: #db4437;
+  --social-button-hover: #e5e7eb;
+  --social-button-text: #1f2937;
+
+  --modal-gradient-start: var(--primary);
+  --modal-gradient-end: #60a5fa; /* Blue 400 */
 }
 
 /* รูปแบบสำหรับโหมดมืด */
 .dark {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --secondary: #1e293b;
-  --secondary-foreground: #f1f5f9;
-  --accent: #334155;
-  --muted: #475569;
-  --muted-foreground: #94a3b8;
-  --card: #1e293b;
-  --card-foreground: #f1f5f9;
-  --border: #334155;
-  --input: #1e293b;
-  --ring: #3b82f6;
-  --alert-error: #7f1d1d;
-  --alert-error-foreground: #fee2e2;
-  --alert-error-border: #991b1b;
-  --alert-success: #14532d;
-  --alert-success-foreground: #dcfce7;
-  --alert-success-border: #15803d;
+  --background: #0f172a; /* Slate 900 */
+  --foreground: #f8fafc; /* Slate 50 */
+  --primary: #60a5fa;    /* Blue 400 */
+  --primary-foreground: #0f172a; /* Slate 900 */
+  --secondary: #1e293b;  /* Slate 800 */
+  --secondary-foreground: #e2e8f0; /* Slate 200 */
+  --accent: #334155;     /* Slate 700 */
+  --muted: #475569;      /* Slate 600 */
+  --muted-foreground: #94a3b8; /* Slate 400 */
+  --card: #1e293b;       /* Slate 800 */
+  --card-foreground: #f1f5f9; /* Slate 100 */
+  --border: #334155;     /* Slate 700 */
+  --input: #1e293b;      /* Slate 800 */
+  --ring: #3b82f6;       /* Blue 500 */
+
+  --alert-error: #3f1212; /* Darker Red */
+  --alert-error-foreground: #fca5a5; /* Red 300 */
+  --alert-error-border: #7f1d1d; /* Red 800 */
+  --alert-success: #062f17; /* Darker Green */
+  --alert-success-foreground: #a7f3d0; /* Green 300 */
+  --alert-success-border: #14532d; /* Green 800 */
+
   --social-button-bg: #1e293b;
-  --social-button-google: #db4437;
+  /* --social-button-google: #db4437; (คงเดิม) */
   --social-button-hover: #334155;
-  --social-button-text: #f1f5f9;
-  --modal-gradient-start: #3b82f6;
-  --modal-gradient-end: #93c5fd;
+  --social-button-text: #e2e8f0;
+
+  --modal-gradient-start: var(--primary);
+  --modal-gradient-end: #93c5fd; /* Blue 300 */
 }
 
-/* กำหนดธีมสำหรับ Tailwind CSS */
-@theme inline {
+/* รูปแบบสำหรับโหมดซีเปีย */
+.sepia {
+  --background: #f5eadd; /* Sepia background - lighter */
+  --foreground: #4a3b31; /* Sepia foreground - darker brown */
+  --primary: #8c6f56;    /* Sepia primary - muted brown */
+  --primary-foreground: #f5efdc; /* Sepia primary foreground - light cream */
+  --secondary: #e9dfcf;  /* Sepia secondary - lighter than card */
+  --secondary-foreground: #5a4b41; /* Sepia secondary foreground */
+  --accent: #b89d83;     /* Sepia accent - slightly more vibrant */
+  --muted: #9c8b7c;      /* Sepia muted - grayish brown */
+  --muted-foreground: #6b5a4d; /* Sepia muted foreground */
+  --card: #efe6d8;       /* Sepia card - slightly darker than bg */
+  --card-foreground: #4a3b31; /* Sepia card foreground */
+  --border: #d3c1ad;     /* Sepia border */
+  --input: #e9dfcf;      /* Sepia input */
+  --ring: #a0846c;       /* Sepia ring - derived from primary */
+
+  --alert-error: #f0e0e0; /* Sepia-toned error bg */
+  --alert-error-foreground: #8c5353; /* Sepia-toned error text */
+  --alert-error-border: #e6c9c9; /* Sepia-toned error border */
+  --alert-success: #e0f0e0; /* Sepia-toned success bg */
+  --alert-success-foreground: #538c53; /* Sepia-toned success text */
+  --alert-success-border: #c9e6c9; /* Sepia-toned success border */
+
+  --social-button-bg: #e9dfcf;
+  /* --social-button-google: #db4437; (อาจจะต้องปรับสี google ให้เข้ากับ sepia หรือคงเดิม) */
+  --social-button-hover: #d3c1ad;
+  --social-button-text: #5a4b41;
+
+  --modal-gradient-start: var(--primary);
+  --modal-gradient-end: #a98e74;
+}
+
+
+/* กำหนดธีมสำหรับ Tailwind CSS 4.0+ (inline config) */
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
@@ -115,49 +162,60 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
   --color-alert-error: var(--alert-error);
   --color-alert-error-foreground: var(--alert-error-foreground);
   --color-alert-error-border: var(--alert-error-border);
   --color-alert-success: var(--alert-success);
   --color-alert-success-foreground: var(--alert-success-foreground);
   --color-alert-success-border: var(--alert-success-border);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --container-padding: var(--container-padding);
-  --container-max-width: var(--container-max-width);
-  --animation-fast: var(--animation-fast);
-  --animation-normal: var(--animation-normal);
-  --animation-slow: var(--animation-slow);
+
+  --spacing-container-padding: var(--container-padding); /* เปลี่ยนชื่อให้สอดคล้อง */
+  --spacing-container-padding-sm: var(--container-padding-sm);
+  --spacing-container-padding-lg: var(--container-padding-lg);
+  --size-container-max-width: var(--container-max-width); /* เปลี่ยนชื่อให้สอดคล้อง */
+
+  --duration-animation-fast: var(--animation-fast); /* เปลี่ยนชื่อให้สอดคล้อง */
+  --duration-animation-normal: var(--animation-normal);
+  --duration-animation-slow: var(--animation-slow);
+
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
   --radius-2xl: var(--radius-2xl);
   --radius-full: var(--radius-full);
+
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
+
   --color-social-button-bg: var(--social-button-bg);
   --color-social-button-google: var(--social-button-google);
   --color-social-button-hover: var(--social-button-hover);
   --color-social-button-text: var(--social-button-text);
+
   --color-modal-gradient-start: var(--modal-gradient-start);
   --color-modal-gradient-end: var(--modal-gradient-end);
 }
 
 /* ใช้รูปแบบพื้นฐานกับ body */
 body {
-  background: var(--background);
-  color: var(--color-foreground);
+  background-color: var(--background); /* Tailwind จะใช้ bg-background จาก @theme */
+  color: var(--foreground); /* Tailwind จะใช้ text-foreground จาก @theme */
   font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 16px; /* 1rem */
+  line-height: 1.625; /* เพิ่ม line-height เล็กน้อย */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility; /* ปรับปรุงการแสดงผลตัวอักษร */
 }
 
-/* คลาสยูทิลิตี้ที่กำหนดเอง */
+/* คลาสยูทิลิตี้ที่กำหนดเองสำหรับ container */
 .container-custom {
   width: 100%;
   max-width: var(--container-max-width);
@@ -167,7 +225,22 @@ body {
   padding-right: var(--container-padding);
 }
 
-/* คลาสสำหรับแอนิเมชั่น */
+@media (min-width: 640px) { /* sm breakpoint */
+  .container-custom {
+    padding-left: var(--container-padding-sm);
+    padding-right: var(--container-padding-sm);
+  }
+}
+
+@media (min-width: 1024px) { /* lg breakpoint */
+  .container-custom {
+    padding-left: var(--container-padding-lg);
+    padding-right: var(--container-padding-lg);
+  }
+}
+
+
+/* คลาสสำหรับแอนิเมชั่น (ตัวอย่าง - Tailwind มี utility classes สำหรับ animation อยู่แล้ว) */
 .animate-fadeIn {
   animation: fadeIn var(--animation-normal) ease-in-out;
 }
@@ -176,120 +249,58 @@ body {
   animation: slideIn var(--animation-normal) ease-out;
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-/* คลาสสำหรับการแจ้งเตือน */
-.bg-alert-error {
-  background-color: var(--alert-error);
-}
-
-.text-alert-error {
-  color: var(--alert-error-foreground);
-}
-
-.border-alert-error {
-  border-color: var(--alert-error-border);
-}
-
-.bg-alert-success {
-  background-color: var(--alert-success);
-}
-
-.text-alert-success {
-  color: var(--alert-success-foreground);
-}
-
-.border-alert-success {
-  border-color: var(--alert-success-border);
-}
-
 /* การปรับแต่ง scrollbar */
-.scrollbar-thin {
-  scrollbar-width: thin;
+/* For Webkit browsers (Chrome, Safari, Edge Chromium) */
+::-webkit-scrollbar {
+  width: 10px; /* ความกว้างของ scrollbar แนวตั้ง */
+  height: 10px; /* ความสูงของ scrollbar แนวนอน */
 }
 
-/* Scrollbar เฉพาะสำหรับ AuthModal */
-.auth-modal-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent) var(--secondary);
-}
-
-.auth-modal-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.auth-modal-scrollbar::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: var(--secondary);
   border-radius: var(--radius-full);
 }
 
-.auth-modal-scrollbar::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--accent);
   border-radius: var(--radius-full);
-  transition: background var(--animation-fast);
+  border: 2px solid var(--secondary); /* สร้างเอฟเฟกต์ padding รอบ thumb */
 }
 
-.auth-modal-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--primary);
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 80%, var(--foreground) 20%); /* ทำให้สีเข้มขึ้นเมื่อ hover */
 }
 
-/* การปรับแต่ง scrollbar เดิม */
-.scrollbar-thumb-accent::-webkit-scrollbar-thumb {
-  background-color: var(--accent);
-  border-radius: var(--radius-full);
+/* For Firefox */
+/* scrollbar-thin or scrollbar-auto or scrollbar-none */
+/* scrollbar-color: <thumb-color> <track-color> */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) var(--secondary);
 }
 
-.scrollbar-track-secondary::-webkit-scrollbar-track {
-  background-color: var(--secondary);
-}
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  background-color: var(--accent);
-  border-radius: var(--radius-full);
-}
-
-::-webkit-scrollbar-track {
-  background-color: var(--secondary);
-}
-
-/* การเปลี่ยนแปลงสไตล์ (transitions) */
-.transition-all {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: var(--animation-normal);
-}
-
-.transition-colors {
-  transition-property: color, background-color, border-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: var(--animation-normal);
-}
-
-.transition-transform {
-  transition-property: transform;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: var(--animation-normal);
-}
-
-/* สไตล์เมื่อโฟกัส */
+/* สไตล์เมื่อโฟกัส (เพื่อให้สอดคล้องกับ Tailwind focus-visible) */
 *:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+  border-radius: var(--radius-sm); /* เพิ่ม border-radius ให้ outline ดูดีขึ้น */
 }
 
-/* การปรับแต่ง scrollbar สำหรับการเลื่อนแนวนอน */
-.overflow-x-auto {
+/* ไม่แสดง outline เมื่อ focus แต่ไม่ใช่ :focus-visible (เช่น คลิกด้วยเมาส์) */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+
+/* Utility class for specific scrollbar styling if needed */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--primary);
+}
+.custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--accent) var(--secondary);
+  scrollbar-color: var(--primary) var(--secondary);
 }

@@ -12,7 +12,6 @@ import {
   FiStar,
   FiAward 
 } from "react-icons/fi";
-import Footer from "@/components/layouts/Footer";
 
 /**
  * ฟังก์ชันดึงข้อมูลนิยายจาก API
@@ -284,7 +283,6 @@ export default async function HomePage() {
         </Suspense>
       </div>
     </main>
-    <Footer/>
     </div>
   );
 }

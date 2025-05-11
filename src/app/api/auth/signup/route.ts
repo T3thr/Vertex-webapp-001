@@ -179,7 +179,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // 6. สร้างผู้ใช้ใหม่ (ยังไม่ได้ hash password, ควร hash ก่อนบันทึก)
     console.log("🔄 [Signup API] สร้างผู้ใช้ใหม่ใน User collection...");
     // หมายเหตุ: การ hash password ควรทำใน model pre-save hook หรือก่อนสร้าง instance
-    // ตัวอย่างนี้สมมติว่า model จัดการ hash password เอง หรือมีการ hash ก่อนหน้านี้
+    // ตัวอย่างนี้สมมติว่า model จัดการ hash password เอง หรือมีการ hash ก่อนหนนี้
     const newUser = new User({
       email: lowerCaseEmail,
       username,
@@ -269,17 +269,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     let status = 500;
 
     if (error instanceof Error) {
-      // @ts-ignore
-      if (error.code === 11000) { // MongoDB duplicate key error
-        // @ts-ignore
+      // @ts-expect-error MongoDB duplicate key error
+      if (error.code === 11000) {
+        // @ts-expect-error Accessing keyValue
         const field = Object.keys(error.keyValue)[0];
-        // @ts-ignore
+        // @ts-expect-error Accessing keyValue[field]
         const value = error.keyValue[field];
         errorMessage = `${field === "email" ? "อีเมล" : (field === "username" ? "ชื่อผู้ใช้" : `ข้อมูล '${field}'`)} '${value}' นี้ถูกใช้งานแล้ว`;
         status = 409; // Conflict
-      // @ts-ignore
-      } else if (error.name === "ValidationError") { // Mongoose validation error
-        // @ts-ignore
+
+      } else if (error.name === "ValidationError") {
+        // @ts-expect-error Accessing errors
         const errors = Object.values(error.errors).map((e: any) => e.message);
         errorMessage = `ข้อมูลไม่ถูกต้อง: ${errors.join(", ")}`;
         status = 400; // Bad Request
