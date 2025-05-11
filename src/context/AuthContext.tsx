@@ -2,6 +2,7 @@
 // คอนเท็กซ์สำหรับจัดการการยืนยันตัวตนของผู้ใช้
 // รองรับการลงชื่อเข้าใช้ สมัครสมาชิก และออกจากระบบ
 // อัปเดต: ปรับ signInWithCredentials ให้ทำงานกับ /api/auth/signin, signInWithSocial กับ OAuth providers, และ signUp กับ /api/auth/signup (ซึ่งจะ verify reCAPTCHA อีกครั้ง)
+// อัปเดต: แก้ไข dependency array ของ signUp useCallback
 
 import { createContext, useContext, useCallback, ReactNode, useState, useEffect } from "react";
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
@@ -59,8 +60,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       try {
         // เรียก API /api/auth/signin เพื่อตรวจสอบข้อมูลกับ User model
-        // API นี้จะจัดการ logic การตรวจสอบ credentials ทั้งหมด
-        const response = await fetch("/api/auth/signin", { // Endpoint ที่คุณสร้างไว้
+        const response = await fetch("/api/auth/signin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ identifier, password }),
@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           } else if (errorMessage.includes("ถูกปิดใช้งาน")) {
             errorMessage = "บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแล";
           } else if (errorMessage.includes("ถูกระงับ")) {
-            errorMessage = data.error; // ใช้ข้อความจาก API เช่น "บัญชีนี้ถูกระงับจนถึง..."
+            errorMessage = data.error;
           }
 
           console.warn(`⚠️ [AuthContext] ลงชื่อเข้าใช้ล้มเหลว: ${errorMessage}`);
@@ -88,37 +88,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return { error: errorMessage, success: false, verificationRequired, ok: false };
         }
 
-        // ถ้า API /api/auth/signin สำเร็จ (หมายถึงข้อมูลถูกต้องและบัญชีพร้อมใช้งาน)
-        // ให้ทำการ signIn ผ่าน NextAuth เพื่อสร้าง session
+        // ถ้า API /api/auth/signin สำเร็จ ให้ทำการ signIn ผ่าน NextAuth
+        // identifier ที่ส่งไป NextAuth ควรเป็น email หรือ username ที่ใช้ใน authorize callback
+        // โดยทั่วไปจะเป็น email หรือ username ที่ผู้ใช้กรอก แล้วแต่การตั้งค่า
+        // ถ้า /api/auth/signin คืน user object มา, สามารถใช้ข้อมูลนั้นได้
+        // แต่ในที่นี้ ให้ NextAuth เรียก authorize callback ของตัวเองอีกที (ซึ่งจะปลอดภัยกว่า)
+        const finalIdentifierForNextAuth = data.user?.email || data.user?.username || identifier;
+
+        console.log(`🔵 [AuthContext] เรียก nextAuthSignIn ด้วย identifier: ${finalIdentifierForNextAuth}`);
         const signInResult = await nextAuthSignIn("credentials", {
           redirect: false,
-          // ส่งข้อมูลที่ API /api/auth/signin ยืนยันแล้วไปให้ NextAuth
-          // โดยปกติ `authorize` ใน NextAuth options จะถูกเรียก
-          // ซึ่ง authorize ของเราจะเรียก /api/auth/signin อีกครั้ง
-          // นี่อาจดูซ้ำซ้อน แต่เป็น flow มาตรฐานถ้า authorize ของ NextAuth provider credentials
-          // ไม่ได้จัดการ database logic โดยตรง
-          // หาก /api/auth/signin ของคุณคืน user object ที่ NextAuth ต้องการ
-          // คุณสามารถปรับ authorize ใน NextAuth options ให้ใช้ user object นั้นได้เลย
-          // แต่ในกรณีนี้ เราจะให้ NextAuth เรียก authorize ของมันเอง
-          identifier: data.user.username, // หรือ email, ขึ้นอยู่กับว่า authorize คาดหวังอะไร
-          password, // รหัสผ่านเดิม (NextAuth ไม่ควรเก็บรหัสผ่าน)
-          // อาจจะส่ง user object จาก data.user ไปให้ authorize โดยตรงถ้า NextAuth รองรับ
+          identifier: finalIdentifierForNextAuth, // ใช้ identifier ที่ API ยืนยันแล้ว หรือที่ user กรอก
+          password, // ส่ง password ไปด้วยเพื่อให้ authorize function ของ NextAuth ทำงานได้
         });
 
 
         if (signInResult?.error) {
           console.warn(`⚠️ [AuthContext] การสร้าง session ล้มเหลว (NextAuth): ${signInResult.error}`);
-          // แปล error message จาก NextAuth
           let nextAuthErrorMessage = "การสร้างเซสชันล้มเหลว";
           if (signInResult.error.includes("CredentialsSignin")) {
+            // Error นี้มักจะหมายความว่า authorize callback ใน NextAuth options คืน null หรือ error
+            // ซึ่งอาจจะเกิดจาก /api/auth/signin ที่ถูกเรียกจาก authorize callback ไม่ผ่าน
             nextAuthErrorMessage = "ข้อมูลการเข้าสู่ระบบไม่ถูกต้อง (NextAuth)";
+          } else if (signInResult.error.includes("User not found") || signInResult.error.includes("Incorrect password")) {
+             nextAuthErrorMessage = "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง";
+          } else if (signInResult.error.includes("Email not verified")) {
+            nextAuthErrorMessage = "บัญชีของคุณยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมาย";
           }
           setAuthError(nextAuthErrorMessage);
           return { error: nextAuthErrorMessage, success: false, ok: false };
         }
 
         console.log(`✅ [AuthContext] ลงชื่อเข้าใช้สำเร็จ (สร้าง session): ${identifier}`);
-        await queryClient.invalidateQueries({ queryKey: ["session"] }); // อัปเดต session cache
+        await queryClient.invalidateQueries({ queryKey: ["session"] });
         return { success: true, ok: true };
 
       } catch (error: any) {
@@ -130,7 +132,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setLoading(false);
       }
     },
-    [queryClient] // เพิ่ม queryClient ใน dependency array
+    [queryClient, setLoading, setAuthError] // เพิ่ม setLoading และ setAuthError ใน dependencies
   );
 
   const signInWithSocial = useCallback(async (provider: string): Promise<void> => {
@@ -138,70 +140,60 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAuthError(null);
     console.log(`🔵 [AuthContext] พยายามลงชื่อเข้าใช้ด้วย social provider: ${provider}`);
     try {
-      // เรียก NextAuth social provider โดยตรง
-      // NextAuth จะจัดการการ redirect และ callback
       const result = await nextAuthSignIn(provider, {
-        redirect: true, // ให้ NextAuth จัดการ redirect
-        callbackUrl: "/", // URL ที่จะไปหลัง login สำเร็จ
+        redirect: true,
+        callbackUrl: "/",
       });
 
-      // โค้ดส่วนนี้อาจจะไม่ถูกเรียกถ้า redirect สำเร็จ
-      if (result?.error) {
+      if (result?.error) { // ส่วนนี้อาจจะไม่ถูกเรียกถ้า redirect สำเร็จ
         console.warn(`⚠️ [AuthContext] Social sign-in (${provider}) ล้มเหลว: ${result.error}`);
         let errorMessage = result.error;
-        // ตัวอย่างการจัดการ error ที่พบบ่อย
         if (errorMessage.includes("OAuthAccountNotLinked")) {
           errorMessage = "บัญชีโซเชียลนี้ยังไม่ได้เชื่อมโยง หรืออีเมลอาจถูกใช้กับบัญชีอื่นแล้ว";
-        } else if (errorMessage.includes("Callback")) {
+        } else if (errorMessage.includes("Callback") || errorMessage.toLowerCase().includes("oauth_callback_error")) {
           errorMessage = `เกิดปัญหาในการเชื่อมต่อกับ ${provider} กรุณาลองอีกครั้ง`;
         }
         setAuthError(errorMessage);
-        // ไม่ setLoading(false) ที่นี่ เพราะถ้าสำเร็จจะ redirect ไปแล้ว
-        // ถ้ามี error และไม่ redirect, ควร setLoading(false)
-        if (!result.url) setLoading(false);
+        if (!result.url) setLoading(false); // ถ้าไม่ redirect ให้คืนสถานะ loading
       } else {
         console.log(`✅ [AuthContext] Social sign-in (${provider}) เริ่มต้นสำเร็จ, กำลัง redirect...`);
-        // ไม่ต้องทำอะไรมาก NextAuth จะจัดการ redirect
-        // อาจจะต้อง queryClient.invalidateQueries หลัง redirect กลับมา (ใน useEffect ของหน้าที่ callbackUrl ไป)
+        // ไม่ setLoading(false) เพราะจะ redirect
       }
     } catch (error: any) {
       console.error(`❌ [AuthContext] ข้อผิดพลาดระหว่าง signInWithSocial (${provider}):`, error);
       setAuthError(error.message || `เกิดข้อผิดพลาดในการลงชื่อเข้าใช้ด้วย ${provider}`);
-      setLoading(false); // คืนสถานะปุ่มถ้ามี error
+      setLoading(false);
     }
-    // ไม่ setLoading(false) โดยทั่วไปเพราะจะ redirect
-  }, []);
+  }, [setLoading, setAuthError]); // เพิ่ม setLoading และ setAuthError
 
 
-  // signUp method ถูกปรับปรุงให้รับ recaptchaToken
   const signUp = useCallback(
     async (
       email: string,
       username: string,
       password: string,
-      recaptchaToken: string // เพิ่ม recaptchaToken ที่นี่
+      recaptchaToken: string
     ): Promise<{ error?: string; success?: boolean; message?: string }> => {
       setLoading(true);
       setAuthError(null);
-      console.log(`🔵 [AuthContext] ส่งคำขอสมัครสมาชิก: ${username} (${email}) พร้อม reCAPTCHA token`);
+      console.log(`🔵 [AuthContext] ส่งคำขอสมัครสมาชิก: ${username} (${email}) พร้อม reCAPTCHA token (token: ${recaptchaToken ? recaptchaToken.substring(0,10)+'...' : 'N/A'})`);
       try {
-        // ส่งข้อมูลทั้งหมดไปยัง API /api/auth/signup
         const response = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, username, password, recaptchaToken }), // ส่ง recaptchaToken ไปด้วย
+          body: JSON.stringify({ email, username, password, recaptchaToken }),
         });
 
         const data = await response.json();
 
-        if (!response.ok || !data.success) { // ตรวจสอบ data.success ด้วย
+        if (!response.ok || !data.success) {
           const errorMessage = data.error || `การสมัครสมาชิกล้มเหลว (สถานะ: ${response.status})`;
           console.warn(`⚠️ [AuthContext] การสมัครสมาชิกล้มเหลว: ${errorMessage}`);
           setAuthError(errorMessage);
           return { error: errorMessage, success: false };
         }
 
-        console.log(`✅ [AuthContext] สมัครสมาชิกสำเร็จ: ${username} (${email})`);
+        console.log(`✅ [AuthContext] สมัครสมาชิกสำเร็จ: ${username} (${email}), Message: ${data.message}`);
         return { success: true, message: data.message || "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี" };
       } catch (error: any) {
         console.error("❌ [AuthContext] ข้อผิดพลาดระหว่าง signUp:", error);
@@ -212,7 +204,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setLoading(false);
       }
     },
-    [] // Dependencies (ถ้ามี)
+    [setLoading, setAuthError] // แก้ไข dependency array
   );
 
 
@@ -221,23 +213,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAuthError(null);
     console.log(`🔵 [AuthContext] กำลังออกจากระบบ...`);
     try {
-      await nextAuthSignOut({ redirect: true, callbackUrl: "/" }); // ให้ NextAuth จัดการ redirect
+      await nextAuthSignOut({ redirect: true, callbackUrl: "/" });
       console.log(`✅ [AuthContext] ออกจากระบบสำเร็จ, กำลัง redirect...`);
-      // queryClient.removeQueries(["session"]); // ลบ session cache
-      // ไม่จำเป็นต้อง setLoading(false) เพราะจะ redirect
+      // queryClient.removeQueries({ queryKey: ["session"] }); // NextAuth จัดการ session update ผ่าน useSession
     } catch (error: any) {
       console.error("❌ [AuthContext] ข้อผิดพลาดระหว่าง signOut:", error);
       setAuthError(error.message || "เกิดข้อผิดพลาดในการออกจากระบบ");
-      setLoading(false); // คืนสถานะถ้า error และไม่ redirect
+      setLoading(false);
     }
-  }, []);
+  }, [setLoading, setAuthError, queryClient]); // queryClient อาจไม่จำเป็นถ้า NextAuth จัดการ session update
 
   const contextValue: AuthContextType = {
     user,
     status: nextAuthStatus,
     signInWithCredentials,
     signInWithSocial,
-    signUp, // เพิ่ม signUp ใน context
+    signUp,
     signOut,
     loading,
     authError,
@@ -247,7 +238,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };
 
-// Hook สำหรับใช้งาน AuthContext
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {

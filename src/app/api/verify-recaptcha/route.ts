@@ -1,7 +1,8 @@
 // src/app/api/verify-recaptcha/route.ts
 // API สำหรับตรวจสอบโทเค็น reCAPTCHA v2 Invisible
 // ส่งคำขอไปยัง Google reCAPTCHA API เพื่อยืนยันความถูกต้องของโทเค็น
-// อัปเดต: เพิ่ม console log สำหรับการ debug และการจัดการ error ที่ครอบคลุม
+// อัปเดต: ปรับปรุงการจัดการ error และเพิ่ม logging ที่ชัดเจน
+// อัปเดต: เพิ่มการตรวจสอบ hostname เพื่อป้องกันการใช้งาน token จาก domain อื่น
 
 import { NextResponse } from "next/server";
 
@@ -62,6 +63,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    const expectedHostname = process.env.NEXT_PUBLIC_APP_HOSTNAME || 'localhost';
+    console.log(`ℹ️ [reCAPTCHA Verify API] Expected Hostname: ${expectedHostname}`);
+
     const verificationUrl = "https://www.google.com/recaptcha/api/siteverify";
     const params = new URLSearchParams({
       secret: secretKey,
@@ -121,12 +125,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       } else if (googleRecaptchaData["error-codes"]?.includes("bad-request")) {
         userFriendlyError = "คำขอ reCAPTCHA ไม่ถูกต้อง";
       }
-
       return NextResponse.json(
         {
           success: false,
           error: userFriendlyError,
           "error-codes": googleRecaptchaData["error-codes"] || [],
+        },
+        { status: 400 }
+      );
+    }
+
+    // ตรวจสอบ hostname
+    if (googleRecaptchaData.hostname !== expectedHostname) {
+      console.warn(`❌ [reCAPTCHA Verify API] Hostname ไม่ตรงกัน: ได้รับ ${googleRecaptchaData.hostname}, คาดว่า ${expectedHostname}`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "การยืนยัน reCAPTCHA ล้มเหลว: hostname ไม่ถูกต้อง",
+          "error-codes": ["invalid-hostname"],
         },
         { status: 400 }
       );
