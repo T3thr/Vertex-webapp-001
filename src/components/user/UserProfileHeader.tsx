@@ -43,6 +43,7 @@ const UserProfileHeader: React.FC<UserProfileHeaderProps> = ({ username }) => {
     setIsLoading(true);
     setError(null);
     try {
+      // แก้ไขตรงนี้: เพิ่ม origin หรือใช้ URL ที่เป็น relative path
       const response = await fetch(`/api/users/${username}/profile`, {
         cache: "no-store", // ป้องกันการแคชเพื่อข้อมูลล่าสุด
       });

@@ -34,17 +34,17 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
     throw new Error('Server configuration error: Missing base URL.');
   }
   if (!process.env.EMAIL_USERNAME) {
-      console.error('❌ Missing EMAIL_USERNAME in environment variables.');
-      throw new Error('Server configuration error: Missing sender email.');
+    console.error('❌ Missing EMAIL_USERNAME in environment variables.');
+    throw new Error('Server configuration error: Missing sender email.');
   }
 
-  // token ที่รับเข้ามาในฟังก์ชันนี้คือ token
-  const verificationUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`;
+  // เปลี่ยนลิงก์ให้ชี้ไปที่หน้า verify-email
+  const verificationUrl = `${process.env.NEXTAUTH_URL}/verify-email?token=${token}`;
 
   const mailOptions: MailOptions = {
     from: `"NOVELMAZE - GAME VISUAL NOVEL PLATFORM" <${process.env.EMAIL_USERNAME}>`,
     to: email,
-    subject: '🔹 ยืนยันอีเมลของคุณเพื่อเริ่มต้นใช้งาน!', // แปลเป็นไทย
+    subject: '🔹 ยืนยันอีเมลของคุณเพื่อเริ่มต้นใช้งาน!',
     html: `
       <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #0e0e10; color: #ffffff; border-radius: 8px;">
         <div style="text-align: center;">
@@ -76,17 +76,17 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
         </div>
 
         <p style="text-align: center; font-size: 12px; color: #666; margin-top: 20px;">
-          &copy; ${new Date().getFullYear()} Pathy. สงวนลิขสิทธิ์.
+          © ${new Date().getFullYear()} Pathy. สงวนลิขสิทธิ์.
         </p>
       </div>
     `,
   };
 
   try {
-      await transporter.sendMail(mailOptions);
-      console.log(`📧 อีเมลยืนยันถูกส่งไปยัง ${email}`);
+    await transporter.sendMail(mailOptions);
+    console.log(`📧 อีเมลยืนยันถูกส่งไปยัง ${email}`);
   } catch (error) {
-      console.error(`❌ ไม่สามารถส่งอีเมลยืนยันไปยัง ${email}:`, error);
-      throw new Error("ไม่สามารถส่งอีเมลยืนยันได้");
+    console.error(`❌ ไม่สามารถส่งอีเมลยืนยันไปยัง ${email}:`, error);
+    throw new Error("ไม่สามารถส่งอีเมลยืนยันได้");
   }
 };

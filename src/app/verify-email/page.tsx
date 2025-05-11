@@ -1,6 +1,6 @@
 // src/app/verify-email/page.tsx
 
-'use client'
+'use client';
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -17,6 +17,9 @@ function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token');
+  const status = searchParams.get('status');
+  const message = searchParams.get('message');
+  const email = searchParams.get('email');
 
   // ฟังก์ชันสำหรับยืนยัน token
   const verifyToken = async () => {
@@ -33,11 +36,30 @@ function VerifyEmailContent() {
       });
 
       if (response.redirected) {
-        setState({ status: 'success', message: 'ยืนยันอีเมลสำเร็จ! คุณสามารถเข้าสู่ระบบได้แล้ว' });
-        setTimeout(() => router.push('/auth/signin'), 3000);
+        // API จะ redirect กลับมาพร้อม query params
+        const redirectedUrl = new URL(response.url);
+        const redirectedStatus = redirectedUrl.searchParams.get('status');
+        const redirectedMessage = redirectedUrl.searchParams.get('message');
+        const redirectedEmail = redirectedUrl.searchParams.get('email');
+
+        if (redirectedStatus === 'success') {
+          setState({
+            status: 'success',
+            message: `ยืนยันอีเมลสำเร็จสำหรับ ${redirectedEmail || 'บัญชีของคุณ'}! คุณสามารถเข้าสู่ระบบได้แล้ว`,
+          });
+          setTimeout(() => router.push('/auth/signin'), 3000);
+        } else {
+          setState({
+            status: 'error',
+            message: redirectedMessage || 'เกิดข้อผิดพลาดในการยืนยันอีเมล',
+          });
+        }
       } else {
         const data = await response.json();
-        setState({ status: 'error', message: data.error || 'เกิดข้อผิดพลาดในการยืนยันอีเมล' });
+        setState({
+          status: data.success ? 'success' : 'error',
+          message: data.message || data.error || 'เกิดข้อผิดพลาดในการยืนยันอีเมล',
+        });
       }
     } catch (error) {
       console.error('❌ ข้อผิดพลาดในการยืนยันอีเมล:', error);
@@ -45,10 +67,20 @@ function VerifyEmailContent() {
     }
   };
 
-  // เรียกใช้ verifyToken เมื่อหน้าโหลด
+  // ตรวจสอบ query params จาก API redirect หรือลิงก์โดยตรง
   useEffect(() => {
-    verifyToken();
-  }, [token]);
+    if (status === 'success' && email) {
+      setState({
+        status: 'success',
+        message: `ยืนยันอีเมลสำเร็จสำหรับ ${email}! คุณสามารถเข้าสู่ระบบได้แล้ว`,
+      });
+      setTimeout(() => router.push('/auth/signin'), 3000);
+    } else if (status === 'error' && message) {
+      setState({ status: 'error', message });
+    } else {
+      verifyToken();
+    }
+  }, [token, status, message, email]);
 
   // ฟังก์ชันสำหรับแสดงเนื้อหาตามสถานะ
   const renderContent = () => {
@@ -72,13 +104,13 @@ function VerifyEmailContent() {
               href="/"
               className="text-primary hover:underline transition-colors"
             >
-              ไปที่หน้าหลักตอนนี้เลย!
+              ไปที่หน้าเข้าสู่ระบบตอนนี้เลย!
             </Link>
           </div>
         );
       case 'error':
         return (
-          <div className="flex flex-col Likewiseitems-center gap-4 animate-fadeIn">
+          <div className="flex flex-col items-center gap-4 animate-fadeIn">
             <AlertCircle className="w-16 h-16 text-red-500" />
             <p className="text-xl font-semibold text-foreground">{state.message}</p>
             <p className="text-sm text-muted-foreground">
@@ -97,11 +129,7 @@ function VerifyEmailContent() {
     }
   };
 
-  return (
-    <div className="text-center">
-      {renderContent()}
-    </div>
-  );
+  return <div className="text-center">{renderContent()}</div>;
 }
 
 export default function VerifyEmailPage() {

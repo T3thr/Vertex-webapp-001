@@ -1,12 +1,12 @@
 // src/app/resend-verification/page.tsx
 
-'use client'
+'use client';
 import React, { useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
-// สถานะของการส่งอีเมลยืนยัน
+// สถานะของการส่งอีเมลยืนยันใหม่
 interface ResendState {
   status: 'idle' | 'loading' | 'success' | 'error';
   message: string;
@@ -23,18 +23,23 @@ function ResendVerificationContent() {
     e.preventDefault();
 
     // ตรวจสอบความถูกต้องของอีเมล
-    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    if (!email) {
+      setState({ status: 'error', message: 'กรุณาระบุอีเมล' });
+      return;
+    }
+    const lowerCaseEmail = email.toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(lowerCaseEmail)) {
       setState({ status: 'error', message: 'กรุณาระบุอีเมลที่ถูกต้อง' });
       return;
     }
 
-    setState({ status: 'loading', message: 'กำลังส่งอีเมลยืนยัน...' });
+    setState({ status: 'loading', message: 'กำลังส่งอีเมลยืนยันใหม่...' });
 
     try {
       const response = await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.toLowerCase() }),
+        body: JSON.stringify({ email: lowerCaseEmail }),
       });
 
       const data = await response.json();
@@ -42,18 +47,23 @@ function ResendVerificationContent() {
       if (response.ok) {
         setState({
           status: 'success',
-          message: data.message || 'ส่งอีเมลยืนยันเรียบร้อยแล้ว กรุณาตรวจสอบกล่องจดหมายของคุณ',
+          message: data.message || 'ส่งอีเมลยืนยันใหม่สำเร็จ กรุณาตรวจสอบกล่องจดหมายของคุณ',
         });
         setEmail('');
+        // รีเซ็ต input
+        if (emailInputRef.current) {
+          emailInputRef.current.value = '';
+        }
+        // Redirect ไปยังหน้า signin หลังจาก 5 วินาที
         setTimeout(() => router.push('/auth/signin'), 5000);
       } else {
         setState({
           status: 'error',
-          message: data.error || 'เกิดข้อผิดพลาดในการส่งอีเมลยืนยัน',
+          message: data.error || 'เกิดข้อผิดพลาดในการส่งอีเมลยืนยันใหม่',
         });
       }
     } catch (error) {
-      console.error('❌ ข้อผิดพลาดในการส่งอีเมลยืนยัน:', error);
+      console.error('❌ ข้อผิดพลาดในการส่งอีเมลยืนยันใหม่:', error);
       setState({
         status: 'error',
         message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่ภายหลัง',
@@ -62,7 +72,7 @@ function ResendVerificationContent() {
   };
 
   // ฟังก์ชันสำหรับแสดงผลตามสถานะ
-  const renderContent = () => {
+  const renderStatus = () => {
     switch (state.status) {
       case 'loading':
         return (
@@ -125,18 +135,26 @@ function ResendVerificationContent() {
           disabled={state.status === 'loading'}
           className="w-full bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          ส่งอีเมลยืนยัน
+          ส่งอีเมลยืนยันใหม่
         </button>
       </form>
       {state.status !== 'idle' && (
-        <div className="mt-4 text-center text-sm">{renderContent()}</div>
+        <div className="mt-4 text-center text-sm">{renderStatus()}</div>
       )}
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        กลับไปที่{' '}
-        <Link href="/" className="text-primary hover:underline">
-          หน้าหลัก
-        </Link>
-      </p>
+      <div className="mt-6 text-center text-sm text-muted-foreground space-y-2">
+        <p>
+          กลับไปที่{' '}
+          <Link href="/" className="text-primary hover:underline">
+            หน้าเข้าสู่ระบบ
+          </Link>
+        </p>
+        <p>
+          หรือไปที่{' '}
+          <Link href="/" className="text-primary hover:underline">
+            หน้าหลัก
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

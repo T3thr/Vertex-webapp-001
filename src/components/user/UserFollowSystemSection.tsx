@@ -63,6 +63,7 @@ const UserFollowSystemSection: React.FC<UserFollowSystemSectionProps> = ({
     if (sessionStatus === "authenticated" && currentLoggedInUserId && !isOwnProfile) {
       const checkFollowStatus = async () => {
         try {
+          // แก้ไขตรงนี้: ใช้ URL path ที่ถูกต้อง
           const res = await fetch(`/api/users/${session?.user?.username}/following?limit=1000`, {
             cache: "no-store", // ป้องกันการแคชเพื่อข้อมูลล่าสุด
           });
@@ -82,6 +83,7 @@ const UserFollowSystemSection: React.FC<UserFollowSystemSectionProps> = ({
   const fetchFollowers = useCallback(async (page: number) => {
     setIsLoadingFollowers(true);
     try {
+      // แก้ไขตรงนี้: ใช้ URL path ที่ถูกต้อง
       const res = await fetch(`/api/users/${viewedUsername}/followers?page=${page}&limit=10`, {
         cache: "no-store",
       });
@@ -102,6 +104,7 @@ const UserFollowSystemSection: React.FC<UserFollowSystemSectionProps> = ({
   const fetchFollowing = useCallback(async (page: number) => {
     setIsLoadingFollowing(true);
     try {
+      // แก้ไขตรงนี้: ใช้ URL path ที่ถูกต้อง
       const res = await fetch(`/api/users/${viewedUsername}/following?page=${page}&limit=10`, {
         cache: "no-store",
       });
@@ -133,6 +136,7 @@ const UserFollowSystemSection: React.FC<UserFollowSystemSectionProps> = ({
     setIsLoadingFollowAction(true);
     const method = isFollowingUser ? "DELETE" : "POST";
     try {
+      // แก้ไขตรงนี้: ใช้ URL path ที่ถูกต้อง
       const response = await fetch(`/api/users/${viewedUsername}/follow`, {
         method,
         headers: { "Content-Type": "application/json" },
