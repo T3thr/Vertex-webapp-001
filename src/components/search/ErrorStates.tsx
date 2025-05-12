@@ -19,7 +19,7 @@ export const NoResultsFound = ({ searchTerm }: { searchTerm?: string }) => {
       <h3 className="text-xl font-semibold mb-2">ไม่พบผลการค้นหา</h3>
       {searchTerm ? (
         <p className="text-muted-foreground max-w-md">
-          ไม่พบนิยายที่ตรงกับ "{searchTerm}" กรุณาลองคำค้นหาอื่น
+          ไม่พบนิยายที่ตรงกับ &quot;{searchTerm}&quot; กรุณาลองคำค้นหาอื่น
           หรือปรับตัวกรองของคุณ
         </p>
       ) : (
