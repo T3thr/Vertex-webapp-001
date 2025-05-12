@@ -34,11 +34,17 @@ export interface PopulatedNovelForDetailPage
   relatedNovels?: Pick<INovel, '_id' | 'title' | 'slug' | 'coverImage'>[]; // ตัวอย่าง: ถ้าต้องการนิยายที่เกี่ยวข้อง
 }
 
+// Interface สำหรับ context parameter ใน dynamic route
+interface RouteContext {
+  params: {
+    slug: string;
+  };
+}
 
 // ฟังก์ชัน GET สำหรับดึงข้อมูลนิยายตาม slug
 export async function GET(
   request: Request, // Parameter ตัวแรกคือ Request object
-  context: { params: { slug: string } } // Parameter ตัวที่สองคือ context พร้อม params
+  context: RouteContext // Parameter ตัวที่สองคือ context พร้อม params
 ): Promise<NextResponse<PopulatedNovelForDetailPage | { error: string }>> {
   const { slug } = context.params; // ดึง slug จาก context.params
   console.log(`\n--- 📡 [API GET /api/novels/${slug}] ---`);
