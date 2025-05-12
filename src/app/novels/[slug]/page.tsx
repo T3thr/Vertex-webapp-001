@@ -8,7 +8,7 @@ import { NovelTabs } from "@/components/novels/NovelTabs";
 
 // --- Interface สำหรับ Props ---
 interface NovelPageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>; // Explicitly type params as a Promise
 }
 
 // --- ฟังก์ชัน Fetch ข้อมูลนิยาย ---
@@ -32,9 +32,9 @@ async function getNovelData(slug: string): Promise<PopulatedNovelForDetailPage |
       throw new Error(`ไม่สามารถดึงข้อมูลนิยายได้: ${res.status} ${res.statusText}`);
     }
 
-    const data: PopulatedNovelForDetailPage = await res.json();
-    console.log(`✅ ดึงข้อมูลนิยายสำเร็จ: "${data.title}"`);
-    return data;
+    const data = await res.json();
+    console.log(`✅ ดึงข้อมูลนิยายสำเร็จ: "${data.novel.title}"`);
+    return data.novel as PopulatedNovelForDetailPage;
   } catch (error: any) {
     console.error(`❌ เกิดข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slug}":`, error.message);
     return null;
@@ -47,7 +47,7 @@ export async function generateMetadata(
   parent: ResolvingMetadata
 ): Promise<Metadata> {
   // รอ params เพื่อให้แน่ใจว่า slug พร้อมใช้งาน
-  const slug = params.slug;
+  const { slug } = await params; // Await params to resolve slug
   const novel = await getNovelData(slug);
 
   if (!novel) {
@@ -111,7 +111,7 @@ export async function generateMetadata(
 
 // --- Server Component หลักของหน้า ---
 export default async function NovelPage({ params }: NovelPageProps) {
-  const { slug } = params;
+  const { slug } = await params; // Await params to resolve slug
   const novel = await getNovelData(slug);
 
   // ถ้า getNovelData คืนค่า null (ไม่พบข้อมูล หรือเกิด error)
