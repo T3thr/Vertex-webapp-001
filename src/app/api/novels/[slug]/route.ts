@@ -81,16 +81,17 @@ interface NovelResponse {
 /**
  * GET: ดึงข้อมูลนิยายตาม slug
  * @param req ข้อมูลคำขอจาก Next.js
+ * @param params Promise ที่มี slug ของนิยาย
  * @returns JSON response พร้อมข้อมูลนิยายหรือข้อผิดพลาด
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: Record<string, string | string[]> }
+  { params }: { params: Promise<{ slug: string }> } // Awaitable params
 ): Promise<NextResponse<NovelResponse | { error: string }>> {
   try {
-    // ดึง slug จาก params
-    const slug = params.slug;
-    if (!slug || Array.isArray(slug)) {
+    // รอ params เพื่อดึง slug
+    const { slug } = await params;
+    if (!slug) {
       console.error("❌ ขาดหรือรูปแบบ slug ไม่ถูกต้อง");
       return NextResponse.json({ error: "ต้องระบุ slug ของนิยาย" }, { status: 400 });
     }
@@ -189,7 +190,7 @@ export async function GET(
     const response: NovelResponse = { novel: responseData };
     return NextResponse.json(response, { status: 200 });
   } catch (error: any) {
-    console.error(`❌ [API] ข้อผิดพลาดใน /api/novels/${params.slug}:`, error);
+    console.error(`❌ [API] ข้อผิดพลาดใน /api/novels/${params}:`, error);
 
     if (error instanceof mongoose.Error.CastError) {
       return NextResponse.json({ error: "รูปแบบ slug หรือ ID ไม่ถูกต้อง" }, { status: 400 });
@@ -200,7 +201,7 @@ export async function GET(
       { status: 500 }
     );
   } finally {
-    console.log(`--- 📡 [API GET /api/novels/${params.slug}] สิ้นสุด --- \n`);
+    console.log(`--- 📡 [API GET /api/novels/${params}] สิ้นสุด --- \n`);
   }
 }
 
