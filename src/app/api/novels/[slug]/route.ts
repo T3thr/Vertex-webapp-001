@@ -1,104 +1,82 @@
 // src/app/api/novels/[slug]/route.ts
 import { NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบ path ให้ถูกต้อง
-import NovelModel, { INovel } from "@/backend/models/Novel"; // ตรวจสอบ path และ import interface
-import UserModel from "@/backend/models/User"; // ตรวจสอบ path
-import CategoryModel from "@/backend/models/Category"; // ตรวจสอบ path
-import mongoose from "mongoose";
+import dbConnect from "@/backend/lib/mongodb";
+import NovelModel, { INovel } from "@/backend/models/Novel";
+import UserModel from "@/backend/models/User";
+import EpisodeModel from "@/backend/models/Episode";
+import CategoryModel from "@/backend/models/Category"; 
 
-// Interface สำหรับ context ที่รับ params
-interface RouteContext {
-  params: {
-    slug: string;
-  };
+// ฟังก์ชันสำหรับดึงข้อมูลนิยายเรื่องเดียวตาม slug
+async function getNovelBySlug(slug: string): Promise<INovel | null> {
+  await dbConnect(); // เชื่อมต่อฐานข้อมูล
+
+  const User = UserModel(); // โหลด User Model
+  const Category = CategoryModel(); // โหลด Category Model
+  const Episode = EpisodeModel(); // โหลด Episode Model
+
+  const novel = await NovelModel()
+    .findOne({ slug: slug, isDeleted: false /* visibility: "public" */ }) // ค้นหาด้วย slug, ยังไม่ลบ (อาจพิจารณาเรื่อง visibility ทีหลัง)
+    .populate({
+      path: "author",
+      select: "username profile.displayName profile.avatar", // เลือกฟิลด์ที่ต้องการจาก User
+      model: User, // ระบุ model ให้ชัดเจน
+    })
+    .populate({
+      path: "categories",
+      select: "name slug iconUrl themeColor", // เลือกฟิลด์ที่ต้องการจาก Category
+      model: Category, // ระบุ model
+    })
+    .populate({
+      path: "subCategories",
+      select: "name slug", // เลือกฟิลด์ที่ต้องการจาก Category
+      model: Category, // ระบุ model
+    })
+    // ไม่ populate episodes ที่นี่เพื่อลดขนาด response αρχικά, หน้า page จะ fetch แยกถ้าจำเป็น
+    .lean(); // ใช้ lean() เพื่อ performance
+
+  return novel as INovel | null;
 }
 
-// ฟังก์ชัน GET สำหรับดึงข้อมูลนิยายเรื่องเดียวตาม slug
-export async function GET(request: Request, context: RouteContext) {
-  // ดึง slug จาก context.params
-  const { slug } = context.params;
-
-  // ตรวจสอบว่ามี slug หรือไม่
-  if (!slug) {
-    console.error("❌ API Error: Slug is missing in the request.");
-    return NextResponse.json(
-      { message: "Slug parameter is required" },
-      { status: 400 }
-    );
-  }
+// ฟังก์ชัน Handler สำหรับ GET request
+export async function GET(
+  request: Request,
+  { params }: { params: { slug: string } } // <--- Signature ที่ถูกต้อง
+) {
+  const slug = params.slug; // ดึง slug จาก params
 
   console.log(`📡 API /api/novels/${slug} called`);
 
+  if (!slug) {
+    console.error("❌ Slug parameter is missing");
+    return NextResponse.json({ error: "Slug หายไป" }, { status: 400 });
+  }
+
   try {
-    // เชื่อมต่อฐานข้อมูล
-    await dbConnect();
-    console.log("🗄️ Database connected.");
+    const novel = await getNovelBySlug(slug); // เรียกใช้ฟังก์ชันดึงข้อมูล
 
-    // สร้าง Models ที่ต้องใช้ (ป้องกัน re-compilation ใน dev mode)
-    const Novel = NovelModel();
-    const User = UserModel();
-    const Category = CategoryModel();
-
-    // Query หานิยายด้วย slug
-    // เลือก populate ข้อมูลที่จำเป็น: author และ categories
-    // ใช้ lean() เพื่อ performance ที่ดีขึ้น (ได้ plain JS object)
-    const novel: INovel | null = await Novel.findOne({
-      slug: slug,
-      isDeleted: false, // ไม่เอาอันที่ถูกลบไปแล้ว
-      // visibility: 'public' // อาจจะตรวจสอบ visibility เพิ่มเติมตาม logic ของคุณ (เช่น อนุญาตให้ admin ดู private ได้)
-    })
-      .populate({
-        path: "author",
-        model: User, // ระบุ Model ให้ชัดเจน
-        select: "username profile.displayName profile.avatar role", // เลือกฟิลด์ที่ต้องการจาก User
-      })
-      .populate({
-        path: "categories",
-        model: Category, // ระบุ Model ให้ชัดเจน
-        select: "name slug themeColor", // เลือกฟิลด์ที่ต้องการจาก Category
-      })
-      .populate({
-        path: "subCategories", // สมมติว่าต้องการ populate subCategories ด้วย
-        model: Category,
-        select: "name slug",
-      })
-      .lean(); // ใช้ lean() เพื่อให้ได้ Plain JavaScript Object
-
-    // ตรวจสอบว่าพบนิยายหรือไม่
     if (!novel) {
-      console.warn(`⚠️ Novel with slug "${slug}" not found or not accessible.`);
-      return NextResponse.json({ message: "Novel not found" }, { status: 404 });
+      console.log(`ℹ️ Novel with slug "${slug}" not found.`);
+      return NextResponse.json({ error: "ไม่พบนิยายเรื่องนี้" }, { status: 404 });
     }
 
-    // ตรวจสอบ visibility เพิ่มเติม (ถ้าจำเป็น)
-    // ตัวอย่าง: ถ้า visibility ไม่ใช่ public และผู้ใช้ไม่ได้ login หรือไม่มีสิทธิ์, อาจ return 404/403
-    // if (novel.visibility !== 'public') {
-    //   // Check user session/role here
-    //   // return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-    // }
+    // ดึงข้อมูลตอน (episodes) เพิ่มเติม ถ้าต้องการส่งไปพร้อมกัน
+    // แต่โดยทั่วไป หน้า page component จะ fetch เอง
+    // const episodes = await EpisodeModel()
+    //   .find({ novel: novel._id, isDeleted: false, status: "published" })
+    //   .sort({ episodeNumber: 1 })
+    //   .select("title slug episodeNumber isFree priceInCoins publishedAt viewsCount")
+    //   .lean();
 
     console.log(`✅ Successfully fetched novel: ${novel.title}`);
-
-    // ส่งข้อมูลนิยายกลับไป
-    return NextResponse.json(novel, { status: 200 });
-
+    return NextResponse.json(
+        { novel /* , episodes */ }, // ส่งข้อมูลนิยาย (และตอน ถ้าดึงมา)
+        { status: 200 }
+    );
   } catch (error: any) {
     console.error(`❌ Error fetching novel with slug "${slug}":`, error);
-
-    // จัดการข้อผิดพลาดประเภทต่างๆ
-    if (error instanceof mongoose.Error.CastError) {
-      return NextResponse.json(
-        { message: "Invalid slug format" },
-        { status: 400 }
-      );
-    }
-
-    // ข้อผิดพลาดทั่วไป
     return NextResponse.json(
-      { message: "Internal Server Error", error: error.message },
+      { error: "เกิดข้อผิดพลาดในการดึงข้อมูลนิยาย" },
       { status: 500 }
     );
   }
 }
-
-// สามารถเพิ่ม POST, PUT, DELETE handlers ได้ที่นี่ถ้าต้องการ
