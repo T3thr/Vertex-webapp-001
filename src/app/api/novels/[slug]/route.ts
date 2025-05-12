@@ -1,8 +1,12 @@
 // src/app/api/novels/[slug]/route.ts
+// API สำหรับดึงข้อมูลนิยายตาม slug สำหรับหน้า novel/[slug]
+// ดึงข้อมูลนิยายพร้อม populate ข้อมูล author, categories, และ subCategories
+// ส่งกลับข้อมูลในรูปแบบที่เหมาะสมสำหรับหน้าแสดงผลนิยาย
+
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { INovel } from "@/backend/models/Novel"; // Import INovel
-import UserModel, { IUser } from "@/backend/models/User";     // Import IUser
+import UserModel, { IUser } from "@/backend/models/User"; // Import IUser
 import CategoryModel, { ICategory } from "@/backend/models/Category"; // Import ICategory
 import mongoose from "mongoose";
 
@@ -31,22 +35,15 @@ export interface PopulatedNovelForDetailPage
   formattedViewsCount?: string;
   formattedLikesCount?: string;
   formattedFollowersCount?: string;
-  relatedNovels?: Pick<INovel, '_id' | 'title' | 'slug' | 'coverImage'>[]; // ตัวอย่าง: ถ้าต้องการนิยายที่เกี่ยวข้อง
-}
-
-// Interface สำหรับ context parameter ใน dynamic route
-interface RouteContext {
-  params: {
-    slug: string;
-  };
+  relatedNovels?: Pick<INovel, "_id" | "title" | "slug" | "coverImage">[]; // ตัวอย่าง: ถ้าต้องการนิยายที่เกี่ยวข้อง
 }
 
 // ฟังก์ชัน GET สำหรับดึงข้อมูลนิยายตาม slug
 export async function GET(
   request: Request, // Parameter ตัวแรกคือ Request object
-  context: RouteContext // Parameter ตัวที่สองคือ context พร้อม params
+  { params }: { params: { slug: string } } // ใช้ destructuring เพื่อดึง params จาก context
 ): Promise<NextResponse<PopulatedNovelForDetailPage | { error: string }>> {
-  const { slug } = context.params; // ดึง slug จาก context.params
+  const { slug } = params; // ดึง slug จาก params
   console.log(`\n--- 📡 [API GET /api/novels/${slug}] ---`);
 
   if (!slug) {
@@ -70,22 +67,22 @@ export async function GET(
       isDeleted: false,
       // visibility: 'public', // อาจจะเพิ่มเงื่อนไขนี้ถ้าไม่ต้องการให้เข้าถึงนิยาย private/unlisted ผ่าน slug โดยตรง
     })
-      .populate<{ author: PopulatedAuthor | null }>({ // กำหนด Type ให้ populate author
+      .populate<{ author: PopulatedAuthor | null }>({
         path: "author",
         model: User, // ระบุ Model ที่ใช้ Populate
         select: "username profile.displayName profile.avatar", // เลือก fields ที่ต้องการ
       })
-      .populate<{ categories: PopulatedCategory[] }>({ // กำหนด Type ให้ populate categories
+      .populate<{ categories: PopulatedCategory[] }>({
         path: "categories",
         model: Category, // ระบุ Model
         select: "name slug", // เลือก fields
       })
-      .populate<{ subCategories?: PopulatedCategory[] }>({ // กำหนด Type ให้ populate subCategories
+      .populate<{ subCategories?: PopulatedCategory[] }>({
         path: "subCategories",
         model: Category, // ระบุ Model
         select: "name slug", // เลือก fields
       })
-      .select( // เลือก fields หลักของ Novel ที่ต้องการส่งกลับไป
+      .select(
         "title slug description coverImage author categories subCategories tags status visibility language isExplicitContent ageRating averageRating ratingsCount viewsCount likesCount followersCount episodesCount publishedEpisodesCount wordsCount settings lastEpisodePublishedAt firstPublishedAt createdAt updatedAt isPremium isDiscounted discountDetails gameElementsSummary"
       )
       .lean() // ใช้ lean() เพื่อประสิทธิภาพ และได้ Plain Old JavaScript Object (POJO)
@@ -123,24 +120,24 @@ export async function GET(
     console.error(`❌ Error fetching novel with slug "${slug}":`, error);
     // ตรวจสอบว่าเป็น CastError หรือไม่ (เช่น ObjectId ไม่ถูกต้อง)
     if (error instanceof mongoose.Error.CastError) {
-       return NextResponse.json({ error: "Invalid format for slug or ID." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid format for slug or ID." }, { status: 400 });
     }
     return NextResponse.json(
-       { error: "An error occurred while fetching the novel." },
-       { status: 500 }
+      { error: "An error occurred while fetching the novel." },
+      { status: 500 }
     );
   } finally {
-      console.log(`--- 📡 [API GET /api/novels/${slug}] Finished --- \n`);
+    console.log(`--- 📡 [API GET /api/novels/${slug}] Finished --- \n`);
   }
 }
 
 // (Optional) Helper function สำหรับ format ตัวเลข (อาจจะย้ายไปไว้ใน utils)
 function formatNumber(num: number): string {
   if (num >= 1000000) {
-    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
   }
   if (num >= 1000) {
-    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K";
   }
   return num.toString();
 }
