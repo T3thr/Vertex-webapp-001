@@ -3,7 +3,7 @@
 // รองรับการ populate ข้อมูลที่จำเป็นทั้งหมดสำหรับหน้าแสดงผลนิยายตาม Models
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบให้แน่ใจว่า path ถูกต้อง
+import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { INovel } from "@/backend/models/Novel";
 import UserModel, { IUser } from "@/backend/models/User";
 import CategoryModel, { ICategory } from "@/backend/models/Category";
@@ -18,7 +18,6 @@ interface PopulatedAuthor extends Pick<IUser, "_id" | "username"> {
     displayName?: string;
     avatar?: string;
   };
-  // เพิ่มเติมฟิลด์ที่อาจต้องการ เช่น socialStats.followersCount
   socialStats?: {
     followersCount: number;
   };
@@ -45,54 +44,52 @@ type PopulatedEpisodeSummary = Pick<
 >;
 
 // --- Interface สำหรับข้อมูล Novel ที่ส่งกลับ (Populated) ---
-// รวมทุก fields จาก INovel และแทนที่ fields ที่ต้อง populate ด้วย type ที่ populate แล้ว
-// Omit fields ที่ไม่ต้องการส่งไป client หรือ fields ที่จะถูกแทนที่
 export interface PopulatedNovelForDetailPage
   extends Omit<
     INovel,
-    | "author" // จะถูกแทนที่ด้วย PopulatedAuthor
-    | "categories" // จะถูกแทนที่ด้วย PopulatedCategory[]
-    | "subCategories" // จะถูกแทนที่ด้วย PopulatedCategory[]
-    | "embeddingVector" // ไม่ส่งไป client
-    | "seo" // อาจจะไม่ส่งทั้งหมด หรือส่งเฉพาะที่จำเป็น
-    | "stats" // อาจจะคำนวณบางส่วนที่ client หรือส่งเท่าที่จำเป็น
-    | "sentimentAnalysis" // ไม่น่าจะส่งไป client
-    | "genreDistribution" // ไม่น่าจะส่งไป client
+    | "author"
+    | "categories"
+    | "subCategories"
+    | "embeddingVector"
+    | "seo"
+    | "stats"
+    | "sentimentAnalysis"
+    | "genreDistribution"
   > {
+  _id: string;
   author: PopulatedAuthor | null;
   categories: PopulatedCategory[];
   subCategories?: PopulatedCategory[];
-  episodesList: PopulatedEpisodeSummary[]; // เพิ่มรายการตอน (ย่อ)
-  formattedViewsCount?: string; // ค่าที่ format แล้ว
+  episodesList: PopulatedEpisodeSummary[];
+  formattedViewsCount?: string;
   formattedLikesCount?: string;
   formattedFollowersCount?: string;
   formattedWordsCount?: string;
-  // relatedNovels?: Pick<INovel, '_id' | 'title' | 'slug' | 'coverImage'>[]; // นิยายที่เกี่ยวข้อง (Optional)
-  // --- เพิ่มเติม fields ที่อาจคำนวณหรือต้องการในหน้า UI ---
-  firstEpisodeSlug?: string; // Slug ของตอนแรก (ถ้ามี)
+  firstEpisodeSlug?: string;
 }
 
 /**
  * ฟังก์ชัน GET สำหรับดึงข้อมูลนิยายตาม slug
- * @param _req - ข้อมูลคำขอ (ไม่ได้ใช้โดยตรง แต่จำเป็นสำหรับ Next.js)
- * @param params - พารามิเตอร์จาก dynamic route ({ params: { slug: string } })
+ * @param req - ข้อมูลคำขอจาก Next.js
+ * @param context - คอนเท็กซ์ที่มีพารามิเตอร์จาก dynamic route
  * @returns NextResponse พร้อมข้อมูลนิยายหรือข้อผิดพลาด
  */
 export async function GET(
-  _req: NextRequest, // ใช้ _req เพื่อบ่งบอกว่าไม่ได้ใช้งานโดยตรง
-  { params }: { params: { slug: string } }
+  req: NextRequest,
+  context: { params: Promise<{ slug: string }> }
 ): Promise<NextResponse<PopulatedNovelForDetailPage | { error: string }>> {
-  const { slug } = params; // ดึง slug จาก params
+  const params = await context.params; // รอ params เพื่อดึง slug
+  const { slug } = params;
   console.log(`\n--- 📡 [API GET /api/novels/${slug}] ---`);
 
   if (!slug) {
-    console.error("❌ Missing slug parameter.");
+    console.error("❌ ขาดพารามิเตอร์ slug");
     return NextResponse.json({ error: "ต้องระบุ slug ของนิยาย" }, { status: 400 });
   }
 
   try {
     await dbConnect();
-    console.log("✅ Database connected.");
+    console.log("✅ เชื่อมต่อฐานข้อมูลสำเร็จ");
 
     const Novel = NovelModel();
     const User = UserModel();
@@ -100,60 +97,59 @@ export async function GET(
     const Episode = EpisodeModel();
 
     // 1. ค้นหานิยายหลัก
-    const novel = await Novel.findOne({
+    const novelQuery = Novel.findOne({
       slug,
       isDeleted: false,
-      // visibility: 'public', // พิจารณาเรื่อง visibility ตาม requirement
     })
       .populate<{ author: PopulatedAuthor | null }>({
         path: "author",
         model: User,
-        select: "username profile.displayName profile.avatar socialStats.followersCount", // เลือก field ที่ต้องการ
+        select: "username profile.displayName profile.avatar socialStats.followersCount",
       })
       .populate<{ categories: PopulatedCategory[] }>({
         path: "categories",
         model: Category,
-        select: "name slug themeColor iconUrl", // เลือก field ที่ต้องการ
+        select: "name slug themeColor iconUrl",
       })
       .populate<{ subCategories?: PopulatedCategory[] }>({
         path: "subCategories",
         model: Category,
-        select: "name slug themeColor iconUrl", // เลือก field ที่ต้องการ
+        select: "name slug themeColor iconUrl",
       })
-      // เลือก fields ทั้งหมดจาก Novel model ยกเว้น fields ที่ไม่ต้องการส่ง
       .select("-embeddingVector -sentimentAnalysis -genreDistribution")
-      .lean() // ใช้ lean() เพื่อ performance ที่ดีขึ้นและได้ plain JS object
-      .exec();
+      .lean();
+
+    const novel = await novelQuery.exec();
 
     if (!novel) {
-      console.warn(`⚠️ Novel with slug "${slug}" not found.`);
+      console.warn(`⚠️ ไม่พบนิยายสำหรับ slug "${slug}"`);
       return NextResponse.json({ error: "ไม่พบนิยาย" }, { status: 404 });
     }
 
-    console.log(`✅ Novel "${novel.title}" found.`);
+    console.log(`✅ พบนิยาย "${novel.title}"`);
 
-    // 2. ดึงรายการตอน (เลือกเฉพาะ field ที่จำเป็น)
+    // 2. ดึงรายการตอน
     const episodesList = await Episode.find({
       novel: novel._id,
       isDeleted: false,
-      // status: 'published', // อาจจะดึงเฉพาะตอนที่ published แล้ว หรือทั้งหมดแล้วให้ client กรอง
     })
-      .sort({ episodeNumber: 1 }) // เรียงตามลำดับตอน
+      .sort({ episodeNumber: 1 })
       .select(
-        "title slug episodeNumber status visibility isFree priceInCoins publishedAt viewsCount likesCount commentsCount"
+        "_id title slug episodeNumber status visibility isFree priceInCoins publishedAt viewsCount likesCount commentsCount"
       )
       .lean()
       .exec();
 
-    console.log(`✅ Fetched ${episodesList.length} episodes for novel "${novel.title}".`);
+    console.log(`✅ ดึง ${episodesList.length} ตอนสำหรับนิยาย "${novel.title}"`);
 
     // 3. เตรียมข้อมูลสำหรับ Response
     const responseData: PopulatedNovelForDetailPage = {
-      ...(novel as any), // Cast เป็น any ชั่วคราว เนื่องจาก lean() และ populate type อาจไม่ตรงเป๊ะ
-      author: novel.author, // `author` ถูก populate แล้ว
-      categories: novel.categories, // `categories` ถูก populate แล้ว
-      subCategories: novel.subCategories, // `subCategories` ถูก populate แล้ว
-      episodesList: episodesList as PopulatedEpisodeSummary[], // Cast episodes ที่ดึงมา
+      ...novel,
+      _id: novel._id.toString(),
+      author: novel.author,
+      categories: novel.categories,
+      subCategories: novel.subCategories,
+      episodesList,
       formattedViewsCount: formatNumber(novel.viewsCount ?? 0),
       formattedLikesCount: formatNumber(novel.likesCount ?? 0),
       formattedFollowersCount: formatNumber(novel.followersCount ?? 0),
@@ -161,15 +157,11 @@ export async function GET(
       firstEpisodeSlug: episodesList.length > 0 ? episodesList[0].slug : undefined,
     };
 
-    // (Optional) ลบ fields ที่ไม่ต้องการส่งออกไปจริงๆ จังๆ อีกครั้ง (ถ้าจำเป็น)
-    // delete (responseData as any).stats; // ตัวอย่างการลบ
-
-    console.log(`✅ Prepared response data for novel "${novel.title}".`);
+    console.log(`✅ เตรียมข้อมูลตอบกลับสำหรับนิยาย "${novel.title}"`);
 
     return NextResponse.json(responseData, { status: 200 });
-
   } catch (error: any) {
-    console.error(`❌ Error fetching novel with slug "${slug}":`, error);
+    console.error(`❌ เกิดข้อผิดพลาดในการดึงนิยายสำหรับ slug "${slug}":`, error);
 
     if (error instanceof mongoose.Error.CastError) {
       return NextResponse.json({ error: "รูปแบบ slug หรือ ID ไม่ถูกต้อง" }, { status: 400 });
@@ -180,11 +172,9 @@ export async function GET(
       { status: 500 }
     );
   } finally {
-    console.log(`--- 📡 [API GET /api/novels/${slug}] Finished --- \n`);
+    console.log(`--- 📡 [API GET /api/novels/${slug}] สิ้นสุด --- \n`);
   }
 }
-
-// --- Helper Functions ---
 
 /**
  * ฟังก์ชันช่วยเหลือสำหรับ format ตัวเลขให้อ่านง่าย (K, M)
