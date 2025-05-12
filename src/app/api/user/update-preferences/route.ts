@@ -1,10 +1,10 @@
 // src/app/api/user/update-preferences/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/options"; // ตรวจสอบว่า path ถูกต้อง
-import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบว่า path ถูกต้อง
-import UserModel, { IUser } from "@/backend/models/User"; // ตรวจสอบว่า path และ import IUser ถูกต้อง
-import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser"; // ตรวจสอบว่า path และ import ISocialMediaUser ถูกต้อง
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import dbConnect from "@/backend/lib/mongodb";
+import UserModel, { IUser } from "@/backend/models/User";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
 import { z } from "zod";
 import mongoose from "mongoose";
 
@@ -84,7 +84,7 @@ export async function PUT(req: NextRequest) {
 
     // 3. เชื่อมต่อฐานข้อมูล
     await dbConnect();
-    // console.log(`[API UpdatePrefs] Attempting to connect to DB for User ID: ${userId}`); // อาจจะไม่จำเป็นต้อง log ทุกครั้ง
+    console.log(`[API UpdatePrefs] Connected to DB for updating preferences, User ID: ${userId}`);
 
     // 4. ค้นหาและอัปเดตผู้ใช้
     const updateFields: { [key: string]: any } = {};
@@ -106,7 +106,7 @@ export async function PUT(req: NextRequest) {
 
     // ถ้าไม่พบใน User model ให้ลอง SocialMediaUser model
     if (!updatedUserDocument) {
-      // console.log(`[API UpdatePrefs] User not found in UserModel, trying SocialMediaUserModel for ID: ${userId}`);
+      console.log(`[API UpdatePrefs] User not found in UserModel, trying SocialMediaUserModel for ID: ${userId}`);
       updatedUserDocument = await SocialMediaUserCollection.findByIdAndUpdate(
         userId,
         { $set: updateFields },
@@ -122,7 +122,7 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    console.log(`[API UpdatePrefs] Preferences updated successfully for user ID: ${userId}`);
+    console.log(`[API UpdatePrefs] Preferences updated successfully for user ID: ${userId}, theme: ${theme}`);
     return NextResponse.json({
       success: true,
       message: "อัปเดตการตั้งค่าเรียบร้อยแล้ว",

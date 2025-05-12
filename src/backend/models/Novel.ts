@@ -9,6 +9,13 @@ interface MonthlyEarning {
   donationValue: number; // รายได้จากการบริจาค
 }
 
+// Interface สำหรับข้อมูลส่วนลด
+interface DiscountDetails {
+  percentage?: number; // เปอร์เซ็นต์ส่วนลด (เช่น 20 หมายถึง 20%)
+  startDate?: Date; // วันที่เริ่มโปรโมชัน
+  endDate?: Date; // วันที่สิ้นสุดโปรโมชัน
+}
+
 // Interface สำหรับ Novel document
 export interface INovel extends Document {
   title: string;
@@ -19,7 +26,7 @@ export interface INovel extends Document {
   categories: Types.ObjectId[];
   subCategories?: Types.ObjectId[];
   tags: string[];
-  status: "draft" | "published" | "completed" | "onHiatus" | "archived" | "discount";
+  status: "draft" | "published" | "completed" | "onHiatus" | "archived"; // ลบ discount ออกจาก enum
   visibility: "public" | "unlisted" | "private" | "followersOnly";
   language: string;
   isExplicitContent: boolean;
@@ -28,10 +35,12 @@ export interface INovel extends Document {
   originalLanguage?: string;
   translationSource?: string;
   isPremium: boolean;
+  isDiscounted: boolean; // เพิ่มฟิลด์ใหม่เพื่อระบุสถานะส่วนลด
+  discountDetails?: DiscountDetails; // เพิ่มฟิลด์สำหรับเก็บรายละเอียดส่วนลด
   averageRating: number;
   ratingsCount: number;
   viewsCount: number;
-  totalReads: number; // เพิ่มฟิลด์สำหรับจำนวนการอ่านทั้งหมด
+  totalReads: number;
   likesCount: number;
   followersCount: number;
   commentsCount: number;
@@ -43,7 +52,7 @@ export interface INovel extends Document {
     totalDonationsAmount?: number;
     completionRate?: number;
     lastViewedAt?: Date;
-    monthlyEarnings?: MonthlyEarning[]; // เพิ่มฟิลด์สำหรับรายได้รายเดือน
+    monthlyEarnings?: MonthlyEarning[];
   };
   settings: {
     allowComments: boolean;
@@ -94,6 +103,15 @@ const MonthlyEarningSchema = new Schema<MonthlyEarning>(
     month: { type: Number, required: true, min: 1, max: 12 },
     coinValue: { type: Number, default: 0, min: 0 },
     donationValue: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
+
+const DiscountDetailsSchema = new Schema<DiscountDetails>(
+  {
+    percentage: { type: Number, min: 0, max: 100 },
+    startDate: { type: Date },
+    endDate: { type: Date },
   },
   { _id: false }
 );
@@ -155,7 +173,7 @@ const NovelSchema = new Schema<INovel>(
     },
     status: {
       type: String,
-      enum: ["draft", "published", "completed", "onHiatus", "archived", "discount"],
+      enum: ["draft", "published", "completed", "onHiatus", "archived"], // ลบ discount ออก
       default: "draft",
       index: true,
     },
@@ -172,10 +190,12 @@ const NovelSchema = new Schema<INovel>(
     originalLanguage: String,
     translationSource: String,
     isPremium: { type: Boolean, default: false, index: true },
+    isDiscounted: { type: Boolean, default: false, index: true }, // เพิ่มฟิลด์ isDiscounted
+    discountDetails: DiscountDetailsSchema, // เพิ่มฟิลด์ discountDetails
     averageRating: { type: Number, default: 0, min: 0, max: 5, index: true },
     ratingsCount: { type: Number, default: 0, min: 0 },
     viewsCount: { type: Number, default: 0, min: 0, index: true },
-    totalReads: { type: Number, default: 0, min: 0 }, // เพิ่มฟิลด์ totalReads
+    totalReads: { type: Number, default: 0, min: 0 },
     likesCount: { type: Number, default: 0, min: 0, index: true },
     followersCount: { type: Number, default: 0, min: 0, index: true },
     commentsCount: { type: Number, default: 0, min: 0 },
@@ -187,7 +207,7 @@ const NovelSchema = new Schema<INovel>(
       totalDonationsAmount: { type: Number, default: 0, min: 0 },
       completionRate: { type: Number, default: 0, min: 0, max: 100 },
       lastViewedAt: { type: Date, index: true },
-      monthlyEarnings: [MonthlyEarningSchema], // เพิ่มฟิลด์ monthlyEarnings
+      monthlyEarnings: [MonthlyEarningSchema],
     },
     settings: {
       allowComments: { type: Boolean, default: true },
@@ -246,6 +266,7 @@ NovelSchema.index({ status: 1, visibility: 1, isDeleted: 1 });
 NovelSchema.index({ language: 1, status: 1, isDeleted: 1 });
 NovelSchema.index({ categories: 1, status: 1, isDeleted: 1 });
 NovelSchema.index({ isPremium: 1, status: 1, isDeleted: 1 });
+NovelSchema.index({ isDiscounted: 1, status: 1, isDeleted: 1 }); // เพิ่ม index สำหรับ isDiscounted
 NovelSchema.index({ averageRating: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 NovelSchema.index({ viewsCount: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
 NovelSchema.index({ lastSignificantUpdateAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });

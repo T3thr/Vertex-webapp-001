@@ -6,6 +6,7 @@ import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 // Categories ใช้สำหรับจัดระเบียบ Novels และเนื้อหาอื่นๆ ที่อาจมี
 // ออกแบบมาเพื่อรองรับการกรองและการแสดงผลที่ซับซ้อนใน UI
 export interface ICategory extends Document {
+  _id: Types.ObjectId;
   name: string; // ชื่อหมวดหมู่ (เช่น "แฟนตาซี", "โรแมนติก", "สยองขวัญ") - ชื่อที่แสดงต่อผู้ใช้
   slug: string; // URL-friendly slug (unique) - สำหรับใช้ใน URL ให้สั้นและสื่อความหมาย
   description?: string; // คำอธิบายหมวดหมู่ (รองรับ Markdown) - รายละเอียดเพิ่มเติมเกี่ยวกับหมวดหมู่

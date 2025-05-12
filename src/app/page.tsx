@@ -29,6 +29,8 @@ async function getNovels(filter: string, limit: number = 8) {
       "description",
       "status",
       "isExplicitContent",
+      "isDiscounted", // เพิ่ม isDiscounted
+      "discountDetails", // เพิ่ม discountDetails
       "tags",
       "lastEpisodePublishedAt",
       "viewsCount",
@@ -193,96 +195,96 @@ export default async function HomePage() {
 
   return (
     <div>
-    <main className="pb-16">
-      {/* ส่วนสไลด์ภาพหน้าแรก */}
-      <section className="w-full mb-12">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
-          <ImageSlider slides={featuredSlides} />
-        </div>
-      </section>
+      <main className="pb-16">
+        {/* ส่วนสไลด์ภาพหน้าแรก */}
+        <section className="w-full mb-12">
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+            <ImageSlider slides={featuredSlides} />
+          </div>
+        </section>
 
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
-        {/* ส่วนนิยายยอดนิยม */}
-        <Suspense
-          fallback={
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+          {/* ส่วนนิยายยอดนิยม */}
+          <Suspense
+            fallback={
+              <SectionWithViewAll
+                title="ผลงานยอดนิยม"
+                icon={<FiTrendingUp size={20} />}
+                novels={[]}
+                viewAllUrl="/novels?sort=trending"
+                isLoading={true}
+              />
+            }
+          >
             <SectionWithViewAll
               title="ผลงานยอดนิยม"
               icon={<FiTrendingUp size={20} />}
-              novels={[]}
+              novels={trendingNovels}
               viewAllUrl="/novels?sort=trending"
-              isLoading={true}
             />
-          }
-        >
-          <SectionWithViewAll
-            title="ผลงานยอดนิยม"
-            icon={<FiTrendingUp size={20} />}
-            novels={trendingNovels}
-            viewAllUrl="/novels?sort=trending"
-          />
-        </Suspense>
+          </Suspense>
 
-        {/* ส่วนผลงานอัพเดตล่าสุด */}
-        <Suspense
-          fallback={
+          {/* ส่วนผลงานอัพเดตล่าสุด */}
+          <Suspense
+            fallback={
+              <SectionWithViewAll
+                title="อัพเดตล่าสุด"
+                icon={<FiClock size={20} />}
+                novels={[]}
+                viewAllUrl="/novels?sort=published"
+                isLoading={true}
+              />
+            }
+          >
             <SectionWithViewAll
               title="อัพเดตล่าสุด"
               icon={<FiClock size={20} />}
-              novels={[]}
+              novels={newReleaseNovels}
               viewAllUrl="/novels?sort=published"
-              isLoading={true}
             />
-          }
-        >
-          <SectionWithViewAll
-            title="อัพเดตล่าสุด"
-            icon={<FiClock size={20} />}
-            novels={newReleaseNovels}
-            viewAllUrl="/novels?sort=published"
-          />
-        </Suspense>
+          </Suspense>
 
-        {/* ส่วนส่วนลดพิเศษ */}
-        <Suspense
-          fallback={
+          {/* ส่วนส่วนลดพิเศษ */}
+          <Suspense
+            fallback={
+              <SectionWithViewAll
+                title="ส่วนลดพิเศษ"
+                icon={<FiGift size={20} />}
+                novels={[]}
+                viewAllUrl="/novels?filter=discount"
+                isLoading={true}
+              />
+            }
+          >
             <SectionWithViewAll
               title="ส่วนลดพิเศษ"
               icon={<FiGift size={20} />}
-              novels={[]}
+              novels={discountNovels}
               viewAllUrl="/novels?filter=discount"
-              isLoading={true}
             />
-          }
-        >
-          <SectionWithViewAll
-            title="ส่วนลดพิเศษ"
-            icon={<FiGift size={20} />}
-            novels={discountNovels}
-            viewAllUrl="/novels?filter=discount"
-          />
-        </Suspense>
+          </Suspense>
 
-        {/* ส่วนนิยายที่จบแล้ว */}
-        <Suspense
-          fallback={
+          {/* ส่วนนิยายที่จบแล้ว */}
+          <Suspense
+            fallback={
+              <SectionWithViewAll
+                title="จบบริบูรณ์"
+                icon={<FiCheck size={20} />}
+                novels={[]}
+                viewAllUrl="/novels?filter=completed"
+                isLoading={true}
+              />
+            }
+          >
             <SectionWithViewAll
               title="จบบริบูรณ์"
               icon={<FiCheck size={20} />}
-              novels={[]}
+              novels={completedNovels}
               viewAllUrl="/novels?filter=completed"
-              isLoading={true}
             />
-          }
-        >
-          <SectionWithViewAll
-            title="จบบริบูรณ์"
-            icon={<FiCheck size={20} />}
-            novels={completedNovels}
-            viewAllUrl="/novels?filter=completed"
-          />
-        </Suspense>
-      </div>
-    </main>
+          </Suspense>
+        </div>
+      </main>
     </div>
   );
 }

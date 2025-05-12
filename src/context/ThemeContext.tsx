@@ -64,6 +64,7 @@ export const ThemeProvider = ({
     initialState.resolvedTheme
   );
   const [mounted, setMounted] = useState(false);
+  const [initialThemeLoaded, setInitialThemeLoaded] = useState(false);
   const { data: session, status } = useSession();
 
   // --- Helper Functions ---
@@ -95,7 +96,7 @@ export const ThemeProvider = ({
   const updateUserThemePreferenceInDB = useCallback(
     debounce(async (newThemeToSave: Theme) => {
       if (status !== "authenticated" || !session?.user?.id) {
-        // console.log("[ThemeContext] User not authenticated or session not ready, skipping DB update for theme.");
+        console.log("[ThemeContext] User not authenticated or session not ready, skipping DB update for theme.");
         return;
       }
       console.log(
@@ -131,20 +132,21 @@ export const ThemeProvider = ({
   // --- Main setTheme Function ---
   const setTheme = useCallback(
     (newTheme: Theme) => {
+      console.log(`[ThemeContext] Setting theme to: ${newTheme}`);
       setThemeState(newTheme); // อัปเดต React state
 
       // 1. คำนวณ resolved theme ใหม่
       const newResolved = calculateResolvedTheme(newTheme);
       setResolvedThemeState(newResolved); // อัปเดต resolved theme state
 
-      // 2. 적용 theme ไปที่ DOM
+      // 2. ประยุกต์ theme ไปที่ DOM
       applyThemeToDOM(newResolved);
 
       // 3. บันทึก theme ลง localStorage (สำหรับผู้ใช้ที่ไม่ได้ login หรือเป็นค่าเริ่มต้น)
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem(storageKey, newTheme);
-          // console.log(`[ThemeContext] Theme "${newTheme}" saved to localStorage.`);
+          console.log(`[ThemeContext] Theme "${newTheme}" saved to localStorage.`);
         } catch (e) {
           console.warn(
             `[ThemeContext] Could not save theme to localStorage (${storageKey}):`, e
@@ -171,14 +173,17 @@ export const ThemeProvider = ({
 
   // Effect 1: Initial theme loading (Client-side only)
   useEffect(() => {
+    if (initialThemeLoaded) return; // ป้องกันการทำงานซ้ำ
+    
     setMounted(true);
     let initialUserTheme: Theme = defaultTheme; // เริ่มต้นด้วย defaultTheme
 
     // ก. ดึงค่าจาก localStorage ก่อน (สำคัญสำหรับ persist theme ของ guest)
     try {
       const storedTheme = localStorage.getItem(storageKey) as Theme | null;
-      if (storedTheme) {
+      if (storedTheme && ["light", "dark", "system", "sepia"].includes(storedTheme)) {
         initialUserTheme = storedTheme;
+        console.log(`[ThemeContext] Initial theme from localStorage: "${storedTheme}"`);
       }
     } catch (e) {
       console.warn("[ThemeContext] Failed to read from localStorage:", e);
@@ -190,7 +195,7 @@ export const ThemeProvider = ({
         const dbTheme = session.user.preferences.theme as Theme;
         if (["light", "dark", "system", "sepia"].includes(dbTheme)) {
             initialUserTheme = dbTheme;
-            // console.log(`[ThemeContext] Initial theme from DB session: "${dbTheme}"`);
+            console.log(`[ThemeContext] Initial theme from DB session: "${dbTheme}"`);
         }
     }
 
@@ -198,27 +203,53 @@ export const ThemeProvider = ({
     const initialResolved = calculateResolvedTheme(initialUserTheme);
     setResolvedThemeState(initialResolved);
     applyThemeToDOM(initialResolved);
+    setInitialThemeLoaded(true);
 
-    // console.log(`[ThemeContext] Initial theme set to: "${initialUserTheme}", Resolved: "${initialResolved}"`);
-  }, [ status, session?.user?.preferences?.theme, storageKey, defaultTheme, applyThemeToDOM, calculateResolvedTheme]);
-  // ไม่ใส่ `theme` ใน dependency array นี้เพื่อป้องกัน loop ในการโหลดครั้งแรก
-
+    console.log(`[ThemeContext] Initial theme set to: "${initialUserTheme}", Resolved: "${initialResolved}"`);
+  }, [status, session?.user?.preferences?.theme, storageKey, defaultTheme, applyThemeToDOM, calculateResolvedTheme, initialThemeLoaded]);
 
   // Effect 2: Listen to system theme changes (if theme is 'system')
   useEffect(() => {
-    if (theme !== "system" || typeof window === "undefined") {
+    if (!mounted || theme !== "system" || typeof window === "undefined") {
       return;
     }
+    
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
-      // console.log("[ThemeContext] System color scheme changed.");
+      console.log("[ThemeContext] System color scheme changed.");
       const newResolved = calculateResolvedTheme("system"); // Recalculate based on "system"
       setResolvedThemeState(newResolved);
       applyThemeToDOM(newResolved);
     };
+    
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [theme, applyThemeToDOM, calculateResolvedTheme]); // `theme` เป็น dependency ที่สำคัญที่นี่
+  }, [theme, applyThemeToDOM, calculateResolvedTheme, mounted]); // `theme` เป็น dependency ที่สำคัญที่นี่
+
+  // Effect 3: Listen to session changes
+  useEffect(() => {
+    if (!mounted || status !== "authenticated" || !session?.user?.preferences?.theme || initialThemeLoaded === false) {
+      return;
+    }
+    
+    const sessionTheme = session.user.preferences.theme as Theme;
+    if (sessionTheme !== theme && ["light", "dark", "system", "sepia"].includes(sessionTheme)) {
+      console.log(`[ThemeContext] Session changed, updating theme from session: ${sessionTheme}`);
+      setThemeState(sessionTheme);
+      const newResolved = calculateResolvedTheme(sessionTheme);
+      setResolvedThemeState(newResolved);
+      applyThemeToDOM(newResolved);
+      
+      // อัปเดต localStorage เพื่อให้ตรงกับค่าจาก session
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(storageKey, sessionTheme);
+        } catch (e) {
+          console.warn(`[ThemeContext] Could not save session theme to localStorage:`, e);
+        }
+      }
+    }
+  }, [status, session?.user?.preferences?.theme, applyThemeToDOM, calculateResolvedTheme, mounted, theme, storageKey, initialThemeLoaded]);
 
   const availableThemes = useMemo(
     () => [

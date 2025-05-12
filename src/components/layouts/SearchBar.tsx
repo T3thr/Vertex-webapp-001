@@ -1,206 +1,301 @@
 // src/components/layouts/SearchBar.tsx
 "use client";
 
-import { Search, X, Loader2, BookOpen, Tag } from "lucide-react";
+import { Search, X, BookOpen, Clock, TrendingUp, Tag } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 
-// ประเภทข้อมูลสำหรับผลการค้นหา
-interface SearchResult {
-  _id: string;
-  title: string;
-  slug: string;
-  coverImage?: string;
-  author?: {
-    username: string;
-    profile?: {
-      displayName?: string;
-    }
-  };
-  description: string;
-  tags: string[];
-}
-
-// SearchBar Component Props - คอมโพเนนต์สำหรับแถบค้นหา
+// คอมโพเนนต์ SearchBar Props - คอมโพเนนต์สำหรับแถบค้นหา
 interface SearchBarProps {
   onClose: () => void;
   isMobile?: boolean;
 }
 
+// ประเภทข้อมูลสำหรับผลการค้นหา (ย่อ)
+interface SearchNovelResult {
+  _id: string;
+  title: string;
+  slug: string;
+  coverImage: string;
+  author: {
+    username: string;
+    profile: {
+      displayName?: string;
+    };
+  };
+  tags: string[];
+}
+
 export default function SearchBar({ onClose, isMobile = false }: SearchBarProps) {
   const [searchValue, setSearchValue] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [searchResults, setSearchResults] = useState<SearchNovelResult[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [popularTags, setPopularTags] = useState<string[]>([
+    "แฟนตาซี", "โรแมนติก", "แอ็คชั่น", "ดราม่า", "สยองขวัญ", "ไซไฟ", "เกิดใหม่", "ผจญภัย"
+  ]);
   const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const searchBarRef = useRef<HTMLDivElement>(null);
   
+  // โหลดการค้นหาล่าสุดจาก localStorage เมื่อคอมโพเนนต์ถูกโหลด
   useEffect(() => {
-    inputRef.current?.focus();
+    const savedSearches = localStorage.getItem("recentSearches");
+    if (savedSearches) {
+      try {
+        setRecentSearches(JSON.parse(savedSearches).slice(0, 3));
+      } catch (e) {
+        console.error("Error parsing recent searches:", e);
+      }
+    }
     
-    // ดึงแท็กยอดนิยมเมื่อโหลดครั้งแรก
-    const popularTags = ["แฟนตาซี", "โรแมนติก", "เกิดใหม่", "ระบบ", "ผจญภัย", "ดราม่า", "สยองขวัญ", "แอ็คชั่น"];
-    setSuggestedTags(popularTags);
+    inputRef.current?.focus();
   }, []);
   
-  // ฟังก์ชันค้นหาเบื้องต้นเมื่อพิมพ์
-  useEffect(() => {
-    const searchTimeout = setTimeout(async () => {
-      if (searchValue.trim().length >= 2) {
-        setIsSearching(true);
-        try {
-          // เรียก API สำหรับค้นหาแบบ live search
-          const response = await fetch(`/api/search?q=${encodeURIComponent(searchValue)}&limit=5`);
-          
-          if (response.ok) {
-            const data = await response.json();
-            setSearchResults(data.novels || []);
-          } else {
-            console.error("การค้นหาล้มเหลว");
-            setSearchResults([]);
-          }
-        } catch (error) {
-          console.error("เกิดข้อผิดพลาดในการค้นหา:", error);
-          setSearchResults([]);
-        } finally {
-          setIsSearching(false);
-        }
-      } else {
-        setSearchResults([]);
-      }
-    }, 300); // delay การค้นหาเพื่อลดการเรียก API บ่อยเกินไป
-
-    return () => clearTimeout(searchTimeout);
-  }, [searchValue]);
+  // บันทึกการค้นหาล่าสุด
+  const saveRecentSearch = (term: string) => {
+    if (!term.trim()) return;
+    
+    const updatedSearches = [
+      term,
+      ...recentSearches.filter(s => s !== term)
+    ].slice(0, 5);
+    
+    setRecentSearches(updatedSearches);
+    localStorage.setItem("recentSearches", JSON.stringify(updatedSearches));
+  };
   
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchValue.trim()) {
-      onClose();
-      router.push(`/search/novels?q=${encodeURIComponent(searchValue)}`);
+  // ส่งคำค้นหาไปยัง API
+  const searchNovels = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      setIsSearching(true);
+      const response = await fetch(`/api/search/novels?q=${encodeURIComponent(query)}&limit=5`);
+      
+      if (!response.ok) {
+        throw new Error("ไม่สามารถค้นหานิยายได้");
+      }
+      
+      const data = await response.json();
+      setSearchResults(data.novels || []);
+    } catch (error) {
+      console.error("Error searching novels:", error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
     }
   };
   
-  // ตัดความยาวข้อความ
-  const truncateText = (text: string, maxLength: number) => {
-    if (!text) return "";
-    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  // กำหนดเวลาการค้นหาเพื่อลดการเรียก API บ่อยเกินไป
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchValue.trim().length > 1) {
+        searchNovels(searchValue);
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [searchValue]);
+  
+  // จัดการเหตุการณ์เมื่อกดปุ่มค้นหา
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchValue.trim()) {
+      saveRecentSearch(searchValue.trim());
+      router.push(`/search/novels?q=${encodeURIComponent(searchValue.trim())}`);
+      onClose();
+    }
+  };
+  
+  // เลือกแท็กหรือคำที่แนะนำ
+  const handleSuggestionClick = (term: string) => {
+    setSearchValue(term);
+    inputRef.current?.focus();
   };
   
   return (
-    <form onSubmit={handleSubmit} className={`w-full ${isMobile ? "p-2" : ""}`}>
-      <div className={`w-full bg-card rounded-lg shadow-lg p-3 border border-accent ${isMobile ? "" : ""}`}>
-        <div className="flex items-center gap-3">
-          <Search size={18} className="text-muted-foreground flex-shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="ค้นหานิยาย, ผู้เขียน, แนวนิยาย..."
-            className="bg-transparent w-full focus:outline-none text-foreground placeholder-muted-foreground text-sm"
-            aria-label="ช่องค้นหา"
-          />
-          {isSearching ? (
-            <Loader2 size={18} className="text-primary animate-spin flex-shrink-0" />
-          ) : searchValue ? (
+    <div ref={searchBarRef} className={`w-full ${isMobile ? "p-2" : ""}`}>
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        className="w-full bg-card rounded-lg shadow-lg border border-accent overflow-hidden"
+      >
+        <form onSubmit={handleSubmit}>
+          <div className="flex items-center gap-3 p-3">
+            <Search size={18} className="text-primary flex-shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              placeholder="ค้นหานิยาย, ผู้เขียน, แท็ก..."
+              className="bg-transparent w-full focus:outline-none text-foreground placeholder-muted-foreground text-sm"
+              aria-label="ค้นหา"
+            />
+            {isSearching ? (
+              <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0"></div>
+            ) : searchValue ? (
+              <button 
+                type="button"
+                onClick={() => setSearchValue("")}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-secondary flex-shrink-0"
+                aria-label="ล้างคำค้นหา"
+              >
+                <X size={16} />
+              </button>
+            ) : null}
             <button 
               type="button"
-              onClick={() => setSearchValue("")}
+              onClick={onClose} 
               className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-secondary flex-shrink-0"
-              aria-label="ล้างการค้นหา"
+              aria-label="ปิดค้นหา"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
-          ) : null}
-          <button 
-            type="button"
-            onClick={onClose} 
-            className="text-muted-foreground hover:text-foreground ml-1 p-1 rounded-full hover:bg-secondary flex-shrink-0 md:hidden"
-            aria-label="ปิดการค้นหา"
-          >
-            <X size={18} />
-          </button>
-        </div>
+          </div>
+        </form>
         
-        {/* ผลลัพธ์การค้นหา */}
-        {searchValue.length > 0 && searchResults.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <div className="text-xs font-medium text-muted-foreground mb-2">ผลการค้นหา</div>
-            <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-accent">
-              {searchResults.map((novel) => (
+        <AnimatePresence>
+          {searchResults.length > 0 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="border-t border-border px-3 py-2"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-foreground">ผลการค้นหา</span>
                 <Link 
-                  key={novel._id}
-                  href={`/novels/${novel.slug}`}
-                  onClick={onClose}
-                  className="flex items-start gap-3 p-2 rounded-md hover:bg-secondary transition-colors"
-                >
-                  <div className="flex-shrink-0 w-10 h-14 bg-muted rounded-md overflow-hidden">
-                    {novel.coverImage ? (
-                      <Image 
-                        src={novel.coverImage} 
-                        alt={novel.title}
-                        width={40}
-                        height={56}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <BookOpen size={20} className="text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{novel.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {novel.author?.profile?.displayName || novel.author?.username || "ไม่ระบุผู้เขียน"}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                      {truncateText(novel.description, 60)}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-              <Link 
-                href={`/search/novels?q=${encodeURIComponent(searchValue)}`}
-                onClick={onClose}
-                className="flex items-center justify-center w-full py-2 text-xs text-primary hover:text-primary/80 transition-colors"
-              >
-                ดูผลการค้นหาทั้งหมด
-              </Link>
-            </div>
-          </div>
-        )}
-        
-        {/* แท็กแนะนำ */}
-        {(searchValue.length === 0 || (searchValue.length > 0 && searchResults.length === 0 && !isSearching)) && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <div className="text-xs font-medium text-muted-foreground mb-2">
-              {searchValue.length > 0 && searchResults.length === 0 && !isSearching
-                ? "ไม่พบผลลัพธ์ ลองดูแนวเหล่านี้"
-                : "แนวนิยายยอดนิยม"}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {suggestedTags.map(tag => (
-                <button
-                  key={tag}
-                  type="button"
+                  href={`/search/novels?q=${encodeURIComponent(searchValue)}`}
                   onClick={() => {
-                    setSearchValue(tag);
-                    inputRef.current?.focus();
+                    saveRecentSearch(searchValue);
+                    onClose();
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-accent rounded-full text-xs text-secondary-foreground hover:text-foreground transition-colors"
+                  className="text-xs text-primary hover:underline"
                 >
-                  <Tag size={12} />
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </form>
+                  ดูทั้งหมด
+                </Link>
+              </div>
+              <div className="space-y-2">
+                {searchResults.map((novel) => (
+                  <Link 
+                    key={novel._id} 
+                    href={`/novels/${novel.slug}`}
+                    onClick={() => {
+                      saveRecentSearch(novel.title);
+                      onClose();
+                    }}
+                    className="flex items-center gap-3 p-2 hover:bg-secondary rounded-md transition-colors"
+                  >
+                    <div className="w-10 h-14 relative rounded-md overflow-hidden flex-shrink-0">
+                      <Image
+                        src={novel.coverImage || "/images/placeholder-cover.jpg"}
+                        alt={novel.title}
+                        fill
+                        sizes="40px"
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-medium text-foreground truncate">{novel.title}</h4>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {novel.author?.profile?.displayName || novel.author?.username || "ไม่ระบุผู้เขียน"}
+                      </p>
+                      {novel.tags?.length > 0 && (
+                        <div className="flex gap-1 mt-1">
+                          {novel.tags.slice(0, 2).map((tag) => (
+                            <span 
+                              key={tag} 
+                              className="px-1.5 py-0.5 bg-secondary text-xs rounded-full text-secondary-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {novel.tags.length > 2 && (
+                            <span className="text-xs text-muted-foreground">+{novel.tags.length - 2}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          )}
+          
+          {searchValue.length === 0 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="px-3 pb-3"
+            >
+              {recentSearches.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock size={14} className="text-muted-foreground" />
+                    <span className="text-xs font-medium text-foreground">ค้นหาล่าสุด</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {recentSearches.map((term, index) => (
+                      <button
+                        key={`recent-${index}`}
+                        type="button"
+                        onClick={() => handleSuggestionClick(term)}
+                        className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 rounded-full text-xs text-secondary-foreground transition-colors flex items-center gap-1.5"
+                      >
+                        <Clock size={12} />
+                        {term}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp size={14} className="text-muted-foreground" />
+                  <span className="text-xs font-medium text-foreground">แนะนำ</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {popularTags.map((tag, index) => (
+                    <button
+                      key={`tag-${index}`}
+                      type="button"
+                      onClick={() => handleSuggestionClick(tag)}
+                      className="px-3 py-1.5 bg-secondary hover:bg-accent/20 rounded-full text-xs text-secondary-foreground transition-colors flex items-center gap-1.5"
+                    >
+                      <Tag size={12} />
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="mt-3 pt-2 border-t border-border">
+                <Link 
+                  href="/search/novels"
+                  onClick={onClose}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium rounded-md transition-colors"
+                >
+                  <BookOpen size={16} />
+                  <span>ค้นหาขั้นสูง</span>
+                </Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </div>
   );
-};
+}

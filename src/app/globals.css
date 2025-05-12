@@ -85,7 +85,7 @@
   --foreground: #f8fafc; /* Slate 50 */
   --primary: #60a5fa;    /* Blue 400 */
   --primary-foreground: #0f172a; /* Slate 900 */
-  --secondary: #1e293b;  /* Slate 800 */
+  --secondary: #17202f;  /* Slate 800 */
   --secondary-foreground: #e2e8f0; /* Slate 200 */
   --accent: #334155;     /* Slate 700 */
   --muted: #475569;      /* Slate 600 */
@@ -114,16 +114,16 @@
 
 /* รูปแบบสำหรับโหมดซีเปีย */
 .sepia {
-  --background: #f5eadd; /* Sepia background - lighter */
+  --background: #e4d9cb; /* Sepia background - lighter */
   --foreground: #4a3b31; /* Sepia foreground - darker brown */
   --primary: #8c6f56;    /* Sepia primary - muted brown */
-  --primary-foreground: #f5efdc; /* Sepia primary foreground - light cream */
-  --secondary: #e9dfcf;  /* Sepia secondary - lighter than card */
+  --primary-foreground: #e9dfbf; /* Sepia primary foreground - light cream */
+  --secondary: #cfc0a8;  /* Sepia secondary - lighter than card */
   --secondary-foreground: #5a4b41; /* Sepia secondary foreground */
   --accent: #b89d83;     /* Sepia accent - slightly more vibrant */
   --muted: #9c8b7c;      /* Sepia muted - grayish brown */
   --muted-foreground: #6b5a4d; /* Sepia muted foreground */
-  --card: #efe6d8;       /* Sepia card - slightly darker than bg */
+  --card: #e9d3af;       /* Sepia card - slightly darker than bg */
   --card-foreground: #4a3b31; /* Sepia card foreground */
   --border: #d3c1ad;     /* Sepia border */
   --input: #e9dfcf;      /* Sepia input */

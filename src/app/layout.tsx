@@ -11,21 +11,27 @@ import dbConnect from "@/backend/lib/mongodb";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"], // ควรมี subsets
+  subsets: ["latin"],
+  display: "swap", // ใช้ swap เพื่อป้องกัน FOUT (Flash Of Unstyled Text)
+  preload: true,
+  adjustFontFallback: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"], // ควรมี subsets
+  subsets: ["latin"],
+  display: "swap",
+  preload: true,
+  adjustFontFallback: true,
 });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"),
   title: {
-    default: "NovelMaze", // ชื่อเว็บของคุณ +
+    default: "NovelMaze",
     template: "%s — NovelMaze",
   },
-  description: "สวัสดีจ้า โฮะๆๆ แพลตฟอร์ม Visual Novel หลากหลายแนว", // คำอธิบายเว็บ
+  description: "สวัสดีจ้า โฮะๆๆ แพลตฟอร์ม Visual Novel หลากหลายแนว",
   applicationName: "NovelMaze",
   authors: [{ name: "NovelMaze Team" }],
   generator: "Next.js",
@@ -51,7 +57,7 @@ export const metadata: Metadata = {
     siteName: "NovelMaze",
     images: [
       {
-        url: "/opengraph-image.png", // ควรมีไฟล์นี้ใน public folder
+        url: "/opengraph-image.png", 
         width: 1200,
         height: 630,
         alt: "NovelMaze - ประตูสู่โลกแห่งนิยาย",
@@ -64,20 +70,20 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: { default: "NovelMaze", template: "%s — NovelMaze" },
     description: "ดำดิ่งสู่โลกแห่งนิยายกับ NovelMaze",
-    images: [{ url: "/twitter-image.png", alt: "NovelMaze" }], // ควรมีไฟล์นี้ใน public folder
+    images: [{ url: "/twitter-image.png", alt: "NovelMaze" }],
   },
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: 'any', type: 'image/x-icon' }, // แก้ไข type
+      { url: '/favicon.ico', sizes: 'any', type: 'image/x-icon' },
       { url: '/icon.svg', type: 'image/svg+xml' },
       { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
       { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
     ],
-    apple: '/apple-icon.png', // Apple touch icon
+    apple: '/apple-icon.png',
   },
   manifest: '/manifest.webmanifest',
   verification: {
-    google: process.env.GOOGLE_SITE_VERIFICATION_TOKEN, // ใช้ environment variable
+    google: process.env.GOOGLE_SITE_VERIFICATION_TOKEN,
   },
   appleWebApp: {
     title: 'NovelMaze',
@@ -85,100 +91,87 @@ export const metadata: Metadata = {
     capable: true,
   },
   formatDetection: { telephone: false, email: false, address: false },
+  // Next.js 15+ เพิ่ม metadataBase เพื่อแก้ปัญหา hydration mismatch
+  other: {
+    'csrf-protection': process.env.CSRF_SECRET || 'true',
+  },
 };
 
-export const viewport: Viewport = { // ใช้ viewport object โดยตรง
+export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1, // หรือ 5 ถ้าต้องการให้ zoom ได้
+  maximumScale: 2, // เปลี่ยนเป็น 2 เพื่อให้ zoom ได้บ้างแต่ไม่มากเกินไป
   userScalable: true,
-  themeColor: [ // themeColor ควรเป็น array ของ objects
-    { media: "(prefers-color-scheme: light)", color: "hsl(0 0% 100%)" }, //  ค่าสีตรงๆ หรือ CSS var ที่ define ใน global แต่ไม่แนะนำให้ใช้ var ที่นี่
-    { media: "(prefers-color-scheme: dark)", color: "hsl(222.2 84% 4.9%)" },
-    { media: "(prefers-color-scheme: sepia)", color: "var(--background)" }, // sepia theme
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" }, // ใช้สีตรงๆ แทน CSS var
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+    { media: "(prefers-color-scheme: sepia)", color: "#f5eadd" },
   ],
 };
-
 
 // Script สำหรับการตั้งค่า theme เริ่มต้นเพื่อป้องกัน FOUC (Flash Of Unstyled Content)
 // และช่วยลด Hydration Mismatch. Script นี้ควรจะ run ก่อนที่ React จะ render.
 function InitializeTheme() {
-  // Nonce สำหรับ CSP (Content Security Policy) ถ้ามีการใช้งาน
-  // const nonce = (globalThis as any).__webpack_nonce__ || (globalThis as any).__NEXT_NONCE__;
-  // ใน Next.js 14+ การเข้าถึง nonce อาจจะเปลี่ยนไป ควรตรวจสอบเอกสารล่าสุด
-  // ถ้าไม่ได้ใช้ CSP ที่ strict มากๆ อาจจะไม่จำเป็นต้องใส่ nonce ที่นี่
-
   const scriptContent = `
 (function() {
-  // ฟังก์ชันนี้จะพยายามอ่าน theme จาก localStorage หรือ user preferences ถ้าเป็นไปได้
-  // แต่ในขั้นตอนนี้ (ก่อน React render) เราอาจจะยังไม่มีข้อมูล user session
-  // ดังนั้นจะเน้นที่ localStorage และ system preference
-  function getInitialTheme() {
-    try {
-      const storedTheme = localStorage.getItem('novelmaze-theme'); // Key ควรตรงกับใน ThemeContext
+  try {
+    // ฟังก์ชันนี้จะพยายามอ่าน theme จาก localStorage ก่อน
+    function getInitialTheme() {
+      const storedTheme = localStorage.getItem('novelmaze-theme');
       if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'sepia') {
         return storedTheme;
       }
-      // ถ้า storedTheme เป็น 'system' หรือค่าอื่นๆ หรือไม่มี, ให้เช็ค system preference
+      // ถ้า storedTheme เป็น 'system' หรือไม่มีค่า, ให้เช็ค system preference
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         return 'dark';
       }
-    } catch (e) {
-      // console.warn('[Layout ThemeScript] Error accessing localStorage:', e);
+      return 'light'; // Default theme
     }
-    return 'light'; // Default theme ถ้าไม่มีอะไรเลย หรือเกิด error
+    
+    // ทำการตั้งค่า theme ทันที
+    const theme = getInitialTheme();
+    document.documentElement.classList.remove('light', 'dark', 'sepia');
+    document.documentElement.classList.add(theme);
+    
+    // ป้องกัน FOUC โดยซ่อน body ไว้จนกว่า theme จะโหลดเสร็จ
+    document.documentElement.style.visibility = 'visible';
+  } catch (e) {
+    console.warn('[Layout ThemeScript] Error setting initial theme:', e);
+    document.documentElement.classList.add('light'); // Fallback theme
+    document.documentElement.style.visibility = 'visible';
   }
-  const theme = getInitialTheme();
-  document.documentElement.classList.add(theme);
-  // console.log('[Layout ThemeScript] Initial theme set on <html>:', theme);
 })();`;
 
   return (
     <script
       id="theme-initializer-script"
-      // nonce={nonce} // ใส่ nonce ถ้ามี
       dangerouslySetInnerHTML={{ __html: scriptContent }}
     />
   );
 }
 
-
 export default async function RootLayout({
   children,
-}:Readonly< {
+}: Readonly<{
   children: React.ReactNode;
 }>) {
-  await dbConnect(); // ไม่จำเป็นถ้าไม่มีการ query DB ใน Server Component นี้โดยตรง
+  // ทำการเชื่อมต่อ MongoDB เฉพาะเมื่อจำเป็น - สามารถปิดไว้ได้ถ้าไม่ได้ query ข้อมูลในส่วนนี้โดยตรง
+  // await dbConnect();
 
   return (
-    <html lang="th" suppressHydrationWarning> 
+    <html lang="th" suppressHydrationWarning className="invisible">
       <head>
-        {/*
-          Theme Initializer Script:
-          - ควรอยู่สูงที่สุดใน <head> เพื่อทำงานก่อน CSS อื่นๆ และ JavaScript ของ React.
-          - script นี้จะเพิ่ม class (light/dark/sepia) ให้กับ <html> tag โดยตรง.
-          - ThemeProvider ใน GlobalContext จะอ่านค่านี้อีกครั้งและ re-hydrate state
-            และจะจัดการการเปลี่ยนแปลง theme หลังจากนี้.
-        */}
         <InitializeTheme />
-        {/*
-          ไม่จำเป็นต้องใส่ <meta charSet="utf-8" /> และ <meta name="viewport" ... /> อีก
-          เพราะ Next.js 13+ (App Router) จัดการให้โดยอัตโนมัติจาก metadata และ viewport exports.
-        */}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary flex flex-col`}
       >
         <GlobalProvider>
-          {/*
-            NavBarWrapper หรือ NavBar ควรเป็น Client Component ถ้ามีการใช้ hooks เช่น usePathname, useState, useEffect, useTheme, useAuth
-            ถ้า NavBarWrapper เป็น Server Component ที่ render NavBar (Client Component) ก็ถูกต้อง
-          */}
           <NavBarWrapper />
-          <main className="flex-grow w-full"> 
+          <main className="flex-grow w-full">
             {children}
           </main>
-          <Footer /> 
+          <Footer />
         </GlobalProvider>
         <Analytics />
         <SpeedInsights />

@@ -1,87 +1,92 @@
 // src/app/api/search/suggestions/route.ts
-import { NextResponse } from "next/server";
-import dbConnect from "@/backend/lib/mongodb";
-import NovelModel from "@/backend/models/Novel";
-import CategoryModel from "@/backend/models/Category";
+import { NextRequest, NextResponse } from 'next/server';
+import dbConnect from '@/backend/lib/mongodb';
+import NovelModel from '@/backend/models/Novel';
+import CategoryModel from '@/backend/models/Category';
+import UserModel from '@/backend/models/User';
 
-export async function GET(request: Request) {
-  await dbConnect();
-
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q") || "";
-    
+    // เชื่อมต่อกับฐานข้อมูล
+    await dbConnect();
+    const Novel = NovelModel();
+    const Category = CategoryModel();
+    const User = UserModel();
+
+    // ดึงพารามิเตอร์การค้นหาจาก URL
+    const searchParams = request.nextUrl.searchParams;
+    const query = searchParams.get('q') || '';
+    const limit = parseInt(searchParams.get('limit') || '5', 10);
+
+    // ถ้าไม่มีคำค้นหา ให้ส่งค่าว่างกลับไป
     if (!query || query.length < 2) {
-      return NextResponse.json({ suggestions: [] }, { status: 200 });
+      return NextResponse.json({
+        success: true,
+        data: {
+          novels: [],
+          categories: [],
+          authors: []
+        }
+      });
     }
-    
-    console.log(`📡 API /api/search/suggestions called with query: ${query}`);
-    
-    // Create regex for case-insensitive search
-    const regexSearch = new RegExp(query.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), "i");
-    
-    // Find matching novels (titles)
-    const novelTitles = await NovelModel()
-      .find({
-        title: regexSearch,
-        isDeleted: false,
-        visibility: "public"
-      })
-      .select("title")
-      .limit(3)
-      .lean();
-    
-    // Find matching categories
-    const categories = await CategoryModel()
-      .find({
-        name: regexSearch,
+
+    // ค้นหานิยายที่ตรงกับคำค้นหา
+    const novels = await Novel.find(
+      { 
+        title: { $regex: query, $options: 'i' },
+        status: 'published',
+        visibility: 'public',
+        isDeleted: false
+      }
+    )
+    .sort({ viewsCount: -1 })
+    .limit(limit)
+    .select('_id title slug coverImage')
+    .lean();
+
+    // ค้นหาหมวดหมู่ที่ตรงกับคำค้นหา
+    const categories = await Category.find(
+      {
+        name: { $regex: query, $options: 'i' },
         isVisible: true,
         isDeleted: false
-      })
-      .select("name")
-      .limit(2)
-      .lean();
-    
-    // Find matching tags (aggregating from novels)
-    const tagsAggregation = await NovelModel().aggregate([
-      { $match: { isDeleted: false, visibility: "public" } },
-      { $unwind: "$tags" },
-      { $match: { tags: regexSearch } },
-      { $group: { _id: "$tags", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 3 }
-    ]);
-    
-    // Format suggestions
-    const novelSuggestions = novelTitles.map(novel => ({
-      type: 'novel',
-      text: novel.title
-    }));
-    
-    const categorySuggestions = categories.map(category => ({
-      type: 'category',
-      text: category.name
-    }));
-    
-    const tagSuggestions = tagsAggregation.map(tag => ({
-      type: 'tag',
-      text: tag._id
-    }));
-    
-    // Combine and limit results
-    const allSuggestions = [
-      ...novelSuggestions,
-      ...categorySuggestions,
-      ...tagSuggestions
-    ].slice(0, 8);
-    
-    console.log(`✅ Found ${allSuggestions.length} suggestions for query: ${query}`);
-    
-    return NextResponse.json({ suggestions: allSuggestions }, { status: 200 });
-  } catch (error: any) {
-    console.error(`❌ Error fetching search suggestions:`, error.message);
+      }
+    )
+    .sort({ isFeatured: -1, displayOrder: 1 })
+    .limit(limit)
+    .select('_id name slug iconUrl')
+    .lean();
+
+    // ค้นหาผู้เขียนที่ตรงกับคำค้นหา
+    const authors = await User.find(
+      {
+        $or: [
+          { username: { $regex: query, $options: 'i' } },
+          { 'profile.displayName': { $regex: query, $options: 'i' } }
+        ],
+        role: 'Writer',
+        isActive: true,
+        isBanned: false,
+        isDeleted: false
+      }
+    )
+    .limit(limit)
+    .select('_id username profile.displayName profile.avatar')
+    .lean();
+
+    // ส่งข้อมูลกลับ
+    return NextResponse.json({
+      success: true,
+      data: {
+        novels,
+        categories,
+        authors
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching search suggestions:', error);
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดในการดึงคำแนะนำสำหรับการค้นหา" },
+      { success: false, message: 'เกิดข้อผิดพลาดในการดึงข้อมูลข้อเสนอแนะการค้นหา' },
       { status: 500 }
     );
   }

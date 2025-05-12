@@ -15,6 +15,7 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 5, // 5 นาที
       refetchOnWindowFocus: false, // สามารถเปิด true ได้ถ้าต้องการ aggressive refetching
+      retry: 1, // จำกัดการ retry เพื่อเพิ่มประสิทธิภาพ
     },
   },
 });
@@ -27,19 +28,37 @@ interface GlobalProviderProps {
 // เพื่อให้ useTheme() ถูกเรียกภายใน ThemeProvider
 const AppContent = ({ children }: { children: ReactNode }) => {
   const { mounted: themeMounted, resolvedTheme } = useTheme(); // ดึง resolvedTheme และ mounted จาก context
+  const [isReady, setIsReady] = useState(false);
+
+  // แสดงผลเมื่อ client-side hydration เสร็จสมบูรณ์
+  useEffect(() => {
+    if (themeMounted) {
+      // ใช้ requestAnimationFrame เพื่อให้ browser render cycle เสร็จสมบูรณ์ก่อน
+      const timer = requestAnimationFrame(() => {
+        setIsReady(true);
+      });
+      return () => cancelAnimationFrame(timer);
+    }
+  }, [themeMounted]);
 
   // คำนวณ theme สำหรับ ToastContainer
   const toastThemeMode = useMemo(() => {
     if (!themeMounted) return "light"; // ค่าเริ่มต้นก่อน client-side theme พร้อม
-    return resolvedTheme; // resolvedTheme จะเป็น 'light', 'dark', หรือ 'sepia'
+    
+    // สำหรับธีม sepia ใช้ light mode toast ซึ่งจะมองเห็นได้ดีกว่า
+    if (resolvedTheme === "sepia") return "light";
+    
+    return resolvedTheme; // 'light' หรือ 'dark'
   }, [themeMounted, resolvedTheme]);
 
-  if (!themeMounted) {
-    // แสดง children แบบ hidden หรือ placeholder ขณะรอ ThemeContext mount
-    // ThemeScript ใน layout.tsx ควรจัดการ FOUC เบื้องต้นแล้ว
-    // การ return null หรือ placeholder อาจทำให้เกิด layout shift ตอน client render
-    // การใช้ visibility: hidden จะ render children แต่ไม่แสดงผล
-    return <div style={{ visibility: "hidden" }}>{children}</div>;
+  if (!isReady) {
+    // แสดง children แบบ visibility: hidden เพื่อป้องกัน layout shift
+    // โดยใช้ fade-in animation เมื่อ content พร้อม
+    return (
+      <div className="opacity-0 transition-opacity duration-300" aria-hidden="true">
+        {children}
+      </div>
+    );
   }
 
   return (
@@ -47,16 +66,16 @@ const AppContent = ({ children }: { children: ReactNode }) => {
       {children}
       <ToastContainer
         position="bottom-right"
-        autoClose={3500} // เพิ่มเวลานิดหน่อย
+        autoClose={3500}
         hideProgressBar={false}
-        newestOnTop={true} // แสดง toast ใหม่ล่าสุดด้านบน
+        newestOnTop={true}
         closeOnClick
         rtl={false}
         pauseOnFocusLoss
         draggable
         pauseOnHover
-        theme={toastThemeMode} // ใช้ resolvedTheme จาก context
-        toastClassName={(context) => { // ตัวอย่างการ custom classname
+        theme={toastThemeMode}
+        toastClassName={(context) => {
           const baseClass = "font-sans text-sm rounded-lg shadow-md";
           if (context?.type === "error") {
             return `${baseClass} bg-alert-error text-alert-error-foreground border border-alert-error-border`;

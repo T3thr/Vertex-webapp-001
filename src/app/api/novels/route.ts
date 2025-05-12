@@ -39,11 +39,10 @@ export async function GET(request: Request) {
         query.status = "published";
         break;
       case "discount":
-        // ส่วนลดพิเศษ: นิยายที่มีแท็ก discount
-        query.tags = "discount";
+        // ส่วนลดพิเศษ: นิยายที่มี isDiscounted เป็น true
+        query.isDiscounted = true;
         sort.viewsCount = -1;
         sort.createdAt = -1;
-        console.warn(`⚠️ Using tag-based discount filter; ensure novels have 'discount' tag`);
         break;
       case "completed":
         // จบบริบูรณ์: นิยายที่มีสถานะ completed

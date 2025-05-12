@@ -1,196 +1,139 @@
 // src/app/api/search/novels/route.ts
-import { NextResponse } from "next/server";
-import { Types } from "mongoose";
-import dbConnect from "@/backend/lib/mongodb";
-import NovelModel from "@/backend/models/Novel";
-import UserModel from "@/backend/models/User";
-import CategoryModel from "@/backend/models/Category";
+import { NextRequest, NextResponse } from 'next/server';
+import dbConnect from '@/backend/lib/mongodb';
+import NovelModel from '@/backend/models/Novel';
+import UserModel from '@/backend/models/User';
+import CategoryModel from '@/backend/models/Category';
 
-export async function GET(request: Request) {
-  await dbConnect();
-
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    
-    // Extract search parameters
-    const query = searchParams.get("query") || "";
-    const categories = searchParams.getAll("categories");
-    const tags = searchParams.getAll("tags");
-    const status = searchParams.get("status");
-    const ageRating = searchParams.get("ageRating");
-    const isExplicit = searchParams.get("isExplicit") === "true";
-    const sort = searchParams.get("sort") || "trending";
-    const limit = parseInt(searchParams.get("limit") || "12", 10);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const skip = (page - 1) * limit;
-    
-    console.log(`📡 API /api/search/novels called with query: "${query}", categories: [${categories}], tags: [${tags}], sort: ${sort}`);
-    
-    // Build query object
-    const mongoQuery: any = {
-      isDeleted: false,
-      visibility: "public",
+    // เชื่อมต่อกับฐานข้อมูล
+    await dbConnect();
+    const Novel = NovelModel();
+    const User = UserModel();
+    const Category = CategoryModel();
+
+    // ดึงพารามิเตอร์การค้นหาจาก URL
+    const searchParams = request.nextUrl.searchParams;
+    const query = searchParams.get('q') || '';
+    const category = searchParams.get('category') || '';
+    const status = searchParams.get('status') || '';
+    const sortBy = searchParams.get('sortBy') || 'updatedAt';
+    const language = searchParams.get('language') || '';
+    const ageRating = searchParams.get('ageRating') || '';
+    const isPremium = searchParams.get('isPremium') || '';
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
+
+    // สร้างเงื่อนไขการค้นหา
+    const searchConditions: any = {
+      status: 'published', // แสดงเฉพาะนิยายที่เผยแพร่แล้ว
+      visibility: 'public', // แสดงเฉพาะนิยายที่เป็นสาธารณะ
+      isDeleted: false
     };
-    
-    // Text search
+
+    // ค้นหาด้วยข้อความ
     if (query) {
-      // For Thai language support, we use regex instead of $text because
-      // MongoDB's text search doesn't work well with Thai without custom tokenizers
-      const searchRegex = new RegExp(query.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), "i");
-      mongoQuery.$or = [
-        { title: searchRegex },
-        { description: searchRegex },
-        { tags: searchRegex }
+      searchConditions.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { tags: { $in: [new RegExp(query, 'i')] } }
       ];
     }
     
-    // Filter by categories
-    if (categories.length > 0) {
-      const categoryIds = categories
-        .map(id => {
-          try {
-            return new Types.ObjectId(id);
-          } catch (e) {
-            return null;
-          }
-        })
-        .filter(Boolean) as Types.ObjectId[];
-      
-      if (categoryIds.length > 0) {
-        mongoQuery.categories = { $in: categoryIds };
+    // กรองตามหมวดหมู่
+    if (category) {
+      try {
+        // หาหมวดหมู่จาก slug
+        const categoryDoc = await Category.findOne({ slug: category, isDeleted: false });
+        if (categoryDoc) {
+          searchConditions.categories = categoryDoc._id;
+        }
+      } catch (error) {
+        console.error('Error finding category:', error);
       }
     }
     
-    // Filter by tags
-    if (tags.length > 0) {
-      mongoQuery.tags = { $in: tags };
+    // กรองตามสถานะ
+    if (status && ['published', 'completed', 'onHiatus'].includes(status)) {
+      searchConditions.status = status;
     }
     
-    // Filter by status
-    if (status && ["published", "completed", "discount"].includes(status)) {
-      mongoQuery.status = status;
+    // กรองตามภาษา
+    if (language) {
+      searchConditions.language = language;
     }
     
-    // Filter by age rating
+    // กรองตามการจัดเรตติ้ง
     if (ageRating) {
-      mongoQuery.ageRating = ageRating;
+      searchConditions.ageRating = ageRating;
     }
     
-    // Filter by explicit content flag
-    if (isExplicit !== undefined) {
-      mongoQuery.isExplicitContent = isExplicit;
+    // กรองตามประเภทพรีเมียม
+    if (isPremium === 'true') {
+      searchConditions.isPremium = true;
+    } else if (isPremium === 'false') {
+      searchConditions.isPremium = false;
     }
     
-    // Build sort options
-    const sortOptions: any = {};
+    // กำหนดการเรียงลำดับ
+    let sortOptions: any = {};
     
-    switch (sort) {
-      case "trending":
-        // Sort by popularity metrics
-        sortOptions.viewsCount = -1;
-        sortOptions.followersCount = -1;
-        sortOptions.lastEpisodePublishedAt = -1;
+    switch (sortBy) {
+      case 'newest':
+        sortOptions = { createdAt: -1 };
         break;
-      case "newest":
-        // Sort by most recently updated
-        sortOptions.lastEpisodePublishedAt = -1;
-        sortOptions.createdAt = -1;
+      case 'popularity':
+        sortOptions = { viewsCount: -1 };
         break;
-      case "rating":
-        // Sort by rating
-        sortOptions.averageRating = -1;
-        sortOptions.viewsCount = -1;
+      case 'rating':
+        sortOptions = { averageRating: -1 };
         break;
-      case "popular":
-        // Sort by pure views
-        sortOptions.viewsCount = -1;
+      case 'mostLiked':
+        sortOptions = { likesCount: -1 };
         break;
+      case 'mostEpisodes':
+        sortOptions = { publishedEpisodesCount: -1 };
+        break;
+      case 'lastUpdated':
       default:
-        sortOptions.viewsCount = -1;
-        sortOptions.lastEpisodePublishedAt = -1;
+        sortOptions = { lastSignificantUpdateAt: -1 };
+        break;
     }
     
-    // Count total matching documents (for pagination)
-    const total = await NovelModel().countDocuments(mongoQuery);
-    console.log(`ℹ️ Found ${total} novels matching search criteria`);
+    // ดึงจำนวนนิยายทั้งหมดที่ตรงกับเงื่อนไข
+    const totalNovels = await Novel.countDocuments(searchConditions);
     
-    // Prepare models for population
-    const User = UserModel();
-    const Category = CategoryModel();
-    
-    // Execute the query
-    const novels = await NovelModel()
-      .find(mongoQuery)
-      .populate({
-        path: "author",
-        select: "username profile.displayName profile.avatar",
-        model: User,
-      })
-      .populate({
-        path: "categories",
-        select: "name slug iconUrl themeColor",
-        model: Category,
-      })
+    // ดึงข้อมูลนิยายจากฐานข้อมูล
+    const novels = await Novel.find(searchConditions)
       .sort(sortOptions)
-      .skip(skip)
+      .skip((page - 1) * limit)
       .limit(limit)
+      .populate('author', '_id username profile.displayName profile.avatar')
+      .populate('categories', '_id name slug')
       .lean();
     
-    console.log(`✅ Fetched ${novels.length} novels for search query`);
+    // คำนวณข้อมูลการแบ่งหน้า
+    const totalPages = Math.ceil(totalNovels / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
     
-    // Get categories for filter UI
-    // We limit to visible parent categories (level 0) and their immediate children (level 1)
-    const allCategories = await CategoryModel()
-      .find({ 
-        isVisible: true, 
-        isDeleted: false, 
-        level: { $lte: 1 } 
-      })
-      .select("name slug iconUrl level parentCategory displayOrder isFeatured")
-      .sort({ level: 1, displayOrder: 1 })
-      .lean();
-    
-    // Organize categories hierarchically
-    const categoriesTree = allCategories.filter(cat => cat.level === 0).map(parent => {
-      const children = allCategories.filter(
-        child => child.parentCategory && child.parentCategory.toString() === parent._id.toString()
-      );
-      
-      return {
-        ...parent,
-        children
-      };
+    // ส่งข้อมูลกลับ
+    return NextResponse.json({
+      success: true,
+      data: novels,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems: totalNovels,
+        hasNextPage,
+        hasPrevPage
+      }
     });
-    
-    // Get popular tags for tag filter
-    const popularTags = await NovelModel().aggregate([
-      { $match: { isDeleted: false, visibility: "public" } },
-      { $unwind: "$tags" },
-      { $group: { _id: "$tags", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 20 },
-      { $project: { tag: "$_id", count: 1, _id: 0 } }
-    ]);
-    
-    // Return the response
+  } catch (error) {
+    console.error('Error searching novels:', error);
     return NextResponse.json(
-      {
-        novels,
-        categories: categoriesTree,
-        popularTags: popularTags.map(item => item.tag),
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        },
-      },
-      { status: 200 }
-    );
-  } catch (error: any) {
-    console.error(`❌ Error in novel search:`, error.message);
-    return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดในการค้นหานิยาย" },
+      { success: false, message: 'เกิดข้อผิดพลาดในการค้นหานิยาย' },
       { status: 500 }
     );
   }

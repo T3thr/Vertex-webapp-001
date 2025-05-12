@@ -172,8 +172,15 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
     const currentIndex = availableThemes.findIndex(t => t.name === currentThemeChoice);
     const nextIndex = (currentIndex + 1) % availableThemes.length;
     const nextThemeName = availableThemes[nextIndex].name;
-    setTheme(nextThemeName); // setTheme จาก ThemeContext จะจัดการ localStorage และ DB update
-    setIsDropdownOpen(false); // ปิด dropdown หลังเลือก
+    
+    // ใช้ console log เพื่อดู debugging
+    console.log(`[NavBar] Cycling theme from ${currentThemeChoice} to ${nextThemeName}`);
+    
+    // ใช้ setTheme จาก ThemeContext จะจัดการ localStorage และ DB update
+    setTheme(nextThemeName);
+    
+    // ปิด dropdown หลังเลือก
+    setIsDropdownOpen(false);
   }, [currentThemeChoice, setTheme, availableThemes, themeMounted]);
 
   const navLinks = useMemo(
@@ -301,7 +308,7 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
                       {resolvedTheme === "dark" ? (
                         <Sun size={16} className="mr-2.5 text-muted-foreground" />
                       ) : resolvedTheme === "sepia" ? (
-                         <Moon size={16} className="mr-2.5 text-muted-foreground" />
+                        <Moon size={16} className="mr-2.5 text-muted-foreground" />
                       ) : ( // light
                         <IconBookOpen size={16} className="mr-2.5 text-muted-foreground" />
                       )}

@@ -9,6 +9,13 @@ import { FiHeart, FiEye, FiStar, FiClock } from "react-icons/fi";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
 
+// อินเตอร์เฟซสำหรับข้อมูลส่วนลด
+interface DiscountDetails {
+  percentage?: number;
+  startDate?: Date;
+  endDate?: Date;
+}
+
 // อินเตอร์เฟซสำหรับข้อมูลนิยาย
 interface Novel {
   _id: string;
@@ -16,8 +23,10 @@ interface Novel {
   slug: string;
   coverImage: string;
   description?: string;
-  status: "draft" | "published" | "completed" | "onHiatus" | "discount";
+  status: "draft" | "published" | "completed" | "onHiatus" | "archived";
   isExplicitContent: boolean;
+  isDiscounted: boolean; // เพิ่มฟิลด์ isDiscounted
+  discountDetails?: DiscountDetails; // เพิ่มฟิลด์ discountDetails
   tags: string[];
   lastEpisodePublishedAt?: Date | string;
   viewsCount?: number;
@@ -54,22 +63,22 @@ export function NovelCard({
 
   // กำหนดสีป้ายสถานะโดยใช้ธีม
   const getStatusColor = () => {
+    if (novel.isDiscounted) return "bg-purple-500"; // สีสำหรับส่วนลด
     switch (novel.status) {
       case "published": return "bg-primary";
       case "completed": return "bg-secondary";
       case "onHiatus": return "bg-accent";
-      case "discount": return "bg-purple-500"; // ใช้สีเฉพาะเนื่องจากไม่มีตัวแปรธีมที่เหมาะสม
       default: return "bg-muted";
     }
   };
 
   // แปลงสถานะเป็นภาษาไทย
   const getStatusLabel = () => {
+    if (novel.isDiscounted) return "ลดราคา"; // แสดงป้ายลดราคา
     switch (novel.status) {
       case "published": return "ยังไม่จบ";
       case "completed": return "จบแล้ว";
       case "onHiatus": return "หยุดชั่วคราว";
-      case "discount": return "ลดราคา";
       default: return "ร่าง";
     }
   };
@@ -104,7 +113,7 @@ export function NovelCard({
             
             {/* ป้ายแสดงสถานะนิยาย */}
             <div className="absolute top-2 right-2">
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full text-primary-foreground ${getStatusColor()}`}>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full text-foreground ${getStatusColor()}`}>
                 {getStatusLabel()}
               </span>
             </div>

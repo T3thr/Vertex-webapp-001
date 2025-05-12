@@ -1,4 +1,3 @@
-// src/scripts/novel-seed.ts
 import mongoose, { Types } from "mongoose";
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { INovel } from "@/backend/models/Novel";
@@ -19,7 +18,7 @@ const categories = [
   { name: "ลึกลับ", slug: "mystery", description: "นิยายแนวสืบสวนและปริศนา" },
 ];
 
-// ข้อมูลนิยายตัวอย่าง (รักษาชื่อและคำอธิบายเดิม แต่ปรับให้เข้ากับ INovel interface)
+// ข้อมูลนิยายตัวอย่างที่ปรับให้เข้ากับ INovel interface ใหม่
 const sampleNovels: Array<Partial<INovel>> = [
   {
     title: "The Shadow of Eternity",
@@ -34,10 +33,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false, // เพิ่มฟิลด์ isDiscounted
     averageRating: 4.8,
     ratingsCount: 900,
     viewsCount: 15000,
+    totalReads: 12000,
     likesCount: 4000,
     followersCount: 3200,
     commentsCount: 200,
@@ -49,6 +51,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 5000,
       completionRate: 85,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 50000, donationValue: 2000 },
+        { year: 2025, month: 5, coinValue: 60000, donationValue: 3000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -60,7 +66,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 1, // Monday
+      dayOfWeek: 1, // วันจันทร์
       timeOfDay: "09:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -71,9 +77,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "The Shadow of Eternity",
+      metaDescription: "ในโลกที่เวลาเบี่ยงเบนตามเจตจำนงของนักเวทย์โบราณ นักรบรุ่นใหม่ได้ค้นพบคาถาต้องห้ามที่อาจทำลายเนื้อผ้าแห่งความเป็นจริง",
+      keywords: ["Fantasy", "Adventure", "Magic", "Time"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Shadow+Eternity",
+    },
+    embeddingVector: [],
+    genreDistribution: { fantasy: 0.7, adventure: 0.3 },
+    sentimentAnalysis: { overallScore: 0.9, dominantEmotion: "epic" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Neon Dreams",
@@ -88,10 +104,14 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: true,
     ageRating: "mature17+",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: true,
+    isDiscounted: true, // เพิ่มส่วนลด
+    discountDetails: { percentage: 15, startDate: new Date(), endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }, // เพิ่มรายละเอียดส่วนลด
     averageRating: 4.6,
     ratingsCount: 600,
     viewsCount: 9500,
+    totalReads: 8000,
     likesCount: 2300,
     followersCount: 2100,
     commentsCount: 150,
@@ -103,6 +123,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 3000,
       completionRate: 80,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 40000, donationValue: 1500 },
+        { year: 2025, month: 5, coinValue: 40000, donationValue: 1500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -114,7 +138,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 2, // Tuesday
+      dayOfWeek: 2, // วันอังคาร
       timeOfDay: "10:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -125,9 +149,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Neon Dreams",
+      metaDescription: "นักโปรแกรมเมอร์ AI ต้องต่อสู้กับบริษัทยักษ์ใหญ่ในเมืองดิสโทเปียเพื่อเปิดโปงแผนการที่คุกคามเสรีภาพของมนุษยชาติ",
+      keywords: ["Sci-Fi", "Cyberpunk", "Thriller", "AI"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Neon+Dreams",
+    },
+    embeddingVector: [],
+    genreDistribution: { scifi: 0.6, thriller: 0.4 },
+    sentimentAnalysis: { overallScore: 0.85, dominantEmotion: "intense" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Whispers of the Forest",
@@ -142,10 +176,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "everyone",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.9,
     ratingsCount: 1000,
     viewsCount: 17000,
+    totalReads: 14000,
     likesCount: 4500,
     followersCount: 3800,
     commentsCount: 350,
@@ -157,6 +194,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 7000,
       completionRate: 90,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 3, coinValue: 90000, donationValue: 3000 },
+        { year: 2025, month: 4, coinValue: 100000, donationValue: 4000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -166,9 +207,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       enableDonations: true,
       enableCharacterDonations: false,
     },
+    seo: {
+      metaTitle: "Whispers of the Forest",
+      metaDescription: "เด็กหญิงคนหนึ่งค้นพบว่าเธอสามารถสื่อสารกับวิญญาณโบราณในป่าลึกลับ แต่พรสวรรค์ของเธอมาพร้อมกับราคาที่อันตราย",
+      keywords: ["Fantasy", "Mystery", "Supernatural", "Coming of Age"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Whispers+Forest",
+    },
+    embeddingVector: [],
+    genreDistribution: { fantasy: 0.5, mystery: 0.3, supernatural: 0.2 },
+    sentimentAnalysis: { overallScore: 0.95, dominantEmotion: "mystical" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Starborn Legacy",
@@ -183,10 +234,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.3,
     ratingsCount: 420,
     viewsCount: 8000,
+    totalReads: 6500,
     likesCount: 1900,
     followersCount: 1600,
     commentsCount: 130,
@@ -198,6 +252,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 2000,
       completionRate: 70,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 2, coinValue: 30000, donationValue: 1000 },
+        { year: 2025, month: 3, coinValue: 35000, donationValue: 1000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -207,9 +265,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       enableDonations: true,
       enableCharacterDonations: false,
     },
+    seo: {
+      metaTitle: "Starborn Legacy",
+      metaDescription: "สงครามดวงดาวบังคับให้วีรบุรุษผู้ไม่เต็มใจต้องใช้อาวุธจักรวาลที่อาจช่วยหรือทำลายกาแล็กซี่",
+      keywords: ["Sci-Fi", "Space Opera", "Action", "War"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Starborn+Legacy",
+    },
+    embeddingVector: [],
+    genreDistribution: { scifi: 0.6, action: 0.4 },
+    sentimentAnalysis: { overallScore: 0.8, dominantEmotion: "heroic" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 240 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Crimson Skies",
@@ -224,10 +292,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.6,
     ratingsCount: 650,
     viewsCount: 10000,
+    totalReads: 8500,
     likesCount: 2600,
     followersCount: 2200,
     commentsCount: 170,
@@ -239,6 +310,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 4000,
       completionRate: 82,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 45000, donationValue: 2000 },
+        { year: 2025, month: 5, coinValue: 45000, donationValue: 2000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -250,7 +325,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 3, // Wednesday
+      dayOfWeek: 3, // วันพุธ
       timeOfDay: "08:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -261,9 +336,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Crimson Skies",
+      metaDescription: "ในโลกที่ปกครองโดยเรือเหาะและอาณาจักรลอยฟ้า นักบินผู้เสื่อมเสียชื่อเสียงมองหาการไถ่บาปด้วยการเปิดโปงการสมคบคิดบนท้องฟ้า",
+      keywords: ["Steampunk", "Adventure", "Fantasy", "Sky"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Crimson+Skies",
+    },
+    embeddingVector: [],
+    genreDistribution: { steampunk: 0.5, adventure: 0.3, fantasy: 0.2 },
+    sentimentAnalysis: { overallScore: 0.87, dominantEmotion: "adventurous" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Echoes of the Deep",
@@ -278,10 +363,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "everyone",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.4,
     ratingsCount: 400,
     viewsCount: 7200,
+    totalReads: 6000,
     likesCount: 1700,
     followersCount: 1500,
     commentsCount: 100,
@@ -293,6 +381,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 2000,
       completionRate: 75,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 25000, donationValue: 1000 },
+        { year: 2025, month: 5, coinValue: 30000, donationValue: 1000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -304,7 +396,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 4, // Thursday
+      dayOfWeek: 4, // วันพฤหัสบดี
       timeOfDay: "09:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -315,9 +407,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Echoes of the Deep",
+      metaDescription: "ใต้ผิวน้ำมหาสมุทรซ่อนอารยธรรมโบราณที่คอยปกป้องความลับที่อาจเปลี่ยนโลก จนกระทั่งนักดำน้ำลึกบังเอิญค้นพบมัน",
+      keywords: ["Mystery", "Ocean", "Sci-Fi", "Adventure"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Echoes+Deep",
+    },
+    embeddingVector: [],
+    genreDistribution: { mystery: 0.4, scifi: 0.3, adventure: 0.3 },
+    sentimentAnalysis: { overallScore: 0.82, dominantEmotion: "intriguing" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Moonlight Requiem",
@@ -326,16 +428,20 @@ const sampleNovels: Array<Partial<INovel>> = [
       "นักไวโอลินที่ถูกสาปเดินเร่ร่อนในเมืองใต้แสงจันทร์ บรรเลงทำนองที่ปลุกความทรงจำของวิญญาณที่สูญหาย — และบางครั้งก็ปลุกสิ่งที่มืดมนยิ่งกว่า",
     coverImage: "https://via.placeholder.com/400x600?text=Moonlight+Requiem",
     tags: ["Fantasy", "Horror", "Music", "Dark"],
-    status: "discount",
+    status: "completed", // เปลี่ยนจาก discount เป็น completed
     visibility: "public",
     language: "th",
     isExplicitContent: true,
     ageRating: "adult18+",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: true,
+    isDiscounted: true, // เพิ่มส่วนลด
+    discountDetails: { percentage: 20, startDate: new Date(), endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }, // เพิ่มรายละเอียดส่วนลด
     averageRating: 4.7,
     ratingsCount: 700,
     viewsCount: 11000,
+    totalReads: 9000,
     likesCount: 2900,
     followersCount: 2500,
     commentsCount: 220,
@@ -347,6 +453,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 4500,
       completionRate: 83,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 50000, donationValue: 2000 },
+        { year: 2025, month: 5, coinValue: 50000, donationValue: 2500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -358,7 +468,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 5, // Friday
+      dayOfWeek: 5, // วันศุกร์
       timeOfDay: "10:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -369,9 +479,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Moonlight Requiem",
+      metaDescription: "นักไวโอลินที่ถูกสาปเดินเร่ร่อนในเมืองใต้แสงจันทร์ บรรเลงทำนองที่ปลุกความทรงจำของวิญญาณที่สูญหาย",
+      keywords: ["Fantasy", "Horror", "Music", "Dark"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Moonlight+Requiem",
+    },
+    embeddingVector: [],
+    genreDistribution: { fantasy: 0.4, horror: 0.4, music: 0.2 },
+    sentimentAnalysis: { overallScore: 0.88, dominantEmotion: "dark" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Digital Prophet",
@@ -386,10 +506,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.5,
     ratingsCount: 500,
     viewsCount: 8700,
+    totalReads: 7000,
     likesCount: 2100,
     followersCount: 1900,
     commentsCount: 160,
@@ -401,6 +524,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 2500,
       completionRate: 78,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 35000, donationValue: 1000 },
+        { year: 2025, month: 5, coinValue: 40000, donationValue: 1500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -412,7 +539,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 6, // Saturday
+      dayOfWeek: 6, // วันเสาร์
       timeOfDay: "09:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -423,9 +550,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Digital Prophet",
+      metaDescription: "ในอนาคตที่อัลกอริทึมทำนายทุกความเคลื่อนไหว นักคณิตศาสตร์นอกกฎหมายเขียนสูตรที่สามารถท้าทายชะตากรรมได้",
+      keywords: ["Sci-Fi", "Techno-thriller", "Philosophy", "Future"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Digital+Prophet",
+    },
+    embeddingVector: [],
+    genreDistribution: { scifi: 0.6, thriller: 0.4 },
+    sentimentAnalysis: { overallScore: 0.85, dominantEmotion: "thought-provoking" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Ashes of the Phoenix",
@@ -440,10 +577,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.7,
     ratingsCount: 800,
     viewsCount: 13000,
+    totalReads: 11000,
     likesCount: 3400,
     followersCount: 2900,
     commentsCount: 250,
@@ -455,6 +595,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 5000,
       completionRate: 87,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 60000, donationValue: 2500 },
+        { year: 2025, month: 5, coinValue: 60000, donationValue: 2500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -466,7 +610,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 0, // Sunday
+      dayOfWeek: 0, // วันอาทิตย์
       timeOfDay: "08:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -477,9 +621,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Ashes of the Phoenix",
+      metaDescription: "หลังการล่มสลายของจักรวรรดิยิ่งใหญ่ นักรบผู้โดดเดี่ยวลุกขึ้นจากซากปรักหักพังเพื่อจุดประกายการปฏิวัติ",
+      keywords: ["Action", "Fantasy", "Rebellion", "Empire"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Ashes+Phoenix",
+    },
+    embeddingVector: [],
+    genreDistribution: { action: 0.5, fantasy: 0.5 },
+    sentimentAnalysis: { overallScore: 0.9, dominantEmotion: "epic" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "The Librarian's Code",
@@ -494,10 +648,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "everyone",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.6,
     ratingsCount: 600,
     viewsCount: 10500,
+    totalReads: 8500,
     likesCount: 2500,
     followersCount: 2200,
     commentsCount: 190,
@@ -509,6 +666,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 3000,
       completionRate: 80,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 3, coinValue: 40000, donationValue: 1500 },
+        { year: 2025, month: 4, coinValue: 45000, donationValue: 1500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -518,9 +679,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       enableDonations: true,
       enableCharacterDonations: false,
     },
+    seo: {
+      metaTitle: "The Librarian's Code",
+      metaDescription: "ซ่อนอยู่ในห้องสมุดโบราณคือรหัสที่เชื่อมโยงทุกเรื่องราวที่เคยถูกเขียนขึ้น",
+      keywords: ["Mystery", "Fantasy", "Library", "Secret"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Librarians+Code",
+    },
+    embeddingVector: [],
+    genreDistribution: { mystery: 0.6, fantasy: 0.4 },
+    sentimentAnalysis: { overallScore: 0.85, dominantEmotion: "intriguing" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Chrono Alchemist",
@@ -535,10 +706,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.4,
     ratingsCount: 460,
     viewsCount: 8200,
+    totalReads: 6500,
     likesCount: 2000,
     followersCount: 1800,
     commentsCount: 150,
@@ -550,6 +724,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 2500,
       completionRate: 76,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 35000, donationValue: 1000 },
+        { year: 2025, month: 5, coinValue: 35000, donationValue: 1500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -561,7 +739,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 1, // Monday
+      dayOfWeek: 1, // วันจันทร์
       timeOfDay: "09:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -572,9 +750,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Chrono Alchemist",
+      metaDescription: "นักเล่นแร่แปรธาตุค้นพบวิธีควบคุมเวลา แต่ทุกการเปลี่ยนแปลงในอดีตต้องแลกมาด้วยการเสียสละในปัจจุบัน",
+      keywords: ["Fantasy", "Time Travel", "Alchemy", "Adventure"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Chrono+Alchemist",
+    },
+    embeddingVector: [],
+    genreDistribution: { fantasy: 0.6, adventure: 0.4 },
+    sentimentAnalysis: { overallScore: 0.83, dominantEmotion: "adventurous" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Silent Frequency",
@@ -589,10 +777,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.8,
     ratingsCount: 850,
     viewsCount: 14000,
+    totalReads: 12000,
     likesCount: 3700,
     followersCount: 3100,
     commentsCount: 280,
@@ -604,6 +795,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 6000,
       completionRate: 88,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 3, coinValue: 70000, donationValue: 3000 },
+        { year: 2025, month: 4, coinValue: 75000, donationValue: 3000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -613,9 +808,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       enableDonations: true,
       enableCharacterDonations: false,
     },
+    seo: {
+      metaTitle: "Silent Frequency",
+      metaDescription: "วิศวกรวิทยุได้รับสัญญาณลึกลับที่เปิดเผยภัยพิบัติในอนาคต",
+      keywords: ["Sci-Fi", "Thriller", "Mystery", "Radio"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Silent+Frequency",
+    },
+    embeddingVector: [],
+    genreDistribution: { scifi: 0.5, thriller: 0.3, mystery: 0.2 },
+    sentimentAnalysis: { overallScore: 0.9, dominantEmotion: "suspenseful" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Garden of Glass",
@@ -630,10 +835,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.7,
     ratingsCount: 800,
     viewsCount: 13500,
+    totalReads: 11000,
     likesCount: 3400,
     followersCount: 3000,
     commentsCount: 260,
@@ -645,6 +853,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 5000,
       completionRate: 85,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 3, coinValue: 65000, donationValue: 2500 },
+        { year: 2025, month: 4, coinValue: 65000, donationValue: 2500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -654,9 +866,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       enableDonations: true,
       enableCharacterDonations: false,
     },
+    seo: {
+      metaTitle: "Garden of Glass",
+      metaDescription: "ในเมืองที่ดอกไม้ถูกห้าม นักพฤกษศาสตร์หนุ่มสร้างเรือนกระจกลับ",
+      keywords: ["Dystopia", "Nature", "Drama", "Rebellion"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Garden+Glass",
+    },
+    embeddingVector: [],
+    genreDistribution: { dystopia: 0.5, drama: 0.3, rebellion: 0.2 },
+    sentimentAnalysis: { overallScore: 0.87, dominantEmotion: "hopeful" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 240 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Quantum Harmony",
@@ -671,10 +893,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.5,
     ratingsCount: 520,
     viewsCount: 9000,
+    totalReads: 7500,
     likesCount: 2200,
     followersCount: 2000,
     commentsCount: 170,
@@ -686,6 +911,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 3000,
       completionRate: 80,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 35000, donationValue: 1500 },
+        { year: 2025, month: 5, coinValue: 40000, donationValue: 1500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -697,7 +926,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 2, // Tuesday
+      dayOfWeek: 2, // วันอังคาร
       timeOfDay: "09:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -708,9 +937,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Quantum Harmony",
+      metaDescription: "นักดนตรีและนักฟิสิกส์ร่วมมือกันเพื่อค้นพบความถี่เสียงที่สามารถเชื่อมต่อกับมิติขนาน",
+      keywords: ["Sci-Fi", "Music", "Multiverse", "Collaboration"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Quantum+Harmony",
+    },
+    embeddingVector: [],
+    genreDistribution: { scifi: 0.6, music: 0.4 },
+    sentimentAnalysis: { overallScore: 0.85, dominantEmotion: "innovative" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Midnight Cartographer",
@@ -725,10 +964,13 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "everyone",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: false,
+    isDiscounted: false,
     averageRating: 4.6,
     ratingsCount: 650,
     viewsCount: 10200,
+    totalReads: 8500,
     likesCount: 2600,
     followersCount: 2250,
     commentsCount: 195,
@@ -740,6 +982,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 3500,
       completionRate: 82,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 45000, donationValue: 1500 },
+        { year: 2025, month: 5, coinValue: 48000, donationValue: 2000 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -751,7 +997,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 3, // Wednesday
+      dayOfWeek: 3, // วันพุธ
       timeOfDay: "10:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -762,9 +1008,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: false,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Midnight Cartographer",
+      metaDescription: "นักทำแผนที่สาวพบว่าแผนที่ของเธอเปลี่ยนแปลงทุกคืนเที่ยงคืน เผยให้เห็นเมืองซ่อนเร้น",
+      keywords: ["Fantasy", "Adventure", "Maps", "Hidden World"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Midnight+Cartographer",
+    },
+    embeddingVector: [],
+    genreDistribution: { fantasy: 0.6, adventure: 0.4 },
+    sentimentAnalysis: { overallScore: 0.87, dominantEmotion: "mysterious" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
   {
     title: "Urban Spirits",
@@ -779,10 +1035,14 @@ const sampleNovels: Array<Partial<INovel>> = [
     isExplicitContent: false,
     ageRating: "teen",
     isOriginalWork: true,
+    originalLanguage: "th",
     isPremium: true,
+    isDiscounted: true, // เพิ่มส่วนลด
+    discountDetails: { percentage: 10, startDate: new Date(), endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }, // เพิ่มรายละเอียดส่วนลด
     averageRating: 4.9,
     ratingsCount: 900,
     viewsCount: 16000,
+    totalReads: 14000,
     likesCount: 4100,
     followersCount: 3500,
     commentsCount: 310,
@@ -794,6 +1054,10 @@ const sampleNovels: Array<Partial<INovel>> = [
       totalDonationsAmount: 7000,
       completionRate: 90,
       lastViewedAt: new Date(),
+      monthlyEarnings: [
+        { year: 2025, month: 4, coinValue: 75000, donationValue: 3500 },
+        { year: 2025, month: 5, coinValue: 75000, donationValue: 3500 },
+      ],
     },
     settings: {
       allowComments: true,
@@ -805,7 +1069,7 @@ const sampleNovels: Array<Partial<INovel>> = [
     },
     releaseSchedule: {
       frequency: "weekly",
-      dayOfWeek: 4, // Thursday
+      dayOfWeek: 4, // วันพฤหัสบดี
       timeOfDay: "09:00",
       nextExpectedReleaseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -816,9 +1080,19 @@ const sampleNovels: Array<Partial<INovel>> = [
       hasRelationshipSystem: true,
       hasInventorySystem: false,
     },
+    seo: {
+      metaTitle: "Urban Spirits",
+      metaDescription: "ในกรุงเทพมหานครยุคดิจิทัล ยังมีวิญญาณเก่าแก่สิงสถิตอยู่ตามตึกระฟ้าและซอยเล็กซอยน้อย",
+      keywords: ["Urban Fantasy", "Thai", "Supernatural", "Modern"],
+      socialImage: "https://via.placeholder.com/1200x630?text=Urban+Spirits",
+    },
+    embeddingVector: [],
+    genreDistribution: { urbanFantasy: 0.6, supernatural: 0.4 },
+    sentimentAnalysis: { overallScore: 0.92, dominantEmotion: "mystical" },
     isDeleted: false,
     lastEpisodePublishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
     firstPublishedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+    lastSignificantUpdateAt: new Date(),
   },
 ];
 
@@ -836,7 +1110,7 @@ async function seedCategories() {
     if (existingCategories === 0) {
       console.log("🌱 เริ่มเพิ่มข้อมูลหมวดหมู่...");
       await Category.insertMany(
-        categories.map(cat => ({
+        categories.map((cat) => ({
           name: cat.name,
           slug: cat.slug,
           description: cat.description,
@@ -908,20 +1182,25 @@ async function seedNovels() {
       const selectedCategories = [...categories]
         .sort(() => 0.5 - Math.random())
         .slice(0, numCategories)
-        .map(cat => cat._id);
+        .map((cat) => cat._id);
 
       const preparedNovel = {
         ...novelData,
         author: authorId,
         categories: selectedCategories,
         subCategories: [], // ไม่ใช้ subCategories ใน seed นี้
-        featuredOfficialMedia: [],
+        featuredOfficialMedia: [], // ไม่ใช้ featuredOfficialMedia ใน seed นี้
         seo: {
           metaTitle: novelData.title,
           metaDescription: novelData.description ? novelData.description.slice(0, 160) : "",
           keywords: novelData.tags,
+          socialImage: novelData.coverImage ? novelData.coverImage.replace("400x600", "1200x630") : "",
         },
+        embeddingVector: novelData.embeddingVector || [],
+        genreDistribution: novelData.genreDistribution || {},
+        sentimentAnalysis: novelData.sentimentAnalysis || { overallScore: 0, dominantEmotion: "" },
         isDeleted: false,
+        deletedAt: undefined,
       };
 
       // ตรวจสอบว่ามีนิยายที่มีชื่อนี้และผู้เขียนนี้อยู่แล้วหรือไม่
