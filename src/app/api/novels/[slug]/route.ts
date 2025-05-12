@@ -1,6 +1,6 @@
 // src/app/api/novels/[slug]/route.ts
-// ปรับปรุง API Endpoint สำหรับดึงข้อมูลนิยายตาม slug
-// รองรับการ populate ข้อมูลที่จำเป็นทั้งหมดสำหรับหน้าแสดงผลนิยายตาม Models
+// API Endpoint สำหรับดึงข้อมูลนิยายตาม slug
+// รองรับการ populate ข้อมูลที่จำเป็นทั้งหมดสำหรับหน้าแสดงผลนิยาย
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
@@ -29,7 +29,6 @@ type PopulatedCategory = Pick<ICategory, "_id" | "name" | "slug" | "themeColor" 
 // ข้อมูล Episode ที่จำเป็นสำหรับแสดงใน List
 type PopulatedEpisodeSummary = Pick<
   IEpisode,
-  | "_id"
   | "title"
   | "slug"
   | "episodeNumber"
@@ -41,7 +40,9 @@ type PopulatedEpisodeSummary = Pick<
   | "viewsCount"
   | "likesCount"
   | "commentsCount"
->;
+> & {
+  _id: string; // Explicitly type _id as string
+};
 
 // --- Interface สำหรับข้อมูล Novel ที่ส่งกลับ (Populated) ---
 export interface PopulatedNovelForDetailPage
@@ -61,65 +62,69 @@ export interface PopulatedNovelForDetailPage
   categories: PopulatedCategory[];
   subCategories?: PopulatedCategory[];
   episodesList: PopulatedEpisodeSummary[];
-  formattedViewsCount?: string;
-  formattedLikesCount?: string;
-  formattedFollowersCount?: string;
-  formattedWordsCount?: string;
+  formattedViewsCount: string;
+  formattedLikesCount: string;
+  formattedFollowersCount: string;
+  formattedWordsCount: string;
   firstEpisodeSlug?: string;
+  firstPublishedAt?: Date; // Optional to match INovel
+  updatedAt: Date; // Non-optional, guaranteed by timestamps
+  description: string;
+  tags: string[];
+}
+
+// --- Interface สำหรับการตอบกลับ API ---
+interface NovelResponse {
+  novel: PopulatedNovelForDetailPage;
 }
 
 /**
- * ฟังก์ชัน GET สำหรับดึงข้อมูลนิยายตาม slug
- * @param req - ข้อมูลคำขอจาก Next.js
- * @param context - คอนเท็กซ์ที่มีพารามิเตอร์จาก dynamic route
- * @returns NextResponse พร้อมข้อมูลนิยายหรือข้อผิดพลาด
+ * GET: ดึงข้อมูลนิยายตาม slug
+ * @param req ข้อมูลคำขอจาก Next.js
+ * @returns JSON response พร้อมข้อมูลนิยายหรือข้อผิดพลาด
  */
 export async function GET(
   req: NextRequest,
-  context: { params: Promise<{ slug: string }> }
-): Promise<NextResponse<PopulatedNovelForDetailPage | { error: string }>> {
-  const params = await context.params; // รอ params เพื่อดึง slug
-  const { slug } = params;
-  console.log(`\n--- 📡 [API GET /api/novels/${slug}] ---`);
-
-  if (!slug) {
-    console.error("❌ ขาดพารามิเตอร์ slug");
-    return NextResponse.json({ error: "ต้องระบุ slug ของนิยาย" }, { status: 400 });
-  }
-
+  { params }: { params: Record<string, string | string[]> }
+): Promise<NextResponse<NovelResponse | { error: string }>> {
   try {
+    // ดึง slug จาก params
+    const slug = params.slug;
+    if (!slug || Array.isArray(slug)) {
+      console.error("❌ ขาดหรือรูปแบบ slug ไม่ถูกต้อง");
+      return NextResponse.json({ error: "ต้องระบุ slug ของนิยาย" }, { status: 400 });
+    }
+
+    console.log(`\n--- 📡 [API GET /api/novels/${slug}] ---`);
+
+    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
     console.log("✅ เชื่อมต่อฐานข้อมูลสำเร็จ");
 
-    const Novel = NovelModel();
-    const User = UserModel();
-    const Category = CategoryModel();
-    const Episode = EpisodeModel();
-
     // 1. ค้นหานิยายหลัก
-    const novelQuery = Novel.findOne({
-      slug,
-      isDeleted: false,
-    })
+    const novel = await NovelModel()
+      .findOne({
+        slug,
+        isDeleted: false,
+      })
       .populate<{ author: PopulatedAuthor | null }>({
         path: "author",
-        model: User,
+        model: UserModel(),
         select: "username profile.displayName profile.avatar socialStats.followersCount",
       })
       .populate<{ categories: PopulatedCategory[] }>({
         path: "categories",
-        model: Category,
+        model: CategoryModel(),
         select: "name slug themeColor iconUrl",
       })
       .populate<{ subCategories?: PopulatedCategory[] }>({
         path: "subCategories",
-        model: Category,
+        model: CategoryModel(),
         select: "name slug themeColor iconUrl",
       })
       .select("-embeddingVector -sentimentAnalysis -genreDistribution")
-      .lean();
-
-    const novel = await novelQuery.exec();
+      .lean()
+      .exec();
 
     if (!novel) {
       console.warn(`⚠️ ไม่พบนิยายสำหรับ slug "${slug}"`);
@@ -129,16 +134,33 @@ export async function GET(
     console.log(`✅ พบนิยาย "${novel.title}"`);
 
     // 2. ดึงรายการตอน
-    const episodesList = await Episode.find({
-      novel: novel._id,
-      isDeleted: false,
-    })
+    const rawEpisodesList = await EpisodeModel()
+      .find({
+        novel: novel._id,
+        isDeleted: false,
+      })
       .sort({ episodeNumber: 1 })
       .select(
         "_id title slug episodeNumber status visibility isFree priceInCoins publishedAt viewsCount likesCount commentsCount"
       )
       .lean()
       .exec();
+
+    // แปลง episodesList ให้ตรงกับ PopulatedEpisodeSummary
+    const episodesList: PopulatedEpisodeSummary[] = rawEpisodesList.map((episode) => ({
+      _id: episode._id.toString(),
+      title: episode.title,
+      slug: episode.slug,
+      episodeNumber: episode.episodeNumber,
+      status: episode.status,
+      visibility: episode.visibility,
+      isFree: episode.isFree,
+      priceInCoins: episode.priceInCoins,
+      publishedAt: episode.publishedAt,
+      viewsCount: episode.viewsCount,
+      likesCount: episode.likesCount,
+      commentsCount: episode.commentsCount,
+    }));
 
     console.log(`✅ ดึง ${episodesList.length} ตอนสำหรับนิยาย "${novel.title}"`);
 
@@ -155,13 +177,19 @@ export async function GET(
       formattedFollowersCount: formatNumber(novel.followersCount ?? 0),
       formattedWordsCount: formatNumber(novel.wordsCount ?? 0),
       firstEpisodeSlug: episodesList.length > 0 ? episodesList[0].slug : undefined,
+      firstPublishedAt: novel.firstPublishedAt ? new Date(novel.firstPublishedAt) : undefined, // Handle undefined
+      updatedAt: new Date(novel.updatedAt), // Non-optional, guaranteed by timestamps
+      description: novel.description || "",
+      tags: novel.tags || [],
     };
 
     console.log(`✅ เตรียมข้อมูลตอบกลับสำหรับนิยาย "${novel.title}"`);
 
-    return NextResponse.json(responseData, { status: 200 });
+    // สร้างข้อมูลสำหรับการตอบกลับ
+    const response: NovelResponse = { novel: responseData };
+    return NextResponse.json(response, { status: 200 });
   } catch (error: any) {
-    console.error(`❌ เกิดข้อผิดพลาดในการดึงนิยายสำหรับ slug "${slug}":`, error);
+    console.error(`❌ [API] ข้อผิดพลาดใน /api/novels/${params.slug}:`, error);
 
     if (error instanceof mongoose.Error.CastError) {
       return NextResponse.json({ error: "รูปแบบ slug หรือ ID ไม่ถูกต้อง" }, { status: 400 });
@@ -172,7 +200,7 @@ export async function GET(
       { status: 500 }
     );
   } finally {
-    console.log(`--- 📡 [API GET /api/novels/${slug}] สิ้นสุด --- \n`);
+    console.log(`--- 📡 [API GET /api/novels/${params.slug}] สิ้นสุด --- \n`);
   }
 }
 
