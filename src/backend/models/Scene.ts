@@ -1,282 +1,511 @@
-// src/backend/models/Scene.ts
+// src/models/Scene.ts
+// โมเดลฉาก (Scene Model) - หัวใจหลักของ Visual Novel Editor จัดการองค์ประกอบทั้งหมดในหนึ่งหน้าจอ/เหตุการณ์
+// ออกแบบใหม่เพื่อรองรับ Visual Novel Editor ระดับโปร, Media Asset Management, Game Mechanics, และ Multi-language
+// อัปเดตล่าสุด: ผสานแนวคิดจาก Photoshop/Premiere, เพิ่ม Timeline, Layers, i18n, Accessibility, และ Editor Metadata
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+// สมมติว่า IChoice, IChoiceCondition ถูก export จาก Choice.ts หรือนิยามไว้ที่นี่ถ้าเหมาะสม
+// import { IChoice } from "./Choice"; 
 
-// Interface สำหรับ Scene document
-// A Scene is a distinct unit within an Episode, representing a specific moment, interaction, or piece of content.
+// ----- Interfaces ย่อยสำหรับองค์ประกอบต่างๆในฉาก -----
+
+// ประเภทของฉาก (Scene Type)
+export type SceneType = 
+  | "standard"        // ฉากมาตรฐาน มีครบทุกองค์ประกอบ
+  | "dialogue_only"   // เน้นบทสนทนา อาจมีพื้นหลังเรียบง่าย
+  | "cg_display"      // แสดงภาพ CG เต็มจอ อาจมีบทพูดเล็กน้อย
+  | "video_cutscene"  // เล่นไฟล์วิดีโอเป็นหลัก
+  | "interactive_map" // ฉากแผนที่ให้ผู้เล่นเลือกจุดหมาย
+  | "minigame"        // ฉากสำหรับมินิเกม (อาจมี logic แยก)
+  | "ending_scene"    // ฉากจบพิเศษ (อาจมี UI หรือ flow ที่ต่างออกไป)
+  | "title_screen"    // ฉากหน้าจอไตเติ้ล
+  | "credits_scene";  // ฉากแสดงเครดิต
+
+// การตั้งค่าการแปลงรูปทรง (Transform Configuration)
+export interface ITransformConfig {
+  x?: number | string; // ตำแหน่งแกน X (px, %, หรือ "center", "left", "right") เช่น 100, "50%", "calc(100% - 50px)"
+  y?: number | string; // ตำแหน่งแกน Y (px, %, หรือ "center", "top", "bottom")
+  width?: number | string; // ความกว้าง (px, %, "auto", "inherit")
+  height?: number | string; // ความสูง (px, %, "auto", "inherit")
+  scaleX?: number; // อัตราส่วนแกน X (เช่น 1 = 100%, 0.5 = 50%)
+  scaleY?: number; // อัตราส่วนแกน Y
+  rotation?: number; // การหมุน (องศา)
+  skewX?: number; // การบิดเบี้ยวแกน X (องศา)
+  skewY?: number; // การบิดเบี้ยวแกน Y
+  originX?: number | string; // จุดหมุนแกน X (0-1 หรือ "left", "center", "right")
+  originY?: number | string; // จุดหมุนแกน Y (0-1 หรือ "top", "center", "bottom")
+  // คอมเมนต์: ใช้สำหรับจัดวางและปรับขนาดองค์ประกอบต่างๆ ในฉากอย่างละเอียด
+}
+
+// การตั้งค่าฟิลเตอร์ภาพ (Image Filter Configuration)
+export interface IFilterConfig {
+  blur?: string; // เช่น "5px"
+  brightness?: string; // เช่น "150%" หรือ "1.5"
+  contrast?: string; // เช่น "200%" หรือ "2"
+  grayscale?: string; // เช่น "100%" หรือ "1"
+  hueRotate?: string; // เช่น "90deg"
+  invert?: string; // เช่น "100%" หรือ "1"
+  opacity?: string; // เช่น "50%" หรือ "0.5" (มักใช้กับ element โดยตรง แต่ใส่ไว้เผื่อ filter chain)
+  saturate?: string; // เช่น "200%" หรือ "2"
+  sepia?: string; // เช่น "100%" หรือ "1"
+  dropShadow?: { offsetX: string; offsetY: string; blurRadius: string; color: string };
+  colorBalance?: { shadows?: { r: number; g: number; b: number }; midtones?: { r: number; g: number; b: number }; highlights?: { r: number; g: number; b: number }; preserveLuminosity?: boolean };
+  levels?: { inputMin?: number; inputMax?: number; gamma?: number; outputMin?: number; outputMax?: number };
+  // คอมเมนต์: ใช้สำหรับปรับแต่งลักษณะภาพและวิดีโอให้ได้โทนสีและอารมณ์ตามต้องการ
+}
+
+// โหมดการผสมสี (Blend Mode)
+export type BlendMode = 
+  | "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten"
+  | "color-dodge" | "color-burn" | "hard-light" | "soft-light" | "difference"
+  | "exclusion" | "hue" | "saturation" | "color" | "luminosity";
+// คอมเมนต์: กำหนดวิธีที่สีของ layer ปัจจุบันจะผสมกับ layer ข้างใต้
+
+// การตั้งค่า Masking
+export interface IMaskingConfig {
+  type: "image_mask" | "vector_mask" | "gradient_mask";
+  sourceValue: string; // URL ภาพ mask, SVG path data, หรือ ID ของ Media/OfficialMedia
+  isOfficialMediaMask?: boolean;
+  invert?: boolean;
+  channel?: "luminance" | "alpha";
+  gradientType?: "linear" | "radial";
+  gradientColors?: Array<{ color: string; position: number }>;
+  gradientAngle?: number;
+  // คอมเมนต์: ใช้สำหรับซ่อนหรือแสดงบางส่วนขององค์ประกอบอย่างละเอียด
+}
+
+// การตั้งค่า Keyframe สำหรับ Animation
+export interface IAnimationKeyframe {
+  time: number; // เวลา (0-1 สำหรับ % ของ duration, หรือ ms)
+  transform?: Partial<ITransformConfig>;
+  opacity?: number;
+  filters?: Partial<IFilterConfig>;
+  // สามารถเพิ่ม property อื่นๆ ที่ต้องการ animate ได้ เช่น volume, playbackRate สำหรับ audio/video
+  customProperties?: Record<string, string | number>; // สำหรับ animate CSS custom properties หรืออื่นๆ
+  // คอมเมนต์: กำหนดสถานะของ property ต่างๆ ณ จุดเวลาที่กำหนด
+}
+
+// การตั้งค่า Animation ทั่วไป
+export interface IAnimationConfig {
+  id: string; // ID ของ animation สำหรับอ้างอิงใน editor หรือ timeline
+  name?: string; // ชื่อ animation
+  type: "predefined" | "keyframes";
+  predefinedName?: string; // ชื่อ animation ที่มีในระบบ (เช่น "fadeIn", "bounce")
+  keyframes?: IAnimationKeyframe[];
+  duration: number; // ระยะเวลา (ms)
+  delay?: number; // หน่วงเวลาก่อนเริ่ม (ms)
+  easing?: string; // ฟังก์ชัน Easing (เช่น "linear", "ease-in-out", "cubic-bezier(0.1,0.7,1.0,0.1)")
+  iterations?: number | "infinite"; // จำนวนครั้งที่เล่น
+  direction?: "normal" | "reverse" | "alternate" | "alternate-reverse";
+  fillMode?: "none" | "forwards" | "backwards" | "both";
+  // คอมเมนต์: ควบคุมการเคลื่อนไหวและเอฟเฟกต์ขององค์ประกอบต่างๆ
+}
+
+// การตั้งค่าพื้นหลัง (Background Configuration)
+export interface ISceneBackground {
+  type: "color" | "image" | "video" | "gradient";
+  value: string; // รหัสสี, URL, ID ของ Media/OfficialMedia, หรือนิยาม gradient
+  isOfficialMedia?: boolean;
+  gradientDetails?: { // สำหรับ type: "gradient"
+    gradientType: "linear" | "radial";
+    colors: Array<{ color: string; position: number }>; // [{ color: "#FF0000", position: 0 }, { color: "#0000FF", position: 1 }]
+    angle?: number; // สำหรับ linear gradient (deg)
+    shape?: "ellipse" | "circle"; // สำหรับ radial gradient
+    extentKeyword?: "closest-side" | "closest-corner" | "farthest-side" | "farthest-corner"; // สำหรับ radial
+  };
+  imageSettings?: { transform?: ITransformConfig; filters?: IFilterConfig; parallax?: { xFactor: number; yFactor: number }; overlayColor?: string; animation?: IAnimationConfig; masking?: IMaskingConfig };
+  videoSettings?: { autoplay?: boolean; loop?: boolean; volume?: number; startTime?: number; filters?: IFilterConfig; transform?: ITransformConfig; playbackRate?: number; masking?: IMaskingConfig };
+  // คอมเมนต์: กำหนดภาพรวมบรรยากาศของฉาก
+}
+
+// การแสดงผลตัวละคร (Character Display Configuration)
+export interface ICharacterDisplay {
+  id: string; // ID ของ instance ตัวละครในฉากนี้ (สำหรับ editor)
+  characterId: Types.ObjectId; // อ้างอิง Character model
+  assetKey?: string; // Key ของชุด asset (เช่น "school_uniform")
+  expressionKey: string; // Key ของการแสดงสีหน้า (เช่น "happy")
+  positionPreset?: string; // ตำแหน่งที่ตั้งไว้ล่วงหน้า (เช่น "left", "center")
+  transform: ITransformConfig;
+  opacity?: number;
+  filters?: IFilterConfig;
+  blendMode?: BlendMode;
+  masking?: IMaskingConfig;
+  zIndex?: number; // (จะถูกจัดการโดย Layer System เป็นหลัก)
+  enterAnimationId?: string; // ID ของ AnimationConfig ที่ใช้ตอนปรากฏตัว
+  exitAnimationId?: string; // ID ของ AnimationConfig ที่ใช้ตอนหายไป
+  idleAnimationId?: string; // ID ของ AnimationConfig ที่ใช้ขณะยืนเฉยๆ
+  isSpeaking?: boolean; // ตัวละครนี้กำลังพูดหรือไม่ (สำหรับเน้น)
+  speakingEffect?: { // เอฟเฟกต์ขณะพูด
+    type: "mouth_flap" | "bounce" | "glow" | "custom_animation";
+    animationId?: string; // ID ของ AnimationConfig (ถ้า type = "custom_animation")
+    intensity?: number; // ความแรงของเอฟเฟกต์ (0-1)
+  };
+  // คอมเมนต์: ควบคุมการแสดงผลของตัวละครแต่ละตัวในฉาก
+}
+
+// องค์ประกอบรูปภาพ (Image Element Configuration)
+export interface IImageElement {
+  id: string; // ID ของ instance รูปภาพในฉากนี้
+  sourceValue: string; // URL รูปภาพ หรือ ID ของ Media/OfficialMedia
+  isOfficialMedia?: boolean;
+  transform: ITransformConfig;
+  opacity?: number;
+  filters?: IFilterConfig;
+  blendMode?: BlendMode;
+  masking?: IMaskingConfig;
+  zIndex?: number;
+  animations?: string[]; // IDs ของ AnimationConfig ที่จะเล่น
+  clickable?: { actionType: "trigger_choice" | "go_to_scene" | "run_script" | "show_tooltip" | "play_animation" | "toggle_layer_visibility" | "increment_variable"; actionValue: string; condition?: string; };
+  tooltip?: string; // ข้อความเมื่อ hover
+  altText?: string; // ข้อความอธิบายรูปภาพ (i18n, accessibility)
+  // คอมเมนต์: ใช้สำหรับแสดงภาพประกอบ, CG, ไอเทม, หรือเอฟเฟกต์ภาพต่างๆ
+}
+
+// องค์ประกอบวิดีโอ (Video Element Configuration)
+export interface IVideoElement {
+  id: string; // ID ของ instance วิดีโอในฉากนี้
+  sourceValue: string; // URL วิดีโอ หรือ ID ของ Media/OfficialMedia
+  isOfficialMedia?: boolean;
+  transform: ITransformConfig;
+  opacity?: number;
+  filters?: IFilterConfig;
+  blendMode?: BlendMode;
+  masking?: IMaskingConfig;
+  zIndex?: number;
+  autoplay?: boolean;
+  loop?: boolean;
+  showControls?: boolean;
+  volume?: number;
+  startTime?: number;
+  playbackRate?: number;
+  animations?: string[]; // IDs ของ AnimationConfig
+  onEnded?: { actionType: "go_to_scene" | "run_script" | "show_choices" | "play_next_video_in_sequence"; actionValue?: string };
+  // คอมเมนต์: ใช้สำหรับเล่นวิดีโอสั้นๆ, คัทซีน, หรือเอฟเฟกต์วิดีโอ
+}
+
+// การตั้งค่าพื้นที่แสดงข้อความ (Text Area/Dialogue Box Configuration)
+export interface ITextAreaConfig {
+  id: string; // ID ของ instance พื้นที่ข้อความ
+  stylePreset?: string; // รูปแบบที่ตั้งไว้ล่วงหน้า
+  fontFamily?: string;
+  fontSize?: string;
+  fontColor?: string;
+  fontWeight?: string;
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline" | "line-through";
+  lineHeight?: string;
+  letterSpacing?: string;
+  textAlign?: "left" | "center" | "right" | "justify";
+  padding?: { top: string; right: string; bottom: string; left: string };
+  margin?: { top: string; right: string; bottom: string; left: string };
+  backgroundColor?: string;
+  backgroundImage?: string; // URL หรือ Media ID
+  backgroundSlice?: { top: number; right: number; bottom: number; left: number; fillCenter?: boolean };
+  borderColor?: string;
+  borderWidth?: string;
+  borderRadius?: string;
+  boxShadow?: string;
+  textShadow?: string;
+  transform: ITransformConfig;
+  opacity?: number;
+  zIndex?: number;
+  animations?: string[]; // IDs ของ AnimationConfig
+  // คอมเมนต์: กำหนดสไตล์และการจัดวางของกล่องข้อความ
+}
+
+// เนื้อหาข้อความ (Text Content Configuration)
+export interface ITextContent {
+  id: string; // ID ของ instance เนื้อหาข้อความ
+  textAreaId: string; // ID ของ ITextAreaConfig ที่จะแสดงข้อความนี้
+  characterId?: Types.ObjectId; // ID ตัวละครที่พูด (ถ้ามี, อ้างอิง Character model)
+  speakerDisplayName?: string; // ชื่อผู้พูดที่แสดง (อาจ override จาก Character model, รองรับ i18n)
+  text: string; // เนื้อหาข้อความ (รองรับ Markdown หรือ BBCode, และ i18n)
+  voiceOverId?: Types.ObjectId; // ID ของไฟล์เสียงพากย์ (อ้างอิง Media/OfficialMedia)
+  typewriterEffect?: { // เอฟเฟกต์พิมพ์ดีด
+    speedCharsPerSecond: number; // ความเร็ว (ตัวอักษรต่อวินาที)
+    soundEffectId?: Types.ObjectId; // ID เสียงประกอบการพิมพ์ (อ้างอิง Media/OfficialMedia)
+    skipEnabled?: boolean; // อนุญาตให้ผู้เล่นกดข้ามได้หรือไม่
+  };
+  autoAdvance?: { // ไปต่ออัตโนมัติ
+    delaySeconds: number; // หน่วงเวลาก่อนไปต่อ (วินาที)
+    condition?: string; // เงื่อนไข (เช่น "!player.has_unread_notifications")
+  };
+  displayCondition?: string; // เงื่อนไขที่ข้อความนี้จะปรากฏ
+  // คอมเมนต์: จัดการเนื้อหาบทสนทนา, คำบรรยาย, และการพากย์เสียง
+}
+
+// การตั้งค่าเสียง (Audio Configuration - BGM, SFX)
+export interface IAudioElement {
+  id: string; // ID ของ instance เสียง
+  sourceValue: string; // URL เสียง หรือ ID ของ Media/OfficialMedia
+  isOfficialMedia?: boolean;
+  type: "bgm" | "sfx" | "ambience"; // ประเภทเสียง
+  autoplay?: boolean;
+  loop?: boolean;
+  volume?: number; // 0-1
+  fadeInDuration?: number; // ms
+  fadeOutDuration?: number; // ms
+  playbackRate?: number;
+  startTime?: number; // วินาที
+  spatialConfig?: { // สำหรับเสียง 3D (ถ้ามี)
+    x: number; y: number; z: number;
+    pan?: number; // -1 (ซ้าย) ถึง 1 (ขวา)
+    maxDistance?: number;
+    rolloffFactor?: number;
+  };
+  playCondition?: string; // เงื่อนไขในการเล่นเสียงนี้
+  // คอมเมนต์: จัดการเพลงประกอบ, เสียงเอฟเฟกต์, และเสียงบรรยากาศ
+}
+
+// การตั้งค่าตัวเลือก (Choice Configuration)
+// (อาจจะอ้างอิง IChoice จาก Choice.ts หรือ StoryMap.ts โดยตรง หรือมีโครงสร้างย่อยที่นี่)
+export interface ISceneChoice {
+  id: string; // ID ของชุดตัวเลือกนี้ในฉาก
+  // choiceGroupId?: Types.ObjectId; // อ้างอิง ChoiceGroup model (ถ้ามี)
+  choices: Array<{
+    text: string; // ข้อความตัวเลือก (รองรับ i18n)
+    targetSceneId?: Types.ObjectId; // ID ฉากต่อไปถ้าเลือก (อ้างอิง Scene model)
+    targetStoryMapNodeId?: string; // หรือ ID ของ Node ใน StoryMap
+    actionScript?: string; // Script ที่จะรันเมื่อเลือก
+    condition?: string; // เงื่อนไขที่ตัวเลือกนี้จะปรากฏ
+    tooltip?: string; // (รองรับ i18n)
+    stylePreset?: string; // สไตล์ปุ่มตัวเลือก
+    // ... other properties from IChoice
+  }>;
+  layout?: "vertical" | "horizontal" | "grid";
+  position?: ITransformConfig; // ตำแหน่งของกลุ่มตัวเลือก
+  displayCondition?: string; // เงื่อนไขที่ชุดตัวเลือกนี้จะปรากฏ
+  timeoutSeconds?: number; // เวลาจำกัดในการเลือก (วินาที)
+  timeoutAction?: { targetSceneId?: Types.ObjectId; targetStoryMapNodeId?: string; actionScript?: string }; // Action เมื่อหมดเวลา
+  // คอมเมนต์: จัดการการนำเสนอตัวเลือกให้ผู้เล่น
+}
+
+// องค์ประกอบ UI ทั่วไป (UI Element Configuration - Buttons, Sliders, Input Fields for minigames)
+export interface IUIElement {
+  id: string;
+  elementType: "button" | "slider" | "input_text" | "checkbox" | "image_button" | "progress_bar";
+  transform: ITransformConfig;
+  stylePreset?: string; // เช่น "primary_button", "settings_slider"
+  // Properties เฉพาะตาม elementType
+  buttonText?: string; // (สำหรับ button, รองรับ i18n)
+  buttonIconUrl?: string; // (สำหรับ button, image_button)
+  sliderRange?: { min: number; max: number; step: number; initialValue?: number };
+  inputPlaceholder?: string; // (สำหรับ input_text, รองรับ i18n)
+  checkboxIsChecked?: boolean;
+  progressBarValue?: number; // 0-100
+  progressBarMaxValue?: number; // default 100
+  onClickAction?: { actionType: string; actionValue: string; condition?: string };
+  onChangeAction?: { actionType: string; actionValueVariable: string }; // (สำหรับ slider, input, checkbox - เก็บค่าในตัวแปร)
+  displayCondition?: string;
+  animations?: string[];
+  zIndex?: number;
+  // คอมเมนต์: สำหรับสร้างองค์ประกอบ UI ที่โต้ตอบได้ในฉาก (เช่น ในมินิเกม, หรือ UI พิเศษ)
+}
+
+// การตั้งค่า Layer (Layer Configuration)
+export interface ISceneLayer {
+  id: string; // ID ของ Layer (เช่น "background_layer", "characters_layer", "ui_layer")
+  name: string; // ชื่อ Layer สำหรับ Editor
+  zIndex: number; // ลำดับการซ้อน (ค่ามากอยู่บน)
+  isVisible?: boolean; // แสดง/ซ่อน Layer (default true)
+  opacity?: number; // ความโปร่งใสของทั้ง Layer (0-1, default 1)
+  blendMode?: BlendMode; // Blend mode ของทั้ง Layer
+  masking?: IMaskingConfig; // Mask ของทั้ง Layer
+  transform?: ITransformConfig; // Transform ของทั้ง Layer (เช่น parallax scrolling สำหรับ layer)
+  // Element IDs ที่อยู่ใน Layer นี้ (ไม่จำเป็นถ้า element มี zIndex ของตัวเองและจัดการใน client)
+  // elementIds?: string[]; 
+  // คอมเมนต์: จัดการลำดับการซ้อนและความโปร่งใสของกลุ่มองค์ประกอบ
+}
+
+// การตั้งค่า Timeline และ Event (Timeline Configuration)
+export interface ITimelineEvent {
+  id: string; // ID ของ Event
+  startTime: number; // เวลาเริ่ม (ms, นับจากเริ่มฉาก หรือเริ่ม timeline track นี้)
+  duration?: number; // ระยะเวลา (ms, ถ้ามี)
+  targetElementId: string; // ID ขององค์ประกอบในฉาก (Image, Character, Text, Audio, Video, Layer, etc.)
+  action: "play_animation" | "set_property" | "trigger_script" | "show_element" | "hide_element" | "play_audio" | "pause_audio" | "stop_audio" | "change_text";
+  animationId?: string; // (ถ้า action = "play_animation") ID ของ AnimationConfig
+  propertyChanges?: { [key: string]: any }; // (ถ้า action = "set_property") เช่น { "opacity": 0.5, "transform.x": 100 }
+  scriptName?: string; // (ถ้า action = "trigger_script")
+  scriptParams?: any[];
+  newTextContentId?: string; // (ถ้า action = "change_text") ID ของ ITextContent ใหม่
+  // คอมเมนต์: กำหนดเหตุการณ์ต่างๆ ที่จะเกิดขึ้นตามเวลาในฉาก
+}
+
+export interface ITimelineTrack {
+  id: string; // ID ของ Track
+  name?: string; // ชื่อ Track (เช่น "Character Animations", "SFX Track")
+  targetType?: "character" | "image" | "audio" | "ui" | "general"; // ประเภทของ element ที่ track นี้มักจะควบคุม
+  events: ITimelineEvent[];
+  // คอมเมนต์: จัดกลุ่ม Events ใน Timeline เพื่อความเป็นระเบียบ
+}
+
+// ----- Interface หลักสำหรับเอกสารฉาก (Scene Document) -----
 export interface IScene extends Document {
-  episode: Types.ObjectId; // ตอนที่ฉากนี้สังกัด (อ้างอิง Episode model)
-  novel: Types.ObjectId; // นิยายที่ฉากนี้สังกัด (อ้างอิง Novel model, เพื่อความสะดวกในการ query)
-  storyMapNodeId?: string; // ID ของโหนดใน StoryMap ที่ฉากนี้เชื่อมโยง (optional, ถ้าใช้ StoryMap)
-  sceneNumber: number; // ลำดับของฉากภายใน Episode (สำหรับ editor, หรือถ้าไม่มี StoryMap)
-  title?: string; // ชื่อฉาก (optional, สำหรับ writer reference หรือแสดงใน editor)
-  // ประเภทของฉาก กำหนดโครงสร้างของ content
-  // text: แสดงข้อความบรรยาย
-  // dialogue: แสดงบทสนทนาของตัวละคร
-  // choice: แสดงตัวเลือกให้ผู้เล่น
-  // mediaDisplay: แสดง/ควบคุมสื่อ (ภาพ, เสียง, วิดีโอ)
-  // effectTrigger: สั่งให้เกิด visual/audio effect
-  // gameStateChange: เปลี่ยนแปลงค่า stat, item, relationship, flag
-  // branchPoint: จุดแยกเนื้อเรื่อง (อาจจะไม่มี content โดยตรง แต่ใช้ logic จาก StoryMap)
-  // ending: ฉากจบ (อาจเป็นของ Episode หรือ Novel)
-  type: "text" | "dialogue" | "choice" | "mediaDisplay" | "effectTrigger" | "gameStateChange" | "branchPoint" | "ending" | "customScript";
-  // เนื้อหาของฉาก, โครงสร้างจะขึ้นอยู่กับ type
-  content: {
-    // สำหรับ type: text
-    narration?: string; // ข้อความบรรยาย
-    // สำหรับ type: dialogue
-    dialogueLines?: Array<{ // ชุดบทสนทนา
-      characterId?: Types.ObjectId; // อ้างอิง Character model (ถ้ามี)
-      speakerName?: string; // ชื่อผู้พูด (ถ้าไม่มี characterId หรือเป็น "Narrator")
-      line: string; // ข้อความบทพูด
-      emotion?: string; // key อารมณ์ (เช่น "happy", "angry") สำหรับ sprite/avatar
-      position?: "left" | "center" | "right" | "custom"; // ตำแหน่งตัวละครบนจอ
-      voiceLineUrl?: string; // URL ของไฟล์เสียงบทพูด (optional)
-      metadata?: Record<string, any>; // ข้อมูลเพิ่มเติมสำหรับ dialogue line นี้
-    }>;
-    // สำหรับ type: choice
-    choices?: Array<{ // รายการตัวเลือก
-      id: string; // ID ของตัวเลือก (unique ภายใน scene)
-      text: string; // ข้อความที่แสดงให้ผู้เล่นเลือก
-      targetNodeId?: string; // ID ของโหนดใน StoryMap ที่จะไปต่อ (ถ้าใช้ StoryMap)
-      nextSceneId?: Types.ObjectId; // ID ของ Scene ถัดไป (ถ้าไม่ใช้ StoryMap หรือเป็น linear choice)
-      conditions?: any[]; // เงื่อนไขในการแสดงตัวเลือกนี้ (โครงสร้างคล้าย StoryMapNode.conditions)
-      effects?: any[]; // ผลกระทบเมื่อเลือกตัวเลือกนี้ (โครงสร้างคล้าย StoryMapNode.effects)
-      isHidden?: boolean; // ตัวเลือกนี้ถูกซ่อนไว้หรือไม่ (อาจแสดงเมื่อเงื่อนไขบางอย่างถูกปลดล็อค)
-    }>;
-    // สำหรับ type: mediaDisplay
-    mediaElements?: Array<{ // รายการสื่อที่จะแสดง/ควบคุม
-      mediaId: Types.ObjectId; // อ้างอิง Media model
-      alias?: string; // ชื่อเรียก media นี้ใน scene (เช่น "main_character_sprite", "background_forest")
-      action: "show" | "hide" | "update" | "play" | "pause" | "stop"; // การกระทำต่อสื่อ
-      mediaTypeOverride?: "image" | "audio" | "background" | "video" | "sfx" | "characterSprite"; // Override ประเภทสื่อ (ถ้าจำเป็น)
-      // คุณสมบัติการแสดงผล (คล้ายกับ ISceneSubdocument ใน Episode)
-      layer?: number; // z-index
-      position?: { x: number; y: number; unit?: "%" | "px" };
-      size?: { width: number; height: number; unit?: "%" | "px" };
-      opacity?: number; // 0-1
-      rotation?: number; // องศา
-      scale?: number; // 0.1 - N
-      // สำหรับ audio/video
-      volume?: number; // 0-1
-      loop?: boolean;
-      startTime?: number; // วินาที (สำหรับ video/audio)
-      // สำหรับ characterSprite
-      characterEmotion?: string; // อารมณ์ที่จะแสดง
-      // Animation/Transition
-      transitionIn?: { type: string; duration: number; delay?: number }; // เช่น { type: "fadeIn", duration: 500 }
-      transitionOut?: { type: string; duration: number; delay?: number };
-      // CSS filters หรือ effects อื่นๆ
-      filters?: Record<string, string>; // เช่น { blur: "5px", brightness: "0.8" }
-    }>;
-    // สำหรับ type: effectTrigger
-    visualEffects?: Array<{ // รายการ visual effects
-      type: "screenShake" | "screenFlash" | "imageFilter" | "transition"; // ประเภท effect
-      targetElementAlias?: string; // alias ของ mediaElement ที่จะ apply effect (ถ้าไม่ระบุคือ screen)
-      duration: number; // ms
-      intensity?: number; // 0-1
-      color?: string; // สำหรับ flash, filter
-      parameters?: Record<string, any>; // เช่น { type: "blur", amount: "5px" } สำหรับ imageFilter
-    }>;
-    // สำหรับ type: gameStateChange
-    gameStateUpdates?: Array<{ // รายการการเปลี่ยนแปลง state ของเกม
-      type: "stat" | "relationship" | "item" | "flag" | "achievementUnlock" | "currency";
-      targetId: string; // statId, characterId for relationship, itemId, flagName, achievementId, currencyId
-      operation: "set" | "increment" | "decrement" | "add" | "remove" | "toggle"; // add/remove for items, toggle for flags
-      value?: any; // ค่าที่จะ set/increment/decrement หรือ itemId ที่จะ add/remove
-      amount?: number; // สำหรับ currency, item quantity
-      displayText?: string; // ข้อความที่จะแสดงให้ผู้เล่นเห็น (เช่น "ได้รับดาบเหล็ก", "ความสัมพันธ์กับ Alice +10")
-      showNotification?: boolean; // แสดง notification หรือไม่
-    }>;
-    // สำหรับ type: customScript
-    script?: string; // โค้ด JavaScript หรือ DSL ที่จะรัน (ต้องระมัดระวังเรื่องความปลอดภัย)
-    scriptParameters?: Record<string, any>; // พารามิเตอร์สำหรับ script
+  _id: Types.ObjectId;
+  novelId: Types.ObjectId; // อ้างอิง Novel model
+  episodeId?: Types.ObjectId; // อ้างอิง Episode model (ถ้าฉากนี้เป็นส่วนหนึ่งของตอน)
+  sceneName: string; // ชื่อฉาก (สำหรับ editor และอ้างอิงภายใน)
+  sceneTitle?: string; // ชื่อฉากที่แสดงให้ผู้เล่นเห็น (รองรับ i18n)
+  sceneType?: SceneType; // ประเภทของฉาก
+  
+  // องค์ประกอบหลักของฉาก
+  background?: ISceneBackground;
+  characters?: ICharacterDisplay[];
+  images?: IImageElement[];
+  videos?: IVideoElement[];
+  textAreas?: ITextAreaConfig[];
+  textContents?: ITextContent[]; // เนื้อหาข้อความที่จะแสดงใน textAreas (อาจมีหลายชุดต่อฉาก)
+  audios?: IAudioElement[];
+  choices?: ISceneChoice[]; // ชุดตัวเลือกในฉาก
+  uiElements?: IUIElement[]; // องค์ประกอบ UI เพิ่มเติม
+  
+  // ระบบ Layer และ Timeline
+  layers?: ISceneLayer[]; // การจัดการ Layer (เรียงตาม zIndex)
+  timelineTracks?: ITimelineTrack[]; // Timeline สำหรับควบคุม events และ animations
+  globalAnimations?: IAnimationConfig[]; // Animations ที่สามารถใช้ร่วมกันได้ในหลาย elements
+
+  // การตั้งค่าเริ่มต้นของฉาก
+  defaultCamera?: { // การตั้งค่ากล้องเริ่มต้น (ถ้ามีระบบกล้อง)
+    position?: { x: number; y: number; z?: number };
+    zoom?: number;
+    rotation?: number;
   };
-  // การตั้งค่าเฉพาะของฉากนี้
-  settings?: {
-    defaultDuration?: number; // ระยะเวลาแสดงผลของฉากนี้ (ms) ก่อนไปฉากถัดไป (ถ้าไม่มี interaction)
-    backgroundColor?: string; // สีพื้นหลังของฉาก (ถ้าไม่มี background image)
-    backgroundImageId?: Types.ObjectId; // อ้างอิง Media model สำหรับภาพพื้นหลัง
-    backgroundMusicId?: Types.ObjectId; // อ้างอิง Media model สำหรับ BGM
-    ambientSoundId?: Types.ObjectId; // อ้างอิง Media model สำหรับเสียงบรรยากาศ
-    // การตั้งค่าการข้ามฉาก (skip)
-    skippable?: boolean; // ผู้เล่นสามารถข้ามฉากนี้ได้หรือไม่
-    autoPlayNext?: boolean; // เล่นฉากถัดไปอัตโนมัติหรือไม่หลังจบฉากนี้
-    // อื่นๆ เช่น transition เข้า/ออกฉาก
-    transitionIn?: { type: string; duration: number };
-    transitionOut?: { type: string; duration: number };
+  entryTransition?: { // Transition ตอนเข้าฉาก
+    type: "fade" | "slide" | "iris" | "custom_animation";
+    duration: number; // ms
+    color?: string; // (สำหรับ fade)
+    direction?: "left" | "right" | "top" | "bottom"; // (สำหรับ slide)
+    animationId?: string; // (สำหรับ custom_animation)
   };
-  // การนำทาง (ถ้าไม่ใช้ StoryMap หรือเป็น linear flow ภายใน node ของ StoryMap)
-  // ถ้าเป็น branchPoint หรือ choice อาจจะไม่มี nextSceneId โดยตรง
-  nextSceneId?: Types.ObjectId; // ID ของ Scene ถัดไป (ถ้าเป็น linear)
-  // Metadata
-  authorNotes?: string; // โน้ตสำหรับผู้เขียน (ไม่แสดงให้ผู้เล่นเห็น)
-  version: number; // เวอร์ชันของข้อมูลฉาก (สำหรับ tracking การเปลี่ยนแปลง)
-  isDeleted: boolean; // Soft delete
+  exitTransition?: { // Transition ตอนออกจากฉาก (ถ้าไม่ถูก override โดย choice/event)
+    type: "fade" | "slide" | "iris" | "custom_animation";
+    duration: number; // ms
+    color?: string;
+    direction?: "left" | "right" | "top" | "bottom";
+    animationId?: string;
+  };
+  
+  // การเชื่อมโยงกับ StoryMap (ถ้าใช้)
+  storyMapNodeId?: string; // ID ของ Node ใน StoryMap ที่ฉากนี้แสดงผล
+  
+  // การตั้งค่าการเล่น
+  skippable?: boolean; // ผู้เล่นสามารถข้ามฉากนี้ได้หรือไม่ (default true)
+  autoPlayNextScene?: boolean; // เล่นฉากต่อไปอัตโนมัติหรือไม่ (ถ้าไม่มี choice หรือ event หยุด)
+  nextSceneId?: Types.ObjectId; // ID ฉากต่อไป (ถ้า autoPlayNextScene = true และไม่มีการแตกแขนง)
+  
+  // Metadata สำหรับ Editor
+  editorNotes?: string; // โน้ตสำหรับผู้เขียน
+  thumbnailUrl?: string; // URL ภาพตัวอย่างฉาก (สำหรับ editor)
+  tags?: string[]; // แท็กสำหรับจัดหมวดหมู่ฉากใน editor
+  version: number; // เวอร์ชันของข้อมูลฉาก
+  
+  // Internationalization (i18n) - สำหรับข้อความที่ไม่ได้อยู่ใน sub-objects ที่มี i18n ของตัวเอง
+  // เช่น sceneTitle อาจเก็บเป็น object { en: "Title", th: "ชื่อเรื่อง" } หรือใช้ระบบ i18n แยก
+  // แต่ส่วนใหญ่ text จะอยู่ใน ITextContent, IImageElement.altText, ISceneChoice.choices.text ซึ่งควรจัดการ i18n ที่นั่น
+
+  // Accessibility
+  audioDescriptionTrackId?: Types.ObjectId; // ID ของ Media/OfficialMedia สำหรับเสียงบรรยายภาพ
+  enableScreenReaderCompatibility?: boolean; // ตั้งค่าให้ UI elements ในฉากนี้เป็นมิตรกับ screen reader
+
+  // Game Logic Integration
+  onSceneStartScript?: string; // Script ที่จะรันเมื่อเริ่มฉาก
+  onSceneEndScript?: string; // Script ที่จะรันเมื่อจบฉาก
+  requiredFlags?: string[]; // Flags ที่ต้องเป็น true ฉากนี้ถึงจะเล่นได้ (จาก StoryMap.gameMechanicsConfig.globalFlags)
+  variablesToSetOnStart?: Record<string, any>; // ตัวแปรที่จะตั้งค่าเมื่อเริ่มฉาก
+
+  // Soft delete
+  isDeleted?: boolean;
   deletedAt?: Date;
+
+  // Timestamps
   createdAt: Date;
   updatedAt: Date;
 }
 
+// ----- Schema หลักสำหรับ Scene -----
 const SceneSchema = new Schema<IScene>(
   {
-    episode: { type: Schema.Types.ObjectId, ref: "Episode", required: true, index: true },
-    novel: { type: Schema.Types.ObjectId, ref: "Novel", required: true, index: true },
-    storyMapNodeId: { type: String, index: true },
-    sceneNumber: { type: Number, required: true, min: 0 }, // ควร unique ภายใน episode
-    title: { type: String, trim: true, maxlength: [200, "ชื่อฉากต้องไม่เกิน 200 ตัวอักษร"] },
-    type: {
-      type: String,
-      enum: ["text", "dialogue", "choice", "mediaDisplay", "effectTrigger", "gameStateChange", "branchPoint", "ending", "customScript"],
-      required: [true, "กรุณาระบุประเภทของฉาก"],
-    },
-    content: {
-      narration: String,
-      dialogueLines: [{
-        _id: false,
-        characterId: { type: Schema.Types.ObjectId, ref: "Character" },
-        speakerName: String,
-        line: { type: String, required: true },
-        emotion: String,
-        position: { type: String, enum: ["left", "center", "right", "custom"] },
-        voiceLineUrl: String,
-        metadata: Schema.Types.Mixed,
-      }],
-      choices: [{
-        _id: false,
-        id: { type: String, required: true }, // UUID
-        text: { type: String, required: true },
-        targetNodeId: String,
-        nextSceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
-        conditions: [Schema.Types.Mixed],
-        effects: [Schema.Types.Mixed],
-        isHidden: { type: Boolean, default: false },
-      }],
-      mediaElements: [{
-        _id: false,
-        mediaId: { type: Schema.Types.ObjectId, ref: "Media", required: true },
-        alias: String,
-        action: { type: String, enum: ["show", "hide", "update", "play", "pause", "stop"], required: true },
-        mediaTypeOverride: { type: String, enum: ["image", "audio", "background", "video", "sfx", "characterSprite"] },
-        layer: Number,
-        position: { x: Number, y: Number, unit: String },
-        size: { width: Number, height: Number, unit: String },
-        opacity: { type: Number, min: 0, max: 1 },
-        rotation: Number,
-        scale: Number,
-        volume: { type: Number, min: 0, max: 1 },
-        loop: Boolean,
-        startTime: Number,
-        characterEmotion: String,
-        transitionIn: { type: { type: String }, duration: Number, delay: Number },
-        transitionOut: { type: { type: String }, duration: Number, delay: Number },
-        filters: Schema.Types.Mixed,
-      }],
-      visualEffects: [{
-        _id: false,
-        type: { type: String, enum: ["screenShake", "screenFlash", "imageFilter", "transition"], required: true },
-        targetElementAlias: String,
-        duration: { type: Number, required: true, min: 0 },
-        intensity: { type: Number, min: 0, max: 1 },
-        color: String,
-        parameters: Schema.Types.Mixed,
-      }],
-      gameStateUpdates: [{
-        _id: false,
-        type: { type: String, enum: ["stat", "relationship", "item", "flag", "achievementUnlock", "currency"], required: true },
-        targetId: { type: String, required: true },
-        operation: { type: String, enum: ["set", "increment", "decrement", "add", "remove", "toggle"], required: true },
-        value: Schema.Types.Mixed,
-        amount: Number,
-        displayText: String,
-        showNotification: { type: Boolean, default: false },
-      }],
-      script: String,
-      scriptParameters: Schema.Types.Mixed,
-    },
-    settings: {
-      defaultDuration: Number,
-      backgroundColor: String,
-      backgroundImageId: { type: Schema.Types.ObjectId, ref: "Media" },
-      backgroundMusicId: { type: Schema.Types.ObjectId, ref: "Media" },
-      ambientSoundId: { type: Schema.Types.ObjectId, ref: "Media" },
-      skippable: { type: Boolean, default: true },
-      autoPlayNext: { type: Boolean, default: false },
-      transitionIn: { type: { type: String }, duration: Number },
-      transitionOut: { type: { type: String }, duration: Number },
-    },
-    nextSceneId: { type: Schema.Types.ObjectId, ref: "Scene" }, // Reference to another Scene in the same collection
-    authorNotes: String,
+    novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true, index: true },
+    episodeId: { type: Schema.Types.ObjectId, ref: "Episode", index: true },
+    sceneName: { type: String, required: true, trim: true },
+    sceneTitle: { type: String, trim: true }, // ควรจัดการ i18n
+    sceneType: { type: String, enum: ["standard", "dialogue_only", "cg_display", "video_cutscene", "interactive_map", "minigame", "ending_scene", "title_screen", "credits_scene"], default: "standard" },
+    
+    background: { type: Object }, // ISceneBackground
+    characters: { type: [Object], default: [] }, // ICharacterDisplay[]
+    images: { type: [Object], default: [] }, // IImageElement[]
+    videos: { type: [Object], default: [] }, // IVideoElement[]
+    textAreas: { type: [Object], default: [] }, // ITextAreaConfig[]
+    textContents: { type: [Object], default: [] }, // ITextContent[]
+    audios: { type: [Object], default: [] }, // IAudioElement[]
+    choices: { type: [Object], default: [] }, // ISceneChoice[]
+    uiElements: { type: [Object], default: [] }, // IUIElement[]
+
+    layers: { type: [Object], default: [] }, // ISceneLayer[]
+    timelineTracks: { type: [Object], default: [] }, // ITimelineTrack[]
+    globalAnimations: { type: [Object], default: [] }, // IAnimationConfig[]
+
+    defaultCamera: { type: Object },
+    entryTransition: { type: Object },
+    exitTransition: { type: Object },
+
+    storyMapNodeId: { type: String, trim: true, index: true },
+
+    skippable: { type: Boolean, default: true },
+    autoPlayNextScene: { type: Boolean, default: false },
+    nextSceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
+
+    editorNotes: { type: String, trim: true },
+    thumbnailUrl: { type: String, trim: true },
+    tags: [{ type: String, trim: true }],
     version: { type: Number, default: 1, min: 1 },
+
+    audioDescriptionTrackId: { type: Schema.Types.ObjectId, refPath: "audioDescriptionTrackModel" },
+    audioDescriptionTrackModel: { type: String, enum: ["Media", "OfficialMedia"] },
+    enableScreenReaderCompatibility: { type: Boolean, default: false },
+
+    onSceneStartScript: { type: String, trim: true },
+    onSceneEndScript: { type: String, trim: true },
+    requiredFlags: [{ type: String, trim: true }],
+    variablesToSetOnStart: { type: Schema.Types.Mixed },
+
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,
   },
   {
     timestamps: true, // createdAt, updatedAt
+    // เนื่องจาก sub-objects มี ID ของตัวเอง (string) และไม่ได้เป็น Mongoose subdocuments เต็มรูปแบบ
+    // การ query และ update จะทำผ่าน dot notation บน array of plain objects
   }
 );
 
 // ----- Indexes -----
-// Unique sceneNumber per episode
-SceneSchema.index({ episode: 1, sceneNumber: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
-// For querying scenes within an episode, ordered by sceneNumber
-SceneSchema.index({ episode: 1, isDeleted: 1, sceneNumber: 1 });
-// If scenes are often queried by novel directly
-SceneSchema.index({ novel: 1, isDeleted: 1 });
-// If StoryMapNodeId is used for linking
-SceneSchema.index({ storyMapNodeId: 1, isDeleted: 1 });
+SceneSchema.index({ novelId: 1, episodeId: 1 });
+SceneSchema.index({ sceneName: 1 });
+SceneSchema.index({ tags: 1 });
 
-// ----- Middleware: Version increment -----
-SceneSchema.pre("save", function (next) {
+// ----- Middleware -----
+SceneSchema.pre("save", async function (next) {
   if (this.isModified() && !this.isNew) {
     this.version = (this.version || 0) + 1;
   }
-  next();
-});
-
-// ----- Middleware: Validate content based on type -----
-SceneSchema.pre("validate", function (next) {
-  let isValid = false;
-  switch (this.type) {
-    case "text":
-      isValid = !!this.content.narration;
-      break;
-    case "dialogue":
-      isValid = Array.isArray(this.content.dialogueLines) && this.content.dialogueLines.length > 0 && this.content.dialogueLines.every(d => d.line);
-      break;
-    case "choice":
-      isValid = Array.isArray(this.content.choices) && this.content.choices.length > 0 && this.content.choices.every(c => c.id && c.text && (c.nextSceneId || c.targetNodeId));
-      break;
-    case "mediaDisplay":
-      isValid = Array.isArray(this.content.mediaElements) && this.content.mediaElements.length > 0 && this.content.mediaElements.every(m => m.mediaId && m.action);
-      break;
-    case "effectTrigger":
-      isValid = Array.isArray(this.content.visualEffects) && this.content.visualEffects.length > 0 && this.content.visualEffects.every(e => e.type && e.duration);
-      break;
-    case "gameStateChange":
-      isValid = Array.isArray(this.content.gameStateUpdates) && this.content.gameStateUpdates.length > 0 && this.content.gameStateUpdates.every(u => u.type && u.targetId && u.operation);
-      break;
-    case "branchPoint": // Branch points might not have direct content, relying on StoryMap or external logic
-    case "ending":      // Endings might also be simple or have minimal content
-      isValid = true; // Or specific validation if they have expected content structures
-      break;
-    case "customScript":
-      isValid = !!this.content.script;
-      break;
-    default:
-      isValid = false;
-  }
-
-  if (!isValid) {
-    return next(new Error(`เนื้อหาของฉาก (Scene content) ไม่ถูกต้องสำหรับประเภท '${this.type}'. กรุณาตรวจสอบข้อมูลที่จำเป็นสำหรับประเภทฉากนี้`));
-  }
+  // TODO: อาจจะต้องมีการ validate IDs ภายใน scene elements (เช่น animationId, textAreaId) ว่ามีอยู่จริงใน scene นี้
   next();
 });
 
 // ----- Model Export -----
-// It's generally better to define the model once and export it.
-// The function pattern `() => models.Scene || model(...)` is useful to avoid re-compiling model in Next.js hot-reload dev environments.
-const SceneModel = () => models.Scene as mongoose.Model<IScene> || model<IScene>("Scene", SceneSchema);
+const SceneModel = (models.Scene as mongoose.Model<IScene>) || model<IScene>("Scene", SceneSchema);
 
 export default SceneModel;
 
+// หมายเหตุการเปลี่ยนแปลงสำคัญ:
+// 1.  ใช้ Plain Objects สำหรับ arrays ของ elements (characters, images, etc.) เพื่อความยืดหยุ่นในการใช้ custom string IDs.
+// 2.  เพิ่ม ISceneLayer และ ITimelineTrack, ITimelineEvent สำหรับการจัดการที่ซับซ้อนเหมือนโปรแกรมตัดต่อ.
+// 3.  เพิ่ม globalAnimations สำหรับ animations ที่ใช้ซ้ำได้.
+// 4.  ขยาย ICharacterDisplay, IImageElement, IVideoElement, IAudioElement, ITextAreaConfig, ITextContent ให้ละเอียดขึ้นมาก.
+// 5.  เพิ่ม IUIElement สำหรับองค์ประกอบ UI ทั่วไป.
+// 6.  เพิ่ม SceneType, Transitions, Camera settings.
+// 7.  รวม i18n และ accessibility considerations.
+// 8.  เพิ่ม Game Logic Integration fields (scripts, flags, variables).
+// 9.  คอมเมนต์ภาษาไทยถูกเพิ่มและปรับปรุงให้ละเอียดขึ้น.

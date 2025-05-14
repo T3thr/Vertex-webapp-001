@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import mongoose from "mongoose";
 import UserModel, { IUser } from "@/backend/models/User";
-import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUserhaha";
 import NovelModel, { INovel } from "@/backend/models/Novel";
 import ActivityHistoryModel from "@/backend/models/ActivityHistory";
 import dbConnect from "@/backend/lib/mongodb";

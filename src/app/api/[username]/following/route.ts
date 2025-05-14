@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
+import SocialMediaUserModel from "@/backend/models/SocialMediaUserhaha";
 import UserFollowModel, { IUserFollow } from "@/backend/models/UserFollow";
 import mongoose from "mongoose";
 

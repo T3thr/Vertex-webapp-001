@@ -304,3 +304,11 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--primary) var(--secondary);
 }
+
+html {
+  visibility: hidden; /* Hide by default to prevent FOUC */
+}
+
+html[data-theme-ready="true"] {
+  visibility: visible; /* Show once the script has set the theme */
+}

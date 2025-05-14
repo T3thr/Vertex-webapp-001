@@ -1,250 +1,208 @@
-// src/backend/models/Comment.ts
+// src/models/Comment.ts
+// โมเดลความคิดเห็น (Comment Model) - จัดการความคิดเห็นของผู้ใช้ต่อเนื้อหาต่างๆ (เช่น นิยาย, ตอน, ฉาก, หรือความคิดเห็นอื่น)
+// ออกแบบให้รองรับการตอบกลับ (replies), การถูกใจ, การแก้ไข, การลบ (soft delete), และการรายงาน
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import UserModel from "./User"; // สำหรับอ้างอิง User model ใน middleware
+import NovelModel from "./Novel"; // สำหรับอ้างอิง Novel model ใน middleware
+import EpisodeModel from "./Episode"; // สำหรับอ้างอิง Episode model ใน middleware
 
-// Interface สำหรับ Reaction (เป็น subdocument หรือ collection แยก)
-export interface ICommentReaction {
-  user: Types.ObjectId; // ผู้ใช้ที่ react (อ้างอิง User model)
-  type: string; // ประเภท reaction (เช่น "like", "love", "haha", "wow", "sad", "angry")
-  createdAt: Date;
+// สถานะของความคิดเห็น (สำหรับการตรวจสอบเนื้อหา)
+export type CommentStatus = "pending_approval" | "approved" | "rejected" | "hidden_by_user" | "archived";
+
+// อินเทอร์เฟซสำหรับข้อมูลการรายงานความคิดเห็น
+export interface ICommentReport {
+  reportedBy: Types.ObjectId; // ผู้ใช้ที่รายงาน
+  reason: string; // เหตุผลการรายงาน
+  reportedAt: Date; // วันที่รายงาน
 }
 
-// Interface สำหรับ Comment document
-// Comments can be made on Novels or specific Episodes.
+// อินเทอร์เฟซหลักสำหรับเอกสารความคิดเห็น (Comment Document)
 export interface IComment extends Document {
-  content: string; // เนื้อหาคอมเมนต์ (รองรับ Markdown แบบจำกัด)
-  author: Types.ObjectId; // ผู้แสดงความคิดเห็น (อ้างอิง User model)
-  // Target of the comment
-  novel?: Types.ObjectId; // นิยายที่แสดงความคิดเห็น (ถ้า comment นี้อยู่ที่ระดับ Novel)
-  episode?: Types.ObjectId; // ตอนที่แสดงความคิดเห็น (ถ้า comment นี้อยู่ที่ระดับ Episode)
-  // Threading
-  parentComment?: Types.ObjectId; // คอมเมนต์หลัก (สำหรับการตอบกลับ, อ้างอิง Comment model)
-  // Status and Moderation
-  isDeleted: boolean; // สถานะการลบ (soft delete)
+  _id: Types.ObjectId;
+  user: Types.ObjectId; // ผู้ใช้ที่แสดงความคิดเห็น (อ้างอิง User model)
+  
+  novel?: Types.ObjectId; // นิยายที่แสดงความคิดเห็น (อ้างอิง Novel model)
+  episode?: Types.ObjectId; // ตอนที่แสดงความคิดเห็น (อ้างอิง Episode model)
+  scene?: Types.ObjectId; // ฉากที่แสดงความคิดเห็น (อ้างอิง Scene model)
+  
+  parentComment?: Types.ObjectId; // ID ของความคิดเห็นแม่ (ถ้าเป็น reply, อ้างอิง Comment model)
+  text: string; // เนื้อหาความคิดเห็น
+  
+  likesCount: number;
+  repliesCount: number; // จำนวนการตอบกลับโดยตรง
+  
+  status: CommentStatus;
+  isEdited: boolean; // ความคิดเห็นนี้เคยถูกแก้ไขหรือไม่
+  editedAt?: Date; // วันที่แก้ไขล่าสุด
+  isPinned?: boolean; // ปักหมุดโดยเจ้าของเนื้อหา
+  
+  mentions?: Array<Types.ObjectId>; // รายชื่อ User IDs ที่ถูกกล่าวถึง
+  
+  reports?: Types.DocumentArray<ICommentReport>;
+  reportCount: number; // จำนวนครั้งที่ถูกรายงาน (denormalized)
+
+  isDeleted: boolean;
   deletedAt?: Date;
-  isEdited: boolean; // มีการแก้ไขหรือไม่
-  lastEditedAt?: Date; // วันที่แก้ไขล่าสุด
-  isHiddenByModerator: boolean; // ซ่อนโดยผู้ดูแลหรือไม่
-  moderationReason?: string; // เหตุผลในการซ่อน/แก้ไขโดยผู้ดูแล
-  moderator?: Types.ObjectId; // ผู้ดูแลที่ดำเนินการ (อ้างอิง User model)
-  // Engagement
-  likesCount: number; // จำนวนไลค์ (denormalized)
-  repliesCount: number; // จำนวนการตอบกลับ (denormalized, เฉพาะ direct replies)
-  // Features
-  isSpoiler: boolean; // เป็นเนื้อหาสปอยล์หรือไม่ (ผู้ใช้ mark เอง หรือ moderator mark)
-  // Optional reference to a specific point in content (e.g., scene in an episode)
-  contentReference?: {
-    sceneId?: Types.ObjectId; // อ้างอิง Scene model (ถ้า comment เกี่ยวกับ scene เฉพาะ)
-    timestamp?: string; // เช่น "01:23" สำหรับ video/audio, หรือ " абзац 5" สำหรับ text
-    quote?: string; // ส่วนของเนื้อหาที่อ้างอิง
-  };
-  // Reporting (เก็บใน collection แยกอาจจะดีกว่าถ้าซับซ้อนมาก)
-  reports?: Array<{ // รายงานคอมเมนต์ที่ไม่เหมาะสม
-    reporter: Types.ObjectId; // ผู้รายงาน (อ้างอิง User model)
-    reason: string; // เหตุผลในการรายงาน (enum หรือ free text)
-    reportCategory: "spam" | "harassment" | "hate_speech" | "spoiler_unmarked" | "other";
-    notes?: string; // รายละเอียดเพิ่มเติม
-    status: "pending" | "reviewed_approved" | "reviewed_rejected" | "action_taken";
-    reviewedBy?: Types.ObjectId; // ผู้ดูแลที่ตรวจสอบ (อ้างอิง User model)
-    reviewedAt?: Date;
-    createdAt: Date;
-  }>;
-  mentionedUsers?: Types.ObjectId[]; // ผู้ใช้ที่ถูกกล่าวถึงในคอมเมนต์ (อ้างอิง User model)
-  // Metadata (พิจารณาเรื่อง privacy, select: false)
-  ipAddress?: string; // IP address ของผู้แสดงความคิดเห็น (hashed หรือ encrypted, ใช้เพื่อ moderation)
-  userAgent?: string; // User agent ของผู้แสดงความคิดเห็น (ใช้เพื่อ moderation)
-  // AI/ML fields
-  sentiment?: "positive" | "negative" | "neutral" | "mixed";
-  language?: string; // ภาษาที่ตรวจจับได้ (ISO 639-1 code)
-  toxicityScore?: number; // คะแนนความเป็นพิษ (0-1)
-  embeddingVector?: number[]; // Vector embedding ของเนื้อหาคอมเมนต์
+  deletedBy?: Types.ObjectId; // ผู้ที่ทำการลบ (user or moderator)
+
   createdAt: Date;
   updatedAt: Date;
 }
 
-const CommentReactionSchema = new Schema<ICommentReaction>({
-  user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-  type: { type: String, required: true, default: "like" },
-  createdAt: { type: Date, default: Date.now },
-}, { _id: false });
+const CommentReportSchema = new Schema<ICommentReport>(
+  {
+    reportedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    reason: { type: String, required: true, trim: true, maxlength: 500 },
+    reportedAt: { type: Date, default: Date.now, required: true },
+  },
+  { _id: false }
+);
 
 const CommentSchema = new Schema<IComment>(
   {
-    content: { type: String, required: [true, "กรุณาระบุเนื้อหาคอมเมนต์"], trim: true, minlength: [1, "คอมเมนต์ต้องมีอย่างน้อย 1 ตัวอักษร"], maxlength: [5000, "เนื้อหาคอมเมนต์ต้องไม่เกิน 5000 ตัวอักษร"] },
-    author: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User", 
+      required: true,
+      index: true,
+    },
     novel: { type: Schema.Types.ObjectId, ref: "Novel", index: true },
     episode: { type: Schema.Types.ObjectId, ref: "Episode", index: true },
+    scene: { type: Schema.Types.ObjectId, ref: "Scene", index: true },
     parentComment: { type: Schema.Types.ObjectId, ref: "Comment", index: true },
-    isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: { type: Date },
-    isEdited: { type: Boolean, default: false },
-    lastEditedAt: { type: Date },
-    isHiddenByModerator: { type: Boolean, default: false, index: true },
-    moderationReason: String,
-    moderator: { type: Schema.Types.ObjectId, ref: "User" },
+    text: {
+      type: String,
+      required: [true, "กรุณาระบุเนื้อหาความคิดเห็น (Comment text is required)"],
+      trim: true,
+      minlength: [1, "ความคิดเห็นต้องมีอย่างน้อย 1 ตัวอักษร"],
+      maxlength: [5000, "ความคิดเห็นต้องไม่เกิน 5000 ตัวอักษร"],
+    },
     likesCount: { type: Number, default: 0, min: 0 },
     repliesCount: { type: Number, default: 0, min: 0 },
-    isSpoiler: { type: Boolean, default: false },
-    contentReference: {
-      sceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
-      timestamp: String,
-      quote: { type: String, maxlength: 300 },
+    status: {
+      type: String,
+      enum: ["pending_approval", "approved", "rejected", "hidden_by_user", "archived"],
+      default: "approved", 
+      required: true,
+      index: true,
     },
-    reports: [{
-      _id: false,
-      reporter: { type: Schema.Types.ObjectId, ref: "User", required: true },
-      reason: { type: String, required: true, trim: true, maxlength: 500 },
-      reportCategory: { type: String, enum: ["spam", "harassment", "hate_speech", "spoiler_unmarked", "other"], required: true },
-      notes: { type: String, maxlength: 1000 },
-      status: { type: String, enum: ["pending", "reviewed_approved", "reviewed_rejected", "action_taken"], default: "pending" },
-      reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      reviewedAt: Date,
-      createdAt: { type: Date, default: Date.now },
-    }],
-    mentionedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
-    ipAddress: { type: String, select: false },
-    userAgent: { type: String, select: false },
-    sentiment: { type: String, enum: ["positive", "negative", "neutral", "mixed"] },
-    language: { type: String, index: true },
-    toxicityScore: { type: Number, min: 0, max: 1 },
-    embeddingVector: { type: [Number], select: false },
+    isEdited: { type: Boolean, default: false },
+    editedAt: Date,
+    isPinned: { type: Boolean, default: false, index: true },
+    mentions: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    reports: [CommentReportSchema],
+    reportCount: { type: Number, default: 0, min: 0, index: true },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: Date,
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   {
-    timestamps: true, // createdAt, updatedAt
-    validateBeforeSave: true,
+    timestamps: true, 
   }
 );
 
-// ----- Validation -----
-CommentSchema.path("novel").validate(function (this: IComment, value: Types.ObjectId) {
-  // A comment must be associated with either a novel or an episode.
-  // If it has an episode, it implicitly belongs to that episode's novel.
-  return !!value || !!this.episode;
-}, "ความคิดเห็นต้องเกี่ยวข้องกับนิยายหรือตอนใดตอนหนึ่ง (A comment must be related to either a Novel or an Episode).");
+CommentSchema.index({ novel: 1, status: 1, isDeleted: 1, createdAt: -1 });
+CommentSchema.index({ episode: 1, status: 1, isDeleted: 1, createdAt: -1 });
+CommentSchema.index({ scene: 1, status: 1, isDeleted: 1, createdAt: -1 });
+CommentSchema.index({ parentComment: 1, status: 1, isDeleted: 1, createdAt: -1 });
+CommentSchema.index({ user: 1, isDeleted: 1, createdAt: -1 });
+CommentSchema.index({ status: 1, reportCount: -1, createdAt: 1 });
 
-// ----- Indexes -----
-// For fetching comments for a novel or episode, sorted by creation time
-CommentSchema.index({ novel: 1, isDeleted: 1, isHiddenByModerator: 1, createdAt: -1 });
-CommentSchema.index({ episode: 1, isDeleted: 1, isHiddenByModerator: 1, createdAt: -1 });
-// For fetching replies to a parent comment
-CommentSchema.index({ parentComment: 1, isDeleted: 1, isHiddenByModerator: 1, createdAt: 1 });
-// For user's comments
-CommentSchema.index({ author: 1, isDeleted: 1, createdAt: -1 });
-// For moderation queue (pending reports)
-CommentSchema.index({ "reports.status": 1, isHiddenByModerator: 1 });
-// Text search on content
-CommentSchema.index({ content: "text" }, { default_language: "thai" });
-
-// ----- Middleware -----
-// Update `isEdited` and `lastEditedAt` on content modification
-CommentSchema.pre("save", function (next) {
-  if (this.isModified("content") && !this.isNew) {
-    this.isEdited = true;
-    this.lastEditedAt = new Date();
+CommentSchema.pre("validate", function (next) {
+  if (!this.novel && !this.episode && !this.scene && !this.parentComment) {
+    next(new Error("ความคิดเห็นต้องเชื่อมโยงกับ Novel, Episode, Scene หรือเป็น Reply (parentComment)"));
+  } else {
+    next();
   }
-  // Soft delete handling
-  if (this.isModified("isDeleted") && this.isDeleted && !this.deletedAt) {
-    this.deletedAt = new Date();
-  }
-  next();
 });
 
-// Middleware to update repliesCount on parent comment
-async function updateParentRepliesCount(doc: IComment, operation: "increment" | "decrement") {
-  if (doc.parentComment) {
-    const Comment = model<IComment>("Comment");
-    const change = operation === "increment" ? 1 : -1;
-    await Comment.findByIdAndUpdate(doc.parentComment, { $inc: { repliesCount: change } });
+async function updateParentCommentRepliesCount(parentId: Types.ObjectId | null | undefined, increment: 1 | -1) {
+  if (!parentId) return;
+  const Comment = CommentModel(); // ใช้ function accessor
+  try {
+    await Comment.findByIdAndUpdate(parentId, { $inc: { repliesCount: increment } });
+  } catch (error) {
+    console.error(`Error updating repliesCount for parent comment ${parentId}:`, error);
   }
 }
 
-// Middleware to update comment counts on Novel/Episode
-async function updateTargetCommentCount(doc: IComment, operation: "increment" | "decrement") {
-  const change = operation === "increment" ? 1 : -1;
-  if (doc.episode) {
-    const Episode = model("Episode"); // Assuming Episode model is registered
-    await Episode.findByIdAndUpdate(doc.episode, { $inc: { "statistics.commentsCount": change } });
-  } else if (doc.novel) {
-    const Novel = model("Novel"); // Assuming Novel model is registered
-    await Novel.findByIdAndUpdate(doc.novel, { $inc: { "statistics.commentsCount": change } });
+async function updateContentCommentCount(doc: IComment, increment: 1 | -1) {
+  const { novel, episode } = doc;
+  const Novel = NovelModel(); // ใช้ function accessor
+  const Episode = EpisodeModel(); // ใช้ function accessor
+  try {
+    if (novel && !doc.parentComment) { 
+      await Novel.findByIdAndUpdate(novel, { $inc: { "statistics.totalComments": increment } });
+    }
+    if (episode && !doc.parentComment) {
+      await Episode.findByIdAndUpdate(episode, { $inc: { "statistics.totalComments": increment } });
+    }
+  } catch (error) {
+    console.error(`Error updating comment count for content (novel: ${novel}, episode: ${episode}):`, error);
   }
 }
 
-CommentSchema.post("save", async function (doc: IComment) {
-  // Check if it is a new, non-deleted, visible comment
-  if (doc.isNew && !doc.isDeleted && !doc.isHiddenByModerator) {
-    await updateParentRepliesCount(doc, "increment");
-    if (!doc.parentComment) { // Only count top-level comments for novel/episode stats
-      await updateTargetCommentCount(doc, "increment");
+CommentSchema.post<IComment>("save", async function (doc) {
+  // `this` is the document that was saved
+  if (this.isNew) {
+    if (this.parentComment) {
+      await updateParentCommentRepliesCount(this.parentComment, 1);
+    }
+    if (!this.isDeleted && this.status === "approved") {
+        await updateContentCommentCount(this, 1);
+    }
+  }
+
+  if (!this.isNew && (this.isModified("status") || this.isModified("isDeleted"))) {
+    const previousStatus = this.$__.priorValid ? this.$__.priorValid.status : null;
+    const previousIsDeleted = this.$__.priorValid ? this.$__.priorValid.isDeleted : null;
+
+    const wasVisible = previousStatus === "approved" && !previousIsDeleted;
+    const isVisible = this.status === "approved" && !this.isDeleted;
+
+    if (wasVisible && !isVisible) {
+        await updateContentCommentCount(this, -1);
+    } else if (!wasVisible && isVisible) {
+        await updateContentCommentCount(this, 1);
     }
   }
 });
 
-// Handle decrementing counts when a comment is soft-deleted or hidden
-// Using findOneAndUpdate to capture the state before update
-CommentSchema.pre("findOneAndUpdate", async function (next) {
-  const update = this.getUpdate() as any; // Consider stricter typing for update
-  const query = this.getQuery();
-
-  // Check if the update involves setting isDeleted or isHiddenByModerator to true
-  if (
-    (update.$set && (update.$set.isDeleted === true || update.$set.isHiddenByModerator === true)) ||
-    update.isDeleted === true ||
-    update.isHiddenByModerator === true
-  ) {
-    // Explicitly type the document as IComment | null
-    const docToUpdate = await this.model.findOne(query).lean() as IComment | null;
-    if (docToUpdate && !docToUpdate.isDeleted && !docToUpdate.isHiddenByModerator) {
-      // Store the pre-update document for the post hook
-      (this as any)._docPreUpdate = docToUpdate;
-    }
-  }
-
-  // Update lastEditedAt if content is changed
-  if (update.$set && update.$set.content) {
-    update.$set.isEdited = true;
-    update.$set.lastEditedAt = new Date();
-  }
-
-  next();
-});
-
-CommentSchema.post("findOneAndUpdate", async function () {
-  const preUpdateDoc = (this as any)._docPreUpdate as IComment | null;
-  const postUpdateDoc = await this.model.findOne(this.getQuery()).lean() as IComment | null;
-
-  if (preUpdateDoc && postUpdateDoc) {
-    const justDeleted = !preUpdateDoc.isDeleted && postUpdateDoc.isDeleted;
-    const justHidden = !preUpdateDoc.isHiddenByModerator && postUpdateDoc.isHiddenByModerator;
-
-    if (justDeleted || justHidden) {
-      await updateParentRepliesCount(postUpdateDoc, "decrement");
-      if (!postUpdateDoc.parentComment) {
-        await updateTargetCommentCount(postUpdateDoc, "decrement");
-      }
+CommentSchema.post<mongoose.Query<IComment, IComment>>("findOneAndUpdate", async function (doc) {
+  // `this` is the query object. `doc` is the document returned by the update (if {new: true})
+  // หรือ null ถ้าไม่เจอ หรือ doc ก่อน update ถ้า {new: false} (default)
+  // การจัดการ denormalization ใน findOneAndUpdate ค่อนข้างซับซ้อนเพราะ pre-hook ไม่มี doc ที่อัปเดต
+  // และ post-hook อาจไม่มีสถานะก่อนอัปเดตที่ชัดเจนเสมอไป
+  // วิธีที่แนะนำคือ: 1. ดึง doc มาตรวจสอบก่อนใน application logic แล้วค่อยสั่ง update
+  // 2. หรือใช้ transaction แล้วคำนวณ delta ในนั้น
+  // 3. หรือมี job แยกต่างหากสำหรับ re-calculate counts เป็นระยะ
+  // ที่นี่จะพยายามอัปเดตถ้า doc ถูกคืนมาและมีการเปลี่ยนแปลงที่สำคัญ
+  if (doc) {
+    const Comment = CommentModel();
+    const currentDoc = await Comment.findById(doc._id).lean(); // ดึงสถานะล่าสุดจริงๆ
+    if (currentDoc) {
+        // ตรวจสอบว่าจำเป็นต้องอัปเดต content count หรือไม่ (เช่น status เปลี่ยนจาก approved <-> อื่นๆ)
+        // Logic นี้ควรจะซับซ้อนกว่านี้เพื่อจัดการทุก edge cases ของการเปลี่ยน status และ isDeleted
+        // ตัวอย่าง: ถ้า status เปลี่ยนจาก non-approved เป็น approved และไม่ถูกลบ -> increment
+        // ถ้า status เปลี่ยนจาก approved เป็น non-approved หรือถูกลบ -> decrement
+        // การ implement ที่แม่นยำอาจต้องเก็บ old values จาก update operation หรือ query ก่อน update
     }
   }
 });
 
-// ----- Virtuals -----
-// Direct replies to this comment
-CommentSchema.virtual("directReplies", {
-  ref: "Comment",
-  localField: "_id",
-  foreignField: "parentComment",
-  match: { isDeleted: false, isHiddenByModerator: false },
-  options: { sort: { createdAt: 1 } },
+CommentSchema.post<mongoose.Query<IComment, IComment>>(["findOneAndDelete", "deleteOne"], async function (doc) {
+  // `doc` is the document that was deleted
+  if (doc) {
+    if (doc.parentComment) {
+      await updateParentCommentRepliesCount(doc.parentComment, -1);
+    }
+    if (!doc.isDeleted && doc.status === "approved") { 
+        await updateContentCommentCount(doc, -1);
+    }
+  }
 });
 
-// (CommentLike model would be separate for actual like data)
-// CommentSchema.virtual("commentLikes", {
-//   ref: "CommentLike",
-//   localField: "_id",
-//   foreignField: "commentId",
-//   count: true // if you only need the count from a separate collection
-// });
-
-// ----- Model Export -----
 const CommentModel = () => models.Comment as mongoose.Model<IComment> || model<IComment>("Comment", CommentSchema);
 
 export default CommentModel;

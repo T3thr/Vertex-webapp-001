@@ -1,111 +1,136 @@
-// src/backend/models/Like.ts
+// src/models/Like.ts
+// โมเดลการถูกใจ (Like Model) - จัดการข้อมูลเมื่อผู้ใช้กดถูกใจเนื้อหาต่างๆ
+// ออกแบบให้เชื่อมโยงกับผู้ใช้และเนื้อหาที่ถูกใจ (เช่น นิยาย, ตอน, ฉาก, ความคิดเห็น)
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// Interface for Like document
-// Represents a user liking a specific target entity (Novel, Episode, Comment, Media, etc.)
+// ประเภทของเนื้อหาที่สามารถถูกใจได้
+export type LikableContentType = "Novel" | "Episode" | "Scene" | "Comment" | "UserPost"; // UserPost ถ้ามีระบบโพสต์ของผู้ใช้
+
+// อินเทอร์เฟซหลักสำหรับเอกสารการถูกใจ (Like Document)
 export interface ILike extends Document {
-  user: Types.ObjectId; // ผู้ใช้ที่กดไลค์ (อ้างอิง User model)
-  targetType: "Novel" | "Episode" | "Comment" | "Media" | "Review" | "Character" | "StoryMapNode"; // ประเภทของสิ่งที่ถูกไลค์
-  targetId: Types.ObjectId; // ID ของสิ่งที่ถูกไลค์ (อ้างอิงตาม targetType)
-  // Optional: Like type/reaction (if more than just a simple like, e.g., "heart", "thumbs_up", "celebrate")
-  reactionType?: string; 
+  _id: Types.ObjectId;
+  user: Types.ObjectId; // ผู้ใช้ที่กดถูกใจ (อ้างอิง User model หรือ SocialMediaUser model)
+  
+  targetType: LikableContentType; // ประเภทของเนื้อหาที่ถูกใจ
+  targetId: Types.ObjectId; // ID ของเนื้อหาที่ถูกใจ (อ้างอิงตาม targetType)
+  
+  // Timestamps
   createdAt: Date;
-  updatedAt: Date; // Though likes are usually immutable in terms of content, timestamp might be useful
+  // updatedAt ไม่จำเป็นมากนักสำหรับ Like, createdAt คือเวลาที่กดถูกใจ
 }
 
 const LikeSchema = new Schema<ILike>(
   {
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User", // หรือ refPath เพื่อรองรับ SocialMediaUser
+      required: true,
+      index: true,
+    },
     targetType: {
       type: String,
-      enum: ["Novel", "Episode", "Comment", "Media", "Review", "Character", "StoryMapNode"],
-      required: [true, "กรุณาระบุประเภทของสิ่งที่ต้องการไลค์"],
+      enum: ["Novel", "Episode", "Scene", "Comment", "UserPost"],
+      required: [true, "กรุณาระบุประเภทของเนื้อหาที่ถูกใจ (Target type is required)"],
       index: true,
     },
-    targetId: { 
-      type: Schema.Types.ObjectId, 
-      required: [true, "กรุณาระบุ ID ของสิ่งที่ต้องการไลค์"], 
+    targetId: {
+      type: Schema.Types.ObjectId,
+      required: [true, "กรุณาระบุ ID ของเนื้อหาที่ถูกใจ (Target ID is required)"],
       index: true,
-      refPath: "targetType" // Dynamic reference to the model specified in targetType
+      // refPath: "targetType" // ทำให้ ref อ้างอิงไปยัง Model ที่ถูกต้องตาม targetType
     },
-    reactionType: { type: String, trim: true, maxlength: 50 }, // e.g., "default", "heart"
   },
   {
-    timestamps: true,
-    // Add refPath for dynamic referencing of targetId
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    timestamps: { createdAt: true, updatedAt: false }, // เก็บเฉพาะ createdAt
   }
 );
 
 // ----- Indexes -----
-// Unique compound index to ensure a user can like a specific target only once (with a specific reactionType if applicable)
-LikeSchema.index({ user: 1, targetType: 1, targetId: 1, reactionType: 1 }, { unique: true });
-LikeSchema.index({ targetType: 1, targetId: 1, createdAt: -1 }); // For fetching likes for an item
-LikeSchema.index({ user: 1, createdAt: -1 }); // For fetching user's likes
+// Unique combination of user, targetType, and targetId to prevent duplicate likes
+LikeSchema.index({ user: 1, targetType: 1, targetId: 1 }, { unique: true });
+// For fetching likes for a specific content item
+LikeSchema.index({ targetType: 1, targetId: 1, createdAt: -1 });
+// For fetching likes by a user
+LikeSchema.index({ user: 1, createdAt: -1 });
 
-// ----- Middleware to update like counts on the target model -----
-// This is a critical piece for denormalization and performance.
-// It should be robust and ideally handle potential race conditions or errors gracefully.
-// Consider using an event-driven architecture for more complex scenarios.
-
-async function updateTargetLikeCount(doc: ILike, operation: "increment" | "decrement") {
-  if (!doc.targetId || !doc.targetType) return;
-
-  const TargetModel = models[doc.targetType] || model(doc.targetType);
+// ----- Middleware: Denormalization of likesCount -----
+// Function to update likesCount on the target document
+async function updateTargetLikesCount(targetType: LikableContentType, targetId: Types.ObjectId, increment: 1 | -1) {
+  const TargetModel = models[targetType] || model(targetType);
   if (!TargetModel) {
-    console.error(`Model ${doc.targetType} not found for like count aggregation.`);
+    console.error(`Model ${targetType} not found for updating likes count.`);
     return;
   }
 
-  const updateField = "statistics.likeCount"; // Standardized field in target models
-  const updateValue = operation === "increment" ? 1 : -1;
-
   try {
-    await TargetModel.findByIdAndUpdate(doc.targetId, { $inc: { [updateField]: updateValue } });
-    console.log(`Like count on ${doc.targetType} ${doc.targetId} updated by ${updateValue}.`);
+    // ตรวจสอบว่า target model มี field `likesCount` หรือ `statistics.totalLikes` หรือไม่
+    // สมมติว่า Comment มี likesCount, Novel/Episode/Scene มี statistics.totalLikes
+    let updateField = "likesCount"; // Default field name
+    if (targetType === "Novel" || targetType === "Episode" || targetType === "Scene") {
+      updateField = "statistics.totalLikes";
+    }
+    
+    await TargetModel.findByIdAndUpdate(targetId, { $inc: { [updateField]: increment } });
   } catch (error) {
-    console.error(`Error updating like count for ${doc.targetType} ${doc.targetId}:`, error);
-    // Potentially add retry logic or queue for later processing if this fails
+    console.error(`Error updating likes count for ${targetType} ${targetId}:`, error);
   }
 }
 
-// After a like is saved, increment the count on the target
-LikeSchema.post("save", async function(doc: ILike) {
-  await updateTargetLikeCount(doc, "increment");
-});
-
-// Before a like is removed (e.g., findOneAndDelete), decrement the count on the target
-// Note: `this` in pre/post `remove` or `findOneAndDelete` hooks refers to the query or document respectively.
-// For `findOneAndDelete`, the document is passed to the `post` hook.
-LikeSchema.post("findOneAndDelete", async function(doc: ILike | null) {
-  if (doc) {
-    await updateTargetLikeCount(doc, "decrement");
+// After a new like is saved, increment the count on the target
+LikeSchema.post("save", async function (doc: ILike) {
+  if (doc.isNew) { // Ensure this runs only for new documents
+    await updateTargetLikesCount(doc.targetType, doc.targetId, 1);
   }
 });
 
-// If using soft deletes for Likes (not typical, usually hard delete for likes):
-// LikeSchema.pre("findOneAndUpdate", async function(next) {
-//   const update = this.getUpdate() as any;
-//   if (update.$set && update.$set.isDeleted === true) {
-//     const docToUpdate = await this.model.findOne(this.getQuery());
-//     if (docToUpdate) {
-//       (this as any)._docToDeleteForLikeCount = docToUpdate;
-//     }
-//   }
-//   next();
-// });
-// LikeSchema.post("findOneAndUpdate", async function() {
-//   const deletedDoc = (this as any)._docToDeleteForLikeCount;
-//   if (deletedDoc) {
-//     await updateTargetLikeCount(deletedDoc, "decrement");
-//   }
-// });
+// Before a like is removed (e.g., findOneAndDelete), decrement the count on the target
+LikeSchema.pre("findOneAndDelete", async function (next) {
+  try {
+    // `this` is the Query object. We need to get the document being deleted.
+    const docToDelete = await this.model.findOne(this.getFilter()).lean();
+    if (docToDelete) {
+      await updateTargetLikesCount(docToDelete.targetType, docToDelete.targetId, -1);
+    }
+    next();
+  } catch (error: any) {
+    console.error("Error in pre findOneAndDelete hook for Like:", error);
+    next(error);
+  }
+});
+
+// Handle deleteOne and deleteMany if used, though typically likes are removed individually.
+// For deleteOne:
+LikeSchema.pre("deleteOne", async function(next) {
+    try {
+        const docToDelete = await this.model.findOne(this.getFilter()).lean();
+        if (docToDelete) {
+            await updateTargetLikesCount(docToDelete.targetType, docToDelete.targetId, -1);
+        }
+        next();
+    } catch (error: any) {
+        console.error("Error in pre deleteOne hook for Like:", error);
+        next(error);
+    }
+});
+
+// For deleteMany (more complex, as it might affect multiple targets):
+LikeSchema.pre("deleteMany", async function(next) {
+    try {
+        const docsToDelete = await this.model.find(this.getFilter()).lean();
+        for (const doc of docsToDelete) {
+            await updateTargetLikesCount(doc.targetType, doc.targetId, -1);
+        }
+        next();
+    } catch (error: any) {
+        console.error("Error in pre deleteMany hook for Like:", error);
+        next(error);
+    }
+});
+
 
 // ----- Model Export -----
-// This generic LikeModel replaces NovelLike, EpisodeLike, etc.
-const LikeModel = () =>
-  models.Like as mongoose.Model<ILike> || model<ILike>("Like", LikeSchema);
+const LikeModel = () => models.Like as mongoose.Model<ILike> || model<ILike>("Like", LikeSchema);
 
 export default LikeModel;
+

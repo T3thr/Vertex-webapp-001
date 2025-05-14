@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser"; // สมมติว่ามี model นี้
+import SocialMediaUserModel from "@/backend/models/SocialMediaUserhaha"; // สมมติว่ามี model นี้
 import { sendVerificationEmail, generateVerificationToken } from "@/backend/services/sendemail"; // สมมติว่ามี services เหล่านี้
 import { validateEmail, validatePassword, validateUsername } from "@/backend/utils/validation"; // สมมติว่ามี utils เหล่านี้
 

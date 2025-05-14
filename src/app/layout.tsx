@@ -113,32 +113,27 @@ export const viewport: Viewport = {
 // และช่วยลด Hydration Mismatch. Script นี้ควรจะ run ก่อนที่ React จะ render.
 function InitializeTheme() {
   const scriptContent = `
+// Inside the script in layout.tsx
 (function() {
   try {
-    // ฟังก์ชันนี้จะพยายามอ่าน theme จาก localStorage ก่อน
     function getInitialTheme() {
-      const storedTheme = localStorage.getItem('novelmaze-theme');
+      const storedTheme = localStorage.getItem('novelmaze-theme'); // Use your storageKey
       if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'sepia') {
         return storedTheme;
       }
-      // ถ้า storedTheme เป็น 'system' หรือไม่มีค่า, ให้เช็ค system preference
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         return 'dark';
       }
       return 'light'; // Default theme
     }
-    
-    // ทำการตั้งค่า theme ทันที
     const theme = getInitialTheme();
-    document.documentElement.classList.remove('light', 'dark', 'sepia');
+    document.documentElement.className = ''; // Clear existing classes like "invisible"
     document.documentElement.classList.add(theme);
-    
-    // ป้องกัน FOUC โดยซ่อน body ไว้จนกว่า theme จะโหลดเสร็จ
-    document.documentElement.style.visibility = 'visible';
+    document.documentElement.setAttribute('data-theme-ready', 'true'); // Signal theme is set
   } catch (e) {
     console.warn('[Layout ThemeScript] Error setting initial theme:', e);
-    document.documentElement.classList.add('light'); // Fallback theme
-    document.documentElement.style.visibility = 'visible';
+    document.documentElement.classList.add('light'); // Fallback
+    document.documentElement.setAttribute('data-theme-ready', 'true');
   }
 })();`;
 
@@ -159,7 +154,7 @@ export default async function RootLayout({
   // await dbConnect();
 
   return (
-    <html lang="th" suppressHydrationWarning className="invisible">
+    <html lang="th" suppressHydrationWarning>
       <head>
         <InitializeTheme />
       </head>

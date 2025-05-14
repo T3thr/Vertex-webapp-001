@@ -1,190 +1,132 @@
-// src/backend/models/WriterStats.ts
-// WriterStats Model - สถิติสำหรับนักเขียนโดยเฉพาะ
-// โมเดลสถิตินักเขียน - จัดเก็บข้อมูลสถิติและประสิทธิภาพสำหรับผู้ใช้ที่เป็นนักเขียน
-import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+// src/models/WriterStats.ts
+// โมเดลสถิตินักเขียน (WriterStats Model) - จัดเก็บข้อมูลสถิติที่เกี่ยวข้องกับผลงานและกิจกรรมของนักเขียนโดยเฉพาะ
+// ออกแบบให้เป็นส่วนหนึ่งของ User model (ผ่าน sub-document) หรือเป็น collection แยกที่อ้างอิง User._id
+// ในที่นี้จะออกแบบเป็น schema ที่สามารถนำไปใช้เป็น sub-document ใน User model ได้ เพื่อความสะดวกในการ query ข้อมูลนักเขียน
 
-// Interface สำหรับข้อมูลสถิติรายวัน/รายเดือน/รายปี (สำหรับกราฟ)
-// อินเทอร์เฟซสำหรับข้อมูลสถิติรายวัน/รายเดือน/รายปี
-export interface ITimeSeriesDataPoint {
-  date: Date; // วันที่ของข้อมูล - วันที่ของข้อมูล
-  value: number; // ค่าสถิติ (เช่น ยอดขาย, จำนวนการอ่าน) - ค่าสถิติ
-  coinValue?: number; // ค่าสถิติในหน่วยเหรียญ (ถ้ามี) - ค่าสถิติในหน่วยเหรียญ
-}
+import mongoose, { Schema, Types } from "mongoose";
 
-// Interface สำหรับสถิติของนิยายแต่ละเรื่อง
-// อินเทอร์เฟซสำหรับสถิติของนิยายแต่ละเรื่อง
+// อินเทอร์เฟซสำหรับสถิติผลงานนิยาย (Novel Performance Stats)
 export interface INovelPerformanceStats {
-  novelId: Types.ObjectId; // ID ของนิยาย (อ้างอิง Novel model) - ID ของนิยาย
-  totalViews: number; // จำนวนการดูทั้งหมด - จำนวนการดูทั้งหมด
-  totalReads: number; // จำนวนการอ่านทั้งหมด (เช่น อ่านจบตอน) - จำนวนการอ่านทั้งหมด
-  totalLikes: number; // จำนวนการถูกใจทั้งหมด - จำนวนการถูกใจทั้งหมด
-  totalComments: number; // จำนวนความคิดเห็นทั้งหมด - จำนวนความคิดเห็นทั้งหมด
-  totalShares?: number; // จำนวนการแชร์ทั้งหมด (ถ้ามี) - จำนวนการแชร์ทั้งหมด
-  averageRating?: number; // คะแนนเฉลี่ย - คะแนนเฉลี่ย
-  totalCoinRevenue: number; // รายได้รวมจากเหรียญ (จากการขายตอน, การบริจาคให้นิยาย) - รายได้รวมจากเหรียญ
-  totalRealMoneyRevenue?: number; // รายได้รวมจากเงินจริง (ถ้ามีการขายตรง) - รายได้รวมจากเงินจริง
-  currencyRealMoney?: string; // สกุลเงินจริง - สกุลเงินจริง
-  conversionRate?: number; // อัตราการแปลง (เช่น ผู้ดูเป็นผู้อ่าน, ผู้อ่านเป็นผู้ซื้อ) - อัตราการแปลง
-  // Historical data for graphs - ข้อมูลย้อนหลังสำหรับกราฟ
-  dailyViews?: ITimeSeriesDataPoint[];
-  dailyReads?: ITimeSeriesDataPoint[];
-  dailyCoinRevenue?: ITimeSeriesDataPoint[];
+  novelId: Types.ObjectId; // ID ของนิยาย
+  novelTitle: string; // ชื่อนิยาย (denormalized)
+  totalViews: number;
+  totalReads: number; // จำนวนครั้งที่ถูกอ่านจนจบ หรือถึง % ที่กำหนด
+  totalLikes: number;
+  totalComments: number;
+  totalFollowers: number; // จำนวนผู้ติดตามนิยายเรื่องนี้
+  averageRating?: number;
+  totalEarningsFromNovel?: number; // รายได้รวมจากนิยายเรื่องนี้ (ถ้ามีการติดตาม)
+  // lastUpdated: Date; // วันที่อัปเดตสถิตินี้ล่าสุด
 }
 
-// Interface สำหรับ WriterStats document
-// อินเทอร์เฟซสำหรับเอกสารสถิตินักเขียน
-export interface IWriterStats extends Document {
-  _id: Types.ObjectId;
-  user: Types.ObjectId; // ID ของผู้ใช้ที่เป็นนักเขียน (อ้างอิง User/SocialMediaUser model) - ID ของผู้ใช้ที่เป็นนักเขียน
-
-  // Overall Earning Stats - สถิติรายได้โดยรวม
-  totalCoinEarned_Lifetime: number; // รายได้รวม (เหรียญ) ตลอดชีพ - รายได้รวม (เหรียญ) ตลอดชีพ
-  totalRealMoneyEarned_Lifetime?: number; // รายได้รวม (เงินจริง) ตลอดชีพ (ถ้ามี) - รายได้รวม (เงินจริง) ตลอดชีพ
-  currencyRealMoney?: string; // สกุลเงินจริงสำหรับรายได้ - สกุลเงินจริงสำหรับรายได้
-  pendingCoinBalance: number; // ยอดเหรียญที่รอดำเนินการ (ยังไม่สามารถถอนได้) - ยอดเหรียญที่รอดำเนินการ
-  withdrawableCoinBalance: number; // ยอดเหรียญที่สามารถถอนได้ - ยอดเหรียญที่สามารถถอนได้
-  lastPayoutDate?: Date; // วันที่จ่ายเงินล่าสุด - วันที่จ่ายเงินล่าสุด
-  totalPayoutAmountCoin?: number; // จำนวนเงินที่จ่ายล่าสุด (เหรียญ) - จำนวนเงินที่จ่ายล่าสุด (เหรียญ)
-
-  // Overall Engagement & Performance Stats - สถิติการมีส่วนร่วมและประสิทธิภาพโดยรวม
-  totalNovelsPublished: number; // จำนวนนิยายที่เผยแพร่ทั้งหมด - จำนวนนิยายที่เผยแพร่ทั้งหมด
-  totalEpisodesPublished: number; // จำนวนตอนที่เผยแพร่ทั้งหมด - จำนวนตอนที่เผยแพร่ทั้งหมด
-  totalNovelViews_Lifetime: number; // จำนวนการดูนิยายทั้งหมด (รวมทุกเรื่อง) - จำนวนการดูนิยายทั้งหมด
-  totalNovelReads_Lifetime: number; // จำนวนการอ่านนิยายทั้งหมด (รวมทุกเรื่อง) - จำนวนการอ่านนิยายทั้งหมด
-  averageRating_AllNovels?: number; // คะแนนเฉลี่ยของนิยายทุกเรื่อง - คะแนนเฉลี่ยของนิยายทุกเรื่อง
-  totalFollowers_Lifetime: number; // จำนวนผู้ติดตามทั้งหมด (อาจซ้ำกับ User.statistics.followersCount แต่เก็บไว้ที่นี่เพื่อ snapshot) - จำนวนผู้ติดตามทั้งหมด
-
-  // Detailed Stats per Novel - สถิติโดยละเอียดของนิยายแต่ละเรื่อง
-  novelPerformance: INovelPerformanceStats[];
-
-  // Time Series Data for Dashboard Graphs (Overall) - ข้อมูลอนุกรมเวลาสำหรับกราฟบนแดชบอร์ด (โดยรวม)
-  monthlyCoinEarnings?: ITimeSeriesDataPoint[]; // รายได้ (เหรียญ) รายเดือน - รายได้ (เหรียญ) รายเดือน
-  monthlyRealMoneyEarnings?: ITimeSeriesDataPoint[]; // รายได้ (เงินจริง) รายเดือน - รายได้ (เงินจริง) รายเดือน
-  monthlyNewFollowers?: ITimeSeriesDataPoint[]; // จำนวนผู้ติดตามใหม่รายเดือน - จำนวนผู้ติดตามใหม่รายเดือน
-  monthlyNovelViews?: ITimeSeriesDataPoint[]; // จำนวนการดูนิยายรายเดือน - จำนวนการดูนิยายรายเดือน
-  monthlyNovelReads?: ITimeSeriesDataPoint[]; // จำนวนการอ่านนิยายรายเดือน - จำนวนการอ่านนิยายรายเดือน
-
-  // Audience Demographics (Potentially aggregated and anonymized) - ข้อมูลประชากรของผู้ชม (อาจมีการรวมและทำให้ไม่ระบุตัวตน)
-  // e.g., topGeographies: [{ country: string, percentage: number }], ageRanges: [...], genderDistribution: [...]
-  audienceDemographics?: any; // ควรออกแบบ schema ย่อยถ้าต้องการรายละเอียดมาก
-
-  // Donation Specific Stats - สถิติเฉพาะการบริจาค
-  totalDonationCoinReceived_Lifetime: number; // จำนวนเหรียญที่ได้รับจากการบริจาคทั้งหมด - จำนวนเหรียญที่ได้รับจากการบริจาคทั้งหมด
-  totalDonationCount_Lifetime: number; // จำนวนครั้งที่ได้รับการบริจาคทั้งหมด - จำนวนครั้งที่ได้รับการบริจาคทั้งหมด
-  averageDonationCoinAmount?: number; // จำนวนเหรียญบริจาคเฉลี่ยต่อครั้ง - จำนวนเหรียญบริจาคเฉลี่ยต่อครั้ง
-  topDonors?: Array<{ userId: Types.ObjectId, totalCoinDonated: number }>; // ผู้บริจาคสูงสุด (เก็บ ID และจำนวน)
-
-  lastCalculatedAt: Date; // วันที่คำนวณสถิติล่าสุด - วันที่คำนวณสถิติล่าสุด
-  createdAt: Date;
-  updatedAt: Date;
+// อินเทอร์เฟซหลักสำหรับสถิตินักเขียน (WriterStats)
+// นี่คือ Schema ที่จะถูกฝัง (embed) หรืออ้างอิงใน User model
+export interface IWriterStats {
+  totalNovelsPublished: number; // จำนวนนิยายทั้งหมดที่เผยแพร่
+  totalEpisodesPublished: number; // จำนวนตอนทั้งหมดที่เผยแพร่
+  
+  // สถิติการมีส่วนร่วมโดยรวม (across all novels by this writer)
+  totalViewsAcrossAllNovels: number;
+  totalReadsAcrossAllNovels: number;
+  totalLikesReceivedOnNovels: number;
+  totalCommentsReceivedOnNovels: number;
+  // totalNovelFollowers: number; // ผลรวมผู้ติดตามของทุกนิยาย (อาจซ้ำซ้อนกับ User.socialStats.followersCount ถ้า follower ของนักเขียนนับรวมจากนิยาย)
+  
+  // สถิติรายได้ (denormalized summary, รายละเอียดอยู่ใน EarningAnalytic)
+  totalEarningsToDate: number; // รายได้รวมทั้งหมด (สกุลเงินหลัก เช่น THB)
+  totalCoinsReceived: number; // เหรียญที่ได้รับจากการสนับสนุน (ถ้ามี)
+  totalRealMoneyReceived: number; // เงินจริงที่ได้รับจากการสนับสนุน/ขาย (สกุลเงินหลัก)
+  totalDonationsReceived: number; // จำนวนครั้งที่ได้รับการสนับสนุน
+  
+  // สถิติผู้ติดตามนักเขียน (อาจซ้ำกับ User.socialStats แต่แยกไว้เพื่อความชัดเจนของ writer-specific stats)
+  // currentWriterFollowers: number; // จำนวนผู้ติดตามนักเขียนคนนี้โดยตรง
+  
+  // สถิติผลงานรายนิยาย (อาจเก็บ top N หรือ link ไปยัง collection แยกถ้าเยอะมาก)
+  // novelPerformanceSummaries?: Types.DocumentArray<INovelPerformanceStats>;
+  
+  // สถิติการสมัครเป็นนักเขียน (ถ้ามีกระบวนการสมัคร)
+  // applicationStatus?: "not_applied" | "pending_review" | "approved" | "rejected";
+  // writerSince?: Date; // วันที่ได้รับการอนุมัติเป็นนักเขียน
+  
+  lastNovelPublishedAt?: Date;
+  lastEpisodePublishedAt?: Date;
+  // lastEarningActivityAt?: Date;
+  // lastWithdrawalAt?: Date;
+  
+  // อาจมี ranking หรือ tier ของนักเขียน (ถ้ามีระบบนี้)
+  // writerTier?: string;
+  // writerRank?: number;
 }
 
-const TimeSeriesDataPointSchema = new Schema<ITimeSeriesDataPoint>(
-  {
-    date: { type: Date, required: true },
-    value: { type: Number, required: true, default: 0 },
-    coinValue: { type: Number },
-  },
-  { _id: false }
-);
-
+// Schema ย่อยสำหรับ INovelPerformanceStats (ถ้าจะ embed)
 const NovelPerformanceStatsSchema = new Schema<INovelPerformanceStats>(
   {
-    novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true, index: true },
+    novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true },
+    novelTitle: { type: String, required: true, trim: true },
     totalViews: { type: Number, default: 0, min: 0 },
     totalReads: { type: Number, default: 0, min: 0 },
     totalLikes: { type: Number, default: 0, min: 0 },
     totalComments: { type: Number, default: 0, min: 0 },
-    totalShares: { type: Number, default: 0, min: 0 },
-    averageRating: { type: Number, min: 0, max: 5 },
-    totalCoinRevenue: { type: Number, default: 0, min: 0 },
-    totalRealMoneyRevenue: { type: Number, default: 0, min: 0 },
-    currencyRealMoney: { type: String, uppercase: true, trim: true },
-    conversionRate: { type: Number, min: 0 },
-    dailyViews: [TimeSeriesDataPointSchema],
-    dailyReads: [TimeSeriesDataPointSchema],
-    dailyCoinRevenue: [TimeSeriesDataPointSchema],
+    totalFollowers: { type: Number, default: 0, min: 0 },
+    averageRating: { type: Number, min: 0, max: 5 }, // หรือตามระบบ rating
+    totalEarningsFromNovel: { type: Number, default: 0, min: 0 },
+    // lastUpdated: { type: Date, default: Date.now }
   },
   { _id: false }
 );
 
-const WriterStatsSchema = new Schema<IWriterStats>(
+// Schema หลักสำหรับ WriterStats (สำหรับใช้เป็น sub-document ใน User model)
+export const WriterStatsSchema = new Schema<IWriterStats>(
   {
-    user: {
-      type: Schema.Types.ObjectId,
-      ref: "User", // Can also be SocialMediaUser, handle dynamically or use a generic refPath
-      required: true,
-      unique: true, // Each user should have only one WriterStats document
-      index: true,
-    },
-    totalCoinEarned_Lifetime: { type: Number, default: 0, min: 0 },
-    totalRealMoneyEarned_Lifetime: { type: Number, default: 0, min: 0 },
-    currencyRealMoney: { type: String, uppercase: true, trim: true },
-    pendingCoinBalance: { type: Number, default: 0, min: 0 },
-    withdrawableCoinBalance: { type: Number, default: 0, min: 0 },
-    lastPayoutDate: { type: Date },
-    totalPayoutAmountCoin: { type: Number, min: 0 },
     totalNovelsPublished: { type: Number, default: 0, min: 0 },
     totalEpisodesPublished: { type: Number, default: 0, min: 0 },
-    totalNovelViews_Lifetime: { type: Number, default: 0, min: 0 },
-    totalNovelReads_Lifetime: { type: Number, default: 0, min: 0 },
-    averageRating_AllNovels: { type: Number, min: 0, max: 5 },
-    totalFollowers_Lifetime: { type: Number, default: 0, min: 0 },
-    novelPerformance: [NovelPerformanceStatsSchema],
-    monthlyCoinEarnings: [TimeSeriesDataPointSchema],
-    monthlyRealMoneyEarnings: [TimeSeriesDataPointSchema],
-    monthlyNewFollowers: [TimeSeriesDataPointSchema],
-    monthlyNovelViews: [TimeSeriesDataPointSchema],
-    monthlyNovelReads: [TimeSeriesDataPointSchema],
-    audienceDemographics: { type: Schema.Types.Mixed }, // For flexibility, consider a sub-schema if structure is fixed
-    totalDonationCoinReceived_Lifetime: { type: Number, default: 0, min: 0 },
-    totalDonationCount_Lifetime: { type: Number, default: 0, min: 0 },
-    averageDonationCoinAmount: { type: Number, min: 0 },
-    topDonors: [
-      {
-        _id: false,
-        userId: { type: Schema.Types.ObjectId, ref: "User" }, // Or SocialMediaUser
-        totalCoinDonated: { type: Number, default: 0, min: 0 },
-      },
-    ],
-    lastCalculatedAt: { type: Date, default: Date.now },
+    totalViewsAcrossAllNovels: { type: Number, default: 0, min: 0 },
+    totalReadsAcrossAllNovels: { type: Number, default: 0, min: 0 },
+    totalLikesReceivedOnNovels: { type: Number, default: 0, min: 0 },
+    totalCommentsReceivedOnNovels: { type: Number, default: 0, min: 0 },
+    totalEarningsToDate: { type: Number, default: 0, min: 0 }, // สกุลเงิน THB (หรือสกุลเงินหลักของระบบ)
+    totalCoinsReceived: { type: Number, default: 0, min: 0 },
+    totalRealMoneyReceived: { type: Number, default: 0, min: 0 }, // สกุลเงิน THB (หรือสกุลเงินหลักของระบบ)
+    totalDonationsReceived: { type: Number, default: 0, min: 0 },
+    // currentWriterFollowers: { type: Number, default: 0, min: 0 }, // อาจดึงจาก User.socialStats.followersCount
+    // novelPerformanceSummaries: [NovelPerformanceStatsSchema], // อาจมี $slice เพื่อจำกัดจำนวน
+    // applicationStatus: { type: String, enum: ["not_applied", "pending_review", "approved", "rejected"], default: "not_applied" },
+    // writerSince: Date,
+    lastNovelPublishedAt: Date,
+    lastEpisodePublishedAt: Date,
+    // writerTier: { type: String, trim: true },
+    // writerRank: { type: Number, min: 0 },
   },
-  {
-    timestamps: true, // createdAt, updatedAt
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
-  }
+  { _id: false } // ไม่สร้าง _id สำหรับ sub-document นี้โดยอัตโนมัติ
 );
 
-// ----- Indexes -----
-// Index for querying writer stats by user and last calculation time
-// ดัชนีสำหรับการ query สถิตินักเขียนตามผู้ใช้และเวลาคำนวณล่าสุด
-WriterStatsSchema.index({ user: 1, lastCalculatedAt: -1 });
-// Index for sorting writers by lifetime earnings (coins)
-// ดัชนีสำหรับการจัดอันดับนักเขียนตามรายได้รวม (เหรียญ)
-WriterStatsSchema.index({ totalCoinEarned_Lifetime: -1 });
+// ไม่มีการ export model โดยตรงจากไฟล์นี้ เนื่องจาก schema นี้มีไว้เพื่อใช้เป็นส่วนหนึ่งของ User model
+// การอัปเดตสถิติเหล่านี้จะเกิดขึ้นผ่าน middleware หรือ logic ในส่วนที่เกี่ยวข้อง
+// เช่น เมื่อมีการ publish novel/episode, เมื่อมีการ like/comment, เมื่อมี earning transaction
 
-// ----- Methods -----
-// Method to update or add novel performance stats
-// เมธอดสำหรับอัปเดตหรือเพิ่มสถิติประสิทธิภาพของนิยาย
-WriterStatsSchema.methods.updateNovelPerformance = function (novelStats: Partial<INovelPerformanceStats> & { novelId: Types.ObjectId }) {
-  const existingNovelPerf = this.novelPerformance.find(
-    (p: INovelPerformanceStats) => p.novelId.equals(novelStats.novelId)
-  );
-  if (existingNovelPerf) {
-    Object.assign(existingNovelPerf, novelStats);
-  } else {
-    this.novelPerformance.push(novelStats);
-  }
-  this.markModified("novelPerformance");
-};
+// ตัวอย่างการใช้งานใน User.ts:
+// import { IWriterStats, WriterStatsSchema } from './WriterStats';
+// ...
+// export interface IUser extends Document {
+//   ...
+//   writerStats?: IWriterStats; // สำหรับผู้ใช้ที่เป็นนักเขียน
+//   isWriter: boolean;
+// }
+// ...
+// const UserSchema = new Schema<IUser>(
+//   {
+//     ...
+//     writerStats: WriterStatsSchema,
+//     isWriter: { type: Boolean, default: false, index: true },
+//   }
+// );
 
-// ----- Model Export -----
-// This pattern ensures the model is not recompiled in Next.js dev mode
-// รูปแบบนี้ช่วยให้มั่นใจว่าโมเดลจะไม่ถูกคอมไพล์ซ้ำในโหมด dev ของ Next.js
-const WriterStatsModel = () =>
-  models.WriterStats as mongoose.Model<IWriterStats> ||
-  model<IWriterStats>("WriterStats", WriterStatsSchema);
-
-export default WriterStatsModel;
+// หมายเหตุ: การตัดสินใจว่าจะ embed หรือใช้ collection แยกสำหรับ WriterStats ขึ้นอยู่กับ
+// 1. ขนาดของข้อมูล: ถ้า novelPerformanceSummaries มีจำนวนมาก การแยก collection อาจดีกว่า
+// 2. ความถี่ในการ query: ถ้า query writer stats บ่อยๆ พร้อม user data การ embed อาจเร็วกว่า
+// 3. ความซับซ้อนในการอัปเดต: การอัปเดต sub-document ที่ซับซ้อนอาจยุ่งยากกว่า collection แยก
+// สำหรับ NovelMaze ที่เน้น performance และ scalability, ถ้า novelPerformanceSummaries จะมีข้อมูลเยอะมาก
+// อาจพิจารณาเก็บ WriterStats หลักๆ embed ไว้ และมี collection `NovelPerformanceDailyStats` แยกต่างหาก
+// ที่ update ด้วย background job เพื่อไม่ให้ User document ใหญ่เกินไป
+// ในที่นี้ WriterStatsSchema ออกแบบมาให้ค่อนข้างกระชับ สามารถ embed ได้
 

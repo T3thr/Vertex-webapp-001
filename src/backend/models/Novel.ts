@@ -1,325 +1,322 @@
-// src/backend/models/Novel.ts
+// src/models/Novel.ts
+// โมเดลนิยาย (Novel Model) - ศูนย์กลางข้อมูลของนิยายแต่ละเรื่อง
+// ออกแบบให้รองรับข้อมูลที่ละเอียด, การจัดการเนื้อหา, การตั้งค่าการเข้าถึง, สถิติ, และการเชื่อมโยงกับผู้เขียนและหมวดหมู่
+// ปรับปรุงให้รองรับธีมหลัก/รอง, ประเภทตอนจบที่หลากหลาย, และการกรองขั้นสูงตามข้อกำหนดของ NovelMaze
+// **ปรับปรุงล่าสุด**: เปลี่ยนไปใช้ Follow.ts สำหรับระบบการติดตามนิยาย, เพิ่มคอมเมนต์เพื่อชี้แจงบทบาทของโมเดลนี้ในการรองรับระบบการบริจาค (Donation System)
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import { ICategory, CategoryType } from "./Category"; // อ้างอิง Category model
+// ไม่มีการ import NovelFollowModel อีกต่อไป
 
-// Interface สำหรับข้อมูลรายเดือนของรายได้
-interface MonthlyEarning {
-  year: number; // ปี (เช่น 2025)
-  month: number; // เดือน (1-12)
-  coinValue: number; // รายได้จากเหรียญ
-  donationValue: number; // รายได้จากการบริจาค
+// ประเภทของตอนจบ (Ending Type)
+export type NovelEndingType = 
+  | "single_linear" // ตอนจบเดียว เนื้อเรื่องเป็นเส้นตรง
+  | "multiple_choices_single_ending" // มีตัวเลือกแต่จบแบบเดียว (อาจมีผลต่อ stat หรือฉากเล็กน้อย)
+  | "multiple_branching_paths_endings" // มีตัวเลือกที่ส่งผลให้เนื้อเรื่องแตกแขนงและมีหลายฉากจบ
+  | "open_world_sandbox" // (แนวคิดสำหรับอนาคต) ไม่มีจุดจบที่ชัดเจน ผู้เล่นสำรวจและสร้างเรื่องราวเอง
+  | "episodic_ongoing"; // นิยายรายตอนที่ยังไม่จบ อาจมีหลาย arc แต่ยังไม่มี final ending
+
+// สถานะของนิยาย (Novel Status)
+export type NovelStatus = 
+  | "draft" // ฉบับร่าง ผู้เขียนกำลังสร้าง/แก้ไข ยังไม่เผยแพร่
+  | "published" // เผยแพร่แล้ว ผู้อ่านทั่วไปสามารถเข้าถึงได้ (ตาม access control)
+  | "on_hiatus" // หยุดพักการอัปเดตชั่วคราว
+  | "completed" // เขียนจบสมบูรณ์แล้ว
+  | "discontinued" // ยกเลิกการเขียน ไม่มีการอัปเดตอีกต่อไป
+  | "pending_review" // รอการตรวจสอบจากทีมงาน (ถ้ามีระบบ review)
+  | "rejected"; // ไม่ผ่านการตรวจสอบ
+
+// ระดับความเหมาะสมของเนื้อหา (Content Rating / Maturity Level)
+export type ContentMaturity = 
+  | "all_ages" // เหมาะสมสำหรับทุกวัย
+  | "teen_13_plus" // เหมาะสำหรับวัยรุ่น 13 ปีขึ้นไป
+  | "mature_17_plus" // เหมาะสำหรับผู้ใหญ่ 17 ปีขึ้นไป (อาจมีเนื้อหารุนแรง, เพศ)
+  | "adult_18_plus_explicit"; // สำหรับผู้ใหญ่ 18 ปีขึ้นไป มีเนื้อหาทางเพศอย่างชัดเจน (ถ้าแพลตฟอร์มอนุญาต)
+
+// โมเดลการสร้างรายได้ (Monetization Model)
+export type MonetizationModel = 
+  | "free_to_read" // อ่านฟรีทั้งหมด
+  | "freemium_with_paid_episodes" // บางตอนฟรี บางตอนเสียเงิน
+  | "pay_per_novel" // ซื้อทั้งเรื่องเพื่ออ่าน
+  | "subscription_access" // เข้าถึงได้ผ่านระบบสมาชิกของแพลตฟอร์ม
+  | "ads_supported"; // อ่านฟรี มีโฆษณา
+
+// การตั้งค่าการเข้าถึง (Access Control)
+export interface INovelAccessControl {
+  monetizationModel: MonetizationModel; // โมเดลการสร้างรายได้
+  pricePerNovel?: number; // ราคาสำหรับทั้งเรื่อง (ถ้า monetizationModel = "pay_per_novel")
+  pricePerEpisode?: number; // ราคาต่อตอน (ถ้า monetizationModel = "freemium_with_paid_episodes")
+  currency?: string; // สกุลเงิน (เช่น "COIN", "THB", "USD")
+  freeEpisodeCount?: number; // จำนวนตอนที่อ่านฟรี (ถ้า monetizationModel = "freemium_with_paid_episodes")
+  isListed: boolean; // แสดงในรายการนิยายสาธารณะหรือไม่ (default true)
+  passwordProtected?: string; // รหัสผ่านสำหรับเข้านิยาย (hashed, ถ้าต้องการ)
 }
 
-// Interface สำหรับข้อมูลส่วนลด
-interface DiscountDetails {
-  percentage?: number; // เปอร์เซ็นต์ส่วนลด (เช่น 20 หมายถึง 20%)
-  startDate?: Date; // วันที่เริ่มโปรโมชัน
-  endDate?: Date; // วันที่สิ้นสุดโปรโมชัน
+// ข้อมูลสถิติของนิยาย (Novel Statistics - denormalized for performance)
+export interface INovelStats {
+  viewCount: number; // จำนวนครั้งที่ถูกเปิดอ่าน (รวมทุกตอน)
+  uniqueViewCount?: number; // จำนวนผู้อ่านที่ไม่ซ้ำกัน (ถ้าติดตามได้)
+  likeCount: number; // จำนวนไลค์ทั้งหมด
+  followerCount: number; // จำนวนผู้ติดตามนิยาย (จะถูกอัปเดตโดย Follow.ts middleware หรือ logic ที่เกี่ยวข้อง)
+  commentCount: number; // จำนวนความคิดเห็นทั้งหมด
+  ratingAverage?: number; // คะแนนเฉลี่ย (0-5)
+  ratingCount?: number; // จำนวนผู้ให้คะแนน
+  totalChapters: number; // จำนวนตอนทั้งหมดที่เผยแพร่แล้ว
+  totalWords?: number; // จำนวนคำโดยประมาณทั้งหมด (อาจคำนวณจาก Episodes/Scenes)
 }
 
-// Interface สำหรับ Novel document
+// การอ้างอิงหมวดหมู่และธีม (Category and Theme Reference)
+export interface INovelCategoryReference {
+  categoryId: Types.ObjectId; // ID ของ ICategory document
+  subItemSlug: string; // Slug ของ ISubCategory item ที่เลือก
+}
+
+// การอ้างอิงธีมหลักและธีมรอง (Main and Sub Themes)
+export interface INovelThemeAssignment {
+  mainTheme: INovelCategoryReference; // ธีมหลัก (ต้องเป็น subItem จาก Category ที่มี categoryType="theme")
+  subThemes?: INovelCategoryReference[]; // ธีมรอง (ต้องเป็น subItems จาก Category ที่มี categoryType="theme")
+}
+
+// ข้อมูลเกี่ยวกับ Fan Fiction (ถ้าเป็น)
+export interface IFanFictionDetails {
+  originalWorkTitle: string; // ชื่อผลงานต้นฉบับ
+  originalWorkAuthor?: string; // ชื่อผู้แต่งผลงานต้นฉบับ
+  originalWorkSourceUrl?: string; // URL ของผลงานต้นฉบับ (ถ้ามี)
+}
+
+// Interface สำหรับ Localized String (ย้ายมาด้านบนเพื่อใช้งานก่อน)
+export interface ILocalizedString {
+  th: string; // ภาษาไทย (บังคับมี)
+  en?: string; // ภาษาอังกฤษ (ไม่บังคับ)
+  // สามารถเพิ่มภาษาอื่นๆ ได้ตามต้องการ เช่น jp, cn, kr
+  [key: string]: string | undefined; // Index signature for other languages
+}
+
+// ----- Interface หลักสำหรับเอกสารนิยาย (Novel Document) -----
+// **ข้อมูลสำคัญสำหรับระบบบริจาค (Donation System):**
+// - `author`: ใช้ตรวจสอบว่าผู้ยื่นคำขอเปิดรับบริจาค (applicant ใน DonationApplication) เป็นเจ้าของนิยายจริงหรือไม่
+// - `sourceType`: ใช้ตรวจสอบว่านิยายเป็นประเภท "Original" หรือไม่ ซึ่งเป็นเงื่อนไขสำหรับการเปิดรับบริจาคให้ตัวละครในนิยาย
+// โมเดล Novel ไม่ได้เก็บ ID ของ DonationApplication โดยตรง แต่ DonationApplication จะอ้างอิงมายัง Novel (targetNovel)
 export interface INovel extends Document {
-  title: string;
-  slug: string;
-  description: string;
-  coverImage: string;
-  author: Types.ObjectId;
-  categories: Types.ObjectId[];
-  subCategories?: Types.ObjectId[];
-  tags: string[];
-  status: "draft" | "published" | "completed" | "onHiatus" | "archived"; // ลบ discount ออกจาก enum
-  visibility: "public" | "unlisted" | "private" | "followersOnly";
-  language: string;
-  isExplicitContent: boolean;
-  ageRating?: "everyone" | "teen" | "mature17+" | "adult18+";
-  isOriginalWork: boolean;
-  originalLanguage?: string;
-  translationSource?: string;
-  isPremium: boolean;
-  isDiscounted: boolean; // เพิ่มฟิลด์ใหม่เพื่อระบุสถานะส่วนลด
-  discountDetails?: DiscountDetails; // เพิ่มฟิลด์สำหรับเก็บรายละเอียดส่วนลด
-  averageRating: number;
-  ratingsCount: number;
-  viewsCount: number;
-  totalReads: number;
-  likesCount: number;
-  followersCount: number;
-  commentsCount: number;
-  episodesCount: number;
-  publishedEpisodesCount: number;
-  wordsCount?: number;
-  stats: {
-    totalPurchasesAmount?: number;
-    totalDonationsAmount?: number;
-    completionRate?: number;
-    lastViewedAt?: Date;
-    monthlyEarnings?: MonthlyEarning[];
-  };
-  settings: {
-    allowComments: boolean;
-    showContentWarnings?: boolean;
-    contentWarnings?: string[];
-    enableMonetization: boolean;
-    enableDonations: boolean;
-    enableCharacterDonations: boolean;
-  };
-  releaseSchedule?: {
-    frequency: "asReady" | "daily" | "weekly" | "biweekly" | "monthly";
-    dayOfWeek?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
-    timeOfDay?: string;
-    nextExpectedReleaseAt?: Date;
-  };
-  gameElementsSummary?: {
-    hasChoices: boolean;
-    hasMultipleEndings: boolean;
-    hasStatSystem: boolean;
-    hasRelationshipSystem: boolean;
-    hasInventorySystem: boolean;
-  };
-  featuredOfficialMedia?: Types.ObjectId[];
-  seo?: {
-    metaTitle?: string;
-    metaDescription?: string;
-    keywords?: string[];
-    socialImage?: string;
-  };
-  embeddingVector?: number[];
-  genreDistribution?: Record<string, number>;
-  sentimentAnalysis?: {
-    overallScore: number;
-    dominantEmotion?: string;
-  };
+  _id: Types.ObjectId;
+  title: ILocalizedString; // ชื่อนิยาย (รองรับหลายภาษา)
+  slug: string; // Slug สำหรับ URL ที่ไม่ซ้ำกัน (สร้างจาก title ภาษาหลัก)
+  
+  author: Types.ObjectId; // ผู้เขียน (อ้างอิง User model) - **สำคัญสำหรับ Donation: ต้องตรงกับ applicant ของ DonationApplication**
+  coAuthors?: Types.ObjectId[]; // ผู้เขียนร่วม (ถ้ามี)
+  
+  // รายละเอียดเนื้อหา
+  synopsis: ILocalizedString; // เรื่องย่อ (รองรับหลายภาษา)
+  coverImageUrl: string; // URL ภาพปกหลักของนิยาย
+  bannerImageUrl?: string; // URL ภาพแบนเนอร์ (สำหรับหน้าโปรโมทนิยาย)
+  tags?: string[]; // Tags หรือ Keywords เพิ่มเติม (ผู้เขียนกำหนดเอง)
+  
+  // การจัดหมวดหมู่และธีม
+  categories: INovelCategoryReference[]; // หมวดหมู่ทั่วไป
+  themeAssignment: INovelThemeAssignment; // การกำหนดธีมหลักและธีมรอง
+  sourceType: INovelCategoryReference; // ประเภทแหล่งที่มา (Original, Fan Fiction, Inspired By) - **สำคัญสำหรับ Donation: การบริจาคให้ตัวละครจะอนุญาตเฉพาะนิยายที่เป็น 'original'**
+  fanFictionDetails?: IFanFictionDetails; // รายละเอียดเพิ่มเติมถ้า sourceType เป็น Fan Fiction
+  
+  // โครงสร้างและตอนจบ
+  endingType: NovelEndingType; // ประเภทของตอนจบ
+  defaultLanguage: string; // ภาษาหลักของนิยาย (เช่น "th", "en")
+  
+  // สถานะและการเผยแพร่
+  status: NovelStatus; // สถานะปัจจุบันของนิยาย
+  publishedAt?: Date; // วันที่เผยแพร่ครั้งแรก
+  lastEpisodePublishedAt?: Date; // วันที่ตอนล่าสุดเผยแพร่
+  contentMaturity: ContentMaturity; // ระดับความเหมาะสมของเนื้อหา
+  
+  // การเข้าถึงและการสร้างรายได้
+  accessControl: INovelAccessControl;
+  
+  // สถิติ (Denormalized)
+  stats: INovelStats; // followerCount ในนี้จะถูกจัดการโดย Follow.ts
+  
+  // การตั้งค่าเพิ่มเติม
+  enableComments: boolean; // เปิด/ปิด ระบบความคิดเห็น (default true)
+  enableRatings: boolean; // เปิด/ปิด ระบบให้คะแนน (default true)
+  authorNotes?: ILocalizedString; // หมายเหตุจากผู้เขียนเกี่ยวกับนิยายโดยรวม
+  
+  // การจัดการ Editor
+  firstEpisode?: Types.ObjectId; // ID ของตอนแรก (อาจใช้เป็นจุดเริ่มต้นใน editor)
+  storyMapData?: any; // ข้อมูลสำหรับแสดงผล Story Map (โครงสร้าง JSON ที่ editor จัดการ)
+  
+  // Soft delete
   isDeleted: boolean;
   deletedAt?: Date;
-  lastEpisodePublishedAt?: Date;
-  firstPublishedAt?: Date;
+
+  // Timestamps
   createdAt: Date;
   updatedAt: Date;
-  lastSignificantUpdateAt?: Date;
+  lastContentUpdatedAt: Date; // วันที่เนื้อหาภายใน (เช่น episodes, scenes) มีการอัปเดตล่าสุด
 }
 
-const MonthlyEarningSchema = new Schema<MonthlyEarning>(
+// ----- Schema ย่อย -----
+const LocalizedStringSchema = new Schema<ILocalizedString>(
+  { 
+    th: { type: String, required: [true, "ต้องระบุข้อความเป็นภาษาไทย"], trim: true, maxlength: 5000 }, 
+    en: { type: String, trim: true, maxlength: 5000 },
+    // เพิ่ม index signature สำหรับภาษาอื่นๆ
+  },
+  { _id: false, strict: false } // strict: false เพื่ออนุญาตภาษาอื่นๆ
+);
+
+const NovelAccessControlSchema = new Schema<INovelAccessControl>(
   {
-    year: { type: Number, required: true },
-    month: { type: Number, required: true, min: 1, max: 12 },
-    coinValue: { type: Number, default: 0, min: 0 },
-    donationValue: { type: Number, default: 0, min: 0 },
+    monetizationModel: {
+      type: String,
+      enum: Object.values(MonetizationModel),
+      required: true,
+      default: "free_to_read",
+    },
+    pricePerNovel: { type: Number, min: 0 },
+    pricePerEpisode: { type: Number, min: 0 },
+    currency: { type: String, trim: true, uppercase: true, maxlength: 10 },
+    freeEpisodeCount: { type: Number, min: 0 },
+    isListed: { type: Boolean, default: true },
+    passwordProtected: { type: String }, // ควร hash ก่อนบันทึก
   },
   { _id: false }
 );
 
-const DiscountDetailsSchema = new Schema<DiscountDetails>(
+const NovelStatsSchema = new Schema<INovelStats>(
   {
-    percentage: { type: Number, min: 0, max: 100 },
-    startDate: { type: Date },
-    endDate: { type: Date },
+    viewCount: { type: Number, default: 0, min: 0 },
+    uniqueViewCount: { type: Number, default: 0, min: 0 },
+    likeCount: { type: Number, default: 0, min: 0 },
+    followerCount: { type: Number, default: 0, min: 0 }, // จะถูกอัปเดตโดย Follow.ts middleware หรือ logic ที่เกี่ยวข้อง
+    commentCount: { type: Number, default: 0, min: 0 },
+    ratingAverage: { type: Number, min: 0, max: 5 },
+    ratingCount: { type: Number, default: 0, min: 0 },
+    totalChapters: { type: Number, default: 0, min: 0 },
+    totalWords: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );
 
+const NovelCategoryReferenceSchema = new Schema<INovelCategoryReference>(
+  {
+    categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
+    subItemSlug: { type: String, required: true, trim: true, lowercase: true },
+  },
+  { _id: false }
+);
+
+const NovelThemeAssignmentSchema = new Schema<INovelThemeAssignment>(
+  {
+    mainTheme: { type: NovelCategoryReferenceSchema, required: true },
+    subThemes: [NovelCategoryReferenceSchema],
+  },
+  { _id: false }
+);
+
+const FanFictionDetailsSchema = new Schema<IFanFictionDetails>(
+  {
+    originalWorkTitle: { type: String, required: true, trim: true, maxlength: 255 },
+    originalWorkAuthor: { type: String, trim: true, maxlength: 255 },
+    originalWorkSourceUrl: { type: String, trim: true, maxlength: 500 },
+  },
+  { _id: false }
+);
+
+// Schema หลักสำหรับ Novel
 const NovelSchema = new Schema<INovel>(
   {
-    title: {
-      type: String,
-      required: [true, "กรุณาระบุชื่อนิยาย"],
-      trim: true,
-      maxlength: [200, "ชื่อนิยายต้องไม่เกิน 200 ตัวอักษร"],
-      index: true,
-    },
+    title: { type: LocalizedStringSchema, required: true, index: "text" }, // เพิ่ม text index สำหรับ title.th, title.en
     slug: {
       type: String,
-      required: [true, "กรุณาระบุ slug URL สำหรับนิยาย"],
+      required: [true, "Slug คือจำเป็น"],
       unique: true,
       trim: true,
       lowercase: true,
-      maxlength: [220, "Slug ต้องไม่เกิน 220 ตัวอักษร"],
-      match: [/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug ต้องประกอบด้วยตัวอักษรพิมพ์เล็ก, ตัวเลข และเครื่องหมาย - เท่านั้น"],
-      index: true,
+      maxlength: 300,
     },
-    description: {
+    author: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    coAuthors: [{ type: Schema.Types.ObjectId, ref: "User", index: true }],
+    synopsis: { type: LocalizedStringSchema, required: true },
+    coverImageUrl: { type: String, required: [true, "URL ภาพปกคือจำเป็น"], trim: true, maxlength: 500 },
+    bannerImageUrl: { type: String, trim: true, maxlength: 500 },
+    tags: [{ type: String, trim: true, lowercase: true, maxlength: 50, index: true }],
+    
+    categories: [NovelCategoryReferenceSchema],
+    themeAssignment: { type: NovelThemeAssignmentSchema, required: true },
+    sourceType: { type: NovelCategoryReferenceSchema, required: true }, // **สำคัญสำหรับ Donation: ใช้ตรวจสอบว่าเป็น 'original' หรือไม่**
+    fanFictionDetails: FanFictionDetailsSchema,
+    
+    endingType: {
       type: String,
-      required: [true, "กรุณาระบุคำอธิบายนิยาย"],
-      trim: true,
-      maxlength: [5000, "คำอธิบายนิยายต้องไม่เกิน 5000 ตัวอักษร"],
+      enum: Object.values(NovelEndingType),
+      required: [true, "ประเภทตอนจบคือจำเป็น"],
+      default: "single_linear",
     },
-    coverImage: {
-      type: String,
-      required: [true, "กรุณาระบุ URL รูปปกนิยาย"],
-      trim: true,
-    },
-    author: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "กรุณาระบุผู้เขียน"],
-      index: true,
-    },
-    categories: {
-      type: [Schema.Types.ObjectId],
-      ref: "Category",
-      required: [true, "กรุณาเลือกอย่างน้อย 1 หมวดหมู่หลัก"],
-      validate: [
-        { validator: (v: Types.ObjectId[]) => v.length > 0, message: "ต้องมีอย่างน้อย 1 หมวดหมู่หลัก" },
-        { validator: (v: Types.ObjectId[]) => v.length <= 3, message: "สามารถเลือกหมวดหมู่หลักได้สูงสุด 3 หมวดหมู่" },
-      ],
-      index: true,
-    },
-    subCategories: [{ type: Schema.Types.ObjectId, ref: "Category", index: true }],
-    tags: {
-      type: [String],
-      validate: [
-        { validator: (v: string[]) => v.length <= 15, message: "สามารถใส่แท็กได้สูงสุด 15 แท็ก" },
-        { validator: (v: string[]) => v.every((tag) => tag.length <= 50), message: "แต่ละแท็กต้องมีความยาวไม่เกิน 50 ตัวอักษร" },
-      ],
-      index: true,
-    },
+    defaultLanguage: { type: String, required: true, default: "th", maxlength: 10 },
     status: {
       type: String,
-      enum: ["draft", "published", "completed", "onHiatus", "archived"], // ลบ discount ออก
+      enum: Object.values(NovelStatus),
       default: "draft",
       index: true,
+      required: true,
     },
-    visibility: {
+    publishedAt: { type: Date, index: true },
+    lastEpisodePublishedAt: { type: Date, index: true },
+    contentMaturity: {
       type: String,
-      enum: ["public", "unlisted", "private", "followersOnly"],
-      default: "private",
-      index: true,
+      enum: Object.values(ContentMaturity),
+      required: [true, "ระดับความเหมาะสมของเนื้อหาคือจำเป็น"],
+      default: "all_ages",
     },
-    language: { type: String, required: [true, "กรุณาระบุภาษาของนิยาย"], default: "th", index: true },
-    isExplicitContent: { type: Boolean, default: false, index: true },
-    ageRating: { type: String, enum: ["everyone", "teen", "mature17+", "adult18+"], default: "everyone", index: true },
-    isOriginalWork: { type: Boolean, default: true },
-    originalLanguage: String,
-    translationSource: String,
-    isPremium: { type: Boolean, default: false, index: true },
-    isDiscounted: { type: Boolean, default: false, index: true }, // เพิ่มฟิลด์ isDiscounted
-    discountDetails: DiscountDetailsSchema, // เพิ่มฟิลด์ discountDetails
-    averageRating: { type: Number, default: 0, min: 0, max: 5, index: true },
-    ratingsCount: { type: Number, default: 0, min: 0 },
-    viewsCount: { type: Number, default: 0, min: 0, index: true },
-    totalReads: { type: Number, default: 0, min: 0 },
-    likesCount: { type: Number, default: 0, min: 0, index: true },
-    followersCount: { type: Number, default: 0, min: 0, index: true },
-    commentsCount: { type: Number, default: 0, min: 0 },
-    episodesCount: { type: Number, default: 0, min: 0 },
-    publishedEpisodesCount: { type: Number, default: 0, min: 0 },
-    wordsCount: { type: Number, default: 0, min: 0 },
-    stats: {
-      totalPurchasesAmount: { type: Number, default: 0, min: 0 },
-      totalDonationsAmount: { type: Number, default: 0, min: 0 },
-      completionRate: { type: Number, default: 0, min: 0, max: 100 },
-      lastViewedAt: { type: Date, index: true },
-      monthlyEarnings: [MonthlyEarningSchema],
-    },
-    settings: {
-      allowComments: { type: Boolean, default: true },
-      showContentWarnings: { type: Boolean, default: false },
-      contentWarnings: [String],
-      enableMonetization: { type: Boolean, default: false },
-      enableDonations: { type: Boolean, default: false },
-      enableCharacterDonations: { type: Boolean, default: false },
-    },
-    releaseSchedule: {
-      frequency: { type: String, enum: ["asReady", "daily", "weekly", "biweekly", "monthly"], default: "asReady" },
-      dayOfWeek: { type: Number, min: 0, max: 6 },
-      timeOfDay: { type: String, match: /^([01]\d|2[0-3]):([0-5]\d)$/ },
-      nextExpectedReleaseAt: Date,
-    },
-    gameElementsSummary: {
-      hasChoices: { type: Boolean, default: false },
-      hasMultipleEndings: { type: Boolean, default: false },
-      hasStatSystem: { type: Boolean, default: false },
-      hasRelationshipSystem: { type: Boolean, default: false },
-      hasInventorySystem: { type: Boolean, default: false },
-    },
-    featuredOfficialMedia: [{ type: Schema.Types.ObjectId, ref: "OfficialMedia" }],
-    seo: {
-      metaTitle: { type: String, trim: true, maxlength: [70, "Meta Title ควรไม่เกิน 70 ตัวอักษร"] },
-      metaDescription: { type: String, trim: true, maxlength: [160, "Meta Description ควรไม่เกิน 160 ตัวอักษร"] },
-      keywords: [String],
-      socialImage: String,
-    },
-    embeddingVector: { type: [Number], select: false },
-    genreDistribution: { type: Schema.Types.Mixed, select: false },
-    sentimentAnalysis: {
-      type: {
-        overallScore: Number,
-        dominantEmotion: String,
-      },
-      select: false,
-    },
+    accessControl: { type: NovelAccessControlSchema, required: true, default: () => ({ monetizationModel: "free_to_read", isListed: true }) },
+    stats: { type: NovelStatsSchema, default: () => ({ viewCount: 0, likeCount: 0, followerCount: 0, totalChapters: 0 }) },
+    enableComments: { type: Boolean, default: true },
+    enableRatings: { type: Boolean, default: true },
+    authorNotes: LocalizedStringSchema,
+    firstEpisode: { type: Schema.Types.ObjectId, ref: "Episode" },
+    storyMapData: Schema.Types.Mixed,
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,
-    lastEpisodePublishedAt: { type: Date, index: true },
-    firstPublishedAt: Date,
-    lastSignificantUpdateAt: { type: Date, default: Date.now, index: true },
+    lastContentUpdatedAt: { type: Date, default: Date.now, index: true },
   },
   {
-    timestamps: true,
+    timestamps: true, // createdAt, updatedAt
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
 // ----- Indexes -----
-NovelSchema.index({ author: 1, title: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
-NovelSchema.index({ title: "text", description: "text", tags: "text", "author.username": "text" }, { default_language: "thai" });
-NovelSchema.index({ status: 1, visibility: 1, isDeleted: 1 });
-NovelSchema.index({ language: 1, status: 1, isDeleted: 1 });
-NovelSchema.index({ categories: 1, status: 1, isDeleted: 1 });
-NovelSchema.index({ isPremium: 1, status: 1, isDeleted: 1 });
-NovelSchema.index({ isDiscounted: 1, status: 1, isDeleted: 1 }); // เพิ่ม index สำหรับ isDiscounted
-NovelSchema.index({ averageRating: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-NovelSchema.index({ viewsCount: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-NovelSchema.index({ lastSignificantUpdateAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-NovelSchema.index({ firstPublishedAt: -1 }, { partialFilterExpression: { status: "published", isDeleted: false } });
-
-// ----- Virtuals (Populated Fields) -----
-NovelSchema.virtual("authorDetails", {
-  ref: "User",
-  localField: "author",
-  foreignField: "_id",
-  justOne: true,
-});
-
-NovelSchema.virtual("episodes", {
-  ref: "Episode",
-  localField: "_id",
-  foreignField: "novel",
-  options: { sort: { episodeNumber: 1 } },
-});
-
-NovelSchema.virtual("storyMaps", {
-  ref: "StoryMap",
-  localField: "_id",
-  foreignField: "novel",
-});
+NovelSchema.index({ status: 1, publishedAt: -1 });
+NovelSchema.index({ author: 1, status: 1 });
+NovelSchema.index({ "categories.categoryId": 1, "categories.subItemSlug": 1 });
+NovelSchema.index({ "themeAssignment.mainTheme.subItemSlug": 1 });
+NovelSchema.index({ "themeAssignment.subThemes.subItemSlug": 1 });
+NovelSchema.index({ "sourceType.subItemSlug": 1 });
+NovelSchema.index({ "stats.viewCount": -1 });
+NovelSchema.index({ "stats.likeCount": -1 });
+NovelSchema.index({ "stats.ratingAverage": -1 });
+NovelSchema.index({ "title.th": "text", "title.en": "text", "synopsis.th": "text", "synopsis.en": "text", tags: "text" }, { default_language: "none" });
 
 // ----- Middleware -----
-NovelSchema.pre("save", async function (next) {
-  if (this.isModified("title") || this.isNew) {
-    this.slug = this.title
-      .toLowerCase()
-      .replace(/[\s\W-]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+NovelSchema.pre<INovel>("save", function (next) {
+  if ((this.isModified("title") || this.isNew) && !this.slug) {
+    const titleForSlug = this.title[this.defaultLanguage] || this.title.th || this.title.en || "untitled-novel";
+    this.slug = titleForSlug.toString().toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w\u0E00-\u0E7F\-]+/g, "") // อนุญาตอักขระไทย
+      .replace(/\-\-+/g, "-")
+      .replace(/^-+/, "")
+      .replace(/-+$/, "");
+    if (!this.slug) this.slug = new Types.ObjectId().toHexString(); // Fallback slug
   }
 
-  if (this.isModified("status") && this.status === "published" && !this.firstPublishedAt) {
-    this.firstPublishedAt = new Date();
-  }
-
-  if (this.isModified("title") || this.isModified("description") || this.isModified("categories") || this.isModified("tags")) {
-    this.lastSignificantUpdateAt = new Date();
+  if (this.isModified() && !this.isNew) {
+    this.lastContentUpdatedAt = new Date();
   }
   next();
 });
-
-// ----- Instance Methods (Example) -----
-NovelSchema.methods.updateCounts = async function () {
-  const episodeCount = await models.Episode.countDocuments({ novel: this._id, status: "published" });
-  this.publishedEpisodesCount = episodeCount;
-  this.episodesCount = await models.Episode.countDocuments({ novel: this._id });
-};
 
 // ----- Model Export -----
 const NovelModel = () => models.Novel as mongoose.Model<INovel> || model<INovel>("Novel", NovelSchema);
 
 export default NovelModel;
+

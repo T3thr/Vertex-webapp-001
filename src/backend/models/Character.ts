@@ -1,155 +1,208 @@
-// src/backend/models/Character.ts
-// Character Model - โมเดลตัวละคร
-// โมเดลสำหรับจัดเก็บข้อมูลตัวละครในนิยาย
+// src/models/Character.ts
+// โมเดลตัวละคร (Character Model) - จัดการข้อมูลของตัวละครที่ปรากฏในนิยาย
+// ออกแบบให้รองรับการแสดงผลภาพตัวละคร, การแสดงออก (expressions), และข้อมูลพื้นฐาน
+// **ปรับปรุงล่าสุด**: เพิ่มการเชื่อมโยงกับ DonationApplication สำหรับการบริจาคให้ตัวละครโดยเฉพาะ
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// Interface สำหรับ Character Sprite/Expression (เป็น subdocument หรืออ้างอิง Media)
-// อินเทอร์เฟซสำหรับภาพตัวละคร/การแสดงออกทางสีหน้า
-export interface ICharacterVisual {
-  mediaId: Types.ObjectId; // อ้างอิง Media model (รูปภาพ sprite sheet, individual image) - ID ของสื่อ
-  emotion: string; // ชื่ออารมณ์ (เช่น "default", "happy", "angry", "sad", "surprised") - ใช้เป็น key - ชื่ออารมณ์
-  url?: string; // URL โดยตรง (ถ้าไม่ใช้ mediaId หรือเป็น fallback) - URL โดยตรง
-  isDefaultEmotion?: boolean; // เป็น sprite/expression เริ่มต้นหรือไม่ - เป็นภาพเริ่มต้นหรือไม่
-  metadata?: Record<string, any>; // เช่น coordinates on sprite sheet, animation info - ข้อมูลเพิ่มเติม
+// อินเทอร์เฟซสำหรับภาพการแสดงออกของตัวละคร (Character Expression/Sprite)
+export interface ICharacterExpression {
+  name: string; // ชื่อการแสดงออก (เช่น "default", "happy", "sad", "angry")
+  imageUrl: string; // URL รูปภาพสำหรับการแสดงออกนี้ (อ้างอิง Media model หรือ URL โดยตรง)
+  mediaId?: Types.ObjectId; // ID ของ Media (ถ้าใช้ Media model)
+  // อาจมี metadata เพิ่มเติม เช่น ขนาด, ตำแหน่ง anchor point
 }
 
-// Interface สำหรับ Character document
-// อินเทอร์เฟซสำหรับเอกสารตัวละคร
+// ----- Interface หลักสำหรับเอกสารตัวละคร (Character Document) -----
 export interface ICharacter extends Document {
   _id: Types.ObjectId;
-  novel: Types.ObjectId; // นิยายที่ตัวละครนี้สังกัด (อ้างอิง Novel model) - ID ของนิยาย
-  author: Types.ObjectId; // ผู้สร้างตัวละคร (อ้างอิง User model) - ID ของผู้สร้าง
-  name: string; // ชื่อตัวละคร (ควร unique ภายใน Novel) - ชื่อตัวละคร
-  slug: string; // URL slug (unique ภายใน Novel) - สลักสำหรับ URL
-  aliases?: string[]; // ชื่อเล่น หรือชื่ออื่นๆ ที่ตัวละครถูกเรียก - ชื่อเล่น/ชื่ออื่น
-  description?: string; // คำอธิบายสั้นๆ (สำหรับแสดงใน list) - คำอธิบายสั้นๆ
-  biography?: string; // ประวัติความเป็นมา, รายละเอียดเชิงลึก (รองรับ Markdown) - ประวัติโดยละเอียด
-  roleInNovel: "protagonist" | "deuteragonist" | "antagonist" | "supporting" | "minor" | "cameo"; // บทบาทในนิยาย - บทบาทในนิยาย
-  age?: string; // อายุ (อาจเป็นช่วง เช่น "วัยรุ่นตอนปลาย", "20s", หรือตัวเลข) - อายุ
-  gender?: string; // เพศ - เพศ
-  species?: string; // เผ่าพันธุ์ (ถ้ามี) - เผ่าพันธุ์
-  height?: string; // ส่วนสูง (เช่น "175 cm", "สูงปานกลาง") - ส่วนสูง
-  weight?: string; // น้ำหนัก - น้ำหนัก
-  appearanceDetails?: string; // รายละเอียดรูปลักษณ์เพิ่มเติม (สีผม, สีตา, ลักษณะเด่น) - รายละเอียดรูปลักษณ์
-  personalityTraits?: string[]; // เช่น "ใจดี", "ขี้อาย", "กล้าหาญ" - ลักษณะนิสัย
-  likes?: string[]; // สิ่งที่ชอบ - สิ่งที่ชอบ
-  dislikes?: string[]; // สิ่งที่ไม่ชอบ - สิ่งที่ไม่ชอบ
-  profileImage?: ICharacterVisual; // รูปโปรไฟล์หลัก (อาจเป็น default emotion) - รูปโปรไฟล์หลัก
-  expressions?: ICharacterVisual[]; // ชุด sprite/expression ตามอารมณ์ต่างๆ - การแสดงออกทางสีหน้า
-  galleryImages?: Types.ObjectId[]; // อ้างอิง Media model สำหรับรูปภาพอื่นๆ ใน gallery - รูปภาพในแกลเลอรี่
-  voiceActor?: string; // ชื่อนักพากย์ (ถ้ามี) - ชื่อนักพากย์
-  sampleVoiceLineUrl?: string; // URL ตัวอย่างเสียงพากย์ - URL ตัวอย่างเสียง
-  firstAppearance?: { // การปรากฏตัวครั้งแรก - การปรากฏตัวครั้งแรก
-    episodeId?: Types.ObjectId;
-    sceneId?: Types.ObjectId; // หรือ sceneNumber
-    description?: string;
-  };
-  isControllableByPlayer?: boolean; // ผู้เล่นสามารถควบคุมตัวละครนี้ได้หรือไม่ (ในบางช่วงของเกม) - ผู้เล่นควบคุมได้หรือไม่
-  isHiddenCharacter?: boolean; // เป็นตัวละครลับหรือไม่ - เป็นตัวละครลับหรือไม่
-  unlockConditions?: any[]; // เงื่อนไขในการปลดล็อคตัวละคร (ถ้าเป็นตัวละครลับหรือต้องปลดล็อค) - เงื่อนไขการปลดล็อค
+  novel: Types.ObjectId; // นิยายที่ตัวละครนี้ปรากฏ (อ้างอิง Novel model)
+  author: Types.ObjectId; // ผู้สร้างตัวละครนี้ (อ้างอิง User model, คือผู้แต่งนิยาย)
+  
+  name: string; // ชื่อตัวละคร (ที่แสดงในเกม/นิยาย)
+  slug: string; // Slug สำหรับตัวละคร (ถ้าต้องการหน้าโปรไฟล์ตัวละครแยก)
+  
+  description?: string; // คำอธิบายตัวละคร (ประวัติ, ลักษณะนิสัย)
+  profileImageUrl?: string; // URL รูปโปรไฟล์หลักของตัวละคร (อาจเป็น default expression)
+  // defaultMediaId?: Types.ObjectId; // ID ของ Media ที่เป็น default expression
 
-  // Coin-based Donation System for Characters - ระบบการบริจาคเหรียญสำหรับตัวละคร
-  isDonationEnabled: boolean; // เปิดให้ผู้ใช้อื่นบริจาคให้ตัวละครนี้ได้หรือไม่ - เปิดรับบริจาคหรือไม่
-  totalCoinDonated: number; // จำนวนเหรียญทั้งหมดที่ได้รับจากการบริจาค - จำนวนเหรียญที่ได้รับบริจาคทั้งหมด
-  // donationTransactions: Types.ObjectId[]; // Array of ActivityHistory IDs related to donations for this character (Consider if needed or if ActivityHistory query is sufficient)
-  // รายการธุรกรรมการบริจาค (อ้างอิง ActivityHistory) - อาจไม่จำเป็นถ้า ActivityHistory query เพียงพอ
+  // คอลเลกชันของภาพการแสดงออก (sprites)
+  expressions: Types.DocumentArray<ICharacterExpression>;
+  
+  // สีประจำตัว (สำหรับ UI เช่น สีชื่อในกล่องข้อความ)
+  colorCode?: string; // เช่น "#FF5733"
+  
+  // ข้อมูลเพิ่มเติม (ไม่บังคับ)
+  age?: string; // อายุ (เช่น "18 ปี", "วัยรุ่น")
+  height?: string; // ส่วนสูง
+  // firstAppearanceSceneId?: Types.ObjectId; // ฉากที่ปรากฏตัวครั้งแรก (อ้างอิง Scene model)
+  // voiceActor?: string; // ชื่อนักพากย์ (ถ้ามี)
 
-  embeddingVector?: number[]; // Vector embedding ของข้อมูลตัวละคร (สำหรับ similarity search) - Vector Embedding
-  tags?: string[]; // แท็กสำหรับ AI (เช่น archetypes, roles for AI story generation) - แท็กสำหรับ AI
-  visibility: "public" | "unlisted" | "privateToAuthor"; // การมองเห็นข้อมูลตัวละคร - การมองเห็น
-  isOfficial: boolean; // เป็นตัวละครทางการที่สร้างโดยผู้เขียนนิยายหรือไม่ - เป็นทางการหรือไม่
-  isDeleted: boolean; // Soft delete - ลบแบบ Soft
-  deletedAt?: Date; // วันที่ลบ - วันที่ลบ
-  createdAt: Date; // วันที่สร้าง - วันที่สร้าง
-  updatedAt: Date; // วันที่อัปเดตล่าสุด - วันที่อัปเดตล่าสุด
-  lastSignificantUpdateAt?: Date; // วันที่อัปเดตสำคัญล่าสุด - วันที่อัปเดตสำคัญล่าสุด
+  // การตั้งค่าการรับบริจาคสำหรับตัวละครนี้โดยเฉพาะ
+  // หากนักเขียนเปิดรับบริจาคให้ตัวละครนี้ผ่าน DonationApplication
+  // และ application นั้น active อยู่, ID จะถูกเก็บไว้ที่นี่
+  activeDonationApplicationId?: Types.ObjectId; // ID ของ DonationApplication ที่ active สำหรับตัวละครนี้ (อ้างอิง DonationApplication model)
+  isDonationEnabled: boolean; // สถานะว่าตัวละครนี้เปิดรับบริจาคอยู่หรือไม่ (อาจ denormalize จาก DonationApplication)
+  
+  // Metadata
+  isProtagonist: boolean; // เป็นตัวละครหลักหรือไม่
+  isMajorCharacter: boolean; // เป็นตัวละครสำคัญหรือไม่
+  customFields?: Record<string, any>; // ฟิลด์เพิ่มเติมตามความต้องการ
+  lastUpdatedAt: Date;
+  
+  // Soft delete
+  isDeleted: boolean;
+  deletedAt?: Date;
+
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const CharacterVisualSchema = new Schema<ICharacterVisual>(
+// Schema ย่อยสำหรับ ICharacterExpression
+const CharacterExpressionSchema = new Schema<ICharacterExpression>(
   {
-    mediaId: { type: Schema.Types.ObjectId, ref: "Media", required: true },
-    emotion: { type: String, required: true, trim: true },
-    url: String,
-    isDefaultEmotion: { type: Boolean, default: false },
-    metadata: Schema.Types.Mixed,
+    name: { 
+      type: String, 
+      required: [true, "กรุณาระบุชื่อการแสดงออก (Expression name is required)"], 
+      trim: true, 
+      maxlength: 50 
+    },
+    imageUrl: { 
+      type: String, 
+      required: [true, "กรุณาระบุ URL รูปภาพ (Image URL is required)"], 
+      trim: true, 
+      validate: { validator: (v: string) => /^https?:\/\/|^\//.test(v), message: "รูปแบบ URL ของรูปภาพไม่ถูกต้อง" }
+    },
+    mediaId: { type: Schema.Types.ObjectId, ref: "Media" }, // หรือ OfficialMedia
   },
-  { _id: false }
+  { _id: false } // ไม่สร้าง _id สำหรับ subdocument นี้โดยอัตโนมัติ, แต่ถ้าต้องการ ID ให้ใส่ true
 );
 
+// Schema หลักสำหรับ Character
 const CharacterSchema = new Schema<ICharacter>(
   {
-    novel: { type: Schema.Types.ObjectId, ref: "Novel", required: true, index: true },
-    author: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    name: { type: String, required: [true, "กรุณาระบุชื่อตัวละคร"], trim: true, maxlength: [150, "ชื่อตัวละครต้องไม่เกิน 150 ตัวอักษร"] },
-    slug: { type: String, required: [true, "กรุณาระบุ slug สำหรับตัวละคร"], trim: true, lowercase: true, maxlength: [170, "Slug ต้องไม่เกิน 170 ตัวอักษร"] },
-    aliases: [{ type: String, trim: true }],
-    description: { type: String, trim: true, maxlength: [1000, "คำอธิบายสั้นๆ ต้องไม่เกิน 1000 ตัวอักษร"] },
-    biography: { type: String, trim: true, maxlength: [20000, "ประวัติตัวละครต้องไม่เกิน 20000 ตัวอักษร"] },
-    roleInNovel: {
-      type: String,
-      enum: ["protagonist", "deuteragonist", "antagonist", "supporting", "minor", "cameo"],
-      required: [true, "กรุณาระบุบทบาทของตัวละครในนิยาย"],
+    novel: {
+      type: Schema.Types.ObjectId,
+      ref: "Novel",
+      required: true,
       index: true,
     },
-    age: String,
-    gender: String,
-    species: String,
-    height: String,
-    weight: String,
-    appearanceDetails: { type: String, maxlength: [5000, "รายละเอียดรูปลักษณ์ต้องไม่เกิน 5000 ตัวอักษร"] },
-    personalityTraits: [{ type: String, trim: true }],
-    likes: [{ type: String, trim: true }],
-    dislikes: [{ type: String, trim: true }],
-    profileImage: CharacterVisualSchema,
-    expressions: [CharacterVisualSchema],
-    galleryImages: [{ type: Schema.Types.ObjectId, ref: "Media" }],
-    voiceActor: String,
-    sampleVoiceLineUrl: String,
-    firstAppearance: {
-      episodeId: { type: Schema.Types.ObjectId, ref: "Episode" },
-      sceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
-      description: String,
+    author: { // Denormalized from Novel for easier access control or direct query
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
-    isControllableByPlayer: { type: Boolean, default: false },
-    isHiddenCharacter: { type: Boolean, default: false },
-    unlockConditions: [Schema.Types.Mixed],
-    isDonationEnabled: { type: Boolean, default: false, index: true }, // เปิดให้ผู้ใช้อื่นบริจาคให้ตัวละครนี้ได้หรือไม่
-    totalCoinDonated: { type: Number, default: 0, min: 0 }, // จำนวนเหรียญทั้งหมดที่ได้รับจากการบริจาค
-    // donationTransactions: [{ type: Schema.Types.ObjectId, ref: "ActivityHistory" }], // อ้างอิงไปยัง ActivityHistory ที่เกี่ยวข้องกับการบริจาคให้ตัวละครนี้โดยเฉพาะ
-    embeddingVector: { type: [Number], select: false },
-    tags: [{ type: String, trim: true, index: true }],
-    visibility: { type: String, enum: ["public", "unlisted", "privateToAuthor"], default: "public", index: true },
-    isOfficial: { type: Boolean, default: true },
+    name: {
+      type: String,
+      required: [true, "กรุณาระบุชื่อตัวละคร (Character name is required)"],
+      trim: true,
+      maxlength: [100, "ชื่อตัวละครต้องไม่เกิน 100 ตัวอักษร"],
+      index: true,
+    },
+    slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
+      // unique: true, // ถ้าต้องการให้ slug ของตัวละครไม่ซ้ำกันทั้งระบบ หรือ unique ภายใน novel
+    },
+    description: { type: String, trim: true, maxlength: 2000 },
+    profileImageUrl: { 
+        type: String, 
+        trim: true, 
+        validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v), message: "รูปแบบ URL ของรูปโปรไฟล์ไม่ถูกต้อง" }
+    },
+    // defaultMediaId: { type: Schema.Types.ObjectId, ref: "Media" },
+    expressions: [CharacterExpressionSchema],
+    colorCode: { 
+      type: String, 
+      trim: true, 
+      match: [/^#([0-9a-fA-F]{3}){1,2}$/, "รูปแบบรหัสสีไม่ถูกต้อง (e.g., #FF5733 or #F53)"]
+    },
+    age: { type: String, trim: true, maxlength: 50 },
+    height: { type: String, trim: true, maxlength: 50 },
+    // firstAppearanceSceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
+    // voiceActor: { type: String, trim: true, maxlength: 100 },
+    
+    // การเชื่อมโยงกับการรับบริจาค
+    activeDonationApplicationId: { 
+      type: Schema.Types.ObjectId, 
+      ref: "DonationApplication", // อ้างอิงไปยังโมเดล DonationApplication
+      index: true 
+    },
+    isDonationEnabled: { type: Boolean, default: false, index: true }, // สถานะการเปิดรับบริจาคของตัวละครนี้
+
+    isProtagonist: { type: Boolean, default: false },
+    isMajorCharacter: { type: Boolean, default: true },
+    customFields: Schema.Types.Mixed,
+    lastUpdatedAt: { type: Date, default: Date.now },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,
-    lastSignificantUpdateAt: { type: Date, default: Date.now },
   },
   {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    timestamps: true, // createdAt, updatedAt
   }
 );
 
 // ----- Indexes -----
-CharacterSchema.index({ novel: 1, slug: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
-CharacterSchema.index({ novel: 1, name: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
-CharacterSchema.index({ novel: 1, isDeleted: 1, visibility: 1 });
-CharacterSchema.index({ novel: 1, isDonationEnabled: 1, totalCoinDonated: -1 }); // For querying donatable characters and sorting by donations
-CharacterSchema.index({ name: "text", aliases: "text", description: "text", tags: "text" }, { default_language: "thai" });
+// Index สำหรับ query ตัวละครทั้งหมดของนิยายหนึ่งๆ
+CharacterSchema.index({ novel: 1, name: 1 });
+CharacterSchema.index({ novel: 1, slug: 1 }, { unique: true, sparse: true }); // Slug ควร unique ภายใน novel ถ้ามี
+CharacterSchema.index({ novel: 1, isDonationEnabled: 1 }); // ค้นหาตัวละครที่เปิดรับบริจาคในนิยาย
 
-// ----- Middleware: Slug generation -----
+// ----- Middleware -----
+// อัปเดต lastUpdatedAt ของ Character และ Novel เมื่อมีการเปลี่ยนแปลง
 CharacterSchema.pre("save", async function (next) {
-  if ((this.isModified("name") || this.isNew) && !this.slug) {
-    this.slug = (this.name || "")
+  if (this.isModified("name") && !this.slug) {
+    let baseSlug = this.name
+      .toString()
       .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .substring(0, 70);
+      .replace(/\s+/g, "-") // แทนที่ช่องว่างด้วย -
+      .replace(/[^\w\-]+/g, "") // ลบอักขระที่ไม่ใช่ word characters หรือ -
+      .replace(/\-\-+/g, "-") // แทนที่ -- ด้วย -
+      .replace(/^-+/, "") // ลบ - ที่อยู่ข้างหน้าสุด
+      .replace(/-+$/, ""); // ลบ - ที่อยู่ข้างหลังสุด
+    this.slug = baseSlug; // อาจต้องเพิ่ม logic ตรวจสอบความซ้ำซ้อนภายใน novel
   }
-  if (this.isModified("name") || this.isModified("description") || this.isModified("biography") || this.isModified("profileImage") || this.isModified("expressions")) {
-    this.lastSignificantUpdateAt = new Date();
+
+  if (this.isModified() && !this.isNew) {
+    this.lastUpdatedAt = new Date();
+    
+    // อัปเดต Novel.lastUpdatedAt
+    const Novel = models.Novel || model("Novel"); // ใช้ models.Novel หรือ model("Novel") เพื่อหลีกเลี่ยง OverwriteModelError
+    try {
+      await Novel.findByIdAndUpdate(this.novel, { lastUpdatedAt: new Date() });
+    } catch (error) {
+      console.error(`Error updating Novel.lastUpdatedAt for character ${this._id}:`, error);
+      // ควรพิจารณาการจัดการ error ที่เหมาะสมกว่านี้ใน production
+    }
   }
+
+  // Denormalize author from novel if not set or novel changed
+  if (this.isNew || this.isModified("novel")) {
+    const NovelModel = models.Novel || model("Novel");
+    const novelDoc = await NovelModel.findById(this.novel).select("author").lean();
+    if (novelDoc) {
+        this.author = novelDoc.author;
+    }
+  }
+  
+  // ตรวจสอบและอัปเดต isDonationEnabled โดยอัตโนมัติ
+  // ถ้า activeDonationApplicationId มีค่า และ DonationApplication นั้น active อยู่จริง
+  // (ส่วนนี้อาจต้องทำใน service layer หรือหลังจาก DonationApplication ถูกอัปเดตสถานะ)
+  if (this.isModified("activeDonationApplicationId")) {
+    if (this.activeDonationApplicationId) {
+      // สมมติว่ามี logic ในการตรวจสอบสถานะของ DonationApplication ที่นี่
+      // หรืออาจจะตั้งค่า isDonationEnabled โดยตรงเมื่อมีการ link activeDonationApplicationId
+      // ในตัวอย่างนี้ จะตั้งเป็น true ถ้ามี ID, แต่ในระบบจริงควรตรวจสอบสถานะของ App นั้นๆ
+      // this.isDonationEnabled = true; // ตัวอย่างง่ายๆ
+    } else {
+      this.isDonationEnabled = false;
+    }
+  }
+
   next();
 });
 
@@ -157,4 +210,26 @@ CharacterSchema.pre("save", async function (next) {
 const CharacterModel = () => models.Character as mongoose.Model<ICharacter> || model<ICharacter>("Character", CharacterSchema);
 
 export default CharacterModel;
+
+// ----- ตัวอย่างการใช้งาน (เพิ่มเติม) -----
+/**
+ * // เมื่อ DonationApplication สำหรับตัวละครได้รับการอนุมัติและ active
+ * const characterId = "some_character_id";
+ * const activeDonationAppIdForCharacter = "donation_app_id_for_this_character";
+ *
+ * await CharacterModel().findByIdAndUpdate(characterId, {
+ *   $set: {
+ *     activeDonationApplicationId: activeDonationAppIdForCharacter,
+ *     isDonationEnabled: true // ควรตั้งค่าตามสถานะจริงของ DonationApplication
+ *   }
+ * });
+ *
+ * // การค้นหาตัวละครที่เปิดรับบริจาคในนิยายเรื่องหนึ่ง
+ * // const novelId = "some_novel_id";
+ * // const charactersWithDonation = await CharacterModel().find({
+ * //   novel: novelId,
+ * //   isDonationEnabled: true,
+ * //   isDeleted: false
+ * // }).populate("activeDonationApplicationId");
+ */
 

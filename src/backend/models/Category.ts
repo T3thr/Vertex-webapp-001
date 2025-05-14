@@ -1,207 +1,184 @@
-// src/backend/models/Category.ts
+// backend/models/Category.ts
+// โมเดลหมวดหมู่ (Category Model) - จัดการหมวดหมู่หลักและหมวดหมู่ย่อยของนิยาย
+// ออกแบบให้รองรับการค้นหาและกรองนิยายที่ซับซ้อน, การแสดงผล UI ที่หลากหลาย, และการจัดการโดยผู้ดูแลระบบ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// Interface สำหรับ Category document
-// Categories ใช้สำหรับจัดระเบียบ Novels และเนื้อหาอื่นๆ ที่อาจมี
-// ออกแบบมาเพื่อรองรับการกรองและการแสดงผลที่ซับซ้อนใน UI
+// ประเภทของหมวดหมู่ (สำหรับแยกหมวดหมู่หลักและหมวดหมู่ย่อย)
+// ตัวอย่างการใช้งาน: const type: CategoryType = "main_genre";
+export type CategoryType = 
+  | "main_genre" // หมวดหมู่หลัก (เช่น แฟนตาซี, โรแมนติก, สืบสวนสอบสวน)
+  | "sub_genre" // หมวดหมู่ย่อย (เช่น แฟนตาซีโรงเรียน, โรแมนติกคอมเมดี้, สืบสวนคดีฆาตกรรม)
+  | "theme_tag" // แท็กธีม (เช่น ต่างโลก, ย้อนยุค, ทหาร, โรงเรียน, ออฟฟิศ)
+  | "content_rating" // เรทเนื้อหา (เช่น ทั่วไป, 13+, 18+)
+  | "novel_type" // ประเภทนิยาย (เช่น นิยายแชท, นิยายบรรยาย, Visual Novel)
+  | "source_type"; // ประเภทแหล่งที่มา (เช่น Original, Fanfiction)
+
+// อินเทอร์เฟซสำหรับข้อมูลหลายภาษา (i18n)
+// ตัวอย่างการใช้งาน: const localizedName: ILocalizedString = { en: "Fantasy", th: "แฟนตาซี" };
+export interface ILocalizedString {
+  [languageCode: string]: string; // key คือรหัสภาษา (เช่น "en", "th"), value คือข้อความในภาษานั้น
+                                  // ตัวอย่าง: { en: "School Life", th: "ชีวิตในโรงเรียน" }
+}
+
+// อินเทอร์เฟซหลักสำหรับเอกสารหมวดหมู่ (Category Document)
 export interface ICategory extends Document {
   _id: Types.ObjectId;
-  name: string; // ชื่อหมวดหมู่ (เช่น "แฟนตาซี", "โรแมนติก", "สยองขวัญ") - ชื่อที่แสดงต่อผู้ใช้
-  slug: string; // URL-friendly slug (unique) - สำหรับใช้ใน URL ให้สั้นและสื่อความหมาย
-  description?: string; // คำอธิบายหมวดหมู่ (รองรับ Markdown) - รายละเอียดเพิ่มเติมเกี่ยวกับหมวดหมู่
+  name: ILocalizedString; // ชื่อหมวดหมู่ (รองรับหลายภาษา)
+                          // ตัวอย่าง: { en: "Fantasy", th: "แฟนตาซี" }
+  slug: string; // Slug สำหรับใช้ใน URL (ควร unique และสร้างจากชื่อภาษาอังกฤษ)
+                // ตัวอย่าง: "fantasy"
+  description?: ILocalizedString; // (Optional) คำอธิบายหมวดหมู่ (รองรับหลายภาษา)
+                                 // ตัวอย่าง: { en: "Novels with magical elements...", th: "นิยายที่มีองค์ประกอบของเวทมนตร์..." }
   
-  // Hierarchy and Structure (โครงสร้างลำดับชั้น)
-  parentCategory?: Types.ObjectId; // หมวดหมู่หลัก (ถ้าเป็นหมวดหมู่ย่อย) - อ้างอิงไปยัง Category อื่นที่เป็นแม่
-  ancestorPath?: Types.ObjectId[]; // เส้นทางของหมวดหมู่หลักทั้งหมด (เช่น [grandparent_id, parent_id]) - ช่วยในการ query ที่ซับซ้อน
-  level: number; // ระดับความลึกในโครงสร้างหมวดหมู่ (0 = หมวดหมู่หลัก) - ช่วยในการแสดงผลและจัดการ UI
-  categoryType: "genre" | "subgenre" | "theme" | "trope" | "setting" | "art_style" | "gameplay_feature" | "content_warning" | "tag" | "platform_specific"; // ประเภทของหมวดหมู่เพื่อการกรองขั้นสูง - เช่น หมวดหมู่หลัก, ธีม, แท็ก
-
-  // Visuals & UI Presentation (การแสดงผลและภาพลักษณ์)
-  iconUrl?: string; // URL ของไอคอน (SVG, PNG) - สำหรับแสดงใน UI
-  coverImageUrl?: string; // URL ของภาพปกสำหรับหน้าหมวดหมู่ - ภาพขนาดใหญ่สำหรับตกแต่ง
-  themeColor?: string; // สีหลักของหมวดหมู่ (HEX, e.g., "#FF69B4") - เพื่อสร้าง branding
-  displayOrder?: number; // ลำดับการแสดงผล (สำหรับหมวดหมู่ในระดับเดียวกัน) - ควบคุมการเรียงลำดับใน UI
-  isVisible: boolean; // แสดงหมวดหมู่นี้ในรายการหรือไม่ - ควบคุมการมองเห็นทั่วไป
-  isFeatured: boolean; // หมวดหมู่นี้ถูกเน้น/แนะนำเป็นพิเศษหรือไม่ (เช่น ในหน้าแรกส่วน features) - ต่างจาก isPromoted ที่อาจใช้สำหรับ SEO หรือการตลาด
-  isPromoted: boolean; // โปรโมทหมวดหมู่นี้ในหน้าหลักหรือส่วนแนะนำหรือไม่ (อาจใช้สำหรับ SEO หรือการตลาด)
-
-  // SEO Settings (การตั้งค่าสำหรับ SEO)
-  seo: {
-    metaTitle?: string; // ชื่อสำหรับ SEO (อาจ default จาก name)
-    metaDescription?: string; // คำอธิบายสำหรับ SEO (อาจ default จาก description)
-    keywords?: string[]; // คำสำคัญสำหรับ SEO
-  };
-
-  // Content Association and Stats (การเชื่อมโยงกับเนื้อหาและสถิติ)
-  novelCount: number; // จำนวนนิยายทั้งหมดในหมวดหมู่นี้ (รวมหมวดหมู่ย่อย, อาจต้องอัปเดตผ่าน trigger)
+  type: CategoryType; // ประเภทของหมวดหมู่ (main_genre, sub_genre, theme_tag, etc.)
+                      // ตัวอย่าง: "main_genre"
   
-  // Specific Settings & Restrictions (การตั้งค่าเฉพาะและข้อจำกัด)
-  allowedNovelAgeRatings?: ("everyone" | "teen" | "mature" | "adult")[]; // การจัดเรทอายุของนิยายที่อนุญาตในหมวดหมู่นี้
-  allowsExplicitContent: boolean; // หมวดหมู่นี้อนุญาตเนื้อหาสำหรับผู้ใหญ่หรือไม่
-  isSystemCategory: boolean; // เป็นหมวดหมู่ที่สร้างโดยระบบหรือไม่ (ผู้ใช้ทั่วไปแก้ไขไม่ได้)
+  parentCategory?: Types.ObjectId; // (Optional) ID ของหมวดหมู่แม่ (สำหรับ sub_genre หรือการจัดกลุ่ม)
+                                   // ตัวอย่าง: new Types.ObjectId("60f5eabc1234567890maincat") (ถ้าเป็น sub-genre ของ "Fantasy")
   
-  // Standard Timestamps and Soft Delete (ข้อมูลเวลามาตรฐานและการลบแบบ soft delete)
-  isDeleted: boolean; // Soft delete status
-  deletedAt?: Date;
+  iconUrl?: string; // (Optional) URL ของไอคอนหมวดหมู่ (สำหรับแสดงผลใน UI)
+                   // ตัวอย่าง: "https://cdn.novelmaze.com/categories/fantasy.svg"
+  coverImageUrl?: string; // (Optional) URL ของภาพปกหมวดหมู่ (สำหรับหน้า category page)
+                        // ตัวอย่าง: "https://cdn.novelmaze.com/categories/fantasy_cover.jpg"
+  
+  displayOrder?: number; // (Optional) ลำดับการแสดงผล (สำหรับจัดเรียงใน UI)
+                         // ตัวอย่าง: 1 (แสดงเป็นอันดับแรก)
+  
+  isActive: boolean; // สถานะการใช้งาน (ผู้ดูแลระบบสามารถปิดหมวดหมู่ที่ไม่ต้องการใช้)
+                     // ตัวอย่าง: true
+  isFeatured: boolean; // (Optional) เป็นหมวดหมู่แนะนำหรือไม่ (สำหรับแสดงในส่วนพิเศษ)
+                       // ตัวอย่าง: false
+  
+  associatedTags?: string[]; // (Optional) แท็กที่เกี่ยวข้องอื่นๆ (อาจใช้สำหรับการค้นหาขั้นสูง)
+                             // ตัวอย่าง: ["magic", "adventure", "medieval"]
+  
+  novelCount?: number; // (Denormalized) จำนวนนิยายในหมวดหมู่นี้ (อัปเดตผ่าน trigger หรือ batch job)
+                       // ตัวอย่าง: 125 (มีนิยายในหมวดนี้ 125 เรื่อง)
+
   createdAt: Date;
   updatedAt: Date;
 }
 
+const LocalizedStringSchema = new Schema<ILocalizedString>(
+  {
+    // Dynamic keys for language codes
+  },
+  { _id: false, strict: false } // strict: false เพื่อให้สามารถเพิ่มภาษาได้เรื่อยๆ
+);
+
 const CategorySchema = new Schema<ICategory>(
   {
-    name: { 
-      type: String, 
-      required: [true, "กรุณาระบุชื่อหมวดหมู่"], // ชื่อหมวดหมู่จำเป็นต้องมี
-      trim: true, 
-      maxlength: [100, "ชื่อหมวดหมู่ต้องไม่เกิน 100 ตัวอักษร"], 
-      index: true 
+    name: {
+      type: LocalizedStringSchema,
+      required: [true, "กรุณาระบุชื่อหมวดหมู่ (Category name is required)"],
+      validate: {
+        validator: (value: ILocalizedString) => value && (value.en || value.th), // ต้องมีอย่างน้อยภาษาอังกฤษหรือไทย
+        message: "ชื่อหมวดหมู่ต้องมีอย่างน้อยภาษาอังกฤษ (en) หรือภาษาไทย (th)",
+      },
+      // ตัวอย่าง: { en: "Science Fiction", th: "นิยายวิทยาศาสตร์" }
     },
-    slug: { 
-      type: String, 
-      required: [true, "กรุณาระบุ slug สำหรับหมวดหมู่"], // slug จำเป็นต้องมี
-      unique: true, // slug ต้องไม่ซ้ำกัน
-      trim: true, 
-      lowercase: true, 
-      maxlength: [120, "Slug ต้องไม่เกิน 120 ตัวอักษร"] 
+    slug: {
+      type: String,
+      required: [true, "กรุณาระบุ Slug สำหรับหมวดหมู่ (Slug is required)"],
+      unique: true,
+      trim: true,
+      lowercase: true,
+      match: [/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug ต้องเป็นตัวอักษรภาษาอังกฤษตัวเล็ก, ตัวเลข, และขีดกลาง (-) เท่านั้น และห้ามขึ้นต้นหรือลงท้ายด้วยขีดกลาง"],
+      index: true,
+      // ตัวอย่าง: "science-fiction"
     },
     description: { 
+      type: LocalizedStringSchema,
+      // ตัวอย่าง: { en: "Stories involving future science and technology.", th: "เรื่องราวเกี่ยวกับวิทยาศาสตร์และเทคโนโลยีในอนาคต" }
+    },
+    type: {
+      type: String,
+      enum: Object.values<CategoryType>(["main_genre", "sub_genre", "theme_tag", "content_rating", "novel_type", "source_type"]),
+      required: [true, "กรุณาระบุประเภทของหมวดหมู่ (Category type is required)"],
+      index: true,
+      // ตัวอย่าง: "main_genre"
+    },
+    parentCategory: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
+      index: true,
+      // ตัวอย่าง: new Types.ObjectId() (ถ้าเป็นหมวดหมู่ย่อย)
+    },
+    iconUrl: { 
       type: String, 
       trim: true, 
-      maxlength: [1500, "คำอธิบายหมวดหมู่ต้องไม่เกิน 1500 ตัวอักษร"] 
+      // ตัวอย่าง: "/assets/icons/categories/sci-fi.svg"
     },
-    parentCategory: { 
-      type: Schema.Types.ObjectId, 
-      ref: "Category", 
-      index: true 
+    coverImageUrl: { 
+      type: String, 
+      trim: true, 
+      // ตัวอย่าง: "/assets/images/covers/categories/sci-fi_banner.jpg"
     },
-    ancestorPath: [{ type: Schema.Types.ObjectId, ref: "Category" }],
-    level: { 
+    displayOrder: { 
+      type: Number, 
+      default: 0, 
+      // ตัวอย่าง: 2 (แสดงเป็นลำดับที่สอง)
+    },
+    isActive: { 
+      type: Boolean, 
+      default: true, 
+      index: true, 
+      // ตัวอย่าง: true (หมวดหมู่นี้ใช้งานได้)
+    },
+    isFeatured: { 
+      type: Boolean, 
+      default: false, 
+      index: true, 
+      // ตัวอย่าง: true (เป็นหมวดหมู่แนะนำ)
+    },
+    associatedTags: [{ 
+      type: String, 
+      trim: true, 
+      lowercase: true, 
+      // ตัวอย่าง: ["cyberpunk", "space_opera", "dystopian"]
+    }],
+    novelCount: { 
       type: Number, 
       default: 0, 
       min: 0, 
-      max: 10, // เพิ่ม max depth สำหรับความยืดหยุ่น
-      index: true 
+      // ตัวอย่าง: 78 (มีนิยายในหมวดนี้ 78 เรื่อง)
     },
-    categoryType: {
-      type: String,
-      enum: ["genre", "subgenre", "theme", "trope", "setting", "art_style", "gameplay_feature", "content_warning", "tag", "platform_specific"],
-      required: [true, "กรุณาระบุประเภทของหมวดหมู่"], // ประเภทหมวดหมู่จำเป็นต้องมี
-      default: "tag",
-      index: true
-    },
-    iconUrl: { type: String, trim: true },
-    coverImageUrl: { type: String, trim: true },
-    themeColor: { type: String, trim: true },
-    displayOrder: { type: Number, default: 0, index: true },
-    isVisible: { type: Boolean, default: true, index: true },
-    isFeatured: { type: Boolean, default: false, index: true }, // เพิ่ม field isFeatured
-    isPromoted: { type: Boolean, default: false, index: true },
-    seo: {
-      metaTitle: { type: String, trim: true, maxlength: [70, "Meta title ต้องไม่เกิน 70 ตัวอักษร"] },
-      metaDescription: { type: String, trim: true, maxlength: [160, "Meta description ต้องไม่เกิน 160 ตัวอักษร"] },
-      keywords: [{ type: String, trim: true, lowercase: true }],
-    },
-    novelCount: { type: Number, default: 0, min: 0 },
-    allowedNovelAgeRatings: {
-      type: [String],
-      enum: ["everyone", "teen", "mature", "adult"],
-      default: ["everyone", "teen", "mature", "adult"],
-    },
-    allowsExplicitContent: { type: Boolean, default: false },
-    isSystemCategory: { type: Boolean, default: false },
-    isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: Date,
   },
   {
-    timestamps: true, // createdAt, updatedAt
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    timestamps: true, // สร้าง createdAt และ updatedAt โดยอัตโนมัติ
   }
 );
 
-// ----- Indexes (ดัชนีสำหรับ query ที่มีประสิทธิภาพ) -----
-// Unique slug per non-deleted category (ปรับปรุง unique index)
-CategorySchema.index({ slug: 1, isDeleted: 1 }, { unique: true });
+// ----- Indexes เพิ่มเติม -----
+CategorySchema.index({ type: 1, parentCategory: 1, displayOrder: 1, "name.th": 1 }); // สำหรับการ query หมวดหมู่ตามประเภทและ parent, เรียงตาม displayOrder และชื่อไทย
+CategorySchema.index({ type: 1, parentCategory: 1, displayOrder: 1, "name.en": 1 }); // สำหรับการ query หมวดหมู่ตามประเภทและ parent, เรียงตาม displayOrder และชื่ออังกฤษ
+CategorySchema.index({ isActive: 1, type: 1 }); // สำหรับการค้นหาหมวดหมู่ที่ active ตามประเภท
 
-// For finding top-level categories or categories by parent, ordered by displayOrder
-CategorySchema.index({ parentCategory: 1, displayOrder: 1, isVisible: 1, isDeleted: 1 });
-
-// For filtering by categoryType, visibility, and order
-CategorySchema.index({ categoryType: 1, isVisible: 1, displayOrder: 1, isDeleted: 1 });
-
-// For searching categories by name (text index)
-CategorySchema.index({ name: "text", description: "text" }, { default_language: "thai", weights: { name: 10, description: 5 } });
-
-// For filtering by level and visibility
-CategorySchema.index({ level: 1, isVisible: 1, isDeleted: 1 });
-
-// For featured categories
-CategorySchema.index({ isFeatured: 1, isVisible: 1, isDeleted: 1, displayOrder: 1 });
-
-// ----- Middleware (ฟังก์ชันที่ทำงานก่อนหรือหลัง event บางอย่าง) -----
-CategorySchema.pre("save", async function (next) {
-  // Auto-generate slug from name if not provided or if name changed
-  if ((this.isModified("name") || this.isNew) && (!this.slug || this.isModified("name"))) {
-    const baseSlug = (this.name || "")
+// ----- Middleware (Pre/Post Hooks) -----
+CategorySchema.pre<ICategory>("save", async function(next) {
+  // สร้าง slug จาก name.en ถ้า slug ยังไม่ได้กำหนด
+  if (!this.slug && this.name && this.name.en) {
+    this.slug = this.name.en
+      .toString()
       .toLowerCase()
-      .replace(/\s+/g, "-")      // แทนที่ช่องว่างด้วย -
-      .replace(/[^a-z0-9ก-๙เ-ไ\-]+/g, "") // ลบอักขระที่ไม่ใช่ alphanumeric ไทย อังกฤษ หรือ -
-      .replace(/--+/g, "-")     // แทนที่ -- ด้วย -
-      .substring(0, 100);
-    
-    // Ensure slug uniqueness by appending a counter if necessary
-    // This is a basic implementation; a more robust solution might use a separate counter or UUIDs for extremely high collision scenarios.
-    let slug = baseSlug;
-    let count = 0;
-    const Category = this.constructor as mongoose.Model<ICategory>; // Get the model constructor
-    while (await Category.findOne({ slug: slug, _id: { $ne: this._id }, isDeleted: this.isDeleted })) {
-      count++;
-      slug = `${baseSlug}-${count}`;
-    }
-    this.slug = slug;
-  }
-
-  // Manage ancestorPath and level
-  if (this.isModified("parentCategory") || this.isNew) {
-    if (this.parentCategory) {
-      const Category = this.constructor as mongoose.Model<ICategory>;
-      const parent = await Category.findById(this.parentCategory).select("ancestorPath level");
-      if (parent) {
-        this.ancestorPath = [...(parent.ancestorPath || []), this.parentCategory];
-        this.level = parent.level + 1;
-        if (this.level > 10) { // Enforce max depth
-            return next(new Error("Category depth cannot exceed 10 levels."));
-        }
-      } else {
-        // Parent category not found, reset to top level
-        this.parentCategory = undefined;
-        this.ancestorPath = [];
-        this.level = 0;
-      }
-    } else {
-      this.ancestorPath = [];
-      this.level = 0;
-    }
+      .trim()
+      .replace(/\s+/g, "-") // แทนที่ช่องว่างด้วยขีดกลาง
+      .replace(/[^\w-]+/g, "") // ลบตัวอักษรพิเศษที่ไม่ใช่ word characters หรือขีดกลาง
+      .replace(/--+/g, "-"); // แทนที่ขีดกลางซ้ำๆ ด้วยขีดกลางเดียว
   }
   next();
 });
 
-// ----- Virtuals (field ที่ไม่ได้เก็บใน DB โดยตรง แต่คำนวณได้) -----
-// Virtual to get children categories
-CategorySchema.virtual("children", {
-  ref: "Category",
-  localField: "_id",
-  foreignField: "parentCategory",
-  justOne: false,
-  options: { sort: { displayOrder: 1 }, match: { isVisible: true, isDeleted: false } },
-});
+// ----- Virtuals (ถ้ามี) -----
+// CategorySchema.virtual("childrenCategories", {
+//   ref: "Category",
+//   localField: "_id",
+//   foreignField: "parentCategory"
+// });
 
-// ----- Static Methods (ฟังก์ชันที่เรียกใช้ผ่าน Model โดยตรง) -----
-// Example: Method to get a category tree (can be complex, consider client-side processing or optimized queries)
-// CategorySchema.statics.getCategoryTree = async function() { ... };
-
-// ----- Model Export (ส่งออก Model) -----
+// ----- Model Export -----
 const CategoryModel = () => models.Category as mongoose.Model<ICategory> || model<ICategory>("Category", CategorySchema);
 
 export default CategoryModel;
+

@@ -1,215 +1,85 @@
-// src/backend/models/Episode.ts
-// โมเดลสำหรับตอนของนิยาย
-// ใช้ในการจัดการเนื้อหาของตอน รวมถึงฉากและสถิติ
+// src/models/Episode.ts
+// โมเดลตอนของนิยาย (Episode Model) - จัดการข้อมูลของแต่ละตอนในนิยาย
+// ออกแบบให้รองรับการเรียงลำดับ, สถานะการเผยแพร่, การเข้าถึง, และการเชื่อมโยงไปยังฉากแรกของตอน
+// ปรับปรุงให้สอดคล้องกับ Novel model ที่มี endingType และ theme
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import ActivityHistoryModel, { IActivityHistory } from "./ActivityHistory";
 
-// อินเทอร์เฟซสำหรับฉากภายในตอน
-export interface ISceneSubdocument {
-  id: string;
-  title?: string;
-  order: number;
-  type: "text" | "dialogue" | "choice" | "mediaDisplay" | "effectTrigger" | "gameStateChange" | "branchPoint" | "ending";
-  content: {
-    text?: string;
-    speaker?: string;
-    characterId?: Types.ObjectId;
-    characterEmotion?: string;
-    characterPosition?: "left" | "center" | "right" | "custom";
-    choices?: Array<{
-      id: string;
-      text: string;
-      targetNodeId?: string;
-      nextSceneId?: string;
-      conditions?: any[];
-      effects?: any[];
-    }>;
-    mediaElements?: Array<{
-      mediaId: Types.ObjectId;
-      mediaType: "image" | "audio" | "background" | "video" | "sfx";
-      alias?: string;
-      layer?: number;
-      position?: { x: number; y: number; unit?: "%" | "px" };
-      size?: { width: number; height: number; unit?: "%" | "px" };
-      opacity?: number;
-      duration?: number;
-      loop?: boolean;
-      volume?: number;
-      fadeInDuration?: number;
-      fadeOutDuration?: number;
-    }>;
-    visualEffects?: Array<{
-      type: "screenShake" | "screenFlash" | "imageFilter" | "transition";
-      targetElementAlias?: string;
-      duration: number;
-      intensity?: number;
-      color?: string;
-      parameters?: Record<string, any>;
-    }>;
-    gameStateUpdates?: Array<{
-      type: "stat" | "relationship" | "item" | "flag" | "achievementUnlock";
-      targetId: string;
-      operation: "set" | "increment" | "decrement" | "toggle";
-      value?: any;
-      displayText?: string;
-    }>;
-  };
-  nextSceneId?: string;
-  storyMapNodeId?: string;
-  metadata?: Record<string, any>;
+// อินเทอร์เฟซสำหรับสถานะการเผยแพร่ของตอน
+export type EpisodeStatus = "draft" | "published" | "scheduled" | "archived";
+// draft: ฉบับร่าง, ผู้เขียนกำลังแก้ไข
+// published: เผยแพร่แล้ว
+// scheduled: ตั้งเวลาเผยแพร่
+// archived: จัดเก็บถาวร
+
+// อินเทอร์เฟซสำหรับข้อมูลสถิติของตอน (อาจ denormalize บางส่วน)
+export interface IEpisodeStats {
+  viewCount: number; // จำนวนครั้งที่ถูกเปิดอ่าน
+  likeCount: number; // จำนวนไลค์สำหรับตอนนี้
+  commentCount: number; // จำนวนความคิดเห็นสำหรับตอนนี้
+  wordCount?: number; // จำนวนคำโดยประมาณในตอนนี้ (อาจคำนวณจาก Scenes)
+  readingTimeMinutes?: number; // เวลาอ่านโดยประมาณของตอนนี้ (นาที)
+  // ตัวอย่าง: viewCount: 5000, likeCount: 150, commentCount: 20, wordCount: 2500
 }
 
-// อินเทอร์เฟซสำหรับเอกสารตอน
+// อินเทอร์เฟซหลักสำหรับเอกสารตอน (Episode Document)
 export interface IEpisode extends Document {
-  novel: Types.ObjectId;
-  title: string;
-  slug: string;
-  episodeNumber: number;
-  author: Types.ObjectId;
-  summary?: string;
-  coverImage?: string;
-  status: "draft" | "scheduled" | "published" | "archived";
-  visibility: "public" | "unlisted" | "private" | "subscribersOnly";
-  isFree: boolean;
-  priceInCoins?: number;
-  publishedAt?: Date;
-  scheduledFor?: Date;
-  scenes: ISceneSubdocument[];
-  startSceneId: string;
-  viewsCount: number;
-  uniqueViewsCount?: number;
-  likesCount: number;
-  commentsCount: number;
-  purchasesCount?: number;
-  totalCoinsEarned?: number;
-  estimatedReadingTimeMinutes?: number;
-  wordCount?: number;
-  allowComments: boolean;
-  embeddingVector?: number[];
-  keywords?: string[];
-  sentiment?: {
-    score: number;
-    dominantEmotion?: string;
-  };
+  _id: Types.ObjectId;
+  novel: Types.ObjectId; // นิยายที่เป็นเจ้าของตอนนี้ (อ้างอิง Novel model)
+  title: string; // ชื่อตอน (ภาษาไทย, เช่น "บทที่ 1: การเริ่มต้น")
+  episodeNumber: number; // ลำดับของตอน (เช่น 1, 2, 3, ...)
+  
+  // เนื้อหาและการดำเนินเรื่อง
+  firstScene: Types.ObjectId; // ID ของฉากแรกในตอนนี้ (อ้างอิง Scene model)
+  // endScenes?: Types.ObjectId[]; // ID ของฉากที่สามารถเป็นจุดจบของตอนนี้ได้ (ถ้า Novel.endingType ไม่ใช่ single_linear)
+  // ตัวอย่าง: ถ้า Novel.endingType = "multiple_branching_paths", ตอนนี้อาจมี endScenes หลายฉาก
+  isBranchingPoint?: boolean; // ตอนนี้เป็นจุดที่เนื้อเรื่องจะแตกแขนงหรือไม่ (สำหรับ UI ใน StoryMap)
+  
+  status: EpisodeStatus; // สถานะการเผยแพร่
+  publishedAt?: Date; // วันที่เผยแพร่ (ถ้า status เป็น published หรือ scheduled)
+  scheduledFor?: Date; // วันที่ตั้งเวลาเผยแพร่ (ถ้า status เป็น scheduled)
+  
+  // การเข้าถึง (อาจ override หรือเสริมจาก Novel.accessControl)
+  isFreeToRead: boolean; // อ่านฟรีหรือไม่ (อาจ default ตาม Novel)
+  price?: number; // ราคาสำหรับตอนนี้ (ถ้าไม่ฟรี และ Novel.accessControl.monetizationModel = "pay_per_episode")
+  currency?: string; // สกุลเงิน (เช่น "COIN", ควรตรงกับ Novel.accessControl.currency)
+  // ตัวอย่าง: isFreeToRead: false, price: 10, currency: "COIN"
+  
+  // สถิติ
+  stats: IEpisodeStats;
+  
+  // ข้อมูลเพิ่มเติม
+  synopsis?: string; // เรื่องย่อสั้นๆ ของตอนนี้ (ภาษาไทย, สำหรับแสดงในสารบัญตอน)
+  // ตัวอย่าง: synopsis: "การตัดสินใจครั้งสำคัญที่ทางแยกของโชคชะตา"
+  authorNotes?: string; // หมายเหตุจากผู้เขียนสำหรับตอนนี้ (แสดงให้ผู้อ่านเห็นได้)
+  // ตัวอย่าง: "ตอนนี้มี Easter egg ซ่อนอยู่นะครับ ลองหากันดู!"
+  coverImageUrl?: string; // URL ภาพปกของตอน (ถ้าต้องการให้แต่ละตอนมีภาพปกแยก)
+  
+  // การอัปเดต
+  lastUpdatedAt: Date; // วันที่ข้อมูลตอนมีการแก้ไขล่าสุด
+
+  // Soft delete
   isDeleted: boolean;
   deletedAt?: Date;
+
+  // Timestamps
   createdAt: Date;
-  updatedAt: Date;
-  lastSignificantUpdateAt?: Date;
+  // updatedAt จะถูก Mongoose จัดการอยู่แล้ว
 }
 
-const SceneSubdocumentSchema = new Schema<ISceneSubdocument>(
+// Schema ย่อยสำหรับ IEpisodeStats
+const EpisodeStatsSchema = new Schema<IEpisodeStats>(
   {
-    id: { type: String, required: true },
-    title: { type: String, trim: true },
-    order: { type: Number, required: true, min: 0 },
-    type: {
-      type: String,
-      enum: [
-        "text",
-        "dialogue",
-        "choice",
-        "mediaDisplay",
-        "effectTrigger",
-        "gameStateChange",
-        "branchPoint",
-        "ending",
-      ],
-      required: [true, "กรุณาระบุประเภทของฉาก"],
-    },
-    content: {
-      text: { type: String, trim: true },
-      speaker: { type: String, trim: true },
-      characterId: { type: Schema.Types.ObjectId, ref: "Character" },
-      characterEmotion: String,
-      characterPosition: {
-        type: String,
-        enum: ["left", "center", "right", "custom"],
-      },
-      choices: [
-        {
-          _id: false,
-          id: { type: String, required: true },
-          text: { type: String, required: true, trim: true },
-          targetNodeId: String,
-          nextSceneId: String,
-          conditions: [Schema.Types.Mixed],
-          effects: [Schema.Types.Mixed],
-        },
-      ],
-      mediaElements: [
-        {
-          _id: false,
-          mediaId: {
-            type: Schema.Types.ObjectId,
-            ref: "Media",
-            required: true,
-          },
-          mediaType: {
-            type: String,
-            enum: ["image", "audio", "background", "video", "sfx"],
-            required: true,
-          },
-          alias: String,
-          layer: Number,
-          position: { x: Number, y: Number, unit: String },
-          size: { width: Number, height: Number, unit: String },
-          opacity: { type: Number, min: 0, max: 1 },
-          duration: Number,
-          loop: Boolean,
-          volume: { type: Number, min: 0, max: 1 },
-          fadeInDuration: Number,
-          fadeOutDuration: Number,
-        },
-      ],
-      visualEffects: [
-        {
-          _id: false,
-          type: {
-            type: String,
-            enum: ["screenShake", "screenFlash", "imageFilter", "transition"],
-            required: true,
-          },
-          targetElementAlias: String,
-          duration: { type: Number, required: true, min: 0 },
-          intensity: { type: Number, min: 0, max: 1 },
-          color: String,
-          parameters: Schema.Types.Mixed,
-        },
-      ],
-      gameStateUpdates: [
-        {
-          _id: false,
-          type: {
-            type: String,
-            enum: [
-              "stat",
-              "relationship",
-              "item",
-              "flag",
-              "achievementUnlock",
-            ],
-            required: true,
-          },
-          targetId: { type: String, required: true },
-          operation: {
-            type: String,
-            enum: ["set", "increment", "decrement", "toggle"],
-            required: true,
-          },
-          value: Schema.Types.Mixed,
-          displayText: String,
-        },
-      ],
-    },
-    nextSceneId: String,
-    storyMapNodeId: String,
-    metadata: Schema.Types.Mixed,
+    viewCount: { type: Number, default: 0, min: 0 },
+    likeCount: { type: Number, default: 0, min: 0 },
+    commentCount: { type: Number, default: 0, min: 0 },
+    wordCount: { type: Number, min: 0 },
+    readingTimeMinutes: { type: Number, min: 0 },
   },
   { _id: false }
 );
 
+// Schema หลักสำหรับ Episode
 const EpisodeSchema = new Schema<IEpisode>(
   {
     novel: {
@@ -220,310 +90,111 @@ const EpisodeSchema = new Schema<IEpisode>(
     },
     title: {
       type: String,
-      required: [true, "กรุณาระบุชื่อตอน"],
+      required: [true, "กรุณาระบุชื่อตอน (Episode title is required)"],
       trim: true,
-      maxlength: [250, "ชื่อตอนต้องไม่เกิน 250 ตัวอักษร"],
-    },
-    slug: {
-      type: String,
-      required: [true, "กรุณาระบุ slug สำหรับตอน"],
-      trim: true,
-      lowercase: true,
-      maxlength: [270, "Slug ต้องไม่เกิน 270 ตัวอักษร"],
+      maxlength: 250,
     },
     episodeNumber: {
       type: Number,
-      required: [true, "กรุณาระบุลำดับตอน"],
-      min: 1,
+      required: [true, "กรุณาระบุลำดับของตอน (Episode number is required)"],
+      min: 0, // อาจมีบทนำเป็นตอนที่ 0
       index: true,
     },
-    author: {
+    firstScene: {
       type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
+      ref: "Scene",
+      // required: true, // อาจไม่บังคับถ้าตอนยังเป็น draft และยังไม่ได้สร้างฉาก
     },
-    summary: {
-      type: String,
-      trim: true,
-      maxlength: [2000, "สรุปเนื้อหาตอนต้องไม่เกิน 2000 ตัวอักษร"],
-    },
-    coverImage: { type: String, trim: true },
+    // endScenes: [{ type: Schema.Types.ObjectId, ref: "Scene" }],
+    isBranchingPoint: { type: Boolean, default: false },
     status: {
       type: String,
-      enum: ["draft", "scheduled", "published", "archived"],
+      enum: ["draft", "published", "scheduled", "archived"],
       default: "draft",
       index: true,
-    },
-    visibility: {
-      type: String,
-      enum: ["public", "unlisted", "private", "subscribersOnly"],
-      default: "private",
-      index: true,
-    },
-    isFree: { type: Boolean, default: true },
-    priceInCoins: {
-      type: Number,
-      min: 0,
-      validate: {
-        validator: function (this: IEpisode, v: number | undefined) {
-          return this.isFree || (typeof v === "number" && v >= 0);
-        },
-        message:
-          "กรุณาระบุราคาเป็น Coin ที่ถูกต้องสำหรับตอนที่ต้องชำระเงิน (0 หรือมากกว่า)",
-      },
-      default: function (this: IEpisode) {
-        return this.isFree ? undefined : 0;
-      },
+      required: true,
     },
     publishedAt: { type: Date, index: true },
-    scheduledFor: {
-      type: Date,
-      validate: {
-        validator: function (this: IEpisode, v: Date | undefined) {
-          return this.status !== "scheduled" || (v && v > new Date());
-        },
-        message: "วันที่ตั้งเวลาเผยแพร่ต้องเป็นอนาคต",
-      },
-    },
-    scenes: [SceneSubdocumentSchema],
-    startSceneId: {
-      type: String,
-      required: [true, "กรุณาระบุ ID ของฉากเริ่มต้น"],
-      validate: {
-        validator: function (this: IEpisode, v: string) {
-          return this.scenes && this.scenes.some((scene) => scene.id === v);
-        },
-        message: "ID ฉากเริ่มต้นไม่พบในรายการฉากของตอนนี้",
-      },
-    },
-    viewsCount: { type: Number, default: 0, min: 0, index: true },
-    uniqueViewsCount: { type: Number, default: 0, min: 0 },
-    likesCount: { type: Number, default: 0, min: 0, index: true },
-    commentsCount: { type: Number, default: 0, min: 0 },
-    purchasesCount: { type: Number, default: 0, min: 0 },
-    totalCoinsEarned: { type: Number, default: 0, min: 0 },
-    estimatedReadingTimeMinutes: { type: Number, min: 0 },
-    wordCount: { type: Number, min: 0 },
-    allowComments: { type: Boolean, default: true },
-    embeddingVector: { type: [Number], select: false },
-    keywords: { type: [String], index: true },
-    sentiment: {
-      type: {
-        score: { type: Number, required: true },
-        dominantEmotion: { type: String },
-      },
-      select: false,
-    },
+    scheduledFor: { type: Date, index: true },
+    isFreeToRead: { type: Boolean, default: true }, // อาจมี logic ที่ดึง default จาก Novel
+    price: { type: Number, min: 0 },
+    currency: { type: String, trim: true, uppercase: true, maxlength: 10 },
+    stats: { type: EpisodeStatsSchema, default: () => ({}) },
+    synopsis: { type: String, trim: true, maxlength: 1000 },
+    authorNotes: { type: String, trim: true, maxlength: 5000 },
+    coverImageUrl: { type: String, trim: true, maxlength: 500 },
+    lastUpdatedAt: { type: Date, default: Date.now },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,
-    lastSignificantUpdateAt: { type: Date, default: Date.now },
   },
   {
-    timestamps: true,
+    timestamps: true, // createdAt, updatedAt
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// ดัชนี
-EpisodeSchema.index({ novel: 1, slug: 1, isDeleted: 1 }, { unique: true });
-EpisodeSchema.index(
-  { novel: 1, episodeNumber: 1, isDeleted: 1 },
-  { unique: true }
-);
-EpisodeSchema.index({ novel: 1, status: 1, visibility: 1, isDeleted: 1 });
-EpisodeSchema.index(
-  { novel: 1, status: 1, publishedAt: -1, isDeleted: 1 },
-  { partialFilterExpression: { status: "published" } }
-);
-EpisodeSchema.index(
-  { title: "text", summary: "text", keywords: "text" },
-  { default_language: "thai", weights: { title: 10, summary: 5, keywords: 2 } }
-);
-EpisodeSchema.index({ novel: 1, isFree: 1, status: 1, isDeleted: 1 });
+// ----- Indexes -----
+// Index สำหรับการ query ตอนของนิยายเรื่องหนึ่งๆ เรียงตามลำดับตอน
+EpisodeSchema.index({ novel: 1, episodeNumber: 1 }, { unique: true }); // ลำดับตอนในแต่ละนิยายต้องไม่ซ้ำกัน
+EpisodeSchema.index({ novel: 1, status: 1, publishedAt: -1 }); // ตอนล่าสุดที่เผยแพร่ของนิยาย
 
-// มิดเดิลแวร์
-EpisodeSchema.pre("save", async function (next) {
-  if (
-    (this.isModified("title") || this.isNew) &&
-    (!this.slug || this.isModified("title"))
-  ) {
-    const baseSlug = (this.title || "")
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9ก-๙เ-ไ\-]+/g, "")
-      .replace(/--+/g, "-")
-      .substring(0, 70);
-    this.slug = `${baseSlug || "episode"}-${this.episodeNumber}`;
-    const Episode = this.constructor as mongoose.Model<IEpisode>;
-    let count = 0;
-    let finalSlug = this.slug;
-    while (
-      await Episode.findOne({
-        novel: this.novel,
-        slug: finalSlug,
-        _id: { $ne: this._id },
-        isDeleted: this.isDeleted,
-      })
-    ) {
-      count++;
-      finalSlug = `${this.slug}-${count}`;
-    }
-    this.slug = finalSlug;
+// ----- Middleware -----
+// Middleware สำหรับอัปเดต lastUpdatedAt ก่อน save
+EpisodeSchema.pre<IEpisode>("save", async function (next) {
+  if (this.isModified()) {
+    this.lastUpdatedAt = new Date();
   }
-
+  // ถ้า status เปลี่ยนเป็น published และ publishedAt ยังไม่ได้ตั้ง, ให้ตั้งเป็นวันปัจจุบัน
   if (this.isModified("status") && this.status === "published" && !this.publishedAt) {
     this.publishedAt = new Date();
   }
 
-  if (this.isModified("scenes")) {
-    let textContent = "";
-    this.scenes.forEach((scene) => {
-      if (scene.content.text) textContent += scene.content.text + " ";
-      if (scene.content.choices) {
-        scene.content.choices.forEach(
-          (choice) => (textContent += choice.text + " ")
-        );
+  // อัปเดต Novel.stats.totalChapters และ Novel.lastEpisodePublishedAt เมื่อมีการ publish/unpublish ตอน
+  if (this.isModified("status") || this.isNew) {
+    const novelId = this.novel;
+    const Novel = models.Novel || model("Novel"); // Ensure Novel model is available
+    if (Novel) {
+      const episodeStatus = this.status;
+      const isPublished = episodeStatus === "published";
+      const isPreviouslyPublished = this.get("status", null, { getters: false }) === "published";
+
+      let updateOp: any = {};
+      if (isPublished && !isPreviouslyPublished) { // New publish or changed to publish
+        updateOp.$inc = { "stats.totalChapters": 1 };
+        updateOp.$set = { lastEpisodePublishedAt: this.publishedAt || new Date() };
+      } else if (!isPublished && isPreviouslyPublished) { // Changed from publish to something else
+        updateOp.$inc = { "stats.totalChapters": -1 };
+        // Logic to find the new lastEpisodePublishedAt might be complex here, 
+        // often handled by a separate script or by querying other episodes.
+        // For simplicity, we might just nullify it or leave it, depending on requirements.
       }
-    });
-    this.wordCount = textContent
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean).length;
-    this.estimatedReadingTimeMinutes = Math.ceil((this.wordCount || 0) / 200);
-    this.lastSignificantUpdateAt = new Date();
+      if (Object.keys(updateOp).length > 0) {
+        try {
+          await Novel.updateOne({ _id: novelId }, updateOp);
+        } catch (err) {
+          console.error("Error updating novel stats from episode save:", err);
+          // Handle error appropriately, maybe log or queue for retry
+        }
+      }
+    }
   }
-
-  if (
-    this.isNew ||
-    this.isModified("title") ||
-    this.isModified("summary") ||
-    this.isModified("status") ||
-    this.isModified("isFree") ||
-    this.isModified("priceInCoins")
-  ) {
-    this.lastSignificantUpdateAt = new Date();
-  }
-
-  if (
-    !this.isFree &&
-    (this.isModified("purchasesCount") || this.isModified("priceInCoins"))
-  ) {
-    this.totalCoinsEarned = (this.purchasesCount || 0) * (this.priceInCoins || 0);
-  }
-
   next();
 });
 
-// อัปเดตข้อมูลนิยายเมื่อตอนมีการเปลี่ยนแปลง
-async function updateNovelOnEpisodeChange(doc: IEpisode | null) {
-  if (!doc || !doc.novel) return;
-  try {
-    const NovelModel = models.Novel as mongoose.Model<any>;
-    const EpisodeModel = models.Episode as mongoose.Model<IEpisode>;
-    const novelId = doc.novel;
-
-    const episodeStats = await EpisodeModel.aggregate([
-      { $match: { novel: novelId, isDeleted: false } },
-      {
-        $group: {
-          _id: "$novel",
-          episodesCount: { $sum: 1 },
-          publishedEpisodesCount: {
-            $sum: { $cond: [{ $eq: ["$status", "published"] }, 1, 0] },
-          },
-          totalWordsCount: { $sum: "$wordCount" },
-          totalCoinsRevenueFromEpisodes: {
-            $sum: {
-              $cond: [{ $eq: ["$isFree", false] }, "$totalCoinsEarned", 0],
-            },
-          },
-          lastEpisodePublishedAt: {
-            $max: {
-              $cond: [{ $eq: ["$status", "published"] }, "$publishedAt", null],
-            },
-          },
-        },
-      },
-    ]);
-
-    if (episodeStats.length > 0) {
-      const stats = episodeStats[0];
-      await NovelModel.findByIdAndUpdate(novelId, {
-        episodesCount: stats.episodesCount || 0,
-        publishedEpisodesCount: stats.publishedEpisodesCount || 0,
-        wordsCount: stats.totalWordsCount || 0,
-        totalCoinRevenue: stats.totalCoinsRevenueFromEpisodes || 0,
-        lastEpisodePublishedAt: stats.lastEpisodePublishedAt,
-        $set: { lastSignificantUpdateAt: new Date() },
-      });
-    } else {
-      await NovelModel.findByIdAndUpdate(novelId, {
-        episodesCount: 0,
-        publishedEpisodesCount: 0,
-        wordsCount: 0,
-        totalCoinRevenue: 0,
-        lastEpisodePublishedAt: null,
-        $set: { lastSignificantUpdateAt: new Date() },
-      });
-    }
-  } catch (error) {
-    console.error(`Error updating novel stats for novel ${doc.novel}:`, error);
-  }
-}
-
-EpisodeSchema.post("save", async function (doc) {
-  await updateNovelOnEpisodeChange(doc);
-  try {
-    const ActivityHistory = ActivityHistoryModel();
-    await new ActivityHistory({
-      user: doc.author,
-      activityType: this.isNew ? "CREATE_EPISODE" : "UPDATE_EPISODE",
-      targetType: "Episode",
-      targetId: doc._id,
-      novelContext: doc.novel,
-      details: {
-        title: doc.title,
-        episodeNumber: doc.episodeNumber,
-        status: doc.status,
-        isFree: doc.isFree,
-        priceInCoins: doc.priceInCoins,
-      },
-    }).save();
-  } catch (error) {
-    console.error("Error logging episode activity:", error);
-  }
+// ----- Virtuals -----
+// Virtual field สำหรับ URL ของตอน (ตัวอย่าง)
+EpisodeSchema.virtual("episodeUrl").get(function(this: IEpisode) {
+  // ต้องการข้อมูล slug ของ novel มาประกอบ URL
+  // อาจจะต้อง populate novel title/slug หรือมีวิธีอื่นในการสร้าง URL ที่สมบูรณ์
+  // This is a placeholder, actual implementation might need novel slug.
+  // const novelSlug = this.parent()?.slug || "NOVEL_SLUG_OR_ID"; // Access parent if populated
+  // For now, let's assume novelId can be used if slug is not available directly
+  return `/novel/${this.novel}/episode/${this.episodeNumber}`;
 });
 
-EpisodeSchema.post("findOneAndUpdate", async function (doc) {
-  if (doc) {
-    await updateNovelOnEpisodeChange(doc as IEpisode);
-  }
-});
-
-EpisodeSchema.post("findOneAndDelete", async function (doc) {
-  if (doc) {
-    await updateNovelOnEpisodeChange(doc as IEpisode);
-    try {
-      const ActivityHistory = ActivityHistoryModel();
-      await new ActivityHistory({
-        user: doc.author,
-        activityType: "DELETE_EPISODE",
-        targetType: "Episode",
-        targetId: doc._id,
-        novelContext: doc.novel,
-        details: { title: doc.title, episodeNumber: doc.episodeNumber },
-      }).save();
-    } catch (error) {
-      console.error("Error logging episode deletion activity:", error);
-    }
-  }
-});
-
-// ส่งออกโมเดล
-const EpisodeModel = () =>
-  models.Episode as mongoose.Model<IEpisode> ||
-  model<IEpisode>("Episode", EpisodeSchema);
+// ----- Model Export -----
+const EpisodeModel = () => models.Episode as mongoose.Model<IEpisode> || model<IEpisode>("Episode", EpisodeSchema);
 
 export default EpisodeModel;
+

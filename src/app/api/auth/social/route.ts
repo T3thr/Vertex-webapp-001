@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
-import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUser";
+import SocialMediaUserModel, { ISocialMediaUser } from "@/backend/models/SocialMediaUserhaha";
 import { Types } from "mongoose";
 
 // ประเภทสำหรับ Request Body

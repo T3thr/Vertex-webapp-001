@@ -1,165 +1,214 @@
-// src/backend/models/Achievement.ts
+// backend/models/Achievement.ts
+// โมเดลความสำเร็จ (Achievement Model) - จัดการข้อมูลความสำเร็จที่ผู้ใช้สามารถปลดล็อกได้ (Gamification)
+// ออกแบบให้เก็บรายละเอียดของความสำเร็จ, เงื่อนไขการปลดล็อก, และรางวัลที่เกี่ยวข้อง
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// Interface for defining the criteria for an achievement
-export interface IAchievementCriteria extends Document {
-  metric: string; // Key for the metric to track (e.g., "novels_read_count", "episodes_written_count", "daily_login_streak")
-  targetValue: number; // The value of the metric required to unlock
-  operator?: "gte" | "lte" | "eq" | "gt" | "lt"; // Operator for comparison (default: "gte")
-  timeWindowSeconds?: number; // Optional: Time window in seconds for the metric (e.g., for streaks or time-limited events)
-  relatedEntity?: "novel" | "episode" | "user" | "category"; // Optional: If the metric is related to a specific type of entity
-  additionalConditions?: Record<string, any>; // e.g., { genre: "fantasy" } for "read_fantasy_novels"
+// ประเภทของความสำเร็จ (สามารถแบ่งตามหมวดหมู่คล้าย Badge)
+// ตัวอย่างการใช้งาน: const category: AchievementCategory = "reading_milestones";
+export type AchievementCategory = 
+  | "reading_milestones" // เช่น อ่านนิยายครบ X เรื่อง, อ่านตอนครบ Y ตอน
+  | "writing_milestones" // เช่น เขียนนิยายเรื่องแรก, เขียนครบ Z คำ
+  | "community_participation" // เช่น แสดงความคิดเห็นครบ X ครั้ง, ได้รับไลค์ Y ครั้ง
+  | "account_progression" // เช่น ล็อกอินครบ X วัน, ยืนยันอีเมลสำเร็จ
+  | "collection_goals" // เช่น สะสมนิยายแฟนตาซีครบ X เรื่อง, ปลดล็อกตัวละครทั้งหมดในเรื่อง Y
+  | "event_participation" // เช่น เข้าร่วมกิจกรรมพิเศษ XYZ
+  | "other"; // หมวดหมู่อื่นๆ
+
+// อินเทอร์เฟซสำหรับรางวัลที่เกี่ยวข้องกับความสำเร็จ
+// ตัวอย่างการใช้งาน: const reward: IAchievementReward = { experiencePoints: 100, coins: 50 };
+export interface IAchievementReward {
+  badgeAwarded?: Types.ObjectId; // ID ของเหรียญตราที่ได้รับ (อ้างอิง Badge model)
+                                 // ตัวอย่าง: new Types.ObjectId("60f5eabc1234567890abcdef")
+  experiencePoints?: number; // แต้มประสบการณ์ที่ได้รับ
+                             // ตัวอย่าง: 100
+  coins?: number; // เหรียญ Coins ที่ได้รับ
+                  // ตัวอย่าง: 50
+  titleAwarded?: string; // ฉายาที่ได้รับ (ถ้ามีระบบฉายา)
+                         // ตัวอย่าง: "นักอ่านตัวยง"
 }
 
-// Interface for rewards given when an achievement is unlocked
-export interface IAchievementReward extends Document {
-  type: "experience_points" | "virtual_currency" | "badge" | "item" | "title_unlock" | "feature_unlock"; // ประเภทของรางวัล
-  value?: number | string; // จำนวน (สำหรับ points, currency), ID/name (สำหรับ badge, item, title, feature)
-  currencyType?: string; // e.g., "COINS", "GEMS" (if type is virtual_currency)
-  itemName?: string; // ชื่อไอเทม (ถ้า type is item)
-  itemQuantity?: number; // จำนวนไอเทม (ถ้า type is item)
-  description?: string; // คำอธิบายรางวัล
-}
-
-// Interface for Achievement definition document
+// อินเทอร์เฟซหลักสำหรับเอกสารความสำเร็จ (Achievement Document)
 export interface IAchievement extends Document {
-  achievementId: string; // Unique, human-readable ID (e.g., "first_novel_read", "prolific_writer_bronze")
-  title: string; // ชื่อความสำเร็จ (แสดงผล, รองรับหลายภาษาได้ถ้าจำเป็น)
-  description: string; // คำอธิบายความสำเร็จ (แสดงผล, รองรับหลายภาษาได้ถ้าจำเป็น)
-  iconUrl?: string; // URL ของไอคอนความสำเร็จ
-  category: "reading" | "writing" | "community_interaction" | "platform_engagement" | "special_event" | "monetization"; // หมวดหมู่ความสำเร็จ
-  type: "milestone" | "streak" | "cumulative" | "event_participation" | "hidden_discovery"; // ประเภทของความสำเร็จ
-  difficulty: "bronze" | "silver" | "gold" | "platinum" | "diamond"; // ระดับความยาก (หรือใช้ points range)
-  unlockPoints: number; // คะแนนที่ผู้ใช้ได้รับเมื่อปลดล็อกความสำเร็จนี้ (สำหรับระบบ ranking/leaderboard)
-  // Criteria for unlocking
-  unlockCriteria: IAchievementCriteria[]; // เงื่อนไขในการปลดล็อก (สามารถมีหลายเงื่อนไข, AND logic by default)
-  // Rewards
-  rewards: IAchievementReward[]; // รางวัลที่ได้รับเมื่อปลดล็อก
-  // Status and Visibility
-  isActive: boolean; // ความสำเร็จนี้เปิดใช้งานอยู่หรือไม่
-  isSecret: boolean; // เป็นความสำเร็จลับหรือไม่ (ซ่อนเงื่อนไขจนกว่าจะปลดล็อก)
-  isHiddenUntilUnlocked: boolean; // ซ่อนความสำเร็จทั้งหมด (รวมถึงชื่อและไอคอน) จนกว่าจะปลดล็อก
-  // Progression (for multi-tier achievements)
-  previousTierAchievement?: Types.ObjectId; // Achievement ก่อนหน้าใน tier เดียวกัน (อ้างอิง Achievement model)
-  nextTierAchievement?: Types.ObjectId; // Achievement ถัดไปใน tier เดียวกัน (อ้างอิง Achievement model)
-  // Time-related
-  availableFrom?: Date; // วันที่เริ่มให้ปลดล็อกได้
-  availableUntil?: Date; // วันที่สิ้นสุดการปลดล็อก (สำหรับ event-specific achievements)
-  // Versioning and Tags
-  version: number; // Version ของ definition นี้ (เผื่อมีการแก้ไข criteria/rewards)
-  tags?: string[]; // Tags สำหรับการจัดกลุ่มหรือค้นหา
-  // Soft delete
-  isDeleted: boolean;
-  deletedAt?: Date;
+  _id: Types.ObjectId;
+  key: string; // Unique key สำหรับอ้างอิงในโค้ด (เช่น "FIRST_NOVEL_READ", "100_COMMENTS_POSTED")
+               // ตัวอย่าง: "FIRST_NOVEL_READ"
+  name: string; // ชื่อความสำเร็จที่แสดงผล (เช่น "นักอ่านหน้าใหม่", "นักวิจารณ์ดาวเด่น")
+               // ตัวอย่าง: "นักอ่านหน้าใหม่"
+  description: string; // คำอธิบายความสำเร็จ และเงื่อนไขการปลดล็อกโดยสังเขป
+                       // ตัวอย่าง: "ปลดล็อกเมื่อคุณอ่านนิยายเรื่องแรกจบ"
+  detailedCriteria?: string; // (Optional) เงื่อนไขการปลดล็อกอย่างละเอียด (อาจเป็น Markdown)
+                             // ตัวอย่าง: "อ่านทุกตอนของนิยายเรื่องใดก็ได้จนจบสมบูรณ์"
+  
+  iconUrl?: string; // URL ของไอคอนความสำเร็จ (ถ้ามี, อาจใช้ร่วมกับ Badge)
+                    // ตัวอย่าง: "https://cdn.novelmaze.com/achievements/first_read.png"
+  category: AchievementCategory; // หมวดหมู่ของความสำเร็จ
+                                  // ตัวอย่าง: "reading_milestones"
+  
+  level?: number; // ระดับของความสำเร็จ (ถ้าเป็นความสำเร็จแบบมีหลายขั้น เช่น อ่าน 10, 50, 100 ตอน)
+                  // ตัวอย่าง: 1 (สำหรับความสำเร็จขั้นแรก)
+  maxLevel?: number; // ระดับสูงสุดของความสำเร็จนี้ (ถ้ามี)
+                     // ตัวอย่าง: 3 (สำหรับความสำเร็จที่มี 3 ขั้น)
+  
+  isRepeatable: boolean; // ความสำเร็จนี้สามารถปลดล็อกซ้ำได้หรือไม่ (เช่น daily login)
+                         // ตัวอย่าง: false
+  repeatCooldownDays?: number; // ระยะเวลา cooldown ก่อนจะปลดล็อกซ้ำได้ (ถ้า isRepeatable = true)
+                               // ตัวอย่าง: 1 (สำหรับ daily login)
+  
+  rewards: IAchievementReward; // รางวัลที่ได้รับเมื่อปลดล็อกความสำเร็จนี้
+  
+  isActive: boolean; // ความสำเร็จนี้ยังสามารถปลดล็อกได้หรือไม่ (อาจปิดการใช้งานชั่วคราว)
+                     // ตัวอย่าง: true
+  isPublic: boolean; // แสดงความสำเร็จนี้ในรายการทั้งหมดหรือไม่ (แม้ยังไม่ปลดล็อก)
+                    // ตัวอย่าง: true
+  isHiddenUntilUnlocked: boolean; // ซ่อนรายละเอียดความสำเร็จนี้จนกว่าผู้ใช้จะปลดล็อกหรือไม่
+                                 // ตัวอย่าง: false
+  
+  availableFrom?: Date; // วันที่เริ่มให้ปลดล็อกความสำเร็จนี้ (สำหรับ event-specific achievements)
+                        // ตัวอย่าง: new Date("2024-06-01T00:00:00.000Z")
+  availableUntil?: Date; // วันที่สิ้นสุดการปลดล็อกความสำเร็จนี้
+                         // ตัวอย่าง: new Date("2024-06-30T23:59:59.000Z")
+
   createdAt: Date;
   updatedAt: Date;
 }
 
-const AchievementCriteriaSchema = new Schema<IAchievementCriteria>(
-  {
-    metric: { type: String, required: true, trim: true },
-    targetValue: { type: Number, required: true, min: 1 },
-    operator: { type: String, enum: ["gte", "lte", "eq", "gt", "lt"], default: "gte" },
-    timeWindowSeconds: { type: Number, min: 0 },
-    relatedEntity: { type: String, enum: ["novel", "episode", "user", "category"] },
-    additionalConditions: Schema.Types.Mixed,
-  },
-  { _id: false }
-);
-
 const AchievementRewardSchema = new Schema<IAchievementReward>(
   {
-    type: {
-      type: String,
-      enum: ["experience_points", "virtual_currency", "badge", "item", "title_unlock", "feature_unlock"],
-      required: true,
-    },
-    value: Schema.Types.Mixed, // Can be number or string
-    currencyType: { type: String, trim: true, uppercase: true },
-    itemName: { type: String, trim: true },
-    itemQuantity: { type: Number, min: 1 },
-    description: { type: String, trim: true, maxlength: 200 },
+    badgeAwarded: { type: Schema.Types.ObjectId, ref: "Badge" },
+    experiencePoints: { type: Number, min: 0, default: 0 },
+    coins: { type: Number, min: 0, default: 0 },
+    titleAwarded: { type: String, trim: true, maxlength: 50 },
   },
-  { _id: false }
+  { _id: false } // ไม่สร้าง _id สำหรับ subdocument นี้
 );
 
 const AchievementSchema = new Schema<IAchievement>(
   {
-    achievementId: { type: String, required: true, unique: true, trim: true, index: true },
-    title: { type: String, required: [true, "กรุณาระบุชื่อความสำเร็จ"], trim: true, maxlength: 150, index: true },
-    description: { type: String, required: [true, "กรุณาระบุคำอธิบาย"], trim: true, maxlength: 1000 },
-    iconUrl: { type: String, trim: true },
+    key: {
+      type: String,
+      required: [true, "กรุณาระบุ Key เฉพาะสำหรับความสำเร็จ (Unique key is required)"],
+      unique: true,
+      trim: true,
+      uppercase: true,
+      match: [/^[A-Z0-9_]+$/, "Key ต้องประกอบด้วยตัวอักษรภาษาอังกฤษตัวใหญ่, ตัวเลข, และ _ เท่านั้น"],
+      index: true,
+      // ตัวอย่าง: "FIRST_NOVEL_READ"
+    },
+    name: {
+      type: String,
+      required: [true, "กรุณาระบุชื่อความสำเร็จ (Achievement name is required)"],
+      trim: true,
+      maxlength: [150, "ชื่อความสำเร็จต้องไม่เกิน 150 ตัวอักษร"],
+      // ตัวอย่าง: "นักอ่านหน้าใหม่"
+    },
+    description: {
+      type: String,
+      required: [true, "กรุณาระบุคำอธิบายความสำเร็จ (Achievement description is required)"],
+      trim: true,
+      maxlength: [500, "คำอธิบายความสำเร็จต้องไม่เกิน 500 ตัวอักษร"],
+      // ตัวอย่าง: "ปลดล็อกเมื่อคุณอ่านนิยายเรื่องแรกจบ"
+    },
+    detailedCriteria: { 
+      type: String, 
+      trim: true, 
+      maxlength: 2000, 
+      // ตัวอย่าง: "ผู้ใช้จะต้องอ่านทุกตอนของนิยายเรื่องใดก็ได้จนถึงสถานะ \'อ่านจบแล้ว\'"
+    },
+    iconUrl: { 
+      type: String, 
+      trim: true, 
+      // ตัวอย่าง: "/assets/icons/achievements/first_read.svg"
+    },
     category: {
       type: String,
-      enum: ["reading", "writing", "community_interaction", "platform_engagement", "special_event", "monetization"],
-      required: true,
+      enum: Object.values<AchievementCategory>(["reading_milestones", "writing_milestones", "community_participation", "account_progression", "collection_goals", "event_participation", "other"]),
+      required: [true, "กรุณาระบุหมวดหมู่ของความสำเร็จ (Achievement category is required)"],
       index: true,
+      // ตัวอย่าง: "reading_milestones"
     },
-    type: {
-      type: String,
-      enum: ["milestone", "streak", "cumulative", "event_participation", "hidden_discovery"],
-      required: true,
-      index: true,
+    level: { 
+      type: Number, 
+      min: 1, 
+      // ตัวอย่าง: 1
     },
-    difficulty: {
-      type: String,
-      enum: ["bronze", "silver", "gold", "platinum", "diamond"],
-      required: true,
-      index: true,
+    maxLevel: { 
+      type: Number, 
+      min: 1, 
+      // ตัวอย่าง: 3
     },
-    unlockPoints: { type: Number, required: true, min: 0, default: 0 },
-    unlockCriteria: { type: [AchievementCriteriaSchema], required: true },
-    rewards: [AchievementRewardSchema],
-    isActive: { type: Boolean, default: true, index: true },
-    isSecret: { type: Boolean, default: false },
-    isHiddenUntilUnlocked: { type: Boolean, default: false },
-    previousTierAchievement: { type: Schema.Types.ObjectId, ref: "Achievement" },
-    nextTierAchievement: { type: Schema.Types.ObjectId, ref: "Achievement" },
-    availableFrom: Date,
-    availableUntil: Date,
-    version: { type: Number, default: 1, min: 1 },
-    tags: [{ type: String, trim: true, lowercase: true }],
-    isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: Date,
+    isRepeatable: { 
+      type: Boolean, 
+      default: false, 
+      // ตัวอย่าง: false
+    },
+    repeatCooldownDays: { 
+      type: Number, 
+      min: 0, 
+      // ตัวอย่าง: 1 (สำหรับ daily login)
+    },
+    rewards: { 
+      type: AchievementRewardSchema, 
+      default: () => ({ experiencePoints: 0, coins: 0 }),
+      // ตัวอย่าง: { experiencePoints: 100, coins: 10, badgeAwarded: new Types.ObjectId() }
+    },
+    isActive: { 
+      type: Boolean, 
+      default: true, 
+      index: true, 
+      // ตัวอย่าง: true
+    },
+    isPublic: { 
+      type: Boolean, 
+      default: true, 
+      // ตัวอย่าง: true (แสดงให้ทุกคนเห็น แม้ยังไม่ปลดล็อก)
+    },
+    isHiddenUntilUnlocked: { 
+      type: Boolean, 
+      default: false, 
+      // ตัวอย่าง: false (แสดงรายละเอียดเลย)
+    },
+    availableFrom: { 
+      type: Date, 
+      index: true, 
+      // ตัวอย่าง: new Date("2024-01-01T00:00:00Z") (สำหรับ achievement ที่มีเวลาจำกัด)
+    },
+    availableUntil: { 
+      type: Date, 
+      index: true, 
+      // ตัวอย่าง: new Date("2024-12-31T23:59:59Z")
+    },
   },
   {
-    timestamps: true, // createdAt, updatedAt
+    timestamps: true, // สร้าง createdAt และ updatedAt โดยอัตโนมัติ
   }
 );
 
-// ----- Indexes -----
-AchievementSchema.index({ title: "text", description: "text", tags: "text" }); // For searching
-AchievementSchema.index({ category: 1, difficulty: 1, isActive: 1 });
-AchievementSchema.index({ type: 1, isActive: 1 });
-AchievementSchema.index({ availableFrom: 1, availableUntil: 1, isActive: 1 });
-AchievementSchema.index({ tags: 1, isActive: 1 });
+// ----- Indexes เพิ่มเติม -----
+AchievementSchema.index({ category: 1, level: 1 }); // สำหรับการค้นหาตามหมวดหมู่และระดับ
+AchievementSchema.index({ isActive: 1, isRepeatable: 1 }); // สำหรับการค้นหา achievement ที่ active และทำซ้ำได้
+AchievementSchema.index({ isActive: 1, availableFrom: 1, availableUntil: 1 }); // สำหรับ event-based achievements
 
-// ----- Middleware -----
-AchievementSchema.pre("save", function (next) {
-  // Ensure achievementId is lowercase and has no spaces (like a slug)
-  if (this.isModified("achievementId")) {
-    this.achievementId = this.achievementId.toLowerCase().replace(/\s+/g, "_");
+// ----- Middleware (Pre/Post Hooks) -----
+AchievementSchema.pre<IAchievement>("save", function(next) {
+  // ถ้า isRepeatable เป็น true แต่ repeatCooldownDays ไม่ได้กำหนดหรือน้อยกว่า 0 ให้ตั้งเป็น 0
+  if (this.isRepeatable && (this.repeatCooldownDays === undefined || this.repeatCooldownDays === null || this.repeatCooldownDays < 0)) {
+    this.repeatCooldownDays = 0; 
   }
-
-  // Soft delete handling
-  if (this.isModified("isDeleted") && this.isDeleted && !this.deletedAt) {
-    this.deletedAt = new Date();
+  // ถ้า isRepeatable เป็น false ให้ repeatCooldownDays เป็น undefined
+  if (!this.isRepeatable) {
+    this.repeatCooldownDays = undefined;
+  }
+  // ตรวจสอบว่า level ไม่เกิน maxLevel (ถ้าทั้งคู่ถูกกำหนด)
+  if (this.level && this.maxLevel && this.level > this.maxLevel) {
+    return next(new Error("ระดับปัจจุบัน (level) ต้องไม่เกินระดับสูงสุด (maxLevel)"));
   }
   next();
 });
 
-// ----- Virtuals -----
-// Virtual to get user progress for this achievement (would require UserAchievement model)
-AchievementSchema.virtual("userAchievements", {
-  ref: "UserAchievement", // Assumes UserAchievement model exists
-  localField: "_id",
-  foreignField: "achievementDefinition", // Field in UserAchievement that refs this Achievement
-});
-
 // ----- Model Export -----
-const AchievementModel = () =>
-  models.Achievement as mongoose.Model<IAchievement> || model<IAchievement>("Achievement", AchievementSchema);
+// ตรวจสอบว่าโมเดลถูกคอมไพล์ไปแล้วหรือยังก่อนที่จะคอมไพล์ใหม่ เพื่อป้องกันข้อผิดพลาด OverwriteModelError
+const AchievementModel = () => models.Achievement as mongoose.Model<IAchievement> || model<IAchievement>("Achievement", AchievementSchema);
 
 export default AchievementModel;
 

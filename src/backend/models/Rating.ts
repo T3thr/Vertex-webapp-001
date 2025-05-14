@@ -1,252 +1,159 @@
-// src/backend/models/Rating.ts
+// src/models/Rating.ts
+// โมเดลการให้คะแนน (Rating Model) - จัดการการให้คะแนนนิยายโดยผู้ใช้
+// ออกแบบให้เชื่อมโยงกับผู้ใช้และนิยาย, เก็บข้อมูลคะแนน, และอาจมีรีวิวสั้นๆ ประกอบ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// Interface for individual rating criteria (if you want multi-dimensional ratings)
-export interface IRatingCriterionScore extends Document {
-  criterionName: string; // e.g., "Story", "Characters", "World-building", "Art Style"
-  score: number; // Score for this specific criterion (1-5 or 1-10)
-  weight?: number; // Optional weight for this criterion in overall score calculation (default 1)
-}
-
-// Interface for Rating document
-// Represents a user's rating and review for a specific target (Novel, Episode, etc.)
+// อินเทอร์เฟซหลักสำหรับเอกสารการให้คะแนน (Rating Document)
 export interface IRating extends Document {
-  wasApprovedBeforeChange: boolean;
-  user: Types.ObjectId; // ผู้ให้คะแนน (อ้างอิง User model)
-  targetType: "Novel" | "Episode" | "Character" | "OfficialMedia"; // ประเภทของสิ่งที่ถูกให้คะแนน
-  targetId: Types.ObjectId; // ID ของสิ่งที่ถูกให้คะแนน (อ้างอิงตาม targetType)
-  // Overall Score and Review
-  overallScore: number; // คะแนนโดยรวม (1-5 หรือ 1-10, คำนวณหรือให้โดยตรง)
-  title?: string; // หัวข้อรีวิว (optional)
-  reviewText?: string; // เนื้อหารีวิว (optional)
-  // Multi-dimensional scores (optional)
-  criteriaScores?: IRatingCriterionScore[]; // คะนนตามเกณฑ์ย่อย (ถ้ามี)
-  // Review Attributes
-  containsSpoilers: boolean; // มีการสปอยล์เนื้อหาหรือไม่
-  language: string; // ภาษาของรีวิว (e.g., "th", "en", default "th")
-  // Moderation and Status
-  status: "pending_approval" | "approved" | "rejected" | "edited_by_moderator"; // สถานะการรีวิว
-  moderationReason?: string; // เหตุผลในการ reject หรือ edit (ถ้ามี)
-  moderatedBy?: Types.ObjectId; // ผู้ดูแลที่จัดการรีวิวนี้ (อ้างอิง User model - admin/moderator role)
-  isHiddenByAdmin: boolean; // ซ่อนโดยผู้ดูแลระบบหรือไม่ (override user visibility)
-  // User Interaction with the Review
-  helpfulVotes: number; // จำนวนโหวตว่ารีวิวนี้มีประโยชน์
-  unhelpfulVotes: number; // จำนวนโหวตว่ารีวิวนี้ไม่มีประโยชน์
-  // Denormalized counts for quick display on review itself
-  commentCount: number; // จำนวนความคิดเห็นต่อรีวิวนี้ (if reviews can be commented on)
-  // Timestamps and Soft Delete
-  isEdited: boolean; // ผู้ใช้แก้ไขรีวิวนี้หรือไม่
-  editedAt?: Date; // วันที่แก้ไขล่าสุดโดยผู้ใช้
-  isDeleted: boolean; // สถานะการลบ (soft delete by user)
-  deletedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
+  _id: Types.ObjectId;
+  user: Types.ObjectId; // ผู้ใช้ที่ให้คะแนน (อ้างอิง User model หรือ SocialMediaUser model)
+  novel: Types.ObjectId; // นิยายที่ถูกให้คะแนน (อ้างอิง Novel model)
+  
+  score: number; // คะแนนที่ให้ (เช่น 1-5 หรือ 1-10, ควรตรงกับระบบโดยรวม)
+  reviewTitle?: string; // หัวข้อรีวิว (ถ้ามี, สำหรับรีวิวแบบสั้นๆ ที่มาพร้อมคะแนน)
+  reviewText?: string; // เนื้อหารีวิวสั้นๆ (ถ้ามี, อาจจำกัดความยาว)
+  // ถ้าต้องการรีวิวยาวๆ ควรมี Review model แยกต่างหาก และ Rating model นี้อาจ link ไปที่ Review model นั้น
+  // reviewId?: Types.ObjectId; // อ้างอิง Review model (ถ้ามี)
+  
+  // สถานะการแสดงผล (เผื่อต้องการ moderate รีวิว/คะแนน)
+  isPublished: boolean; // แสดงผลสาธารณะหรือไม่
+  isFeatured?: boolean; // เป็นรีวิว/คะแนนที่ถูกเลือกให้แสดงเด่นหรือไม่
+  
+  // สถิติการโต้ตอบกับรีวิวนี้ (ถ้ามีรีวิว)
+  helpfulVotes: number; // จำนวนคนที่โหวตว่ารีวิวนี้มีประโยชน์
+  unhelpfulVotes: number; // จำนวนคนที่โหวตว่ารีวิวนี้ไม่มีประโยชน์
+  // reportedCount: number; // จำนวนครั้งที่ถูกรายงาน (สำหรับการตรวจสอบ)
 
-const RatingCriterionScoreSchema = new Schema<IRatingCriterionScore>(
-  {
-    criterionName: { type: String, required: true, trim: true },
-    score: { type: Number, required: true, min: 1, max: 10 }, // Example: 1-10 scale
-    weight: { type: Number, default: 1, min: 0 },
-  },
-  { _id: false }
-);
+  // Soft delete
+  isDeleted: boolean;
+  deletedAt?: Date;
+
+  // Timestamps
+  createdAt: Date; // วันที่ให้คะแนน/เขียนรีวิว
+  updatedAt: Date; // วันที่แก้ไขล่าสุด
+}
 
 const RatingSchema = new Schema<IRating>(
   {
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    targetType: {
-      type: String,
-      enum: ["Novel", "Episode", "Character", "OfficialMedia"],
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User", // หรือ refPath: "userType" เพื่อรองรับทั้ง User และ SocialMediaUser
+      // userType: { type: String, enum: ["User", "SocialMediaUser"] },
       required: true,
       index: true,
     },
-    targetId: { 
-      type: Schema.Types.ObjectId, 
-      required: true, 
+    novel: {
+      type: Schema.Types.ObjectId,
+      ref: "Novel",
+      required: true,
       index: true,
-      refPath: "targetType" // Dynamic reference to the model specified in targetType
     },
-    overallScore: {
+    score: {
       type: Number,
-      required: [true, "กรุณาระบุคะแนนโดยรวม"],
-      min: [1, "คะแนนต้องอยู่ระหว่าง 1 ถึง 5"],
-      max: [5, "คะแนนต้องอยู่ระหว่าง 1 ถึง 5"], // Assuming 1-5 scale for overall
+      required: [true, "กรุณาระบุคะแนน (Score is required)"],
+      min: [1, "คะแนนต้องอยู่ระหว่าง 1 ถึง 5 (หรือตามที่ระบบกำหนด)"], // ปรับ min/max ตามระบบ (เช่น 0.5, 10)
+      max: [5, "คะแนนต้องอยู่ระหว่าง 1 ถึง 5 (หรือตามที่ระบบกำหนด)"],
+      validate: { // อาจต้องการให้คะแนนเป็น step เช่น 0.5, 1, 1.5
+        validator: function(v: number) {
+          return (v * 10) % 5 === 0; // เช่น 1, 1.5, 2, 2.5, ..., 5
+        },
+        message: props => `${props.value} ไม่ใช่ค่าคะแนนที่ถูกต้อง (ต้องเป็นช่วงทีละ 0.5)`
+      }
     },
-    title: { type: String, trim: true, maxlength: [150, "หัวข้อรีวิวต้องไม่เกิน 150 ตัวอักษร"] },
-    reviewText: { type: String, trim: true, maxlength: [5000, "เนื้อหารีวิวต้องไม่เกิน 5000 ตัวอักษร"] },
-    criteriaScores: [RatingCriterionScoreSchema],
-    containsSpoilers: { type: Boolean, default: false },
-    language: { type: String, default: "th", trim: true, lowercase: true, index: true },
-    status: {
-      type: String,
-      enum: ["pending_approval", "approved", "rejected", "edited_by_moderator"],
-      default: "approved", // Or "pending_approval" if moderation is strict
-      index: true,
-    },
-    moderationReason: { type: String, trim: true },
-    moderatedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    isHiddenByAdmin: { type: Boolean, default: false, index: true },
+    reviewTitle: { type: String, trim: true, maxlength: [150, "หัวข้อรีวิวต้องไม่เกิน 150 ตัวอักษร"] },
+    reviewText: { type: String, trim: true, maxlength: [2500, "เนื้อหารีวิวต้องไม่เกิน 2500 ตัวอักษร"] },
+    // reviewId: { type: Schema.Types.ObjectId, ref: "Review" },
+    isPublished: { type: Boolean, default: true, index: true },
+    isFeatured: { type: Boolean, default: false, index: true },
     helpfulVotes: { type: Number, default: 0, min: 0 },
     unhelpfulVotes: { type: Number, default: 0, min: 0 },
-    commentCount: { type: Number, default: 0, min: 0 },
-    isEdited: { type: Boolean, default: false },
-    editedAt: Date,
+    // reportedCount: { type: Number, default: 0, min: 0 },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,
-    wasApprovedBeforeChange: { type: Boolean, default: false }, // Added to schema
   },
   {
     timestamps: true, // createdAt, updatedAt
-    // Add refPath for dynamic referencing of targetId
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
   }
 );
 
 // ----- Indexes -----
-// Unique compound index for user, targetType, and targetId to ensure one rating per user per item
-RatingSchema.index({ user: 1, targetType: 1, targetId: 1 }, { unique: true });
-RatingSchema.index({ targetType: 1, targetId: 1, status: 1, overallScore: -1, createdAt: -1 }); // For fetching approved ratings for an item, sorted by score/date
-RatingSchema.index({ targetType: 1, targetId: 1, status: 1, helpfulVotes: -1, createdAt: -1 }); // Sorted by helpfulness
-RatingSchema.index({ user: 1, createdAt: -1 }); // For fetching user's ratings
-RatingSchema.index({ status: 1, createdAt: -1 }); // For moderation queues
-RatingSchema.index({ reviewText: "text", title: "text" }); // For text search on reviews
+// Unique combination of user and novel to ensure one rating per user per novel
+RatingSchema.index({ user: 1, novel: 1 }, { unique: true });
+// For fetching ratings of a novel, sorted by helpfulness or date
+RatingSchema.index({ novel: 1, isPublished: 1, score: -1, createdAt: -1 });
+RatingSchema.index({ novel: 1, isPublished: 1, helpfulVotes: -1, createdAt: -1 });
+RatingSchema.index({ user: 1, createdAt: -1 }); // รีวิวล่าสุดของผู้ใช้
 
-// ----- Middleware -----
-RatingSchema.pre("save", function (next) {
-  // If criteriaScores are provided and overallScore is not, calculate overallScore
-  if (this.criteriaScores && this.criteriaScores.length > 0 && (this.isNew || this.isModified("criteriaScores"))) {
-    let totalWeightedScore = 0;
-    let totalWeight = 0;
-    this.criteriaScores.forEach(cs => {
-      const weight = cs.weight || 1;
-      totalWeightedScore += cs.score * weight;
-      totalWeight += weight;
-    });
-    if (totalWeight > 0) {
-      // Assuming criteria scores are 1-10 and overall is 1-5, adjust accordingly or ensure scales match.
-      // For simplicity, let's assume scales match or are normalized before this point.
-      // This example assumes overallScore is on the same scale as criteriaScores average.
-      // If overallScore is 1-5 and criteria are 1-10, you might do: (totalWeightedScore / totalWeight) / 2
-      this.overallScore = parseFloat((totalWeightedScore / totalWeight).toFixed(2));
-    }
-  }
-
-  if (this.isModified("reviewText") && !this.isNew) {
-    this.isEdited = true;
-    this.editedAt = new Date();
-  }
-
-  // Soft delete handling
-  if (this.isModified("isDeleted") && this.isDeleted && !this.deletedAt) {
-    this.deletedAt = new Date();
-  }
-  next();
-});
-
-// Post-save/remove middleware to update aggregated ratings on the target model (Novel, Episode, etc.)
-// This is crucial but can be complex. Consider an event-driven approach or a dedicated service.
-async function updateTargetRatingAggregation(doc: IRating | null, action: "save" | "remove") {
-  if (!doc || !doc.targetId || !doc.targetType) return;
-  if (doc.status !== "approved" && action === "save" && !doc.isDeleted) return; // Only count approved, non-deleted ratings
-
-  const TargetModel = models[doc.targetType] || model(doc.targetType);
-  if (!TargetModel) {
-    console.error(`Model ${doc.targetType} not found for rating aggregation.`);
-    return;
-  }
-
-  const pipeline = [
-    { $match: { targetId: doc.targetId, targetType: doc.targetType, status: "approved", isDeleted: false, isHiddenByAdmin: false } },
-    { 
-      $group: { 
-        _id: "$targetId", 
-        averageScore: { $avg: "$overallScore" }, 
-        ratingCount: { $sum: 1 },
-        // Optionally, count ratings per score value for a distribution chart
-        scoreDistribution: {
-          $push: "$overallScore"
-        }
-      }
-    }
-  ];
-
-  const results = await model("Rating").aggregate(pipeline);
-
-  const updateData: { [key: string]: any } = {
-    "statistics.averageRating": 0,
-    "statistics.ratingCount": 0,
-    "statistics.ratingDistribution": { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 } // Assuming 1-5 scale
-  };
-
-  if (results.length > 0) {
-    const agg = results[0];
-    updateData["statistics.averageRating"] = parseFloat(agg.averageScore.toFixed(2));
-    updateData["statistics.ratingCount"] = agg.ratingCount;
-    
-    // Calculate distribution
-    const distribution: { [key: number]: number } = { 1:0, 2:0, 3:0, 4:0, 5:0 };
-    if (agg.scoreDistribution) {
-        agg.scoreDistribution.forEach((score: number) => {
-            const roundedScore = Math.round(score);
-            if (distribution[roundedScore] !== undefined) {
-                distribution[roundedScore]++;
-            }
-        });
-    }
-    updateData["statistics.ratingDistribution"] = distribution;
-
-  } else {
-    // If no ratings left, reset stats
-  }
+// ----- Middleware: Update denormalized average score and rating count on Novel model -----
+// This is a critical part for performance. Updating these on every rating save/delete.
+async function updateNovelRatingStats(novelId: Types.ObjectId) {
+  const Novel = models.Novel || model("Novel");
+  const RatingModel = models.Rating || model("Rating");
 
   try {
-    await TargetModel.findByIdAndUpdate(doc.targetId, { $set: updateData });
-    console.log(`Aggregated ratings updated for ${doc.targetType} ${doc.targetId}`);
+    const publishedRatings = await RatingModel.find({
+      novel: novelId,
+      isPublished: true,
+      isDeleted: false,
+    }).select("score");
+
+    const totalRatings = publishedRatings.length;
+    let averageScore = 0;
+
+    if (totalRatings > 0) {
+      const sumOfScores = publishedRatings.reduce((sum, rating) => sum + rating.score, 0);
+      averageScore = parseFloat((sumOfScores / totalRatings).toFixed(2)); // ปัดทศนิยม 2 ตำแหน่ง
+    }
+    
+    // สถิติการกระจายของคะแนน (เช่น จำนวน 5 ดาว, 4 ดาว, ...)
+    const scoreDistribution: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 }; // ปรับตาม min/max score
+    // สามารถเพิ่มการนับคะแนนแบบละเอียด (เช่น 1.5, 2.5) ถ้า score validator อนุญาต
+    publishedRatings.forEach(rating => {
+        const flooredScore = Math.floor(rating.score);
+        if (scoreDistribution.hasOwnProperty(String(flooredScore))) {
+            scoreDistribution[String(flooredScore)]++;
+        }
+        // หากต้องการนับคะแนน .5 ด้วย อาจต้องปรับ key ของ scoreDistribution
+    });
+
+    await Novel.findByIdAndUpdate(novelId, {
+      "statistics.averageRating": averageScore,
+      "statistics.totalRatings": totalRatings,
+      "statistics.ratingDistribution": scoreDistribution,
+      lastUpdatedAt: new Date(), // อัปเดต Novel ด้วย
+    });
+
   } catch (error) {
-    console.error(`Error updating aggregated ratings for ${doc.targetType} ${doc.targetId}:`, error);
+    console.error(`Error updating novel rating stats for novel ${novelId}:`, error);
+    // Consider more robust error handling, e.g., queuing the update
   }
 }
 
-RatingSchema.post("save", async function(doc: IRating) {
-  // Update if status is approved, or if an approved rating is edited/deleted/hidden
-  if (doc.isModified("status") || doc.isModified("overallScore") || doc.isModified("isDeleted") || doc.isModified("isHiddenByAdmin")) {
-    if (doc.status === "approved" || doc.wasApprovedBeforeChange) { // wasApprovedBeforeChange needs to be set in pre-save if status changes from approved
-        await updateTargetRatingAggregation(doc, "save");
-    }
+RatingSchema.post("save", async function (doc: IRating) {
+  if (doc.isModified("score") || doc.isModified("isPublished") || doc.isModified("isDeleted")) {
+    await updateNovelRatingStats(doc.novel);
   }
 });
 
-// Need a pre-hook for findOneAndUpdate to handle soft deletes or status changes correctly for aggregation
-RatingSchema.pre("findOneAndUpdate", async function(next) {
-    const update = this.getUpdate() as any;
-    // If isDeleted or isHiddenByAdmin is being set, or status changes from approved
-    // We need the original document to know its previous state for correct aggregation update.
-    // This logic can get complex and might be better handled by fetching the doc, then saving.
-    // Or, by ensuring the update operation itself triggers a re-aggregation for the targetId.
-    const docToUpdate = await this.model.findOne(this.getQuery());
-    if (docToUpdate && docToUpdate.status === "approved") {
-        (this as any).wasApprovedBeforeChange = true;
-    }
-    next();
+RatingSchema.post("findOneAndDelete", async function (doc: IRating | null) {
+  if (doc) {
+    await updateNovelRatingStats(doc.novel);
+  }
 });
 
-RatingSchema.post("findOneAndUpdate", async function(doc: IRating | null) {
-    // If an approved rating was modified (e.g. soft-deleted, hidden, score changed)
-    if (doc && ((this as any).wasApprovedBeforeChange || doc.status === "approved")) {
-        await updateTargetRatingAggregation(doc, "save");
+// If using soft delete and isDeleted changes, this hook is needed.
+RatingSchema.post("findOneAndUpdate", async function (doc: IRating | null) {
+    // `this` is the Query object. `doc` is the document *after* the update if `new: true` was used, or *before* if not.
+    // To be safe, re-fetch the document or ensure the fields checked were part of the update.
+    if (doc && (this.getUpdate().$set?.isDeleted !== undefined || this.getUpdate().isDeleted !== undefined)) {
+        await updateNovelRatingStats(doc.novel);
     }
 });
 
-// For remove (hard delete, less common with soft delete strategy)
-// RatingSchema.post("remove", async function(doc: IRating) {
-//   await updateTargetRatingAggregation(doc, "remove");
-// });
 
 // ----- Model Export -----
-const RatingModel = () =>
-  models.Rating as mongoose.Model<IRating> || model<IRating>("Rating", RatingSchema);
+const RatingModel = () => models.Rating as mongoose.Model<IRating> || model<IRating>("Rating", RatingSchema);
 
 export default RatingModel;
+

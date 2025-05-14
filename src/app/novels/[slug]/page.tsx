@@ -60,7 +60,7 @@ export async function generateMetadata(
   const title = `${novel.title} - NovelMaze`;
   const description =
     novel.description.substring(0, 160) + (novel.description.length > 160 ? "..." : "");
-  const imageUrl = novel.coverImage || "/opengraph-image.png";
+  const imageUrl = novel.coverImageUrl || "/opengraph-image.png";
 
   // แปลง firstPublishedAt และ updatedAt เป็น Date ถ้าเป็น string
   const firstPublishedAt = novel.firstPublishedAt

@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
-import SocialMediaUserModel from "@/backend/models/SocialMediaUser";
+import SocialMediaUserModel from "@/backend/models/SocialMediaUserhaha";
 import UserFollowModel from "@/backend/models/UserFollow";
 import ActivityHistoryModel from "@/backend/models/ActivityHistory";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";

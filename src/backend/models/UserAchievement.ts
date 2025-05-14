@@ -1,65 +1,84 @@
+// src/models/UserAchievement.ts
+// โมเดลความสำเร็จของผู้ใช้ (UserAchievement Model) - บันทึกความสำเร็จและเหรียญตราที่ผู้ใช้แต่ละคนได้รับ
+// ออกแบบให้เชื่อมโยงผู้ใช้กับความสำเร็จ/เหรียญตรา, วันที่ได้รับ, และความคืบหน้า (ถ้ามี)
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import UserModel from "./User";
+import AchievementModel from "./Achievement";
+import BadgeModel from "./Badge";
 
-// Interface for tracking progress towards a specific criterion of an achievement
-export interface IUserAchievementCriterionProgress extends Document {
-  metric: string; // Key for the metric being tracked (matches AchievementCriteria.metric)
-  currentValue: number; // Current value of the metric for the user
-  targetValue: number; // Target value for this criterion (denormalized from AchievementCriteria)
-  isCompleted: boolean; // Whether this specific criterion is met
-  lastUpdatedAt: Date; // When this progress was last updated
+// อินเทอร์เฟซสำหรับความสำเร็จหรือเหรียญตราที่ผู้ใช้ได้รับ
+export interface IUserEarnedItem {
+  itemId: Types.ObjectId; // ID ของ Achievement หรือ Badge
+  itemType: "achievement" | "badge"; // ประเภทของสิ่งที่ได้รับ
+  itemName: string; // ชื่อ (denormalized for display, from Achievement.name or Badge.name)
+  itemIconUrl?: string; // URL ไอคอน (denormalized)
+  unlockedAt: Date; // วันที่ปลดล็อก/ได้รับ
+  progress?: number; // ความคืบหน้าปัจจุบัน (สำหรับ achievement ที่มี level หรือ progress tracking)
+  maxProgress?: number; // ความคืบหน้าสูงสุดที่ต้องการ
+  level?: number; // ระดับที่ปลดล็อก (สำหรับ achievement ที่มี level)
+  // notificationSent?: boolean; // สถานะการส่ง notification (อาจจัดการแยก)
 }
 
-// Interface for UserAchievement document
-// Tracks the progress and unlock status of achievements for a specific user.
+// อินเทอร์เฟซหลักสำหรับเอกสารความสำเร็จของผู้ใช้ (UserAchievement Document)
+// อาจจะรวม Badge ที่ได้รับไว้ในนี้ด้วย หรือมี UserBadge model แยก
+// เพื่อความง่ายในการ query "สิ่งที่ผู้ใช้ได้รับทั้งหมด" จะรวมไว้ที่นี่
 export interface IUserAchievement extends Document {
+  _id: Types.ObjectId;
   user: Types.ObjectId; // ผู้ใช้ (อ้างอิง User model)
-  achievementDefinition: Types.ObjectId; // ความสำเร็จ (อ้างอิง Achievement model - the definition)
-  achievementId: string; // Denormalized achievementId from Achievement model for easier querying
-  // Progress Tracking
-  progressPercentage: number; // เปอร์เซ็นต์ความคืบหน้าโดยรวม (0-100)
-  criteriaProgress: IUserAchievementCriterionProgress[]; // ความคืบหน้าของแต่ละเงื่อนไข
-  // Status and Timestamps
-  isUnlocked: boolean; // ปลดล็อกแล้วหรือยัง
-  unlockedAt?: Date; // วันที่ปลดล็อก
-  isClaimed: boolean; // รับรางวัลแล้วหรือยัง (if rewards need explicit claiming)
-  claimedAt?: Date; // วันที่รับรางวัล
-  // Visibility and Notifications
-  hasBeenViewed: boolean; // ผู้ใช้เห็นการแจ้งเตือนการปลดล็อกนี้หรือยัง
-  lastNotifiedAt?: Date; // วันที่แจ้งเตือนล่าสุด
-  // Expiry (if the unlocked achievement instance can expire, though rare)
-  expiresAt?: Date;
-  // Metadata
-  customData?: Record<string, any>; // ข้อมูลเพิ่มเติม เช่น แต้มที่ได้จาก achievement นี้ถ้ามีการเปลี่ยนแปลง
-  createdAt: Date;
-  updatedAt: Date;
+  
+  // รายการความสำเร็จและเหรียญตราที่ปลดล็อกแล้ว
+  earnedItems: Types.DocumentArray<IUserEarnedItem>;
+  
+  // สรุปแต้มประสบการณ์รวมจากความสำเร็จและเหรียญตรา (ถ้ามีระบบ XP)
+  totalExperiencePointsEarned: number;
+  
+  // เหรียญตราที่เลือกแสดงบนโปรไฟล์ (ถ้ามี feature นี้)
+  // showcasedBadges: Types.Array<Types.ObjectId>; // Array of Badge IDs
+  
+  // ความสำเร็จล่าสุดที่ได้รับ (denormalized for quick display on profile)
+  // lastAchievementUnlocked?: {
+  //   achievementId: Types.ObjectId;
+  //   name: string;
+  //   unlockedAt: Date;
+  // };
+
+  // Timestamps
+  createdAt: Date; // วันที่สร้าง record นี้ (มักจะพร้อมกับ user creation)
+  updatedAt: Date; // วันที่อัปเดตล่าสุด (เมื่อมีการปลดล็อก achievement/badge ใหม่)
 }
 
-const UserAchievementCriterionProgressSchema = new Schema<IUserAchievementCriterionProgress>(
+// Schema ย่อยสำหรับ IUserEarnedItem
+const UserEarnedItemSchema = new Schema<IUserEarnedItem>(
   {
-    metric: { type: String, required: true, trim: true },
-    currentValue: { type: Number, required: true, default: 0 },
-    targetValue: { type: Number, required: true, min: 1 },
-    isCompleted: { type: Boolean, default: false },
-    lastUpdatedAt: { type: Date, default: Date.now },
+    itemId: { type: Schema.Types.ObjectId, required: true, index: true }, // refPath: "itemType"
+    itemType: { type: String, enum: ["achievement", "badge"], required: true },
+    itemName: { type: String, required: true, trim: true },
+    itemIconUrl: { type: String, trim: true },
+    unlockedAt: { type: Date, default: Date.now, required: true, index: true },
+    progress: { type: Number, min: 0 },
+    maxProgress: { type: Number, min: 0 },
+    level: { type: Number, min: 1 },
   },
-  { _id: false }
+  {
+    _id: false, // No separate _id for subdocuments unless needed for direct reference
+    // Add a compound index on itemId and itemType if needed for uniqueness within the array per user
+  }
 );
 
+// Schema หลักสำหรับ UserAchievement
 const UserAchievementSchema = new Schema<IUserAchievement>(
   {
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    achievementDefinition: { type: Schema.Types.ObjectId, ref: "Achievement", required: true, index: true },
-    achievementId: { type: String, required: true, trim: true, index: true }, // Denormalized from Achievement
-    progressPercentage: { type: Number, default: 0, min: 0, max: 100 },
-    criteriaProgress: [UserAchievementCriterionProgressSchema],
-    isUnlocked: { type: Boolean, default: false, index: true },
-    unlockedAt: { type: Date, index: true },
-    isClaimed: { type: Boolean, default: false }, // If rewards need to be claimed manually
-    claimedAt: Date,
-    hasBeenViewed: { type: Boolean, default: false },
-    lastNotifiedAt: Date,
-    expiresAt: Date,
-    customData: Schema.Types.Mixed,
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true, // หนึ่ง document ต่อหนึ่งผู้ใช้
+      index: true,
+    },
+    earnedItems: [UserEarnedItemSchema],
+    totalExperiencePointsEarned: { type: Number, default: 0, min: 0 },
+    // showcasedBadges: [{ type: Schema.Types.ObjectId, ref: "Badge" }],
   },
   {
     timestamps: true, // createdAt, updatedAt
@@ -67,81 +86,128 @@ const UserAchievementSchema = new Schema<IUserAchievement>(
 );
 
 // ----- Indexes -----
-UserAchievementSchema.index({ user: 1, achievementDefinition: 1 }, { unique: true }); // Each user can have one instance per achievement definition
-UserAchievementSchema.index({ user: 1, isUnlocked: 1, unlockedAt: -1 }); // For fetching unlocked achievements
-UserAchievementSchema.index({ user: 1, achievementId: 1 }, { unique: true }); // Alternative unique index using denormalized ID
-UserAchievementSchema.index({ user: 1, progressPercentage: 1 }); // For querying achievements in progress
-
-// ----- Middleware -----
-UserAchievementSchema.pre("save", async function (next) {
-  if (this.isModified("criteriaProgress") || this.isNew) {
-    const totalCriteria = this.criteriaProgress.length;
-    if (totalCriteria > 0) {
-      const completedCriteria = this.criteriaProgress.filter(c => c.isCompleted).length;
-      this.progressPercentage = Math.floor((completedCriteria / totalCriteria) * 100);
-
-      if (completedCriteria === totalCriteria && !this.isUnlocked) {
-        this.isUnlocked = true;
-        this.unlockedAt = new Date();
-        // TODO: Consider emitting an event here for "achievement_unlocked"
-        // This event could trigger notifications, reward granting, etc.
-      }
-    } else {
-      this.progressPercentage = this.isUnlocked ? 100 : 0;
-    }
-  }
-
-  // If unlocked, ensure progress is 100%
-  if (this.isModified("isUnlocked") && this.isUnlocked && this.progressPercentage < 100) {
-    this.progressPercentage = 100;
-    if (!this.unlockedAt) {
-        this.unlockedAt = new Date();
-    }
-  }
-
-  next();
-});
+UserAchievementSchema.index({ user: 1, "earnedItems.itemId": 1, "earnedItems.itemType": 1 }); // ตรวจสอบว่า user มี item นี้หรือยัง
+UserAchievementSchema.index({ user: 1, "earnedItems.unlockedAt": -1 }); // ดึงรายการล่าสุดที่ปลดล็อก
 
 // ----- Methods -----
-// Method to update progress for a specific criterion
-UserAchievementSchema.methods.updateCriterionProgress = function(
-  metricName: string,
-  newValue: number
-): boolean {
-  const criterion = this.criteriaProgress.find((c: { metric: string; }) => c.metric === metricName);
-  if (criterion) {
-    criterion.currentValue = newValue;
-    criterion.isCompleted = criterion.currentValue >= criterion.targetValue;
-    criterion.lastUpdatedAt = new Date();
-    // `this.save()` will be called by the service layer after all updates for an event are processed
-    return true;
+// Method to add a new achievement or badge to the user
+UserAchievementSchema.methods.addEarnedItem = async function(
+  this: IUserAchievement,
+  itemDetails: {
+    itemId: Types.ObjectId;
+    itemType: "achievement" | "badge";
+    itemName: string;
+    itemIconUrl?: string;
+    xpAwarded?: number;
+    progress?: number;
+    maxProgress?: number;
+    level?: number;
   }
-  return false;
-};
+) {
+  // ตรวจสอบว่ามี item นี้อยู่แล้วหรือไม่ (สำหรับ achievement ที่ไม่ repeatable)
+  // Badge โดยทั่วไปจะได้รับครั้งเดียว
+  // Achievement ที่ repeatable อาจต้องมี logic การจัดการ progress หรือ multiple entries ที่ซับซ้อนกว่านี้
+  // (ปัจจุบัน model นี้เก็บ earnedItems เป็น unique list ของ itemId+itemType)
+  const existingItem = this.earnedItems.find(
+    (ei) => ei.itemId.equals(itemDetails.itemId) && ei.itemType === itemDetails.itemType
+  );
 
-// Method to populate criteria progress from achievement definition (e.g., when UserAchievement is first created)
-UserAchievementSchema.methods.initializeCriteria = async function() {
-  if (!this.achievementDefinition) throw new Error("Achievement definition not populated or set.");
+  if (existingItem) {
+    // ถ้าเป็น achievement ที่มี level และ level ใหม่สูงกว่า หรือมี progress update
+    if (itemDetails.itemType === "achievement") {
+        let updated = false;
+        if (itemDetails.level && (!existingItem.level || itemDetails.level > existingItem.level)) {
+            existingItem.level = itemDetails.level;
+            existingItem.unlockedAt = new Date(); // Update unlock date for new level
+            updated = true;
+        }
+        if (itemDetails.progress !== undefined && (!existingItem.progress || itemDetails.progress > existingItem.progress || itemDetails.progress === itemDetails.maxProgress)) {
+            existingItem.progress = itemDetails.progress;
+            if (itemDetails.progress === itemDetails.maxProgress) {
+                existingItem.unlockedAt = new Date(); // Mark as unlocked/completed if progress reaches max
+            }
+            updated = true;
+        }
+        if (updated && itemDetails.xpAwarded) {
+            this.totalExperiencePointsEarned += itemDetails.xpAwarded; // Add XP for new level/completion
+        }
+        if (updated) return this.save();
+    }
+    console.log(`User ${this.user} already has ${itemDetails.itemType} ${itemDetails.itemName}. No new entry added or XP awarded.`);
+    return this; // Or throw error if it should be unique and not updatable
+  }
+
+  const newEarnedItem: IUserEarnedItem = {
+    itemId: itemDetails.itemId,
+    itemType: itemDetails.itemType,
+    itemName: itemDetails.itemName,
+    itemIconUrl: itemDetails.itemIconUrl,
+    unlockedAt: new Date(),
+    progress: itemDetails.progress,
+    maxProgress: itemDetails.maxProgress,
+    level: itemDetails.level,
+  };
+
+  this.earnedItems.push(newEarnedItem);
+  if (itemDetails.xpAwarded) {
+    this.totalExperiencePointsEarned += itemDetails.xpAwarded;
+  }
   
-  const Achievement = models.Achievement || model("Achievement"); // Or import directly
-  const definition = await Achievement.findById(this.achievementDefinition);
+  // Potentially update User model with total achievements/badges count or last achievement
+  // await UserModel().findByIdAndUpdate(this.user, { 
+  //   $inc: { [`activityTracking.${itemDetails.itemType}sUnlockedCount`]: 1 },
+  //   // Update last achievement details if needed
+  // });
 
-  if (!definition) throw new Error(`Achievement definition ${this.achievementDefinition} not found.`);
-  if (!this.achievementId) this.achievementId = definition.achievementId;
-
-  this.criteriaProgress = definition.unlockCriteria.map((crit: { metric: any; targetValue: any; }) => ({
-    metric: crit.metric,
-    currentValue: 0,
-    targetValue: crit.targetValue,
-    isCompleted: false,
-    lastUpdatedAt: new Date(),
-  }));
-  this.progressPercentage = 0;
-  this.isUnlocked = false;
+  return this.save();
 };
+
+// ----- Static Methods -----
+// Helper to grant an achievement/badge to a user
+UserAchievementSchema.statics.grantAchievementOrBadge = async function(
+  userId: Types.ObjectId,
+  itemId: Types.ObjectId,
+  itemType: "achievement" | "badge"
+) {
+  let userAchievementDoc = await this.findOne({ user: userId });
+  if (!userAchievementDoc) {
+    userAchievementDoc = new (this as mongoose.Model<IUserAchievement>)({ user: userId, earnedItems: [], totalExperiencePointsEarned: 0 });
+  }
+
+  let itemDefinition;
+  let xpAwarded = 0;
+  let itemName = "";
+  let itemIconUrl: string | undefined;
+
+  if (itemType === "achievement") {
+    itemDefinition = await AchievementModel().findById(itemId).lean();
+    if (!itemDefinition) throw new Error(`Achievement with ID ${itemId} not found.`);
+    xpAwarded = itemDefinition.rewards?.experiencePoints || 0;
+    itemName = itemDefinition.name;
+    itemIconUrl = itemDefinition.iconUrl;
+    // If this achievement also grants a badge, handle that separately or via a more complex reward system
+  } else { // badge
+    itemDefinition = await BadgeModel().findById(itemId).lean();
+    if (!itemDefinition) throw new Error(`Badge with ID ${itemId} not found.`);
+    xpAwarded = itemDefinition.experiencePointsAwarded || 0;
+    itemName = itemDefinition.name;
+    itemIconUrl = itemDefinition.imageUrl || itemDefinition.iconUrl;
+  }
+
+  return userAchievementDoc.addEarnedItem({
+    itemId,
+    itemType,
+    itemName,
+    itemIconUrl,
+    xpAwarded,
+    level: itemType === "achievement" ? itemDefinition?.level : undefined,
+    // progress and maxProgress would typically be handled by the calling logic that determines if an achievement is unlocked
+  });
+};
+
 
 // ----- Model Export -----
-const UserAchievementModel = () =>
-  models.UserAchievement as mongoose.Model<IUserAchievement> || model<IUserAchievement>("UserAchievement", UserAchievementSchema);
+const UserAchievementModel = () => models.UserAchievement as mongoose.Model<IUserAchievement> || model<IUserAchievement>("UserAchievement", UserAchievementSchema);
 
 export default UserAchievementModel;
+

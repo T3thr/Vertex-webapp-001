@@ -1,153 +1,121 @@
-// src/backend/models/Purchase.ts
+// src/models/Purchase.ts
+// โมเดลการซื้อ (Purchase Model) - จัดการข้อมูลการซื้อสินค้าหรือบริการภายในแพลตฟอร์ม
+// ออกแบบให้รองรับการซื้อด้วยเหรียญ (Coins) หรือเงินจริง, เชื่อมโยงกับผู้ใช้, สินค้า, และการชำระเงิน
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import UserModel from "./User"; // Import User model for updates
 
-// Interface for individual items within a purchase order
-export interface IPurchaseItem extends Document {
-  itemId: Types.ObjectId; // ID ของสินค้า (Novel, Episode, OfficialMedia, SubscriptionPlan)
-  itemType: "novel" | "episode" | "official_media" | "subscription_plan" | "donation_tier" | "virtual_currency_pack"; // ประเภทสินค้า
-  novel?: Types.ObjectId; // อ้างอิง Novel (ถ้า itemType is novel or episode)
-  episode?: Types.ObjectId; // อ้างอิง Episode (ถ้า itemType is episode)
-  officialMedia?: Types.ObjectId; // อ้างอิง OfficialMedia (ถ้า itemType is official_media)
-  subscriptionPlan?: Types.ObjectId; // อ้างอิง SubscriptionPlan (ถ้า itemType is subscription_plan)
-  donationTier?: Types.ObjectId; // อ้างอิง DonationTier (ถ้า itemType is donation_tier)
-  virtualCurrencyPack?: Types.ObjectId; // อ้างอิง VirtualCurrencyPack (ถ้า itemType is virtual_currency_pack)
+// อินเทอร์เฟซสำหรับรายการสินค้าที่ซื้อ (Purchased Item)
+export interface IPurchasedItem {
+  itemId: Types.ObjectId; // ID ของสินค้าที่ซื้อ (เช่น Episode, CoinPackage, SubscriptionTier)
+  itemType: "novel_episode" | "novel_bundle" | "coin_package" | "subscription_tier" | "donation_item" | "writer_support_package" | "other"; // ประเภทของสินค้า
   itemName: string; // ชื่อสินค้า (denormalized for display)
-  itemDescription?: string; // คำอธิบายสั้นๆ ของสินค้า (denormalized)
-  quantity: number; // จำนวน
-  unitPrice: number; // ราคาต่อหน่วย (ก่อนส่วนลด)
-  discountAmountPerUnit: number; // ส่วนลดต่อหน่วย
-  finalPricePerUnit: number; // ราคาต่อหน่วยหลังส่วนลด (unitPrice - discountAmountPerUnit)
-  totalPrice: number; // ราคารวมสำหรับรายการนี้ (finalPricePerUnit * quantity)
-  currency: string; // สกุลเงิน (เช่น "THB", "USD", "CREDITS")
-  // Specific attributes based on itemType
-  accessDurationDays?: number; // ระยะเวลาการเข้าถึง (วัน, สำหรับ episode, novel, subscription)
-  isLifetimeAccess: boolean; // เป็นการเข้าถึงตลอดชีพหรือไม่
-  grantedEntitlements?: string[]; // สิทธิ์ที่ได้รับ (เช่น "read_premium_episode_X", "download_asset_Y")
-  metadata?: Record<string, any>; // ข้อมูลเพิ่มเติมเฉพาะรายการ
+  description?: string; // คำอธิบายสั้นๆ ของสินค้า (denormalized)
+  quantity: number; // จำนวนที่ซื้อ
+  pricePerUnit: number; // ราคาต่อหน่วย (ในหน่วย currency ที่ระบุ)
+  currency: "COIN" | "THB" | "USD"; // สกุลเงินที่ใช้สำหรับราคานี้
+  // totalPriceForItem: number; // ราคารวมสำหรับรายการสินค้านี้ (quantity * pricePerUnit)
+  metadata?: Record<string, any>; // ข้อมูลเพิ่มเติมเกี่ยวกับสินค้านี้ (เช่น episodeId, novelId, coins_added)
 }
 
-// Interface for Purchase document (represents an order)
+// อินเทอร์เฟซหลักสำหรับเอกสารการซื้อ (Purchase Document)
 export interface IPurchase extends Document {
-  orderId: string; // รหัสคำสั่งซื้อ (unique, อาจสร้างโดยระบบหรือ payment gateway)
-  user: Types.ObjectId; // ผู้ซื้อ (อ้างอิง User model)
-  items: IPurchaseItem[]; // รายการสินค้าในคำสั่งซื้อ
-  // Order Totals
-  subtotalAmount: number; // ราคารวมก่อนภาษีและค่าธรรมเนียม
-  discountTotal: number; // ส่วนลดรวมทั้งคำสั่งซื้อ
-  taxAmount: number; // ภาษี (ถ้ามี)
-  feeAmount: number; // ค่าธรรมเนียม (เช่น ค่าธรรมเนียมแพลตฟอร์ม, ค่าธรรมเนียมการชำระเงิน)
-  totalAmountPayable: number; // จำนวนเงินที่ต้องชำระทั้งหมด
-  currency: string; // สกุลเงินหลักของคำสั่งซื้อ (เช่น "THB", "USD")
-  // Payment Details (อาจอ้างอิง Payment model ถ้าซับซ้อน)
-  paymentId?: Types.ObjectId; // อ้างอิง Payment model
-  paymentStatus: "pending" | "processing" | "succeeded" | "failed" | "canceled" | "refunded" | "partially_refunded"; // สถานะการชำระเงิน
-  paymentMethod?: string; // วิธีการชำระเงิน (เช่น "credit_card", "promptpay", "paypal", "platform_credits")
-  paymentGatewayTransactionId?: string; // ID ธุรกรรมจาก Payment Gateway
-  // Order Status
-  orderStatus: "pending_payment" | "processing" | "completed" | "failed" | "canceled" | "refund_processing" | "refunded"; // สถานะคำสั่งซื้อ
-  // Recipient (if gifted)
-  giftRecipient?: Types.ObjectId; // ผู้รับของขวัญ (อ้างอิง User model)
-  giftMessage?: string; // ข้อความของขวัญ
-  // Billing and Shipping (if applicable, e.g., for physical goods or detailed invoices)
-  // billingAddress?: IAddress; // (Assume IAddress interface exists)
+  _id: Types.ObjectId;
+  user: Types.ObjectId; // ผู้ใช้ที่ทำการซื้อ (อ้างอิง User model หรือ SocialMediaUser model)
+  items: Types.DocumentArray<IPurchasedItem>; // รายการสินค้าที่ซื้อ
+  
+  totalAmount: number; // ยอดรวมทั้งหมดของการซื้อ (ในหน่วย purchaseCurrency)
+  purchaseCurrency: "COIN" | "THB" | "USD"; // สกุลเงินที่ใช้สำหรับการซื้อนี้
+  
+  paymentId?: Types.ObjectId; // ID ของการชำระเงิน (อ้างอิง Payment model, ถ้าเป็นการซื้อด้วยเงินจริง)
+  // ถ้าซื้อด้วย COIN, paymentId อาจจะไม่จำเป็น หรือชี้ไปที่ internal transaction log
+  
+  status: "pending" | "processing" | "completed" | "failed" | "refunded" | "partially_refunded"; // สถานะการซื้อ
+  purchaseMethod?: "in_platform_coin" | "credit_card" | "promptpay" | "paypal" | "apple_pay" | "google_pay"; // วิธีการซื้อ
+  
+  // รายละเอียดเพิ่มเติม
+  transactionDetails?: { // ข้อมูลที่ไม่ sensitive จาก payment gateway หรือ internal system
+    providerTransactionId?: string; // ID จาก payment gateway
+    coinTransactionId?: string; // ID จากระบบเหรียญภายใน
+    message?: string; // ข้อความจากระบบ (เช่น "Payment successful")
+  };
+  promoCodeUsed?: string; // รหัสโปรโมชันที่ใช้ (ถ้ามี)
+  discountAmount?: number; // จำนวนเงินที่ลดราคา (ถ้ามี)
+  
+  // ที่อยู่สำหรับออกใบเสร็จ (ถ้าจำเป็น และเป็นการซื้อด้วยเงินจริง)
+  // billingAddress?: IBillingAddress; // ควรมี schema แยกถ้าซับซ้อน
+  
+  // Soft delete (อาจไม่จำเป็นสำหรับ Purchase, ขึ้นกับนโยบายการเก็บข้อมูล)
+  // isCancelled?: boolean;
+  // cancelledAt?: Date;
+  // cancellationReason?: string;
+
   // Timestamps
-  completedAt?: Date; // วันที่ทำรายการสำเร็จ
-  failedAt?: Date; // วันที่ทำรายการล้มเหลว
-  refundedAt?: Date; // วันที่คืนเงิน
-  // Revenue Split (calculated after payment success)
-  platformRevenue?: number; // ส่วนแบ่งรายได้ของแพลตฟอร์ม
-  authorRevenue?: Array<{ // ส่วนแบ่งรายได้ของผู้เขียน (กรณีมีหลาย item จากหลาย author ใน order เดียว)
-    author: Types.ObjectId;
-    amount: number;
-    itemId: Types.ObjectId; // Item ที่เกี่ยวข้อง
-  }>;
-  // Other metadata
-  ipAddress?: string; // IP address ของผู้ซื้อ (hashed/encrypted, select: false)
-  userAgent?: string; // User agent (select: false)
-  customMetadata?: Record<string, any>; // ข้อมูลเพิ่มเติม
-  // Soft delete
-  isDeleted: boolean;
-  deletedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  purchasedAt?: Date; // วันที่ทำการซื้อ (เมื่อ status เป็น completed)
+  createdAt: Date; // วันที่สร้างรายการซื้อ (อาจเป็น pending ก่อน)
+  updatedAt: Date; // วันที่อัปเดตล่าสุด
 }
 
-const PurchaseItemSchema = new Schema<IPurchaseItem>(
+// Schema ย่อยสำหรับ IPurchasedItem
+const PurchasedItemSchema = new Schema<IPurchasedItem>(
   {
-    itemId: { type: Schema.Types.ObjectId, required: true, index: true }, // No ref here, itemType defines it
+    itemId: { type: Schema.Types.ObjectId, required: true, index: true }, // refPath ควรใช้ถ้า itemType มีหลาย model
     itemType: {
       type: String,
-      enum: ["novel", "episode", "official_media", "subscription_plan", "donation_tier", "virtual_currency_pack"],
+      enum: ["novel_episode", "novel_bundle", "coin_package", "subscription_tier", "donation_item", "writer_support_package", "other"],
       required: true,
     },
-    novel: { type: Schema.Types.ObjectId, ref: "Novel" },
-    episode: { type: Schema.Types.ObjectId, ref: "Episode" },
-    officialMedia: { type: Schema.Types.ObjectId, ref: "OfficialMedia" },
-    subscriptionPlan: { type: Schema.Types.ObjectId, ref: "SubscriptionPlan" }, // Assume SubscriptionPlan model
-    donationTier: { type: Schema.Types.ObjectId, ref: "DonationTier" }, // Assume DonationTier model
-    virtualCurrencyPack: { type: Schema.Types.ObjectId, ref: "VirtualCurrencyPack" }, // Assume VirtualCurrencyPack model
-    itemName: { type: String, required: true, trim: true },
-    itemDescription: { type: String, trim: true, maxlength: 500 },
+    itemName: { type: String, required: true, trim: true, maxlength: 255 },
+    description: { type: String, trim: true, maxlength: 500 },
     quantity: { type: Number, required: true, min: 1, default: 1 },
-    unitPrice: { type: Number, required: true, min: 0 },
-    discountAmountPerUnit: { type: Number, default: 0, min: 0 },
-    finalPricePerUnit: { type: Number, required: true, min: 0 },
-    totalPrice: { type: Number, required: true, min: 0 },
-    currency: { type: String, required: true, uppercase: true, trim: true, default: "THB" },
-    accessDurationDays: { type: Number, min: 0 },
-    isLifetimeAccess: { type: Boolean, default: false },
-    grantedEntitlements: [String],
+    pricePerUnit: { type: Number, required: true, min: 0 },
+    currency: { type: String, enum: ["COIN", "THB", "USD"], required: true },
     metadata: Schema.Types.Mixed,
   },
-  { _id: false } // Subdocuments don't need their own _id unless necessary
+  { _id: false }
 );
 
+// Schema หลักสำหรับ Purchase
 const PurchaseSchema = new Schema<IPurchase>(
   {
-    orderId: { type: String, required: true, unique: true, index: true },
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    items: [PurchaseItemSchema],
-    subtotalAmount: { type: Number, required: true, min: 0 },
-    discountTotal: { type: Number, default: 0, min: 0 },
-    taxAmount: { type: Number, default: 0, min: 0 },
-    feeAmount: { type: Number, default: 0, min: 0 },
-    totalAmountPayable: { type: Number, required: true, min: 0 },
-    currency: { type: String, required: true, uppercase: true, trim: true, default: "THB" },
-    paymentId: { type: Schema.Types.ObjectId, ref: "Payment" }, // Ref to a separate Payment model
-    paymentStatus: {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User", // หรือ refPath เพื่อรองรับ SocialMediaUser
+      required: true,
+      index: true,
+    },
+    items: [PurchasedItemSchema],
+    totalAmount: {
+      type: Number,
+      required: [true, "กรุณาระบุยอดรวมทั้งหมด (Total amount is required)"],
+      min: 0,
+    },
+    purchaseCurrency: {
       type: String,
-      enum: ["pending", "processing", "succeeded", "failed", "canceled", "refunded", "partially_refunded"],
+      enum: ["COIN", "THB", "USD"],
+      required: [true, "กรุณาระบุสกุลเงินที่ใช้ซื้อ (Purchase currency is required)"],
+    },
+    paymentId: { type: Schema.Types.ObjectId, ref: "Payment", index: true },
+    status: {
+      type: String,
+      enum: ["pending", "processing", "completed", "failed", "refunded", "partially_refunded"],
       default: "pending",
+      required: true,
       index: true,
     },
-    paymentMethod: String,
-    paymentGatewayTransactionId: { type: String, index: true },
-    orderStatus: {
-      type: String,
-      enum: ["pending_payment", "processing", "completed", "failed", "canceled", "refund_processing", "refunded"],
-      default: "pending_payment",
-      index: true,
+    purchaseMethod: { 
+      type: String, 
+      enum: ["in_platform_coin", "credit_card", "promptpay", "paypal", "apple_pay", "google_pay"],
+      index: true 
     },
-    giftRecipient: { type: Schema.Types.ObjectId, ref: "User" },
-    giftMessage: { type: String, trim: true, maxlength: 1000 },
-    completedAt: Date,
-    failedAt: Date,
-    refundedAt: Date,
-    platformRevenue: { type: Number, min: 0 },
-    authorRevenue: [
-      {
-        _id: false,
-        author: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        amount: { type: Number, required: true, min: 0 },
-        itemId: { type: Schema.Types.ObjectId, required: true },
-      },
-    ],
-    ipAddress: { type: String, select: false },
-    userAgent: { type: String, select: false },
-    customMetadata: Schema.Types.Mixed,
-    isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: Date,
+    transactionDetails: {
+      providerTransactionId: { type: String, trim: true, index: true },
+      coinTransactionId: { type: String, trim: true, index: true },
+      message: { type: String, trim: true },
+    },
+    promoCodeUsed: { type: String, trim: true, index: true },
+    discountAmount: { type: Number, min: 0 },
+    purchasedAt: { type: Date, index: true }, // ตั้งค่าเมื่อ status เป็น 'completed'
   },
   {
     timestamps: true, // createdAt, updatedAt
@@ -155,74 +123,78 @@ const PurchaseSchema = new Schema<IPurchase>(
 );
 
 // ----- Indexes -----
-PurchaseSchema.index({ user: 1, orderStatus: 1, createdAt: -1 });
-PurchaseSchema.index({ paymentStatus: 1, createdAt: -1 });
-PurchaseSchema.index({ "items.itemId": 1, "items.itemType": 1 }); // To find purchases containing specific items
-PurchaseSchema.index({ giftRecipient: 1, orderStatus: 1 });
-PurchaseSchema.index({ createdAt: 1 }); // For general time-based queries
+PurchaseSchema.index({ user: 1, status: 1, purchasedAt: -1 }); // การซื้อล่าสุดของผู้ใช้ตามสถานะ
+PurchaseSchema.index({ user: 1, "items.itemType": 1, "items.itemId": 1 }); // ค้นหาว่าผู้ใช้เคยซื้อ item นี้หรือไม่
+PurchaseSchema.index({ status: 1, purchaseCurrency: 1, createdAt: -1 }); // การซื้อที่รอดำเนินการ หรือล้มเหลว
+PurchaseSchema.index({ paymentId: 1 }, { unique: true, sparse: true }); // ถ้า paymentId มี, ควรจะ unique
 
 // ----- Middleware -----
-PurchaseSchema.pre("save", function (next) {
-  // Calculate finalPricePerUnit and totalPrice for each item if not already set
-  this.items.forEach(item => {
-    if (item.isModified("unitPrice") || item.isModified("discountAmountPerUnit") || item.isModified("quantity")) {
-      item.finalPricePerUnit = item.unitPrice - item.discountAmountPerUnit;
-      item.totalPrice = item.finalPricePerUnit * item.quantity;
+PurchaseSchema.pre<IPurchase>("save", async function (next) {
+  if (this.isModified("status") && this.status === "completed" && !this.purchasedAt) {
+    this.purchasedAt = new Date();
+  }
+
+  // เมื่อการซื้อสำเร็จ (status: "completed") ควรมีการอัปเดต User's wallet, inventory, statistics
+  // ตรวจสอบว่า status ถูกเปลี่ยนเป็น "completed" และเป็นการเปลี่ยนแปลงจริง (ไม่ใช่แค่ save document เดิม)
+  const isCompletingPurchase = this.isModified("status") && this.status === "completed";
+  const wasPreviouslyCompleted = this.get("status", null, { getters: false }) === "completed";
+
+  if (isCompletingPurchase && !wasPreviouslyCompleted) {
+    const User = UserModel(); // Get the User model instance
+    try {
+      const userToUpdate = await User.findById(this.user);
+      if (userToUpdate) {
+        let updateOps: any = { $inc: {} };
+
+        if (this.purchaseCurrency === "COIN") {
+          // หากซื้อด้วย COIN, จำนวน COIN ที่ใช้จะถูกหักจาก wallet
+          // การตรวจสอบว่ามีเหรียญพอหรือไม่ ควรทำก่อนขั้นตอนนี้ (เช่น ตอนสร้าง Purchase หรือตอนเปลี่ยน status เป็น processing)
+          if (userToUpdate.wallet.coins < this.totalAmount) {
+            // This should ideally be caught before reaching here.
+            // Mark purchase as failed or handle insufficient funds.
+            this.status = "failed";
+            this.transactionDetails = { ...(this.transactionDetails || {}), message: "Insufficient coins." };
+            console.error(`Purchase ${this._id} failed: Insufficient coins for user ${this.user}.`);
+            return next(new Error("Insufficient coins.")); // Stop save if coins are not enough
+          }
+          updateOps.$inc["wallet.coins"] = -this.totalAmount;
+          updateOps.$inc["activityTracking.totalCoinsSpent"] = (updateOps.$inc["activityTracking.totalCoinsSpent"] || 0) + this.totalAmount;
+        } else {
+          updateOps.$inc["activityTracking.totalRealMoneySpent"] = (updateOps.$inc["activityTracking.totalRealMoneySpent"] || 0) + this.totalAmount;
+          // อาจมีการคำนวณสกุลเงินถ้า totalRealMoneySpent เก็บเป็นสกุลเงินหลักเดียว
+        }
+        
+        // เพิ่ม items ที่ซื้อเข้า inventory ของผู้ใช้ หรือให้สิทธิ์การเข้าถึง content
+        for (const item of this.items) {
+          if (item.itemType === "coin_package" && item.metadata?.coins_added) {
+            updateOps.$inc["wallet.coins"] = (updateOps.$inc["wallet.coins"] || 0) + (item.metadata.coins_added * item.quantity);
+          } else if (item.itemType === "novel_episode" && item.metadata?.episodeId) {
+            if (!updateOps.$addToSet) updateOps.$addToSet = {};
+            updateOps.$addToSet["unlockedContent.episodes"] = item.metadata.episodeId;
+          } else if (item.itemType === "novel_bundle" && item.metadata?.novelId) {
+            if (!updateOps.$addToSet) updateOps.$addToSet = {};
+            updateOps.$addToSet["unlockedContent.novels"] = item.metadata.novelId;
+            // Potentially unlock all episodes of this novel bundle - requires more logic
+          }
+          // ... handle other item types like writer_support_package, subscription_tier
+        }
+        updateOps.lastUpdatedAt = new Date();
+
+        if (Object.keys(updateOps.$inc).length === 0) delete updateOps.$inc;
+        
+        await User.findByIdAndUpdate(this.user, updateOps);
+      }
+    } catch (error) {
+      console.error(`Error updating user stats/inventory after purchase ${this._id}:`, error);
+      // อาจต้องมีระบบ retry หรือแจ้งเตือน admin ถ้าการอัปเดต user data ล้มเหลวหลังการซื้อสำเร็จ
+      // Consider not failing the purchase save, but logging for manual intervention.
     }
-  });
-
-  // Calculate order totals if not already set or items changed
-  if (this.isModified("items") || this.isNew) {
-    this.subtotalAmount = this.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-    this.discountTotal = this.items.reduce((sum, item) => sum + item.discountAmountPerUnit * item.quantity, 0);
-    // Assuming tax and fee are calculated elsewhere or set directly
-    // For simplicity, totalAmountPayable might be subtotal - discount + tax + fee
-    // This.totalAmountPayable = this.subtotalAmount - this.discountTotal + (this.taxAmount || 0) + (this.feeAmount || 0);
   }
-
-  // Soft delete handling
-  if (this.isModified("isDeleted") && this.isDeleted && !this.deletedAt) {
-    this.deletedAt = new Date();
-  }
-
-  // Update timestamps based on status
-  if (this.isModified("orderStatus")) {
-    const now = new Date();
-    if (this.orderStatus === "completed" && !this.completedAt) this.completedAt = now;
-    else if (this.orderStatus === "failed" && !this.failedAt) this.failedAt = now;
-    else if (this.orderStatus === "refunded" && !this.refundedAt) this.refundedAt = now;
-  }
-  if (this.isModified("paymentStatus")) {
-    const now = new Date();
-    if (this.paymentStatus === "succeeded" && this.orderStatus !== "completed" && !this.completedAt) {
-        // Potentially move orderStatus to completed here or in a post-hook / service layer
-    }
-  }
-
   next();
 });
 
-// Post-save middleware for denormalization (e.g., updating user stats, novel purchase counts)
-// This should be handled carefully, potentially in a service layer or via event-driven architecture
-// to avoid making the save operation too heavy or prone to failure.
-PurchaseSchema.post("save", async function(doc: IPurchase) {
-  if (doc.isModified("orderStatus") && doc.orderStatus === "completed") {
-    // Example: Grant entitlements, update user purchase history, update novel sales stats, etc.
-    // This is where you would iterate through doc.items and update relevant models.
-    // For example, if an episode is purchased:
-    // const Episode = model("Episode");
-    // await Episode.findByIdAndUpdate(itemId, { $inc: { "statistics.salesCount": 1 } });
-    // const User = model("User");
-    // await User.findByIdAndUpdate(doc.user, { $addToSet: { purchasedEpisodes: itemId } });
-    console.log(`Order ${doc.orderId} completed. Triggering post-completion actions.`);
-  }
-});
-
 // ----- Model Export -----
-// It's generally better to have a separate Payment model to handle payment-specific details and states.
-// The Purchase/Order model then focuses on what was bought and its fulfillment status.
-const PurchaseModel = () =>
-  models.Purchase as mongoose.Model<IPurchase> || model<IPurchase>("Purchase", PurchaseSchema);
+const PurchaseModel = () => models.Purchase as mongoose.Model<IPurchase> || model<IPurchase>("Purchase", PurchaseSchema);
 
 export default PurchaseModel;
 

@@ -1,160 +1,154 @@
-// src/backend/models/ReadingAnalytic.ts
+// src/models/ReadingAnalytic.ts
+// โมเดลการวิเคราะห์การอ่าน (ReadingAnalytic Model) - จัดเก็บข้อมูลการอ่านของผู้ใช้เพื่อการวิเคราะห์และสร้างคำแนะนำ
+// ออกแบบให้บันทึกกิจกรรมการอ่านอย่างละเอียด, ความชอบ, และพฤติกรรมของผู้ใช้
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// Interface for individual reading session data points (more granular)
-export interface IReadingSessionEvent extends Document {
-  eventType: "start_read" | "pause_read" | "resume_read" | "end_read" | "scroll_depth" | "choice_made" | "page_turn";
-  timestamp: Date;
-  currentProgress?: number; // Current percentage or scene/node ID
-  scrollDepthPercent?: number; // For long-form text within a scene
-  choiceId?: string; // If eventType is choice_made
-  metadata?: Record<string, any>; // e.g., { sceneId: "...", nodeId: "..." }
+// อินเทอร์เฟซสำหรับบันทึกเหตุการณ์การอ่าน (Reading Event)
+export interface IReadingEvent {
+  eventType: "start_novel" | "end_novel" | "start_episode" | "end_episode" | "read_scene" | "make_choice" | "pause_reading" | "resume_reading" | "rate_novel" | "comment_on_episode";
+  novel: Types.ObjectId; // นิยายที่เกี่ยวข้อง
+  episode?: Types.ObjectId; // ตอนที่เกี่ยวข้อง (ถ้ามี)
+  scene?: Types.ObjectId; // ฉากที่เกี่ยวข้อง (ถ้ามี)
+  choice?: Types.ObjectId; // ตัวเลือกที่เลือก (ถ้า eventType = "make_choice")
+  timestamp: Date; // เวลาที่เกิดเหตุการณ์
+  durationSeconds?: number; // ระยะเวลาของเหตุการณ์ (เช่น เวลาที่ใช้ในฉาก, เวลาที่ pause)
+  // ข้อมูลเพิ่มเติมตามประเภทเหตุการณ์
+  // เช่น choiceMade: { choiceId: Types.ObjectId, outcomeSceneId?: Types.ObjectId }
+  // เช่น ratingGiven: number
+  // เช่น scrollDepth?: number (สำหรับ scene)
+  // เช่น wordCountRead?: number (สำหรับ scene/episode)
+  sessionIdentifier?: string; // ID ของ session การอ่าน (ถ้าต้องการ group events)
 }
 
-// Interface for ReadingAnalytic document
-// This model captures detailed analytics about user reading behavior.
-// It can store aggregated data per session or individual events for deep analysis.
-export interface IReadingAnalytic extends Document {
-  user: Types.ObjectId; // ผู้อ่าน (อ้างอิง User model)
-  novel: Types.ObjectId; // นิยายที่อ่าน (อ้างอิง Novel model)
-  episode?: Types.ObjectId; // ตอนที่อ่าน (อ้างอิง Episode model, optional if tracking novel-level reading)
-  storyMapNodeId?: Types.ObjectId; // ID ของโหนดใน StoryMap ที่กำลังอ่าน/โต้ตอบ (ถ้าเป็น visual novel)
-  // Session Information
-  sessionId: string; // Unique ID for a reading session (can be client-generated or server-generated)
-  sessionStartTime: Date; // เวลาเริ่ม session การอ่าน
-  sessionEndTime?: Date; // เวลาสิ้นสุด session การอ่าน (ถ้า session สิ้นสุดแล้ว)
-  durationSeconds: number; // ระยะเวลาที่ใช้ใน session นี้ (วินาที, อัปเดตเมื่อ session สิ้นสุดหรือเป็นระยะ)
-  // Progress and Engagement
-  startProgress?: number; // % ความคืบหน้า ณ ตอนเริ่ม session (0-100 or scene/node ID)
-  endProgress?: number; // % ความคืบหน้า ณ ตอนสิ้นสุด session (0-100 or scene/node ID)
-  maxScrollDepth?: number; // % ความลึกสูงสุดที่ scroll ในเนื้อหา (ถ้ามี)
-  choicesMadeCount?: number; // จำนวนตัวเลือกที่ผู้ใช้เลือกใน session นี้ (สำหรับ visual novels)
-  pagesViewedCount?: number; // จำนวนหน้า/ฉากที่ดูใน session นี้
-  isCompletedEpisode?: boolean; // อ่านตอนจบหรือไม่ (ถ้า session นี้จบตอน)
-  isCompletedNovel?: boolean; // อ่านนิยายจบหรือไม่ (ถ้า session นี้ทำให้นิยายจบ)
-  // Contextual Information
-  deviceInfo?: {
-    type?: "mobile" | "tablet" | "desktop" | "console" | "other"; // ประเภทอุปกรณ์
-    os?: string; // ระบบปฏิบัติการ (e.g., "iOS", "Android", "Windows")
-    browser?: string; // เบราว์เซอร์ (e.g., "Chrome", "Safari")
-    appVersion?: string; // Version ของแอป (ถ้ามี)
-    screenResolution?: string; // e.g., "1920x1080"
-  };
-  networkInfo?: {
-    connectionType?: "wifi" | "cellular" | "ethernet";
-    effectiveConnectionType?: "2g" | "3g" | "4g" | "5g";
-  };
-  location?: { // เก็บข้อมูลตำแหน่งคร่าวๆ (ถ้าผู้ใช้อนุญาต)
-    countryCode?: string; // รหัสประเทศ (e.g., "TH", "US")
-    region?: string; // ภูมิภาค/จังหวัด
-    city?: string;
-  };
-  // For more granular event tracking within a session (optional, can be a separate collection if too verbose)
-  sessionEvents?: IReadingSessionEvent[];
-  // AI/ML Features - to be populated by processing jobs
-  engagementScore?: number; // Calculated score (0-1) indicating engagement level for this session
-  predictedChurnRisk?: number; // Predicted risk of user churning after this session (0-1)
-  readingSpeedWPM?: number; // Words per minute (if applicable and calculable)
-  // Timestamps
-  createdAt: Date;
-  updatedAt: Date;
+// อินเทอร์เฟซหลักสำหรับเอกสารการวิเคราะห์การอ่าน (ReadingAnalytic Document)
+// อาจมีหลายแนวทางในการออกแบบ: 1. เก็บ event stream ต่อผู้ใช้, 2. สรุปข้อมูลต่อผู้ใช้/นิยาย
+// แนวทางที่ 1: Event Stream (ละเอียดมาก, เหมาะสำหรับ ML, แต่อาจใหญ่)
+export interface IReadingAnalytic_EventStream extends Document {
+  _id: Types.ObjectId;
+  user: Types.ObjectId; // ผู้ใช้ (อ้างอิง User model หรือ SocialMediaUser model)
+  events: Types.DocumentArray<IReadingEvent>; // รายการเหตุการณ์การอ่าน
+  // อาจมีข้อมูลสรุปบางอย่างที่ update เป็นระยะ
+  lastEventAt: Date;
 }
 
-const ReadingSessionEventSchema = new Schema<IReadingSessionEvent>(
+// แนวทางที่ 2: Aggregated User-Novel Reading Stats (สรุป, query ง่ายกว่าสำหรับบาง use case)
+// (ในที่นี้จะเน้น Event Stream ตามโจทย์ที่ต้องการความละเอียด แต่จะใส่โครงร่างของ Aggregated ไว้เป็นแนวคิด)
+/*
+export interface IUserNovelReadingSummary {
+  novel: Types.ObjectId;
+  totalTimeSpentSeconds: number;
+  episodesCompleted: number;
+  lastReadAt: Date;
+  averageReadingSpeedWPM?: number;
+  genresReadInNovel: string[]; // genres ของนิยายนี้ที่ผู้ใช้อ่าน
+  choicesMadeStats?: any; // สถิติตัวเลือกที่เคยเลือกในนิยายนี้
+  // ... more aggregated data
+}
+export interface IReadingAnalytic_Aggregated extends Document {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  overallReadingTimeSeconds: number;
+  novelsStarted: number;
+  novelsCompleted: number;
+  favoriteGenres: Array<{ genre: Types.ObjectId, readCount: number }>;
+  readingHabits: { // เช่น เวลาที่อ่านบ่อย, วันที่อ่านบ่อย
+    mostActiveHour?: number; // 0-23
+    mostActiveDayOfWeek?: number; // 0-6 (Sun-Sat)
+  };
+  novelSummaries: Types.DocumentArray<IUserNovelReadingSummary>;
+  lastUpdatedAt: Date;
+}
+*/
+
+// Schema ย่อยสำหรับ IReadingEvent (สำหรับแนวทาง Event Stream)
+const ReadingEventSchema = new Schema<IReadingEvent>(
   {
     eventType: {
       type: String,
-      enum: ["start_read", "pause_read", "resume_read", "end_read", "scroll_depth", "choice_made", "page_turn"],
+      enum: ["start_novel", "end_novel", "start_episode", "end_episode", "read_scene", "make_choice", "pause_reading", "resume_reading", "rate_novel", "comment_on_episode"],
       required: true,
     },
-    timestamp: { type: Date, required: true, default: Date.now },
-    currentProgress: Number,
-    scrollDepthPercent: { type: Number, min: 0, max: 100 },
-    choiceId: String,
-    metadata: Schema.Types.Mixed,
-  },
-  { _id: false }
-);
-
-const ReadingAnalyticSchema = new Schema<IReadingAnalytic>(
-  {
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     novel: { type: Schema.Types.ObjectId, ref: "Novel", required: true, index: true },
     episode: { type: Schema.Types.ObjectId, ref: "Episode", index: true },
-    storyMapNodeId: { type: Schema.Types.ObjectId, ref: "StoryMap.nodes", index: true }, // Assuming StoryMap has a subdocument array `nodes`
-    sessionId: { type: String, required: true, index: true },
-    sessionStartTime: { type: Date, required: true, default: Date.now, index: true },
-    sessionEndTime: { type: Date, index: true },
-    durationSeconds: { type: Number, default: 0, min: 0 },
-    startProgress: Number,
-    endProgress: Number,
-    maxScrollDepth: { type: Number, min: 0, max: 100 },
-    choicesMadeCount: { type: Number, default: 0, min: 0 },
-    pagesViewedCount: { type: Number, default: 0, min: 0 },
-    isCompletedEpisode: { type: Boolean, default: false },
-    isCompletedNovel: { type: Boolean, default: false },
-    deviceInfo: {
-      type: { type: String, enum: ["mobile", "tablet", "desktop", "console", "other"] },
-      os: String,
-      browser: String,
-      appVersion: String,
-      screenResolution: String,
+    scene: { type: Schema.Types.ObjectId, ref: "Scene", index: true },
+    choice: { type: Schema.Types.ObjectId, ref: "Choice" },
+    timestamp: { type: Date, required: true, default: Date.now, index: true },
+    durationSeconds: { type: Number, min: 0 },
+    sessionIdentifier: { type: String, trim: true, index: true },
+  },
+  { _id: false } // ไม่สร้าง _id สำหรับ sub-document นี้โดยอัตโนมัติ
+);
+
+// Schema หลักสำหรับ ReadingAnalytic (Event Stream approach)
+const ReadingAnalyticSchema = new Schema<IReadingAnalytic_EventStream>(
+  {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User", // หรือ refPath เพื่อรองรับทั้ง User และ SocialMediaUser
+      required: true,
+      unique: true, // หนึ่ง document ต่อหนึ่งผู้ใช้ (ถ้าเป็น event stream ของผู้ใช้นั้นๆ)
+      index: true,
     },
-    networkInfo: {
-        connectionType: { type: String, enum: ["wifi", "cellular", "ethernet"] },
-        effectiveConnectionType: { type: String, enum: ["2g", "3g", "4g", "5g"] },
-    },
-    location: {
-      countryCode: { type: String, uppercase: true, trim: true },
-      region: String,
-      city: String,
-    },
-    sessionEvents: [ReadingSessionEventSchema], // Embed if events per session are few, otherwise separate collection
-    engagementScore: { type: Number, min: 0, max: 1 },
-    predictedChurnRisk: { type: Number, min: 0, max: 1 },
-    readingSpeedWPM: { type: Number, min: 0 },
+    events: [ReadingEventSchema],
+    lastEventAt: { type: Date, index: true },
   },
   {
-    timestamps: true, // createdAt, updatedAt
-    // Consider `timeseries` collection if using MongoDB 5.0+ for high-volume event data
-    // timeseries: {
-    //   timeField: "sessionStartTime",
-    //   metaField: "user", // or a composite object
-    //   granularity: "hours" // or minutes, seconds
-    // }
+    timestamps: true, // createdAt, updatedAt (updatedAt จะเปลี่ยนเมื่อมี event ใหม่ หรือมีการแก้ไข)
+    // capped: { size: 1024 * 1024 * 100, max: 100000, autoIndexId: true } // พิจารณา Capped Collection ถ้า event stream ใหญ่มากและต้องการ FIFO
   }
 );
 
 // ----- Indexes -----
-ReadingAnalyticSchema.index({ user: 1, novel: 1, sessionStartTime: -1 });
-ReadingAnalyticSchema.index({ novel: 1, episode: 1, sessionStartTime: -1 });
-ReadingAnalyticSchema.index({ sessionId: 1 }, { unique: true });
-ReadingAnalyticSchema.index({ sessionStartTime: -1 }); // For general time-based queries
-ReadingAnalyticSchema.index({ "location.countryCode": 1, sessionStartTime: -1 });
-ReadingAnalyticSchema.index({ novel: 1, isCompletedNovel: 1, user: 1 });
-ReadingAnalyticSchema.index({ episode: 1, isCompletedEpisode: 1, user: 1 });
-
-// For AI/ML features
-ReadingAnalyticSchema.index({ novel: 1, engagementScore: -1 });
-ReadingAnalyticSchema.index({ user: 1, predictedChurnRisk: -1 });
+// Index สำหรับ query events ของผู้ใช้ตาม novel และ timestamp
+ReadingAnalyticSchema.index({ user: 1, "events.novel": 1, "events.timestamp": -1 });
+ReadingAnalyticSchema.index({ user: 1, lastEventAt: -1 }); // ผู้ใช้ที่มีกิจกรรมล่าสุด
+// Index สำหรับ query events ตามประเภท (ถ้ามีการ query บ่อย)
+// ReadingAnalyticSchema.index({ "events.eventType": 1, "events.timestamp": -1 });
 
 // ----- Middleware -----
-ReadingAnalyticSchema.pre("save", function (next) {
-  if (this.sessionEndTime && this.sessionStartTime) {
-    this.durationSeconds = Math.floor((this.sessionEndTime.getTime() - this.sessionStartTime.getTime()) / 1000);
-  }
-  // If progress reaches 100 for an episode, mark as completed
-  if (this.episode && this.endProgress === 100 && !this.isCompletedEpisode) {
-      this.isCompletedEpisode = true;
-      // Potentially trigger event for UserAchievement update here
+ReadingAnalyticSchema.pre("save", function (this: IReadingAnalytic_EventStream, next) {
+  if (this.events && this.events.length > 0) {
+    // เรียง events ตาม timestamp ล่าสุดก่อน save (ถ้าจำเป็น)
+    // this.events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    // หา timestamp ล่าสุดจาก events array
+    let latestTimestamp = new Date(0); // Initialize with a very old date
+    for (const event of this.events) {
+      if (event.timestamp > latestTimestamp) {
+        latestTimestamp = event.timestamp;
+      }
+    }
+    this.lastEventAt = latestTimestamp;
   }
   next();
 });
 
+// ----- Static Methods (ตัวอย่าง) -----
+// เพิ่ม event ใหม่เข้าไปใน stream ของผู้ใช้
+ReadingAnalyticSchema.statics.addReadingEvent = async function (
+  userId: Types.ObjectId,
+  eventData: Omit<IReadingEvent, "timestamp">
+) {
+  const eventWithTimestamp: IReadingEvent = {
+    ...eventData,
+    timestamp: new Date(),
+  } as IReadingEvent;
+
+  return this.findOneAndUpdate(
+    { user: userId },
+    {
+      $push: { events: { $each: [eventWithTimestamp], $slice: -1000 } }, // เก็บเฉพาะ 1000 events ล่าสุด (ปรับตามต้องการ)
+      $set: { lastEventAt: eventWithTimestamp.timestamp },
+      $setOnInsert: { user: userId, createdAt: new Date() } // สร้าง document ใหม่ถ้ายังไม่มี
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+};
+
 // ----- Model Export -----
-const ReadingAnalyticModel = () =>
-  models.ReadingAnalytic as mongoose.Model<IReadingAnalytic> || model<IReadingAnalytic>("ReadingAnalytic", ReadingAnalyticSchema);
+// การใช้ชื่อ Model นี้ต้องพิจารณาว่าข้อมูลจะถูก query และใช้งานอย่างไร
+// ถ้ามีระบบประมวลผล batch เพื่อสร้าง aggregated data, อาจมี model อีกตัวสำหรับ aggregated results
+const ReadingAnalyticModel = () => models.ReadingAnalytic as mongoose.Model<IReadingAnalytic_EventStream> || model<IReadingAnalytic_EventStream>("ReadingAnalytic", ReadingAnalyticSchema);
 
 export default ReadingAnalyticModel;
 
