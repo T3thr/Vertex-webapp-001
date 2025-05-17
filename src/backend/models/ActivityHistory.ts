@@ -1,372 +1,360 @@
-// backend/models/ActivityHistory.ts
-// โมเดลประวัติกิจกรรม (ActivityHistory Model) - บันทึกกิจกรรมต่างๆ ที่ผู้ใช้ทำบนแพลตฟอร์ม
-// ออกแบบให้เป็น log ที่ครอบคลุม, สามารถใช้ในการวิเคราะห์พฤติกรรม, แสดงผลในโปรไฟล์, และเป็นส่วนหนึ่งของ gamification
-// ปรับปรุงล่าสุด: ตามข้อเสนอแนะของผู้ใช้ ลงวันที่ 13 พฤษภาคม 2025 เพื่อรองรับการวิเคราะห์ข้อมูลขั้นสูงและ AI/ML
+// src/backend/models/ActivityHistory_upgraded.ts
+// โมเดลประวัติกิจกรรมผู้ใช้ (ActivityHistory Model) - อัปเกรดสำหรับแพลตฟอร์ม NovelMaze
+// บันทึกกิจกรรมต่างๆ ที่ผู้ใช้ทำบนแพลตฟอร์ม NovelMaze เพื่อการวิเคราะห์, การแสดงผล, และการตรวจสอบ
+// อัปเกรดจาก ActivityHistory.ts เดิม โดยเพิ่มรายละเอียด, Type Safety, คอมเมนต์ภาษาไทย, Indexes, และปรับปรุงตามมาตรฐาน NovelMaze
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import { IUser } from "./User_upgraded"; // สำหรับ userId
+import { INovel } from "./Novel_upgraded"; // สำหรับ relatedNovelId
+import { IEpisode } from "./Episode_upgraded"; // สำหรับ relatedEpisodeId
+import { IComment } from "./Comment_upgraded"; // สำหรับ relatedCommentId
+import { IPurchase } from "./Purchase_upgraded"; // สำหรับ relatedPurchaseId
+import { IDonation } from "./Donation_upgraded"; // สำหรับ relatedDonationId
+import { IPayment } from "./Payment_upgraded"; // สำหรับ relatedPaymentId
+import { IContentReport } from "./ContentReport_upgraded"; // สำหรับ relatedContentReportId
 
-// ==================================
-// ActivityType Enum Definition
-// ==================================
-// ประเภทของกิจกรรมที่จัดกลุ่มตามหมวดหมู่และใช้ Prefix เพื่อความชัดเจน
-// ตัวอย่างการใช้งาน: const type: ActivityType = ActivityType.ACCOUNT_USER_REGISTERED;
+// ==================================================================================================
+// SECTION: Enums และ Types ที่ใช้ในโมเดล ActivityHistory
+// ==================================================================================================
+
+/**
+ * @enum {string} ActivityCategory
+ * @description หมวดหมู่หลักของกิจกรรม เพื่อช่วยในการจัดกลุ่มและ Query
+ */
+export enum ActivityCategory {
+  AUTHENTICATION = "Authentication", // การยืนยันตัวตนและเซสชัน
+  PROFILE = "Profile",             // การจัดการโปรไฟล์
+  CONTENT_INTERACTION = "ContentInteraction", // การโต้ตอบกับเนื้อหา (นิยาย, ตอน, คอมเมนต์)
+  CONTENT_CREATION = "ContentCreation",   // การสร้างเนื้อหา (สำหรับนักเขียน)
+  MONETIZATION = "Monetization",       // การสร้างรายได้และการใช้จ่าย
+  SOCIAL = "Social",               // กิจกรรมทางสังคม (ติดตาม, ข้อความ)
+  SETTINGS = "Settings",             // การตั้งค่าต่างๆ
+  OTHER = "Other",                 // อื่นๆ
+}
+
+/**
+ * @enum {string} ActivityType
+ * @description ประเภทของกิจกรรมที่ผู้ใช้ทำบนแพลตฟอร์ม (ขยายให้ครอบคลุมและชัดเจนขึ้น)
+ */
 export enum ActivityType {
-  // --- Account & Profile Activities (ACCOUNT_) ---
-  ACCOUNT_USER_REGISTERED = "ACCOUNT_USER_REGISTERED", // ผู้ใช้สมัครสมาชิกใหม่
-  ACCOUNT_USER_LOGGED_IN = "ACCOUNT_USER_LOGGED_IN", // ผู้ใช้เข้าสู่ระบบ
-  ACCOUNT_USER_LOGGED_OUT = "ACCOUNT_USER_LOGGED_OUT", // ผู้ใช้ออกจากระบบ
-  ACCOUNT_PROFILE_UPDATED = "ACCOUNT_PROFILE_UPDATED", // ผู้ใช้อัปเดตข้อมูลโปรไฟล์
-  ACCOUNT_USERNAME_CHANGED = "ACCOUNT_USERNAME_CHANGED", // ผู้ใช้เปลี่ยนชื่อผู้ใช้
-  ACCOUNT_PASSWORD_CHANGED = "ACCOUNT_PASSWORD_CHANGED", // ผู้ใช้เปลี่ยนรหัสผ่าน
-  ACCOUNT_EMAIL_VERIFIED = "ACCOUNT_EMAIL_VERIFIED", // ผู้ใช้ยืนยันอีเมลสำเร็จ
-  ACCOUNT_PROVIDER_LINKED = "ACCOUNT_PROVIDER_LINKED", // ผู้ใช้เชื่อมต่อบัญชี OAuth (เช่น Google, Facebook)
-  ACCOUNT_PROVIDER_UNLINKED = "ACCOUNT_PROVIDER_UNLINKED", // ผู้ใช้ยกเลิกการเชื่อมต่อบัญชี OAuth
+  // --- Authentication & Session (Category: AUTHENTICATION) ---
+  USER_REGISTERED = "user_registered",                 // สมัครสมาชิกใหม่
+  USER_LOGIN_SUCCESS = "user_login_success",             // ล็อกอินสำเร็จ
+  USER_LOGIN_FAILURE = "user_login_failure",             // ล็อกอินล้มเหลว (ระบุเหตุผลใน details)
+  USER_LOGOUT = "user_logout",                       // ออกจากระบบ
+  USER_PASSWORD_RESET_REQUESTED = "user_password_reset_requested", // ขอรีเซ็ตรหัสผ่าน
+  USER_PASSWORD_RESET_COMPLETED = "user_password_reset_completed", // รีเซ็ตรหัสผ่านสำเร็จ
+  USER_EMAIL_VERIFICATION_SENT = "user_email_verification_sent", // ส่งอีเมลยืนยัน
+  USER_EMAIL_VERIFIED = "user_email_verified",             // ยืนยันอีเมลสำเร็จ
+  USER_SESSION_REFRESHED = "user_session_refreshed",       // รีเฟรชเซสชัน
 
-  // --- Content Interaction - Reading Activities (CONTENT_READING_) ---
-  CONTENT_READING_NOVEL_STARTED = "CONTENT_READING_NOVEL_STARTED", // ผู้ใช้เริ่มอ่านนิยาย
-  CONTENT_READING_NOVEL_COMPLETED = "CONTENT_READING_NOVEL_COMPLETED", // ผู้ใช้อ่านนิยายจบเรื่อง
-  CONTENT_READING_EPISODE_VIEWED = "CONTENT_READING_EPISODE_VIEWED", // ผู้ใช้อ่าน/เข้าดูตอนในนิยาย
-  CONTENT_READING_SCENE_VIEWED = "CONTENT_READING_SCENE_VIEWED", // ผู้ใช้เข้าดูฉาก (Scene) ในนิยาย (ละเอียดกว่า episode)
-  CONTENT_READING_NODE_ENTERED = "CONTENT_READING_NODE_ENTERED", // ผู้ใช้เข้าถึง Node ย่อยใน Story Map (สำหรับ Visual Novel ที่ซับซ้อน)
-  CONTENT_READING_CHOICE_MADE = "CONTENT_READING_CHOICE_MADE", // ผู้ใช้เลือกตัวเลือกในนิยายแบบโต้ตอบ
+  // --- Profile Management (Category: PROFILE) ---
+  USER_PROFILE_UPDATED = "user_profile_updated",           // อัปเดตโปรไฟล์ส่วนตัว (เช่น displayName, bio)
+  USER_PASSWORD_CHANGED = "user_password_changed",          // เปลี่ยนรหัสผ่าน
+  USER_AVATAR_UPDATED = "user_avatar_updated",            // อัปเดต Avatar
+  USER_COVER_IMAGE_UPDATED = "user_cover_image_updated",   // อัปเดต Cover Image
+  USER_ACCOUNT_SETTINGS_UPDATED = "user_account_settings_updated", // อัปเดตการตั้งค่าบัญชี (เช่น notification preferences)
+  USER_LINKED_SOCIAL_ACCOUNT = "user_linked_social_account", // เชื่อมต่อบัญชีโซเชียล
+  USER_UNLINKED_SOCIAL_ACCOUNT = "user_unlinked_social_account", // ยกเลิกการเชื่อมต่อบัญชีโซเชียล
 
-  // --- Content Interaction - Bookshelf/Library Activities (CONTENT_LIBRARY_) ---
-  CONTENT_LIBRARY_NOVEL_ADDED = "CONTENT_LIBRARY_NOVEL_ADDED", // ผู้ใช้เพิ่มนิยายเข้าชั้นหนังสือ
-  CONTENT_LIBRARY_NOVEL_REMOVED = "CONTENT_LIBRARY_NOVEL_REMOVED", // ผู้ใช้ลบนิยายออกจากชั้นหนังสือ
+  // --- Content Interaction (Category: CONTENT_INTERACTION) ---
+  NOVEL_VIEWED_DETAILS = "novel_viewed_details",         // ดูรายละเอียดนิยาย
+  NOVEL_EPISODE_READ = "novel_episode_read",             // อ่านตอนนิยาย (อาจมี progress)
+  NOVEL_LIKED = "novel_liked",                       // กดถูกใจนิยาย
+  NOVEL_UNLIKED = "novel_unliked",                     // เลิกถูกใจนิยาย
+  NOVEL_FOLLOWED = "novel_followed",                   // ติดตามนิยาย
+  NOVEL_UNFOLLOWED = "novel_unfollowed",                 // เลิกติดตามนิยาย
+  NOVEL_RATED = "novel_rated",                       // ให้คะแนนนิยาย
+  NOVEL_SHARED = "novel_shared",                     // แชร์นิยาย (เช่น ไปยังโซเชียลมีเดีย)
+  COMMENT_POSTED = "comment_posted",                   // โพสต์ความคิดเห็น (ในนิยาย/ตอน)
+  COMMENT_UPDATED = "comment_updated",                 // แก้ไขความคิดเห็น
+  COMMENT_DELETED = "comment_deleted",                 // ลบความคิดเห็น
+  COMMENT_LIKED = "comment_liked",                     // กดถูกใจความคิดเห็น
+  COMMENT_UNLIKED = "comment_unliked",                   // เลิกถูกใจความคิดเห็น
+  COMMENT_REPLIED = "comment_replied",                   // ตอบกลับความคิดเห็น
+  LIBRARY_ITEM_ADDED = "library_item_added",             // เพิ่มนิยายเข้าคลัง (ระบุสถานะ เช่น reading, wishlisted)
+  LIBRARY_ITEM_REMOVED = "library_item_removed",           // ลบนิยายออกจากคลัง
+  LIBRARY_ITEM_STATUS_UPDATED = "library_item_status_updated", // อัปเดตสถานะในคลัง (เช่น จาก wishlisted เป็น reading)
+  EPISODE_PURCHASED = "episode_purchased",             // ซื้อตอนนิยาย (ปลดล็อคตอน)
+  NOVEL_PURCHASED = "novel_purchased",                 // ซื้อนิยายทั้งเรื่อง (ถ้ามีระบบนี้)
 
-  // --- Content Interaction - Rating & Review Activities (CONTENT_FEEDBACK_) ---
-  CONTENT_FEEDBACK_NOVEL_RATED = "CONTENT_FEEDBACK_NOVEL_RATED", // ผู้ใช้ให้คะแนนนิยาย
-  CONTENT_FEEDBACK_NOVEL_REVIEWED = "CONTENT_FEEDBACK_NOVEL_REVIEWED", // ผู้ใช้เขียนรีวิวนิยาย
+  // --- Content Creation (Category: CONTENT_CREATION) - สำหรับนักเขียน ---
+  WRITER_NOVEL_CREATED = "writer_novel_created",           // นักเขียนสร้างนิยายใหม่
+  WRITER_NOVEL_INFO_UPDATED = "writer_novel_info_updated",   // นักเขียนอัปเดตข้อมูลนิยาย
+  WRITER_NOVEL_PUBLISHED = "writer_novel_published",         // นักเขียนเผยแพร่นิยาย
+  WRITER_NOVEL_UNPUBLISHED = "writer_novel_unpublished",       // นักเขียนยกเลิกการเผยแพร่นิยาย
+  WRITER_NOVEL_DELETED = "writer_novel_deleted",           // นักเขียนลบนิยาย
+  WRITER_EPISODE_CREATED = "writer_episode_created",         // นักเขียนสร้างตอนใหม่
+  WRITER_EPISODE_UPDATED = "writer_episode_updated",         // นักเขียนอัปเดตตอน
+  WRITER_EPISODE_PUBLISHED = "writer_episode_published",       // นักเขียนเผยแพร่ตอน
+  WRITER_EPISODE_UNPUBLISHED = "writer_episode_unpublished",     // นักเขียนยกเลิกการเผยแพร่ตอน
+  WRITER_EPISODE_DELETED = "writer_episode_deleted",         // นักเขียนลบตอน
+  WRITER_APPLICATION_SUBMITTED = "writer_application_submitted", // สมัครเป็นนักเขียน
+  WRITER_DONATION_APPLICATION_SUBMITTED = "writer_donation_application_submitted", // สมัครขอเปิดรับบริจาค
+  WRITER_VIEWED_EARNING_STATS = "writer_viewed_earning_stats", // นักเขียนดูสถิติรายได้
+  WRITER_REQUESTED_PAYOUT = "writer_requested_payout",     // นักเขียนขอเบิกเงิน
 
-  // --- Content Interaction - Media Activities (CONTENT_MEDIA_) ---
-  CONTENT_MEDIA_VIEWED = "CONTENT_MEDIA_VIEWED", // ผู้ใช้ดูสื่อ (ภาพ, วิดีโอ, เสียง) ที่เกี่ยวข้องกับนิยายหรือแพลตฟอร์ม
-  CONTENT_MEDIA_DOWNLOADED = "CONTENT_MEDIA_DOWNLOADED", // ผู้ใช้ดาวน์โหลดสื่อ (ถ้ามีฟังก์ชันนี้)
+  // --- Monetization (Category: MONETIZATION) ---
+  USER_COIN_PACKAGE_PURCHASED = "user_coin_package_purchased", // ซื้อแพ็กเกจเหรียญ
+  USER_DONATED_TO_WRITER = "user_donated_to_writer",       // บริจาคให้นักเขียน
+  USER_REDEEMED_VOUCHER = "user_redeemed_voucher",         // ใช้ Voucher/Promo Code
+  USER_CLAIMED_ACHIEVEMENT_REWARD = "user_claimed_achievement_reward", // รับรางวัลจาก Achievement (เช่น เหรียญ)
 
-  // --- Social Interaction Activities (SOCIAL_) ---
-  SOCIAL_USER_FOLLOWED = "SOCIAL_USER_FOLLOWED", // ผู้ใช้ติดตามผู้ใช้อื่น
-  SOCIAL_USER_UNFOLLOWED = "SOCIAL_USER_UNFOLLOWED", // ผู้ใช้เลิกติดตามผู้ใช้อื่น
-  SOCIAL_NOVEL_FOLLOWED = "SOCIAL_NOVEL_FOLLOWED", // ผู้ใช้ติดตามนิยาย
-  SOCIAL_NOVEL_UNFOLLOWED = "SOCIAL_NOVEL_UNFOLLOWED", // ผู้ใช้เลิกติดตามนิยาย
-  SOCIAL_COMMENT_POSTED = "SOCIAL_COMMENT_POSTED", // ผู้ใช้แสดงความคิดเห็น (ในนิยาย, ตอน, โปรไฟล์, หรืออื่นๆ)
-  SOCIAL_COMMENT_LIKED = "SOCIAL_COMMENT_LIKED", // ผู้ใช้กดถูกใจความคิดเห็น
-  SOCIAL_COMMENT_DELETED = "SOCIAL_COMMENT_DELETED", // ผู้ใช้ลบความคิดเห็น (ของตนเอง)
-  SOCIAL_REPLY_POSTED = "SOCIAL_REPLY_POSTED", // ผู้ใช้ตอบกลับความคิดเห็น
+  // --- Social (Category: SOCIAL) ---
+  USER_FOLLOWED_ANOTHER_USER = "user_followed_another_user", // ติดตามผู้ใช้อื่น
+  USER_UNFOLLOWED_ANOTHER_USER = "user_unfollowed_another_user", // เลิกติดตามผู้ใช้อื่น
+  USER_SENT_PRIVATE_MESSAGE = "user_sent_private_message",   // ส่งข้อความส่วนตัว (ถ้ามี)
+  USER_RECEIVED_PRIVATE_MESSAGE = "user_received_private_message", // ได้รับข้อความส่วนตัว (ถ้ามี)
+  USER_JOINED_COMMUNITY_GROUP = "user_joined_community_group", // เข้าร่วมกลุ่ม (ถ้ามี)
+  USER_LEFT_COMMUNITY_GROUP = "user_left_community_group",   // ออกจากกลุ่ม (ถ้ามี)
 
-  // --- Content Creation - Writer Activities (WRITER_CONTENT_) ---
-  WRITER_CONTENT_NOVEL_CREATED = "WRITER_CONTENT_NOVEL_CREATED", // นักเขียนสร้างนิยายใหม่
-  WRITER_CONTENT_NOVEL_UPDATED = "WRITER_CONTENT_NOVEL_UPDATED", // นักเขียนอัปเดตข้อมูลนิยาย
-  WRITER_CONTENT_NOVEL_PUBLISHED = "WRITER_CONTENT_NOVEL_PUBLISHED", // นักเขียนเผยแพร่นิยาย
-  WRITER_CONTENT_NOVEL_UNPUBLISHED = "WRITER_CONTENT_NOVEL_UNPUBLISHED", // นักเขียนยกเลิกการเผยแพร่นิยาย
-  WRITER_CONTENT_NOVEL_DELETED = "WRITER_CONTENT_NOVEL_DELETED", // นักเขียนลบนิยาย
-  WRITER_CONTENT_EPISODE_CREATED = "WRITER_CONTENT_EPISODE_CREATED", // นักเขียนสร้างตอนใหม่
-  WRITER_CONTENT_EPISODE_UPDATED = "WRITER_CONTENT_EPISODE_UPDATED", // นักเขียนอัปเดตตอน
-  WRITER_CONTENT_EPISODE_PUBLISHED = "WRITER_CONTENT_EPISODE_PUBLISHED", // นักเขียนเผยแพร่ตอน
-  WRITER_CONTENT_EPISODE_DELETED = "WRITER_CONTENT_EPISODE_DELETED", // นักเขียนลบตอน
-  WRITER_CONTENT_CHARACTER_CREATED = "WRITER_CONTENT_CHARACTER_CREATED", // นักเขียนสร้างตัวละครใหม่
-  WRITER_CONTENT_CHARACTER_UPDATED = "WRITER_CONTENT_CHARACTER_UPDATED", // นักเขียนอัปเดตตัวละคร
-  WRITER_CONTENT_CHARACTER_DELETED = "WRITER_CONTENT_CHARACTER_DELETED", // นักเขียนลบตัวละคร
-  WRITER_CONTENT_STORYMAP_UPDATED = "WRITER_CONTENT_STORYMAP_UPDATED", // นักเขียนอัปเดต Story Map
-  WRITER_CONTENT_MEDIA_UPLOADED = "WRITER_CONTENT_MEDIA_UPLOADED", // นักเขียนอัปโหลดสื่อ (ภาพ, เสียง)
-  WRITER_CONTENT_MEDIA_DELETED = "WRITER_CONTENT_MEDIA_DELETED", // นักเขียนลบสื่อ
-
-  // --- Monetization & Wallet Activities (FINANCE_) ---
-  FINANCE_COINS_PURCHASED = "FINANCE_COINS_PURCHASED", // ผู้ใช้ซื้อเหรียญ
-  FINANCE_COINS_SPENT_EPISODE = "FINANCE_COINS_SPENT_EPISODE", // ผู้ใช้ใช้เหรียญปลดล็อกตอน
-  FINANCE_COINS_SPENT_DONATION = "FINANCE_COINS_SPENT_DONATION", // ผู้ใช้ใช้เหรียญในการบริจาค
-  FINANCE_DONATION_MADE = "FINANCE_DONATION_MADE", // ผู้ใช้ทำการบริจาค (อาจเป็นเงินจริงหรือเหรียญ)
-  FINANCE_DONATION_RECEIVED = "FINANCE_DONATION_RECEIVED", // นักเขียนได้รับการบริจาค
-  FINANCE_EARNING_CLAIMED = "FINANCE_EARNING_CLAIMED", // นักเขียนถอนรายได้
-
-  // --- Gamification Activities (GAMIFICATION_) ---
-  GAMIFICATION_ACHIEVEMENT_UNLOCKED = "GAMIFICATION_ACHIEVEMENT_UNLOCKED", // ผู้ใช้ปลดล็อกความสำเร็จ
-  GAMIFICATION_BADGE_EARNED = "GAMIFICATION_BADGE_EARNED", // ผู้ใช้ได้รับเหรียญตรา
-  GAMIFICATION_DAILY_REWARD_CLAIMED = "GAMIFICATION_DAILY_REWARD_CLAIMED", // ผู้ใช้รับรางวัลล็อกอินรายวัน
-
-  // --- Search Activities (SEARCH_) ---
-  SEARCH_PERFORMED = "SEARCH_PERFORMED", // ผู้ใช้ทำการค้นหา
-
-  // --- Settings Activities (SETTINGS_) ---
-  SETTINGS_GENERAL_UPDATED = "SETTINGS_GENERAL_UPDATED", // ผู้ใช้อัปเดตการตั้งค่าทั่วไป
-  SETTINGS_THEME_CHANGED = "SETTINGS_THEME_CHANGED", // ผู้ใช้เปลี่ยนธีมการแสดงผล
-  SETTINGS_LANGUAGE_CHANGED = "SETTINGS_LANGUAGE_CHANGED", // ผู้ใช้เปลี่ยนภาษา
-  SETTINGS_NOTIFICATION_UPDATED = "SETTINGS_NOTIFICATION_UPDATED", // ผู้ใช้อัปเดตการตั้งค่าการแจ้งเตือน
-  SETTINGS_PRIVACY_UPDATED = "SETTINGS_PRIVACY_UPDATED", // ผู้ใช้อัปเดตการตั้งค่าความเป็นส่วนตัว
-
-  // --- Platform/System Activities (SYSTEM_) ---
-  SYSTEM_CONTENT_REPORTED = "SYSTEM_CONTENT_REPORTED", // ผู้ใช้รายงานเนื้อหา/ความคิดเห็นที่ไม่เหมาะสม
-  SYSTEM_ERROR_ENCOUNTERED = "SYSTEM_ERROR_ENCOUNTERED", // ระบบบันทึกข้อผิดพลาดที่ผู้ใช้ประสบ (สำหรับ debugging)
+  // --- Settings & Others (Category: SETTINGS / OTHER) ---
+  USER_NOTIFICATION_SETTINGS_UPDATED = "user_notification_settings_updated", // อัปเดตการตั้งค่าการแจ้งเตือน
+  USER_PRIVACY_SETTINGS_UPDATED = "user_privacy_settings_updated",     // อัปเดตการตั้งค่าความเป็นส่วนตัว
+  USER_SUBMITTED_CONTENT_REPORT = "user_submitted_content_report",   // รายงานเนื้อหา/ผู้ใช้
+  USER_SEARCHED_CONTENT = "user_searched_content",           // ค้นหาเนื้อหา (เก็บ query ใน details)
+  USER_VIEWED_NOTIFICATION = "user_viewed_notification",       // ผู้ใช้เปิดดูการแจ้งเตือน
+  OTHER_USER_ACTIVITY = "other_user_activity",             // กิจกรรมอื่นๆ ที่ไม่เข้าพวก
 }
 
-// ==================================
-// IActivityContext Interface Definition
-// ==================================
-// อินเทอร์เฟซสำหรับข้อมูลเพิ่มเติมที่เกี่ยวข้องกับกิจกรรม (Contextual Data)
-// ออกแบบให้มีความยืดหยุ่นและรองรับข้อมูลที่หลากหลายสำหรับการวิเคราะห์
-export interface IActivityContext {
-  // --- PII (Personal Identifiable Information) / Sensitive Data --- 
-  // **ข้อควรระวัง**: ข้อมูลส่วนนี้มีความละเอียดอ่อน ควรจัดการตามหลัก GDPR/PDPA
-  // เข้ารหัส, จำกัดการเข้าถึง, และระบุวัตถุประสงค์การใช้งานให้ชัดเจน
-  ipAddress?: string; // IP Address ของผู้ใช้ (เข้ารหัสเมื่อจัดเก็บ, ใช้สำหรับการ trace ปัญหา, วิเคราะห์ fraud)
-                      // ตัวอย่าง: (หลังเข้ารหัส) "$2b$10$Kqg..."
-  userAgent?: string; // User Agent ของเบราว์เซอร์/อุปกรณ์ (ใช้สำหรับการวิเคราะห์ platform, debug)
-                      // ตัวอย่าง: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ..."
-  location?: string; // ตำแหน่งทางภูมิศาสตร์โดยประมาณ (ประเทศ/เมือง) (ต้องได้รับความยินยอมจากผู้ใช้)
-                     // ตัวอย่าง: "Bangkok, Thailand"
-  sessionId?: string; // ID ของ session ปัจจุบันของผู้ใช้ (สำหรับเชื่อมโยงกิจกรรมใน session เดียวกัน)
-                      // ตัวอย่าง: "sess_abc123xyz789"
+/**
+ * @interface IActivityDetails
+ * @description โครงสร้างข้อมูลเพิ่มเติมสำหรับแต่ละประเภทกิจกรรม (ยืดหยุ่น)
+ *              ตัวอย่าง:
+ *              - `novel_episode_read`: { progressPercent: number, durationSeconds: number, deviceType: string }
+ *              - `user_profile_updated`: { updatedFields: string[], previousValues?: Record<string, any> }
+ *              - `user_login_failure`: { reason: string, attemptCount: number }
+ *              - `user_searched_content`: { query: string, resultCount: number, filters?: any }
+ */
+export interface IActivityDetails extends Record<string, any> {}
 
-  // --- Entity IDs (Foreign Keys to other models) ---
-  novelId?: Types.ObjectId; // ID ของนิยายที่เกี่ยวข้อง (อ้างอิง Novel model)
-  episodeId?: Types.ObjectId; // ID ของตอนที่เกี่ยวข้อง (อ้างอิง Episode model)
-  sceneId?: Types.ObjectId; // ID ของฉากที่เกี่ยวข้อง (อ้างอิง Scene model)
-  nodeId?: string; // ID ของ Node ใน StoryMap (สำหรับ CONTENT_READING_NODE_ENTERED)
-  choiceId?: Types.ObjectId; // ID ของตัวเลือกที่ผู้ใช้เลือก (อ้างอิง Choice model)
-  selectedChoiceId?: Types.ObjectId; // (สำหรับ CONTENT_READING_CHOICE_MADE) ID ของตัวเลือกที่ถูกเลือก
-  outcomeNodeId?: string; // (สำหรับ CONTENT_READING_CHOICE_MADE) ID ของ Node ปลายทางหลังจากการเลือก
-  commentId?: Types.ObjectId; // ID ของความคิดเห็นที่เกี่ยวข้อง (อ้างอิง Comment model)
-  ratingId?: Types.ObjectId; // ID ของการให้คะแนนที่เกี่ยวข้อง (อ้างอิง Rating model)
-  purchaseId?: Types.ObjectId; // ID ของการซื้อที่เกี่ยวข้อง (อ้างอิง Purchase model)
-  paymentId?: Types.ObjectId; // ID ของการชำระเงินที่เกี่ยวข้อง (อ้างอิง Payment model)
-  donationId?: Types.ObjectId; // ID ของการบริจาค (อ้างอิง Donation model)
-  targetUserId?: Types.ObjectId; // ID ของผู้ใช้เป้าหมาย (เช่น ผู้ที่ถูกติดตาม, ผู้เขียนนิยาย) (อ้างอิง User model)
-  achievementId?: Types.ObjectId; // ID ของความสำเร็จที่ปลดล็อก (อ้างอิง Achievement model)
-  badgeId?: Types.ObjectId; // ID ของเหรียญตราที่ได้รับ (อ้างอิง Badge model)
-  mediaId?: Types.ObjectId; // ID ของสื่อที่เกี่ยวข้อง (อ้างอิง Media หรือ OfficialMedia model)
-  characterId?: Types.ObjectId; // ID ของตัวละครที่เกี่ยวข้อง (อ้างอิง Character model)
+// ==================================================================================================
+// SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร ActivityHistory (IActivityHistory Document Interface)
+// ==================================================================================================
 
-  // --- Denormalized Data (for quick display/filtering, use judiciously) ---
-  novelTitle?: string; // ชื่อนิยาย (เก็บเพื่อความสะดวกในการแสดงผล log)
-  episodeTitle?: string; // ชื่อตอน
-  targetUsername?: string; // ชื่อผู้ใช้เป้าหมาย
-  commentTextSnippet?: string; // ส่วนหนึ่งของข้อความคอมเมนต์ (ไม่เกิน 100 ตัวอักษร)
-
-  // --- Activity Specific Values ---
-  coinsAmount?: number; // จำนวนเหรียญที่เกี่ยวข้อง (เช่น ซื้อ, ใช้จ่าย, ได้รับ)
-  realMoneyAmount?: number; // จำนวนเงินจริงที่เกี่ยวข้อง (เช่น ซื้อเหรียญ, บริจาค)
-  currency?: string; // สกุลเงิน (THB, USD)
-  value?: any; // ค่าใหม่ของสิ่งที่เปลี่ยนแปลง (เช่น theme="dark", privacyLevel=2)
-  previousValue?: any; // ค่าเดิมก่อนการเปลี่ยนแปลง (เช่น theme="light", privacyLevel=1)
-  durationSeconds?: number; // ระยะเวลาที่ใช้ในกิจกรรม (เช่น เวลาที่ใช้ในการอ่านตอน, ดูวิดีโอ)
-  platform?: "web" | "mobile_app_android" | "mobile_app_ios" | "api"; // แพลตฟอร์มที่เกิดกิจกรรม
-  
-  // --- Search Specific Context (for SEARCH_PERFORMED) ---
-  searchQuery?: string; // คำค้นหาที่ผู้ใช้ป้อน
-  searchFilters?: Record<string, any>; // ฟิลเตอร์ที่ใช้ในการค้นหา (เช่น { genre: "fantasy", status: "completed" })
-  searchResultCount?: number; // จำนวนผลลัพธ์ที่ได้จากการค้นหา
-
-  // --- Error Specific Context (for SYSTEM_ERROR_ENCOUNTERED) ---
-  errorCode?: string; // รหัสข้อผิดพลาด (ถ้ามี)
-  errorMessage?: string; // ข้อความข้อผิดพลาด (ส่วนหนึ่ง)
-
-  // --- Extensibility --- 
-  [key: string]: any; // สำหรับข้อมูล context อื่นๆ ที่อาจเพิ่มขึ้นในอนาคต (ควรใช้อย่างระมัดระวัง)
-}
-
-// ==================================
-// IActivityHistory Interface Definition
-// ==================================
+/**
+ * @interface IActivityHistory
+ * @extends Document (Mongoose Document)
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารประวัติกิจกรรมผู้ใช้ใน Collection "activityhistories"
+ * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร
+ * @property {Types.ObjectId | IUser} userId - ID ของผู้ใช้ที่ทำกิจกรรม (**จำเป็น**, อ้างอิง User model)
+ * @property {ActivityType} activityType - ประเภทของกิจกรรม (**จำเป็น**)
+ * @property {ActivityCategory} activityCategory - หมวดหมู่ของกิจกรรม (ได้มาจาก activityType, **จำเป็น**)
+ * @property {string} [description] - (Optional) คำอธิบายกิจกรรมที่สร้างโดยระบบ (human-readable, อาจจะ template-based)
+ * @property {Types.ObjectId | INovel} [novelId] - (Optional) ID ของนิยายที่เกี่ยวข้อง
+ * @property {Types.ObjectId | IEpisode} [episodeId] - (Optional) ID ของตอนที่เกี่ยวข้อง
+ * @property {Types.ObjectId | IComment} [commentId] - (Optional) ID ของความคิดเห็นที่เกี่ยวข้อง
+ * @property {Types.ObjectId | IUser} [targetUserId] - (Optional) ID ของผู้ใช้เป้าหมาย (เช่น ผู้ใช้ที่ถูกติดตาม, ผู้รับบริจาค)
+ * @property {Types.ObjectId | IPurchase} [purchaseId] - (Optional) ID ของการซื้อที่เกี่ยวข้อง
+ * @property {Types.ObjectId | IDonation} [donationId] - (Optional) ID ของการบริจาคที่เกี่ยวข้อง
+ * @property {Types.ObjectId | IPayment} [paymentId] - (Optional) ID ของการชำระเงินที่เกี่ยวข้อง
+ * @property {Types.ObjectId | IContentReport} [contentReportId] - (Optional) ID ของรายงานเนื้อหาที่เกี่ยวข้อง
+ * @property {string} [relatedEntityType] - (Optional) ชื่อ Model ของ Entity อื่นๆ ที่เกี่ยวข้อง (ถ้ามีนอกเหนือจากที่ระบุ)
+ * @property {Types.ObjectId | string} [relatedEntityId] - (Optional) ID ของ Entity อื่นๆ ที่เกี่ยวข้อง
+ * @property {IActivityDetails} [details] - (Optional) รายละเอียดเพิ่มเติมเฉพาะของกิจกรรมนั้นๆ
+ * @property {string} [ipAddress] - (Optional) IP Address ของผู้ใช้ (ควร Hash หรือ Anonymize บางส่วนเพื่อความเป็นส่วนตัว)
+ * @property {string} [userAgent] - (Optional) User Agent ของ browser/client
+ * @property {string} [deviceType] - (Optional) ประเภทอุปกรณ์ (เช่น "desktop", "mobile", "tablet")
+ * @property {string} [appVersion] - (Optional) เวอร์ชันของแอปพลิเคชัน (ถ้ามี)
+ * @property {Date} timestamp - เวลาที่เกิดกิจกรรม (**จำเป็น**, default: `Date.now`)
+ * @property {number} schemaVersion - เวอร์ชันของ schema (default: 1)
+ * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
+ * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
+ */
 export interface IActivityHistory extends Document {
   _id: Types.ObjectId;
-  user: Types.ObjectId; // ID ของผู้ใช้ที่ทำกิจกรรม (อ้างอิง User model)
-  activityType: ActivityType; // ประเภทของกิจกรรม (ใช้ Enum ที่กำหนดด้านบน)
-  timestamp: Date; // เวลาที่เกิดกิจกรรม (ควรเป็น UTC)
-  description?: string; // คำอธิบายกิจกรรมที่สร้างขึ้นโดยอัตโนมัติ (ภาษาไทย, สำหรับแสดงผล)
-  context?: IActivityContext; // ข้อมูลเพิ่มเติมที่เกี่ยวข้องกับกิจกรรม
-  isVisibleOnProfile: boolean; // กิจกรรมนี้แสดงบนหน้าโปรไฟล์ของผู้ใช้หรือไม่ (default: true)
-  createdAt: Date; // MongoDB จะสร้างให้โดยอัตโนมัติ
+  userId: Types.ObjectId | IUser;
+  activityType: ActivityType;
+  activityCategory: ActivityCategory;
+  description?: string;
+  novelId?: Types.ObjectId | INovel;
+  episodeId?: Types.ObjectId | IEpisode;
+  commentId?: Types.ObjectId | IComment;
+  targetUserId?: Types.ObjectId | IUser;
+  purchaseId?: Types.ObjectId | IPurchase;
+  donationId?: Types.ObjectId | IDonation;
+  paymentId?: Types.ObjectId | IPayment;
+  contentReportId?: Types.ObjectId | IContentReport;
+  relatedEntityType?: string;
+  relatedEntityId?: Types.ObjectId | string;
+  details?: IActivityDetails;
+  ipAddress?: string;
+  userAgent?: string;
+  deviceType?: string;
+  appVersion?: string;
+  timestamp: Date;
+  schemaVersion: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// ==================================
-// ActivityContextSchema Definition
-// ==================================
-const ActivityContextSchema = new Schema<IActivityContext>(
-  {
-    ipAddress: { type: String, select: false, comment: "IP Address ของผู้ใช้ (ควรเข้ารหัสก่อนจัดเก็บ)" },
-    userAgent: { type: String, select: false, comment: "User Agent ของ client (ควรเข้ารหัสบางส่วนหากจำเป็น)" },
-    location: { type: String, comment: "ตำแหน่งทางภูมิศาสตร์โดยประมาณ (เช่น 'ประเทศ, เมือง') ต้องได้รับความยินยอม" },
-    sessionId: { type: String, index: true, comment: "Session ID สำหรับติดตามกิจกรรมใน session เดียวกัน" },
-
-    novelId: { type: Schema.Types.ObjectId, ref: "Novel", index: true },
-    episodeId: { type: Schema.Types.ObjectId, ref: "Episode", index: true },
-    sceneId: { type: Schema.Types.ObjectId, ref: "Scene", index: true },
-    nodeId: { type: String, comment: "ID ของ Node ใน StoryMap" },
-    choiceId: { type: Schema.Types.ObjectId, ref: "Choice" },
-    selectedChoiceId: { type: Schema.Types.ObjectId, ref: "Choice", comment: "ID ของตัวเลือกที่ถูกเลือกในกิจกรรม CONTENT_READING_CHOICE_MADE" },
-    outcomeNodeId: { type: String, comment: "ID ของ Node ปลายทางหลังจากการเลือกใน CONTENT_READING_CHOICE_MADE" },
-    commentId: { type: Schema.Types.ObjectId, ref: "Comment", index: true },
-    ratingId: { type: Schema.Types.ObjectId, ref: "Rating" },
-    purchaseId: { type: Schema.Types.ObjectId, ref: "Purchase" },
-    paymentId: { type: Schema.Types.ObjectId, ref: "Payment" },
-    donationId: { type: Schema.Types.ObjectId, ref: "Donation" },
-    targetUserId: { type: Schema.Types.ObjectId, ref: "User", index: true },
-    achievementId: { type: Schema.Types.ObjectId, ref: "Achievement" },
-    badgeId: { type: Schema.Types.ObjectId, ref: "Badge" },
-    mediaId: { type: Schema.Types.ObjectId, ref: "Media" }, // หรือ OfficialMedia, พิจารณาตามการใช้งานจริง
-    characterId: { type: Schema.Types.ObjectId, ref: "Character" },
-
-    novelTitle: { type: String, trim: true, maxlength: 255, comment: "ชื่อนิยาย (denormalized)" },
-    episodeTitle: { type: String, trim: true, maxlength: 255, comment: "ชื่อตอน (denormalized)" },
-    targetUsername: { type: String, trim: true, maxlength: 100, comment: "ชื่อผู้ใช้เป้าหมาย (denormalized)" },
-    commentTextSnippet: { type: String, trim: true, maxlength: 100, comment: "ส่วนหนึ่งของข้อความคอมเมนต์ (denormalized)" },
-
-    coinsAmount: { type: Number, min: 0, comment: "จำนวนเหรียญที่เกี่ยวข้อง" },
-    realMoneyAmount: { type: Number, min: 0, comment: "จำนวนเงินจริงที่เกี่ยวข้อง" },
-    currency: { type: String, trim: true, uppercase: true, maxlength: 3, comment: "สกุลเงิน เช่น THB, USD" },
-    value: { type: Schema.Types.Mixed, comment: "ค่าใหม่ของสิ่งที่เปลี่ยนแปลง" },
-    previousValue: { type: Schema.Types.Mixed, comment: "ค่าเดิมก่อนการเปลี่ยนแปลง" },
-    durationSeconds: { type: Number, min: 0, comment: "ระยะเวลาที่ใช้ในกิจกรรม (วินาที)" },
-    platform: { type: String, enum: ["web", "mobile_app_android", "mobile_app_ios", "api"], comment: "แพลตฟอร์มที่เกิดกิจกรรม" },
-    
-    searchQuery: { type: String, trim: true, comment: "คำค้นหาที่ผู้ใช้ป้อน" },
-    searchFilters: { type: Schema.Types.Mixed, comment: "ฟิลเตอร์ที่ใช้ในการค้นหา (object)" },
-    searchResultCount: { type: Number, min: 0, comment: "จำนวนผลลัพธ์ที่ได้จากการค้นหา" },
-
-    errorCode: { type: String, comment: "รหัสข้อผิดพลาด (สำหรับ SYSTEM_ERROR_ENCOUNTERED)" },
-    errorMessage: { type: String, comment: "ข้อความข้อผิดพลาด (สำหรับ SYSTEM_ERROR_ENCOUNTERED)" },
-  },
-  { 
-    _id: false, 
-    strict: "throw", // ป้องกันการบันทึก field ที่ไม่ได้กำหนดใน schema นี้
-    comment: "Schema ย่อยสำหรับเก็บข้อมูล context ของกิจกรรม, strict: \"throw\" เพื่อความแม่นยำของข้อมูล"
-  }
-);
-
-// ==================================
-// ActivityHistorySchema Definition
-// ==================================
+// ==================================================================================================
+// SECTION: Schema หลักสำหรับ ActivityHistory (ActivityHistorySchema)
+// ==================================================================================================
 const ActivityHistorySchema = new Schema<IActivityHistory>(
   {
-    user: {
+    userId: {
       type: Schema.Types.ObjectId,
-      ref: "User", 
+      ref: "User",
       required: [true, "กรุณาระบุ ID ของผู้ใช้ (User ID is required)"],
       index: true,
-      comment: "ID ของผู้ใช้ที่ทำกิจกรรม"
     },
     activityType: {
       type: String,
-      enum: {
-        values: Object.values(ActivityType),
-        message: "ประเภทกิจกรรม '{VALUE}' ไม่ถูกต้อง กรุณาใช้ค่าจาก ActivityType enum ที่กำหนดไว้"
-      },
+      enum: Object.values(ActivityType),
       required: [true, "กรุณาระบุประเภทกิจกรรม (Activity type is required)"],
       index: true,
-      comment: "ประเภทของกิจกรรมที่เกิดขึ้น"
     },
-    timestamp: { 
-      type: Date, 
-      default: Date.now, 
-      required: [true, "กรุณาระบุเวลาที่เกิดกิจกรรม (Timestamp is required)"], 
-      index: true, 
-      comment: "เวลาที่เกิดกิจกรรม (ควรเป็น UTC)"
+    activityCategory: {
+      type: String,
+      enum: Object.values(ActivityCategory),
+      required: [true, "กรุณาระบุหมวดหมู่กิจกรรม (Activity category is required)"],
+      index: true,
     },
-    description: { 
-      type: String, 
-      trim: true, 
-      maxlength: [500, "คำอธิบายกิจกรรมต้องไม่เกิน 500 ตัวอักษร"], 
-      comment: "คำอธิบายกิจกรรมที่สร้างขึ้นโดยอัตโนมัติ (ภาษาไทย, สำหรับแสดงผล UI)"
-    },
-    context: {
-      type: ActivityContextSchema,
-      default: () => ({}),
-      comment: "ข้อมูลเพิ่มเติม (context) ที่เกี่ยวข้องกับกิจกรรม"
-    },
-    isVisibleOnProfile: { 
-      type: Boolean, 
-      default: true, 
-      comment: "กิจกรรมนี้จะแสดงบนหน้าโปรไฟล์ของผู้ใช้หรือไม่"
-    }, 
+    description: { type: String, trim: true, maxlength: [1000, "คำอธิบายกิจกรรมต้องไม่เกิน 1000 ตัวอักษร"] },
+    novelId: { type: Schema.Types.ObjectId, ref: "Novel", index: true, sparse: true },
+    episodeId: { type: Schema.Types.ObjectId, ref: "Episode", index: true, sparse: true },
+    commentId: { type: Schema.Types.ObjectId, ref: "Comment", index: true, sparse: true },
+    targetUserId: { type: Schema.Types.ObjectId, ref: "User", index: true, sparse: true },
+    purchaseId: { type: Schema.Types.ObjectId, ref: "Purchase", index: true, sparse: true },
+    donationId: { type: Schema.Types.ObjectId, ref: "Donation", index: true, sparse: true },
+    paymentId: { type: Schema.Types.ObjectId, ref: "Payment", index: true, sparse: true },
+    contentReportId: { type: Schema.Types.ObjectId, ref: "ContentReport", index: true, sparse: true },
+    relatedEntityType: { type: String, trim: true, maxlength: 100 },
+    relatedEntityId: { type: Schema.Types.Mixed, index: true, sparse: true }, // Can be ObjectId or String
+    details: { type: Schema.Types.Mixed, default: {} },
+    ipAddress: { type: String, trim: true, maxlength: 100 }, // Store hashed/anonymized if needed
+    userAgent: { type: String, trim: true, maxlength: 512 },
+    deviceType: { type: String, trim: true, maxlength: 50 },
+    appVersion: { type: String, trim: true, maxlength: 50 },
+    timestamp: { type: Date, default: Date.now, required: true, index: true },
+    schemaVersion: { type: Number, default: 1, min: 1 },
   },
   {
-    timestamps: { createdAt: true, updatedAt: false }, // เก็บเฉพาะ createdAt, ไม่ต้องการ updatedAt สำหรับ log
-    collection: "activityhistories", // ชื่อ collection ใน MongoDB
-    comment: "ตารางเก็บประวัติกิจกรรมทั้งหมดของผู้ใช้บนแพลตฟอร์ม"
+    timestamps: true, // createdAt, updatedAt
+    collection: "activityhistories", // ชื่อ collection ที่เหมาะสม
   }
 );
 
-// ----- Indexes เพิ่มเติม (พิจารณาตาม Query Patterns ที่ใช้บ่อย) -----
-ActivityHistorySchema.index({ user: 1, timestamp: -1 }, { comment: "สำหรับ query ประวัติกิจกรรมของผู้ใช้ เรียงตามเวลาล่าสุด" });
-ActivityHistorySchema.index({ user: 1, activityType: 1, timestamp: -1 }, { comment: "สำหรับ query กิจกรรมประเภทเฉพาะของผู้ใช้" });
-ActivityHistorySchema.index({ activityType: 1, timestamp: -1 }, { comment: "สำหรับ query กิจกรรมประเภทเฉพาะทั้งหมดในระบบ (สำหรับ admin/analytics)" });
-ActivityHistorySchema.index({ "context.novelId": 1, timestamp: -1 }, { comment: "สำหรับ query กิจกรรมที่เกี่ยวข้องกับนิยายเรื่องใดเรื่องหนึ่ง" });
-ActivityHistorySchema.index({ "context.episodeId": 1, timestamp: -1 });
-ActivityHistorySchema.index({ "context.targetUserId": 1, timestamp: -1 });
-ActivityHistorySchema.index({ timestamp: 1 }, { comment: "Index พื้นฐานบน timestamp, อาจมีประโยชน์สำหรับ time-range queries ทั่วไป" });
-// หมายเหตุ: หากมีข้อมูล activity ปริมาณมหาศาล อาจพิจารณาใช้ MongoDB Time-series collections ในอนาคต
+// ==================================================================================================
+// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
+// ==================================================================================================
 
-// ----- Static Methods -----
-// Method สำหรับสร้าง log กิจกรรมได้ง่ายขึ้นและมีความสอดคล้องกัน
-ActivityHistorySchema.statics.logActivity = async function (
-  params: {
-    userId: Types.ObjectId;
-    activityType: ActivityType;
-    context?: IActivityContext; // สามารถส่ง ipAddress, userAgent มาในนี้ได้เลย
-    description?: string; // ถ้าไม่ระบุ จะพยายามสร้างจาก activityType และ context
-    isVisibleOnProfile?: boolean;
+// Index หลักสำหรับการ query กิจกรรมล่าสุดของผู้ใช้
+ActivityHistorySchema.index({ userId: 1, timestamp: -1 }, { name: "ActivityHistoryByUserTimeIndex" });
+// Index สำหรับการ query ตามประเภทและหมวดหมู่กิจกรรม
+ActivityHistorySchema.index({ activityCategory: 1, activityType: 1, timestamp: -1 }, { name: "ActivityHistoryByTypeCategoryTimeIndex" });
+// Index สำหรับกิจกรรมที่เกี่ยวข้องกับนิยาย
+ActivityHistorySchema.index({ novelId: 1, activityType: 1, timestamp: -1 }, { sparse: true, name: "ActivityHistoryByNovelIndex" });
+// Index สำหรับกิจกรรมที่เกี่ยวข้องกับตอน
+ActivityHistorySchema.index({ episodeId: 1, activityType: 1, timestamp: -1 }, { sparse: true, name: "ActivityHistoryByEpisodeIndex" });
+// Index สำหรับการค้นหาตาม IP Address (ถ้ามีการใช้งานบ่อย และคำนึงถึงความเป็นส่วนตัว)
+ActivityHistorySchema.index({ ipAddress: 1, timestamp: -1 }, { sparse: true, name: "ActivityHistoryByIpAddressIndex" });
+
+// ==================================================================================================
+// SECTION: Helper Function (ฟังก์ชันช่วยในการกำหนด Category จาก Type)
+// ==================================================================================================
+
+/**
+ * @function getActivityCategory
+ * @description กำหนดหมวดหมู่ (ActivityCategory) โดยอัตโนมัติจากประเภทกิจกรรม (ActivityType)
+ * @param {ActivityType} activityType - ประเภทของกิจกรรม
+ * @returns {ActivityCategory} - หมวดหมู่ของกิจกรรม
+ */
+function getActivityCategory(activityType: ActivityType): ActivityCategory {
+  if (activityType.startsWith("USER_REGISTERED") || activityType.startsWith("USER_LOGIN") || activityType.startsWith("USER_LOGOUT") || activityType.startsWith("USER_PASSWORD_RESET") || activityType.startsWith("USER_EMAIL_VERIF") || activityType.startsWith("USER_SESSION")) {
+    return ActivityCategory.AUTHENTICATION;
   }
-): Promise<IActivityHistory> {
-  const { userId, activityType, context = {}, description, isVisibleOnProfile = true } = params;
+  if (activityType.startsWith("USER_PROFILE") || activityType.startsWith("USER_PASSWORD_CHANGED") || activityType.startsWith("USER_AVATAR") || activityType.startsWith("USER_COVER_IMAGE") || activityType.startsWith("USER_ACCOUNT_SETTINGS") || activityType.startsWith("USER_LINKED_SOCIAL") || activityType.startsWith("USER_UNLINKED_SOCIAL")) {
+    return ActivityCategory.PROFILE;
+  }
+  if (activityType.startsWith("NOVEL_") || activityType.startsWith("COMMENT_") || activityType.startsWith("LIBRARY_ITEM_") || activityType.startsWith("EPISODE_PURCHASED")) {
+    return ActivityCategory.CONTENT_INTERACTION;
+  }
+  if (activityType.startsWith("WRITER_")) {
+    return ActivityCategory.CONTENT_CREATION;
+  }
+  if (activityType.startsWith("USER_COIN_PACKAGE") || activityType.startsWith("USER_DONATED") || activityType.startsWith("USER_REDEEMED_VOUCHER") || activityType.startsWith("USER_CLAIMED_ACHIEVEMENT_REWARD")) {
+    return ActivityCategory.MONETIZATION;
+  }
+  if (activityType.startsWith("USER_FOLLOWED") || activityType.startsWith("USER_UNFOLLOWED") || activityType.startsWith("USER_SENT_PRIVATE") || activityType.startsWith("USER_RECEIVED_PRIVATE") || activityType.startsWith("USER_JOINED_COMMUNITY") || activityType.startsWith("USER_LEFT_COMMUNITY")) {
+    return ActivityCategory.SOCIAL;
+  }
+  if (activityType.startsWith("USER_NOTIFICATION_SETTINGS") || activityType.startsWith("USER_PRIVACY_SETTINGS") || activityType.startsWith("USER_SUBMITTED_CONTENT_REPORT") || activityType.startsWith("USER_SEARCHED") || activityType.startsWith("USER_VIEWED_NOTIFICATION")) {
+    return ActivityCategory.SETTINGS;
+  }
+  return ActivityCategory.OTHER;
+}
 
-  // TODO: Implement more sophisticated description generation based on activityType and context
-  // ตัวอย่างการสร้าง description อัตโนมัติ (ควรทำให้ครอบคลุมและเป็นภาษาไทยที่สละสลวย)
-  let autoDescription = description;
-  if (!autoDescription) {
-    switch (activityType) {
-      case ActivityType.ACCOUNT_USER_LOGGED_IN:
-        autoDescription = "ผู้ใช้เข้าสู่ระบบ";
-        break;
-      case ActivityType.CONTENT_READING_NOVEL_STARTED:
-        autoDescription = `เริ่มอ่านนิยาย${context.novelTitle ? ": '" + context.novelTitle + "'" : ""}`;
-        break;
-      case ActivityType.SOCIAL_COMMENT_POSTED:
-        autoDescription = `แสดงความคิดเห็น${context.novelTitle ? "ในนิยาย '" + context.novelTitle + "'" : (context.episodeTitle ? "ในตอน '" + context.episodeTitle + "'" : "")}`;
-        break;
-      // ... เพิ่ม case อื่นๆ ตามความเหมาะสม ...
-      default:
-        autoDescription = `ทำกิจกรรมประเภท: ${activityType}`;
+// ==================================================================================================
+// SECTION: Middleware (Mongoose Hooks)
+// ==================================================================================================
+
+// Middleware ก่อน save เพื่อกำหนด activityCategory โดยอัตโนมัติ
+ActivityHistorySchema.pre<IActivityHistory>("save", function (next) {
+  if (this.isModified("activityType") || this.isNew) {
+    this.activityCategory = getActivityCategory(this.activityType);
+  }
+  next();
+});
+
+// Middleware `post("save")` (ตัวอย่าง - ควรพิจารณา performance impact)
+// สามารถใช้ update `lastActiveAt` ของ User และนับจำนวน activity แต่ละประเภทได้
+// แต่การ update สถิติที่ซับซ้อนมากๆ ควรแยกไปทำใน background job หรือ service อื่นเพื่อไม่ให้กระทบ performance การ save activity
+ActivityHistorySchema.post<IActivityHistory>("save", async function(doc, next) {
+  try {
+    if (doc.userId) {
+      const UserModel = models.User || model<IUser>("User"); // Ensure User model is available
+      // Update last active timestamp for the user
+      await UserModel.findByIdAndUpdate(doc.userId, { 
+        "userProfile.lastActiveAt": doc.timestamp,
+        // $inc: { [`userProfile.stats.activityCounts.${doc.activityType}`]: 1 } // Consider if this is too granular or impacts performance
+      });
+
+      // ตัวอย่างการอัปเดตสถิติอื่นๆ ที่ User model (ควรทำอย่างระมัดระวังเรื่อง performance)
+      // if (doc.activityType === ActivityType.COMMENT_POSTED) {
+      //   await UserModel.findByIdAndUpdate(doc.userId, { 
+      //     $inc: { "userProfile.stats.totalCommentsPosted": 1 }
+      //   });
+      // }
     }
+  } catch (error) {
+    console.error("Error in ActivityHistory post-save hook:", error);
+    // ไม่ควร throw error ที่นี่ เพราะจะทำให้ save operation หลัก fail
+    // ควร log error และดำเนินการต่อ หรือมีระบบ retry ที่เหมาะสม
   }
+  next();
+});
 
-  const activity = new this({
-    user: userId,
-    activityType,
-    timestamp: new Date(), // เวลาปัจจุบัน (UTC)
-    context,
-    description: autoDescription,
-    isVisibleOnProfile,
-  });
-  return activity.save();
-};
+// ==================================================================================================
+// SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
+// ==================================================================================================
 
-// ----- Model Export -----
-const ActivityHistoryModel = () => 
-  models.ActivityHistory as mongoose.Model<IActivityHistory, {}, {}, {}, mongoose.Schema<IActivityHistory>> || 
+// ตรวจสอบว่า Model "ActivityHistory" ถูกสร้างไปแล้วหรือยัง ถ้ายัง ให้สร้าง Model ใหม่
+const ActivityHistoryModel =
+  (models.ActivityHistory as mongoose.Model<IActivityHistory>) ||
   model<IActivityHistory>("ActivityHistory", ActivityHistorySchema);
 
 export default ActivityHistoryModel;
 
-// ----- Privacy & Security Notes -----
-/**
- * การจัดการข้อมูลส่วนบุคคล (PII) และข้อมูลละเอียดอ่อน:
- * 1. IP Address (context.ipAddress): 
- *    - วัตถุประสงค์: ใช้สำหรับการตรวจสอบความปลอดภัย, ป้องกันการใช้งานที่ไม่เหมาะสม (fraud detection), และการแก้ไขปัญหาทางเทคนิค (debugging) 
- *    - การจัดเก็บ: ควรเข้ารหัส (hashing หรือ encryption) ก่อนจัดเก็บเสมอ ไม่ควรเก็บเป็น plain text
- *    - การเข้าถึง: จำกัดการเข้าถึงเฉพาะผู้ดูแลระบบหรือทีมที่เกี่ยวข้องเท่านั้น
- *    - การแสดงผล: ห้ามแสดงผล IP Address แก่ผู้ใช้ทั่วไปหรือในส่วนสาธารณะ
- * 2. User Agent (context.userAgent):
- *    - วัตถุประสงค์: ใช้สำหรับการวิเคราะห์แพลตฟอร์มที่ผู้ใช้ใช้งาน (เช่น web, mobile), การปรับปรุง UI/UX, และการแก้ไขปัญหาทางเทคนิค
- *    - การจัดเก็บ: อาจพิจารณาเก็บข้อมูลบางส่วนหรือเข้ารหัสหากมีความกังวลเรื่องความเป็นส่วนตัว
- * 3. Location (context.location):
- *    - วัตถุประสงค์: ใช้สำหรับการปรับเนื้อหาให้เข้ากับท้องถิ่น (localization), การวิเคราะห์ทางสถิติ, หรือการตลาด (ต้องได้รับความยินยอมชัดเจน)
- *    - การจัดเก็บ: เก็บในระดับที่ไม่ละเอียดจนเกินไป (เช่น ประเทศ, เมือง) และต้องได้รับความยินยอมจากผู้ใช้ก่อนเสมอ (opt-in)
- * 4. Session ID (context.sessionId):
- *    - วัตถุประสงค์: ใช้สำหรับเชื่อมโยงกิจกรรมต่างๆ ที่เกิดขึ้นภายใน session การใช้งานเดียวกันของผู้ใช้ เพื่อการวิเคราะห์พฤติกรรมหรือการแก้ไขปัญหา
- *    - การจัดเก็บ: สามารถเก็บเป็น plain text ได้ แต่ควรมีมาตรการป้องกันการเข้าถึงโดยไม่ได้รับอนุญาต
- *
- * การปฏิบัติตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล (เช่น GDPR, PDPA):
- * - กำหนดนโยบายความเป็นส่วนตัว (Privacy Policy) ที่ชัดเจนและแจ้งให้ผู้ใช้ทราบเกี่ยวกับการเก็บรวบรวมและใช้งานข้อมูลกิจกรรม
- * - ให้สิทธิ์ผู้ใช้ในการเข้าถึง, แก้ไข, หรือลบข้อมูลส่วนบุคคลของตนเอง (subject access rights)
- * - ออกแบบระบบให้รองรับการลบข้อมูลตามคำขอ (right to be forgotten) โดยคำนึงถึงผลกระทบต่อข้อมูล analytics
- * - มีมาตรการรักษาความปลอดภัยของข้อมูลที่เหมาะสมเพื่อป้องกันการรั่วไหลหรือการเข้าถึงโดยไม่ได้รับอนุญาต
- */
-
+// ==================================================================================================
+// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
+// ==================================================================================================
+// 1.  **Data Volume & Retention**: ActivityHistory สามารถมีขนาดใหญ่มาก ควรมีนโยบายการเก็บรักษาข้อมูล (Retention Policy)
+//     เช่น เก็บ log ล่าสุด 6-12 เดือนใน hot storage และ archive log ที่เก่ากว่าไปยัง cold storage หรือทำการ aggregate.
+// 2.  **Performance**: การเขียน ActivityHistory ไม่ควรส่งผลกระทบต่อ performance ของ critical path.
+//     พิจารณาใช้ message queue (เช่น RabbitMQ, Kafka) สำหรับการเขียน log แบบ asynchronous หากระบบมี traffic สูงมาก.
+// 3.  **Granularity of `details`**: `activityDetails` มีความยืดหยุ่นสูง แต่ควรมีการกำหนดโครงสร้างที่ชัดเจนสำหรับแต่ละ `activityType`
+//     เพื่อให้ง่ายต่อการ query และวิเคราะห์ข้อมูลในภายหลัง (อาจจะสร้าง sub-interfaces สำหรับ details ของแต่ละ type).
+// 4.  **Privacy**: `ipAddress` และ `userAgent` ควรจัดการอย่างระมัดระวังตามนโยบายความเป็นส่วนตัว (เช่น Anonymization, Hashing).
+// 5.  **Use Cases**: ข้อมูลนี้สามารถใช้สำหรับ:
+//     - แสดง "ประวัติกิจกรรมล่าสุด" ให้ผู้ใช้
+//     - Admin ใช้ตรวจสอบพฤติกรรม
+//     - ข้อมูลดิบสำหรับ Recommendation Engine
+//     - ข้อมูลดิบสำหรับ Analytics (Reading, Earning, User Engagement)
+//     - Triggering other system events (เช่น Achievements, Notifications)
+// 6.  **Aggregation**: สำหรับการวิเคราะห์ที่ซับซ้อน อาจจะต้องมีการสร้าง aggregated views หรือ collections เป็นระยะ
+//     เพื่อลดภาระในการ query collection ใหญ่โดยตรง.
+// 7.  **Error Handling in Hooks**: การจัดการ error ใน Mongoose hooks (เช่น post-save) ควรทำอย่างระมัดระวัง
+//     เพื่อไม่ให้กระทบต่อ operation หลัก และควรมีการ logging ที่ดี.
+// ==================================================================================================

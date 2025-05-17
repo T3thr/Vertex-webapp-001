@@ -1,357 +1,388 @@
-// src/models/StoryMap.ts
-// โมเดลแผนผังเนื้อเรื่อง (StoryMap Model) - จัดการโครงสร้างการเชื่อมโยงของฉาก, ตอน, และกลไกเกม
-// ออกแบบใหม่เพื่อรองรับ Visual Novel Editor ระดับโปร, Non-linear storytelling, และ Game Mechanics ที่ซับซ้อน
-// อัปเดตล่าสุด: เพิ่ม Node Types, Game Mechanics Config, Editor Settings, และรายละเอียดสำหรับ UI Editor
+// src/backend/models/StoryMap.ts
+// โมเดลแผนผังเนื้อเรื่อง (StoryMap Model)
+// จัดการโครงสร้าง, ความเชื่อมโยงของฉาก (Scenes), ทางเลือก (Choices), ตัวแปร, และเงื่อนไขต่างๆ ใน Visual Novel
+// เน้นความยืดหยุ่นสำหรับผู้เขียน, การรองรับการวิเคราะห์, และประสิทธิภาพ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 
-// ----- Interfaces สำหรับ Game Mechanics Configuration -----
+// ==================================================================================================
+// SECTION: Enums และ Types ที่ใช้ในโมเดล StoryMap
+// ==================================================================================================
 
-// การตั้งค่าค่าพลัง/สถานะ (เช่น HP, MP, Sanity)
-export interface IDefinedStat {
-  id: string; // ID เฉพาะภายใน StoryMap (เช่น "player_hp", "sanity_level")
-  name: string; // ชื่อที่แสดงใน UI (เช่น "พลังชีวิต", "ระดับสติ")
-  description?: string; // คำอธิบาย
-  initialValue: number; // ค่าเริ่มต้น
-  minValue?: number; // ค่าต่ำสุด (default: 0)
-  maxValue?: number; // ค่าสูงสุด
-  iconUrl?: string; // URL ไอคอนสำหรับแสดงผล
-  color?: string; // สีสำหรับ UI (เช่น สีของแถบพลัง)
-  uiDisplay?: { // การตั้งค่าการแสดงผลใน UI เกม
-    type: "bar" | "number" | "hearts" | "custom";
-    position?: "top_left" | "top_right" | "bottom_left" | "bottom_right" | "hidden";
-    customComponent?: string; // ชื่อ custom component (ถ้า type = "custom")
-  };
-  onMinReachedEffectNodeId?: string; // ID ของ Node ที่จะทำงานเมื่อค่าถึง Min (เช่น Game Over)
-  onMaxReachedEffectNodeId?: string; // ID ของ Node ที่จะทำงานเมื่อค่าถึง Max (ถ้ามี)
+/**
+ * @enum {string} StoryMapNodeType
+ * @description ประเภทของโหนด (Node) ในแผนผังเนื้อเรื่อง (StoryMap)
+ * - `scene_node`: โหนดที่แทนฉากปกติ (อ้างอิง Scene model)
+ * - `choice_node`: โหนดที่แทนกลุ่มของตัวเลือก (Choices) ที่ผู้เล่นต้องเลือก (อาจจะอ้างอิง Choice model หรือเก็บ Choice IDs โดยตรง)
+ * - `branch_point_node`: โหนดที่เป็นจุดเริ่มต้นของแขนงเรื่องราว (อาจมีเงื่อนไขในการเข้าถึง)
+ * - `merge_point_node`: โหนดที่เป็นจุดรวมของแขนงเรื่องราวหลายเส้นทาง
+ * - `ending_node`: โหนดที่แทนฉากจบของเนื้อเรื่อง (อาจมีหลายแบบ)
+ * - `variable_modifier_node`: โหนดที่ใช้สำหรับการตั้งค่าหรือเปลี่ยนแปลงค่าตัวแปรของเรื่องราว (Story Variables)
+ * - `conditional_logic_node`: โหนดที่ใช้สำหรับการตรวจสอบเงื่อนไขและเปลี่ยนเส้นทางตามผลลัพธ์ (เช่น IF-ELSE)
+ * - `event_trigger_node`: โหนดที่ใช้สำหรับกระตุ้นเหตุการณ์พิเศษ (เช่น ปลดล็อก Achievement, เล่น Cutscene พิเศษ)
+ * - `comment_node`: โหนดสำหรับผู้เขียนใส่หมายเหตุหรือคำอธิบายใน StoryMap Editor (ไม่ส่งผลต่อเกม)
+ * - `start_node`: โหนดพิเศษที่เป็นจุดเริ่มต้นของนิยายเรื่องนี้
+ * - `custom_logic_node`: โหนดสำหรับตรรกะที่ซับซ้อนที่กำหนดโดยผู้เขียน (อาจใช้ script)
+ */
+export enum StoryMapNodeType {
+  SCENE_NODE = "scene_node",
+  CHOICE_NODE = "choice_node", // อาจจะเก็บ array of choiceIds ที่มาจาก Scene นั้นๆ
+  BRANCH_POINT_NODE = "branch_point_node",
+  MERGE_POINT_NODE = "merge_point_node",
+  ENDING_NODE = "ending_node",
+  VARIABLE_MODIFIER_NODE = "variable_modifier_node",
+  CONDITIONAL_LOGIC_NODE = "conditional_logic_node",
+  EVENT_TRIGGER_NODE = "event_trigger_node",
+  COMMENT_NODE = "comment_node",
+  START_NODE = "start_node",
+  CUSTOM_LOGIC_NODE = "custom_logic_node",
 }
 
-// การตั้งค่าความสัมพันธ์กับตัวละคร
-export interface IDefinedRelationship {
-  targetCharacterId: Types.ObjectId; // ID ของตัวละครเป้าหมาย (อ้างอิง Character model)
-  relationshipType?: string; // ประเภทความสัมพันธ์ (default: "affinity", เช่น "friendship", "romance", "rivalry")
-  name: string; // ชื่อความสัมพันธ์ที่แสดงใน UI (เช่น "ความสนิทกับ Alice")
-  initialValue?: number; // ค่าเริ่มต้น (default: 0)
-  minValue?: number; // ค่าต่ำสุด (default: -100)
-  maxValue?: number; // ค่าสูงสุด (default: 100)
-  iconUrl?: string;
-  stages?: { // ขั้นของความสัมพันธ์
-    threshold: number; // ค่าที่ต้องถึงเพื่อเข้าสู่ขั้นนี้
-    label: string; // ชื่อขั้น (เช่น "เพื่อนสนิท", "ศัตรูคู่อาฆาต")
-    description?: string;
-    uiColor?: string;
-  }[];
+/**
+ * @enum {string} StoryVariableDataType
+ * @description ประเภทข้อมูลของตัวแปรในเนื้อเรื่อง (Story Variable)
+ * - `boolean`: ค่าตรรกะ (true/false)
+ * - `number`: ค่าตัวเลข (จำนวนเต็มหรือทศนิยม)
+ * - `string`: ค่าข้อความ
+ * - `character_status`: สถานะพิเศษของตัวละคร (เช่น "is_angry", "has_item_X")
+ * - `relationship_level`: ระดับความสัมพันธ์ (อาจเป็นตัวเลข หรือ enum เช่น "friendly", "hostile")
+ */
+export enum StoryVariableDataType {
+  BOOLEAN = "boolean",
+  NUMBER = "number",
+  STRING = "string",
+  CHARACTER_STATUS = "character_status", // อาจจะต้องมี targetCharacterId
+  RELATIONSHIP_LEVEL = "relationship_level", // อาจจะต้องมี targetCharacterId1, targetCharacterId2
 }
 
-// การตั้งค่าไอเทมใน Inventory
-export interface IDefinedItem {
-  itemId: string; // ID เฉพาะของไอเทมภายใน StoryMap
-  name: string; // ชื่อไอเทม
-  description?: string; // คำอธิบาย
-  iconUrl?: string; // URL ไอคอน
-  stackable?: boolean; // ซ้อนทับกันได้หรือไม่ (default: false)
-  maxStack?: number; // จำนวนสูงสุดที่ซ้อนได้ (default: 1 ถ้า stackable, 99 หรืออื่นๆ)
-  isUsable?: boolean; // ใช้ได้หรือไม่ (default: false)
-  isConsumable?: boolean; // ใช้แล้วหมดไปหรือไม่ (default: true ถ้า isUsable)
-  useEffectNodeId?: string; // ID ของ Node ที่จะทำงานเมื่อใช้ไอเทม (ถ้า isUsable)
-  attributes?: Record<string, any>; // คุณสมบัติเพิ่มเติม (เช่น { "damage": 10, "heals": true, "keyItem": true })
-  price?: number; // ราคาซื้อ (ถ้ามีร้านค้าในเกม)
-  sellPrice?: number; // ราคาขาย
+/**
+ * @interface IStoryVariableDefinition
+ * @description การกำหนดตัวแปรที่ใช้ในเนื้อเรื่อง (สำหรับทั้ง Novel)
+ * @property {string} variableName - ชื่อตัวแปร (ต้อง unique ภายใน Novel)
+ * @property {StoryVariableDataType} dataType - ประเภทข้อมูลของตัวแปร
+ * @property {any} initialValue - ค่าเริ่มต้นของตัวแปร
+ * @property {string} [description] - คำอธิบายตัวแปร (สำหรับ Editor)
+ * @property {any[]} [allowedValues] - (Optional) รายการค่าที่เป็นไปได้ (สำหรับ enum หรือ string ที่จำกัด)
+ */
+export interface IStoryVariableDefinition {
+  variableName: string;
+  dataType: StoryVariableDataType;
+  initialValue: any;
+  description?: string;
+  allowedValues?: any[];
 }
+const StoryVariableDefinitionSchema = new Schema<IStoryVariableDefinition>(
+  {
+    variableName: { type: String, required: true, trim: true, maxlength: [100, "ชื่อตัวแปรยาวเกินไป"] },
+    dataType: { type: String, enum: Object.values(StoryVariableDataType), required: true },
+    initialValue: { type: Schema.Types.Mixed, required: true },
+    description: { type: String, trim: true, maxlength: [500, "คำอธิบายตัวแปรยาวเกินไป"] },
+    allowedValues: [{ type: Schema.Types.Mixed }],
+  },
+  { _id: false }
+);
 
-// การตั้งค่าสกุลเงินในเกม
-export interface IDefinedCurrency {
-  id: string; // ID เฉพาะของสกุลเงิน (เช่น "gold_coins", "gems")
-  name: string; // ชื่อสกุลเงิน
-  iconUrl?: string; // URL ไอคอน
-  initialAmount?: number; // จำนวนเริ่มต้น (default: 0)
-  canBePurchasedWithRealMoney?: boolean; // ซื้อด้วยเงินจริงได้หรือไม่ (เชื่อมโยงกับระบบ IAP)
-}
+// ==================================================================================================
+// SECTION: อินเทอร์เฟซสำหรับ Node และ Edge ใน StoryMap
+// ==================================================================================================
 
-// การตั้งค่า Global Flags
-export interface IGlobalFlag {
-  flagId: string; // ID เฉพาะของ Flag
-  description?: string; // คำอธิบาย Flag นี้ใช้ทำอะไร
-  initialValue?: boolean; // ค่าเริ่มต้น (default: false)
-}
-
-// อินเทอร์เฟซสำหรับ Game Mechanics Configuration ทั้งหมดใน StoryMap
-export interface IGameMechanicsConfig {
-  definedStats?: IDefinedStat[];
-  definedRelationships?: IDefinedRelationship[];
-  inventoryConfig?: {
-    isEnabled: boolean;
-    maxSlots?: number;
-    definedItems?: IDefinedItem[];
-  };
-  currencySystem?: {
-    isEnabled: boolean;
-    currencies?: IDefinedCurrency[];
-  };
-  globalFlags?: IGlobalFlag[];
-  // สามารถเพิ่มระบบอื่นๆ เช่น Quest System, Skill System ได้ในอนาคต
-  // questSystemConfig?: { isEnabled: boolean; definedQuests?: any[] };
-  startNodeId?: string; // ID ของ Node เริ่มต้นสำหรับ Game Logic (สำคัญมาก)
-}
-
-// ----- Interfaces สำหรับ Nodes และ Edges -----
-
-// ประเภทของ Node ที่รองรับ
-export type StoryMapNodeType = 
-  | "episode_start" // เริ่มต้นตอน
-  | "scene_direct"  // แสดงฉากโดยตรง (อ้างอิง Scene ID)
-  | "choice_hub"    // จุดตัดสินใจของผู้เล่น
-  | "condition_branch" // แตกแขนงตามเงื่อนไข
-  | "variable_manipulation" // เปลี่ยนแปลงค่าตัวแปร, stat, item, currency, flag
-  | "timeline_event" // ควบคุมเหตุการณ์บน Timeline ของฉาก (เช่น ตัวละครปรากฏ, เสียง)
-  | "minigame_trigger" // เริ่ม Mini-game
-  | "novel_end"     // จุดจบของนิยาย (หรือส่วนย่อย)
-  | "note"          // โน้ตสำหรับผู้เขียนใน Editor
-  | "group"         // จัดกลุ่ม Nodes ใน Editor
-  | "loop_start"    // เริ่ม Loop
-  | "loop_end"      // จบ Loop
-  | "jump_to_node"  // ข้ามไปยัง Node อื่น
-  | "parallel_start" // เริ่มการทำงานแบบขนาน (ถ้าแพลตฟอร์มรองรับ)
-  | "parallel_end";  // สิ้นสุดการทำงานแบบขนาน
-
-// เนื้อหาสำหรับ Node ประเภท "choice_hub"
-export interface IChoiceNodeContent {
-  choices: {
-    choiceId: string; // ID เฉพาะของตัวเลือกภายใน Node นี้
-    text: string; // ข้อความที่แสดงให้ผู้เล่นเลือก
-    targetNodeId?: string; // ID ของ Node ปลายทางถ้าเลือกตัวเลือกนี้ (อาจใช้ output port แทน)
-    outputPortId?: string; // ID ของ Output Port ที่เชื่อมกับตัวเลือกนี้
-    condition?: string; // เงื่อนไขที่ตัวเลือกนี้จะปรากฏ (เช่น "player.has_item("key_A")")
-    isHiddenUntilConditionMet?: boolean; // ซ่อนตัวเลือกจนกว่าเงื่อนไขจะถูกปลดล็อก
-    action?: string; // Action ที่จะเกิดทันทีเมื่อเลือก (เช่น "player.gain_item("potion")")
-    uiPresentation?: { // การตั้งค่า UI ของตัวเลือก
-      buttonStyle?: string; // CSS class หรือ style object
-      positionOnScreen?: string; // ตำแหน่งบนหน้าจอ
-      displayIcon?: string; // URL ไอคอน
-    };
-    autoSelectAfterSeconds?: number; // เลือกอัตโนมัติหลังจากเวลาที่กำหนด (วินาที)
-  }[];
-  prompt?: string; // คำถามหรือข้อความนำก่อนตัวเลือก
-}
-
-// เนื้อหาสำหรับ Node ประเภท "variable_manipulation"
-export interface IVariableManipulationNodeContent {
-  operations: {
-    target: "stat" | "relationship" | "item" | "currency" | "flag" | "custom_variable";
-    targetId: string; // ID ของ stat, relationship (characterId), item, currency, flag, custom variable
-    relationshipType?: string; // สำหรับ target="relationship"
-    operation: "set" | "add" | "subtract" | "toggle" | "push_to_array" | "remove_from_array";
-    value?: any; // ค่าที่จะใช้ในการดำเนินการ (number, boolean, string, object)
-    valueFromVariable?: string; // ดึงค่ามาจากตัวแปรอื่น
-  }[];
-}
-
-// เนื้อหาสำหรับ Node ประเภท "condition_branch"
-export interface IConditionBranchNodeContent {
-  conditions: {
-    conditionId: string; // ID เฉพาะของเงื่อนไข
-    logic: string; // Logic ในการประเมิน (เช่น "player.stat("hp") > 50 && player.flag("met_npc_A")")
-    outputPortId: string; // ID ของ Output Port ที่จะทำงานถ้าเงื่อนไขเป็นจริง
-    priority?: number; // ลำดับความสำคัญในการตรวจสอบ (ถ้ามีหลายเงื่อนไข)
-  }[];
-  defaultOutputPortId?: string; // ID ของ Output Port ที่จะทำงานถ้าไม่มีเงื่อนไขใดเป็นจริง
-}
-
-// อินเทอร์เฟซสำหรับ Node ใน StoryMap
+/**
+ * @interface IStoryMapNode
+ * @description โหนด (Node) หนึ่งรายการในแผนผังเนื้อเรื่อง
+ * @property {string} nodeId - ID เฉพาะของโหนดนี้ (เช่น UUID, **ต้อง unique ภายใน StoryMap เดียวกัน**)
+ * @property {StoryMapNodeType} nodeType - ประเภทของโหนด
+ * @property {string} title - ชื่อหรือป้ายกำกับของโหนด (สำหรับแสดงใน Editor)
+ * @property {Types.ObjectId} [sceneId] - ID ของ Scene ที่โหนดนี้อ้างอิงถึง (ถ้า nodeType เป็น `scene_node` หรือ `ending_node`)
+ * @property {Types.ObjectId[]} [choiceIds] - IDs ของ Choices ที่เกี่ยวข้องกับโหนดนี้ (ถ้า nodeType เป็น `choice_node`)
+ * @property {object} position - ตำแหน่งของโหนดใน StoryMap Editor (สำหรับวาดแผนผัง)
+ * @property {number} position.x - พิกัด X
+ * @property {number} position.y - พิกัด Y
+ * @property {any} [nodeSpecificData] - ข้อมูลเฉพาะสำหรับประเภทโหนดนั้นๆ (เช่น script สำหรับ `conditional_logic_node`, ตัวแปรที่จะแก้ไขสำหรับ `variable_modifier_node`)
+ * @property {string} [notesForAuthor] - หมายเหตุสำหรับผู้เขียน (ไม่แสดงในเกม)
+ * @property {string[]} [authorDefinedEmotionTags] - แท็กอารมณ์ที่ผู้เขียนกำหนดสำหรับโหนดนี้ (เช่น "tension", "relief", "mystery")
+ * @property {number} [authorDefinedPsychologicalImpact] - ค่าผลกระทบทางจิตวิทยาที่ผู้เขียนกำหนด (อาจเป็นบวก/ลบ หรือ scale อื่นๆ)
+ * @property {Date} [lastEdited] - วันที่แก้ไขโหนดนี้ล่าสุด
+ */
 export interface IStoryMapNode {
-  _id: string; // ID ของ Node (ใช้ custom string ID ที่ unique ภายใน StoryMap, เช่น UUID)
-  nodeType: StoryMapNodeType; // ประเภทของ Node
-  title?: string; // ชื่อ Node (สำหรับแสดงผลใน editor)
-  position: { x: number; y: number }; // ตำแหน่งของ Node บน Canvas (สำหรับ editor)
-  size?: { width: number; height: number }; // ขนาดของ Node (สำหรับ editor)
-  
-  // Content specific to nodeType
-  content?: IChoiceNodeContent | IVariableManipulationNodeContent | IConditionBranchNodeContent | { 
-    sceneId?: Types.ObjectId; // สำหรับ scene_direct (อ้างอิง Scene model)
-    episodeId?: Types.ObjectId; // สำหรับ episode_start (อ้างอิง Episode model)
-    novelEndTitle?: string; // สำหรับ novel_end
-    noteText?: string; // สำหรับ note
-    targetNodeId?: string; // สำหรับ jump_to_node
-    // ... other specific content fields
-  };
-
-  // Input/Output Ports (สำหรับเชื่อมโยง Edges ใน Editor)
-  inputPorts?: { portId: string; name?: string; maxConnections?: number }[];
-  outputPorts?: { portId: string; name?: string; maxConnections?: number }[];
-
-  // Metadata สำหรับ Editor
-  metadata?: {
-    colorCoding?: string; // สีสำหรับโหนดใน Editor
-    layerGroup?: string; // สำหรับการจัดกลุ่มโหนดใน Editor ที่ซับซ้อน
-    editorNotes?: string; // โน้ตสำหรับผู้เขียนเอง ไม่แสดงผลในเกม
-    uiStyles?: Record<string, any>; // สไตล์ UI เฉพาะของโหนดใน Editor (เช่น ขนาดตัวอักษร)
-    icon?: string; // ไอคอนสำหรับ Node ใน Editor
-  };
-  customData?: Record<string, any>; // ข้อมูลเพิ่มเติมสำหรับ Node
+  nodeId: string;
+  nodeType: StoryMapNodeType;
+  title: string;
+  sceneId?: Types.ObjectId; // Ref to Scene.ts
+  choiceIds?: Types.ObjectId[]; // Ref to Choice.ts
+  position: { x: number; y: number };
+  nodeSpecificData?: any; // โครงสร้างขึ้นอยู่กับ nodeType
+  notesForAuthor?: string;
+  authorDefinedEmotionTags?: string[];
+  authorDefinedPsychologicalImpact?: number;
+  lastEdited?: Date;
 }
+const StoryMapNodeSchema = new Schema<IStoryMapNode>(
+  {
+    nodeId: { type: String, required: [true, "Node ID is required"], trim: true, maxlength: [100, "Node ID is too long"] },
+    nodeType: { type: String, enum: Object.values(StoryMapNodeType), required: [true, "Node type is required"] },
+    title: { type: String, required: [true, "Node title is required"], trim: true, maxlength: [255, "Node title is too long"] },
+    sceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
+    choiceIds: [{ type: Schema.Types.ObjectId, ref: "Choice" }],
+    position: {
+      x: { type: Number, required: true, default: 0 },
+      y: { type: Number, required: true, default: 0 },
+      _id: false,
+    },
+    nodeSpecificData: { type: Schema.Types.Mixed },
+    notesForAuthor: { type: String, trim: true, maxlength: [2000, "Author notes are too long"] },
+    authorDefinedEmotionTags: [{ type: String, trim: true, lowercase: true, maxlength: [50, "Emotion tag is too long"] }],
+    authorDefinedPsychologicalImpact: { type: Number },
+    lastEdited: { type: Date, default: Date.now },
+  },
+  { _id: false } // ไม่สร้าง _id สำหรับ subdocument นี้
+);
 
-// อินเทอร์เฟซสำหรับ Edge (การเชื่อมโยง) ใน StoryMap
+/**
+ * @interface IStoryMapEdge
+ * @description เส้นเชื่อม (Edge) ระหว่างโหนดสองโหนดในแผนผังเนื้อเรื่อง
+ * @property {string} edgeId - ID เฉพาะของเส้นเชื่อมนี้ (เช่น UUID, **ต้อง unique ภายใน StoryMap เดียวกัน**)
+ * @property {string} sourceNodeId - ID ของโหนดต้นทาง
+ * @property {string} targetNodeId - ID ของโหนดปลายทาง
+ * @property {Types.ObjectId} [triggeringChoiceId] - ID ของ Choice ที่ทำให้เกิดการเปลี่ยนผ่านตามเส้นเชื่อมนี้ (ถ้ามี)
+ * @property {string} [label] - ป้ายกำกับของเส้นเชื่อม (สำหรับแสดงใน Editor, เช่น "ถ้าเลือก A", "ถ้าค่า X > 10")
+ * @property {string} [conditionScript] - Script เงื่อนไข (JavaScript expression) ที่ต้องเป็นจริงเพื่อให้เส้นเชื่อมนี้สามารถใช้งานได้ (สำหรับ dynamic branching)
+ * @property {number} [priority] - ลำดับความสำคัญของเส้นเชื่อม (ถ้ามีหลายเส้นเชื่อมออกจากโหนดเดียวกันและเงื่อนไขซ้อนทับกัน)
+ * @property {any} [edgeSpecificData] - ข้อมูลเฉพาะสำหรับเส้นเชื่อมนี้
+ * @property {string[]} [authorDefinedEmotionTags] - แท็กอารมณ์ที่ผู้เขียนกำหนดสำหรับเส้นเชื่อมนี้ (เช่น อารมณ์ของการเปลี่ยนผ่าน)
+ * @property {number} [authorDefinedPsychologicalImpact] - ค่าผลกระทบทางจิตวิทยาที่ผู้เขียนกำหนดสำหรับเส้นเชื่อมนี้
+ */
 export interface IStoryMapEdge {
-  _id: string; // ID ของ Edge (ใช้ custom string ID ที่ unique ภายใน StoryMap, เช่น UUID)
-  sourceNodeId: string; // ID ของ Node ต้นทาง
-  sourceOutputPortId?: string; // ID ของ Output Port ต้นทาง
-  targetNodeId: string; // ID ของ Node ปลายทาง
-  targetInputPortId?: string; // ID ของ Input Port ปลายทาง
-  label?: string; // ป้ายกำกับสำหรับ Edge
-  edgeType?: "default" | "conditional_true" | "conditional_false" | "choice_outcome" | "timeout" | "interrupt"; // ประเภทของ Edge
-  conditions?: { // เงื่อนไขที่ Edge นี้จะ Active (ถ้า edgeType เป็น conditional)
-    logic: string;
-    priority?: number;
-  }[];
-  metadata?: { // ข้อมูลเพิ่มเติมสำหรับ Edge ใน Editor
-    color?: string;
-    thickness?: number;
-    style?: "solid" | "dashed" | "dotted";
-    arrowhead?: "default" | "circle" | "none";
-    transitionEffect?: string; // เช่น "fadeIn", "slideLeft" (สำหรับการเปลี่ยนฉาก/โหนด)
-    soundEffectOnTransition?: Types.ObjectId; // อ้างอิง Media หรือ OfficialMedia
-  };
-  customData?: Record<string, any>; // ข้อมูลเพิ่มเติมสำหรับ Edge
+  edgeId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  triggeringChoiceId?: Types.ObjectId; // Ref to Choice.ts
+  label?: string;
+  conditionScript?: string; // e.g., "variables.karma > 10 && variables.hasMagicKey === true"
+  priority?: number;
+  edgeSpecificData?: any;
+  authorDefinedEmotionTags?: string[];
+  authorDefinedPsychologicalImpact?: number;
 }
+const StoryMapEdgeSchema = new Schema<IStoryMapEdge>(
+  {
+    edgeId: { type: String, required: [true, "Edge ID is required"], trim: true, maxlength: [100, "Edge ID is too long"] },
+    sourceNodeId: { type: String, required: [true, "Source Node ID is required"], trim: true },
+    targetNodeId: { type: String, required: [true, "Target Node ID is required"], trim: true },
+    triggeringChoiceId: { type: Schema.Types.ObjectId, ref: "Choice" },
+    label: { type: String, trim: true, maxlength: [255, "Edge label is too long"] },
+    conditionScript: { type: String, trim: true, maxlength: [5000, "Condition script is too long"] },
+    priority: { type: Number, default: 0 },
+    edgeSpecificData: { type: Schema.Types.Mixed },
+    authorDefinedEmotionTags: [{ type: String, trim: true, lowercase: true, maxlength: [50, "Emotion tag is too long"] }],
+    authorDefinedPsychologicalImpact: { type: Number },
+  },
+  { _id: false } // ไม่สร้าง _id สำหรับ subdocument นี้
+);
 
-// อินเทอร์เฟซสำหรับ Group ใน StoryMap (เพื่อจัดระเบียบใน Editor)
-export interface IStoryMapGroup {
-  _id: string; // ID ของ Group
-  title?: string; // ชื่อ Group
-  nodeIds: string[]; // IDs ของ Nodes ที่อยู่ใน Group นี้
-  position: { x: number; y: number }; // ตำแหน่งของ Group บน Canvas
-  size: { width: number; height: number }; // ขนาดของ Group
-  color?: string; // สีพื้นหลังของ Group
-  metadata?: { editorNotes?: string };
-}
+// ==================================================================================================
+// SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร StoryMap (IStoryMap Document Interface)
+// ==================================================================================================
 
-// อินเทอร์เฟซหลักสำหรับเอกสารแผนผังเนื้อเรื่อง (StoryMap Document)
+/**
+ * @interface IStoryMap
+ * @extends Document (Mongoose Document)
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารแผนผังเนื้อเรื่องใน Collection "storymaps"
+ * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร StoryMap
+ * @property {Types.ObjectId} novelId - ID ของนิยายที่ StoryMap นี้เป็นส่วนหนึ่ง (อ้างอิง Novel model, **ต้อง unique**)
+ * @property {number} version - หมายเลขเวอร์ชันของ StoryMap นี้ (สำหรับการย้อนกลับหรือเปรียบเทียบ)
+ * @property {string} [description] - คำอธิบายภาพรวมของ StoryMap หรือเวอร์ชันนี้
+ * @property {Types.DocumentArray<IStoryMapNode>} nodes - รายการโหนดทั้งหมดในแผนผัง
+ * @property {Types.DocumentArray<IStoryMapEdge>} edges - รายการเส้นเชื่อมทั้งหมดในแผนผัง
+ * @property {string} startNodeId - ID ของโหนดที่เป็นจุดเริ่มต้นของเนื้อเรื่อง
+ * @property {Types.DocumentArray<IStoryVariableDefinition>} storyVariables - รายการตัวแปรทั้งหมดที่กำหนดไว้สำหรับใช้ในนิยายนี้
+ * @property {any} [editorMetadata] - ข้อมูล Meta สำหรับ StoryMap Editor (เช่น zoom level, view offset, grid settings)
+ * @property {Types.ObjectId} lastModifiedByUserId - ID ของผู้ใช้ที่แก้ไข StoryMap นี้ล่าสุด (อ้างอิง User model)
+ * @property {Date} lastPublishedAt - วันที่เผยแพร่ StoryMap เวอร์ชันนี้ล่าสุด (ถ้ามีระบบ publish แยก)
+ * @property {boolean} isActive - StoryMap เวอร์ชันนี้เป็นเวอร์ชันที่ใช้งานอยู่หรือไม่ (สำหรับกรณีที่มีหลายเวอร์ชัน)
+ * @property {Date} createdAt - วันที่สร้างเอกสาร StoryMap (Mongoose `timestamps`)
+ * @property {Date} updatedAt - วันที่อัปเดตเอกสาร StoryMap ล่าสุด (Mongoose `timestamps`)
+ */
 export interface IStoryMap extends Document {
   _id: Types.ObjectId;
-  novelId: Types.ObjectId; // นิยายที่เป็นเจ้าของแผนผังนี้ (อ้างอิง Novel model, unique one-to-one หรือ one-to-many ถ้า novel มีหลาย story map)
-  title: string; // ชื่อแผนผัง (เช่น "โครงเรื่องหลัก", "โครงเรื่องตัวละคร A")
-  description?: string; // คำอธิบายแผนผัง
-  
-  nodes: IStoryMapNode[]; // รายการ Nodes ทั้งหมดในแผนผัง (ใช้ _id เป็น string)
-  edges: IStoryMapEdge[]; // รายการ Edges ทั้งหมดในแผนผัง (ใช้ _id เป็น string)
-  groups?: IStoryMapGroup[]; // (Optional) รายการ Groups สำหรับจัดระเบียบใน Editor
-  
-  gameMechanicsConfig?: IGameMechanicsConfig; // การตั้งค่ากลไกเกมทั้งหมด
-  
-  // การตั้งค่าสำหรับ editor (เช่น viewport, zoom level ล่าสุด, grid settings)
-  editorSettings?: {
-    viewport?: { x: number; y: number; zoom: number };
+  novelId: Types.ObjectId;
+  version: number;
+  description?: string;
+  nodes: Types.DocumentArray<IStoryMapNode>;
+  edges: Types.DocumentArray<IStoryMapEdge>;
+  startNodeId: string;
+  storyVariables: Types.DocumentArray<IStoryVariableDefinition>;
+  editorMetadata?: {
+    zoomLevel?: number;
+    viewOffsetX?: number;
+    viewOffsetY?: number;
     gridSize?: number;
-    snapToGrid?: boolean;
-    showMinimap?: boolean;
-    // ... other editor preferences
+    showGrid?: boolean;
+    [key: string]: any; // For other editor-specific settings
   };
-  
-  // Metadata
-  version: number; // เวอร์ชันของแผนผัง (สำหรับการย้อนกลับหรือ history)
-  lastPublishedVersion?: number; // เวอร์ชันล่าสุดที่เผยแพร่ (ถ้ามีระบบ draft/publish)
-  status?: "draft" | "published" | "archived"; // สถานะของ StoryMap
-  
-  // Soft delete
-  isDeleted?: boolean;
-  deletedAt?: Date;
-
-  // Timestamps
+  lastModifiedByUserId: Types.ObjectId;
+  lastPublishedAt?: Date;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// ----- Schema Definitions (ย่อย) -----
-// ไม่ได้สร้างเป็น Mongoose Subdocument Schema โดยตรงในที่นี้
-// แต่จะถูก embed เป็น Plain Objects ใน StoryMapSchema หลัก
-// เพื่อความยืดหยุ่นในการ query และ update โดยตรงผ่าน dot notation
-// และเพื่อหลีกเลี่ยงปัญหา _id ของ subdocument ที่อาจไม่ตรงกับ custom string ID ที่ต้องการ
-
-// ----- Schema หลักสำหรับ StoryMap -----
+// ==================================================================================================
+// SECTION: Schema หลักสำหรับ StoryMap (StoryMapSchema)
+// ==================================================================================================
 const StoryMapSchema = new Schema<IStoryMap>(
   {
     novelId: {
       type: Schema.Types.ObjectId,
-      ref: "Novel",
-      required: true,
+      ref: "Novel", // อ้างอิง Novel.ts
+      required: [true, "กรุณาระบุ ID ของนิยาย (Novel ID is required)"],
+      unique: true, // หนึ่งนิยายควรมี StoryMap หลักเพียงอันเดียว (หรือจัดการเวอร์ชันด้วย field `version` และ `isActive`)
       index: true,
     },
-    title: {
-      type: String,
-      required: [true, "กรุณาระบุชื่อแผนผัง (StoryMap title is required)"],
-      trim: true,
-      maxlength: 255,
+    version: {
+      type: Number,
+      required: [true, "กรุณาระบุหมายเลขเวอร์ชัน (Version number is required)"],
+      default: 1,
+      min: [1, "หมายเลขเวอร์ชันต้องเป็นค่าบวก"],
     },
-    description: { type: String, trim: true, maxlength: 1000 },
-    
-    // Nodes, Edges, Groups จะเป็น Plain Objects ไม่ใช่ Mongoose Subdocuments
-    // เพื่อให้สามารถใช้ custom string IDs (_id) ได้ง่าย และ query/update ได้สะดวก
-    nodes: { type: [Object], default: [] }, 
-    edges: { type: [Object], default: [] },
-    groups: { type: [Object], default: [] },
-
-    gameMechanicsConfig: { type: Object },
-    editorSettings: { type: Object },
-    
-    version: { type: Number, default: 1, min: 1 },
-    lastPublishedVersion: { type: Number, min: 1 },
-    status: { type: String, enum: ["draft", "published", "archived"], default: "draft", index: true },
-    
-    isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: Date,
+    description: { type: String, trim: true, maxlength: [2000, "คำอธิบาย StoryMap ยาวเกินไป"] },
+    nodes: [StoryMapNodeSchema],
+    edges: [StoryMapEdgeSchema],
+    startNodeId: { type: String, required: [true, "กรุณาระบุ Node เริ่มต้น (Start Node ID is required)"], trim: true },
+    storyVariables: [StoryVariableDefinitionSchema],
+    editorMetadata: { type: Schema.Types.Mixed },
+    lastModifiedByUserId: {
+      type: Schema.Types.ObjectId,
+      ref: "User", // อ้างอิง User.ts
+      required: [true, "กรุณาระบุ ID ของผู้แก้ไขล่าสุด (Last modified by User ID is required)"],
+    },
+    lastPublishedAt: { type: Date },
+    isActive: { type: Boolean, default: true, index: true }, // ใช้สำหรับกรณีที่มีหลายเวอร์ชัน, ให้มี active ได้แค่ 1 ต่อ novel
   },
   {
-    timestamps: true, // createdAt, updatedAt
-    // Mongoose จะไม่สร้าง _id สำหรับ elements ใน nodes, edges, groups arrays โดยอัตโนมัติ
-    // เราจะจัดการ _id (ที่เป็น string) ของมันเองใน application logic
+    timestamps: true, // เพิ่ม createdAt และ updatedAt โดยอัตโนมัติ
+    toObject: { virtuals: true },
+    toJSON: { virtuals: true },
   }
 );
 
-// ----- Indexes -----
-StoryMapSchema.index({ novelId: 1, status: 1 });
-StoryMapSchema.index({ title: "text", description: "text" }); // สำหรับการค้นหา
+// ==================================================================================================
+// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
+// ==================================================================================================
 
-// ----- Middleware -----
-// อัปเดต version ของ StoryMap และ updatedAt ของ Novel เมื่อมีการเปลี่ยนแปลง
-StoryMapSchema.pre("save", async function (next) {
-  if (this.isModified() && !this.isNew) {
-    this.version = (this.version || 0) + 1; // Increment version on each save
-    
-    // อัปเดต Novel.updatedAt (เพื่อให้รู้ว่ามีการแก้ไขในส่วนของ story map)
-    // ควรพิจารณาว่าการแก้ไข StoryMap ทุกครั้งควร trigger Novel.updatedAt หรือไม่
-    // อาจจะ trigger เฉพาะเมื่อ status ของ StoryMap เปลี่ยนเป็น published
-    if (this.isModified("status") && this.status === "published") {
-        const Novel = models.Novel || model("Novel");
-        try {
-            await Novel.findByIdAndUpdate(this.novelId, { updatedAt: new Date() });
-        } catch (error) {
-            console.error(`Error updating Novel.updatedAt for storyMap ${this._id}:`, error);
-            // Consider how to handle this error, maybe log and continue
-        }
+// Compound index สำหรับการ query StoryMap ที่ active ของ novel หนึ่งๆ
+StoryMapSchema.index({ novelId: 1, isActive: 1 }, { name: "NovelActiveStoryMapIndex" });
+
+// Index สำหรับการ query ตามเวอร์ชัน (ถ้ามีการใช้งานบ่อย)
+StoryMapSchema.index({ novelId: 1, version: 1 }, { name: "NovelStoryMapVersionIndex" });
+
+// ==================================================================================================
+// SECTION: Middleware (Mongoose Hooks)
+// ==================================================================================================
+
+// Middleware: ก่อนบันทึก (save)
+StoryMapSchema.pre<IStoryMap>("save", async function (next) {
+  // 1. ตรวจสอบความ unique ของ nodeId และ edgeId ภายใน StoryMap เดียวกัน
+  if (this.isModified("nodes") && this.nodes) {
+    const nodeIds = this.nodes.map(node => node.nodeId);
+    const uniqueNodeIds = new Set(nodeIds);
+    if (nodeIds.length !== uniqueNodeIds.size) {
+      return next(new Error("รหัส Node ID ภายใน StoryMap ต้องไม่ซ้ำกัน (Node IDs must be unique within a StoryMap)."));
     }
   }
+  if (this.isModified("edges") && this.edges) {
+    const edgeIds = this.edges.map(edge => edge.edgeId);
+    const uniqueEdgeIds = new Set(edgeIds);
+    if (edgeIds.length !== uniqueEdgeIds.size) {
+      return next(new Error("รหัส Edge ID ภายใน StoryMap ต้องไม่ซ้ำกัน (Edge IDs must be unique within a StoryMap)."));
+    }
+
+    // 2. ตรวจสอบว่า sourceNodeId และ targetNodeId ของ Edges มีอยู่จริงใน Nodes
+    const allNodeIdsSet = new Set(this.nodes.map(node => node.nodeId));
+    for (const edge of this.edges) {
+      if (!allNodeIdsSet.has(edge.sourceNodeId)) {
+        return next(new Error(`Edge '${edge.edgeId}' มี sourceNodeId '${edge.sourceNodeId}' ที่ไม่มีอยู่จริงในรายการ Nodes.`));
+      }
+      if (!allNodeIdsSet.has(edge.targetNodeId)) {
+        return next(new Error(`Edge '${edge.edgeId}' มี targetNodeId '${edge.targetNodeId}' ที่ไม่มีอยู่จริงในรายการ Nodes.`));
+      }
+    }
+  }
+
+  // 3. ตรวจสอบว่า startNodeId มีอยู่จริงใน Nodes
+  if (this.isModified("startNodeId") || this.isModified("nodes")) {
+    if (this.startNodeId && this.nodes && !this.nodes.some(node => node.nodeId === this.startNodeId)) {
+      return next(new Error(`Start Node ID '${this.startNodeId}' ไม่พบในรายการ Nodes ของ StoryMap นี้`));
+    }
+  }
+
+  // 4. ตรวจสอบความ unique ของ variableName ใน storyVariables
+  if (this.isModified("storyVariables") && this.storyVariables) {
+    const varNames = this.storyVariables.map(v => v.variableName);
+    const uniqueVarNames = new Set(varNames);
+    if (varNames.length !== uniqueVarNames.size) {
+      return next(new Error("ชื่อตัวแปร (variableName) ใน storyVariables ต้องไม่ซ้ำกัน"));
+    }
+  }
+  
+  // 5. ถ้า StoryMap นี้ถูกตั้งค่าเป็น active, ตรวจสอบว่าไม่มี StoryMap อื่นของ Novel เดียวกันที่ active อยู่
+  if (this.isModified("isActive") && this.isActive) {
+    const StoryMapModelConst = models.StoryMap || model<IStoryMap>("StoryMap");
+    const existingActiveStoryMap = await StoryMapModelConst.findOne({
+      novelId: this.novelId,
+      isActive: true,
+      _id: { $ne: this._id } // ไม่ใช่ตัวมันเอง
+    });
+    if (existingActiveStoryMap) {
+      // Option 1: Throw error
+      return next(new Error(`นิยายเรื่องนี้ (Novel ID: ${this.novelId}) มี StoryMap ที่ active อยู่แล้ว (ID: ${existingActiveStoryMap._id}). กรุณาปิดการใช้งาน StoryMap อื่นก่อน`));
+      // Option 2: Deactivate other active story maps (use with caution)
+      // await StoryMapModelConst.updateMany({ novelId: this.novelId, _id: { $ne: this._id } }, { $set: { isActive: false } });
+    }
+  }
+
+  // อัปเดต lastEdited ของ nodes ที่มีการเปลี่ยนแปลง (ถ้าจำเป็น, อาจจะจัดการใน client-side editor)
+  // if (this.isModified("nodes")) {
+  //   this.nodes.forEach(node => {
+  //     if (node.isModified()) { // Mongoose subdocument isModified check
+  //       node.lastEdited = new Date();
+  //     }
+  //   });
+  // }
+
   next();
 });
 
-// ----- Validation (Custom) -----
-// ควรมีการ validate ความถูกต้องของ node IDs และ port IDs ใน edges และ groups
-// รวมถึงการ validate gameMechanicsConfig.startNodeId ว่ามีอยู่จริงใน nodes array
-// ซึ่งอาจทำใน application layer หรือ pre-save hook ที่ซับซ้อนขึ้น
+// Middleware: หลังจากบันทึก (save) เพื่ออัปเดตข้อมูลใน Novel (เช่น lastContentUpdatedAt)
+StoryMapSchema.post<IStoryMap>("save", async function (doc) {
+  try {
+    const NovelModel = models.Novel || model("Novel");
+    await NovelModel.findByIdAndUpdate(doc.novelId, { $set: { lastContentUpdatedAt: new Date() } });
+  } catch (error) {
+    console.error(`[StoryMapMiddlewareError] Failed to update Novel after saving StoryMap ${doc._id}:`, error);
+  }
+});
 
-// ----- Model Export -----
-const StoryMapModel = (
-  models.StoryMap as mongoose.Model<IStoryMap>
-) || model<IStoryMap>("StoryMap", StoryMapSchema);
+// ==================================================================================================
+// SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
+// ==================================================================================================
+
+// ตรวจสอบว่า Model "StoryMap" ถูกสร้างไปแล้วหรือยัง ถ้ายัง ให้สร้าง Model ใหม่
+const StoryMapModel = (models.StoryMap as mongoose.Model<IStoryMap>) || model<IStoryMap>("StoryMap", StoryMapSchema);
 
 export default StoryMapModel;
 
-// หมายเหตุการเปลี่ยนแปลงสำคัญ:
-// 1.  ใช้ Plain Objects สำหรับ nodes, edges, groups แทน Mongoose Subdocuments เพื่อให้สามารถใช้ custom string _id ได้
-//     และลดความซับซ้อนในการจัดการ _id ของ subdocument ที่ Mongoose สร้างอัตโนมัติ
-// 2.  เพิ่ม IGameMechanicsConfig อย่างละเอียด: definedStats, definedRelationships, inventoryConfig, currencySystem, globalFlags.
-// 3.  ขยาย StoryMapNodeType และเพิ่ม content interfaces (IChoiceNodeContent, IVariableManipulationNodeContent, IConditionBranchNodeContent).
-// 4.  เพิ่มรายละเอียดใน IStoryMapNode และ IStoryMapEdge สำหรับ UI Editor (ports, metadata, size, color, style).
-// 5.  เพิ่ม IStoryMapGroup สำหรับการจัดกลุ่มใน Editor.
-// 6.  เพิ่ม editorSettings, status (draft/published), lastPublishedVersion.
-// 7.  ปรับปรุง Middleware และ Index.
-// 8.  คอมเมนต์ภาษาไทยถูกเพิ่มและปรับปรุงให้ละเอียดขึ้น.
+// ==================================================================================================
+// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
+// ==================================================================================================
+// 1.  **Node/Edge ID Generation**: `nodeId` และ `edgeId` ควรมีระบบการสร้าง ID ที่ client-side (StoryMap Editor) เพื่อให้สามารถอ้างอิงได้ก่อนบันทึกลง DB (เช่น UUID v4).
+// 2.  **Condition Engine**: `conditionScript` ใน `IStoryMapEdge` ต้องการ Condition Engine ที่ robust ในฝั่ง backend (game runtime) เพื่อประมวลผลเงื่อนไขและเลือกเส้นทางที่ถูกต้อง.
+// 3.  **Variable Management**: `storyVariables` และการแก้ไขค่าตัวแปรผ่าน `variable_modifier_node` หรือ `ChoiceAction` ต้องการระบบจัดการตัวแปรที่มีประสิทธิภาพและตรวจสอบ type ได้.
+// 4.  **NodeSpecificData / EdgeSpecificData**: โครงสร้างของ field เหล่านี้ที่เป็น `Schema.Types.Mixed` ควรมีการกำหนด schema ย่อยที่ชัดเจนสำหรับแต่ละ `nodeType` หรือ `edgeType` (ถ้ามี) เพื่อ type safety ที่ดีขึ้น (อาจใช้ discriminators).
+// 5.  **Real-time Collaboration**: หากต้องการให้ผู้เขียนหลายคนแก้ไข StoryMap พร้อมกัน อาจจะต้องพิจารณาใช้ CRDTs หรือ locking mechanism.
+// 6.  **Performance for Large Maps**: สำหรับ StoryMap ที่มีขนาดใหญ่มาก (หลายพันโหนด/เส้นเชื่อม) การ query, การ render ใน editor, และการประมวลผลในเกมต้องคำนึงถึง performance.
+// 7.  **Import/Export**: ควรมีฟังก์ชันสำหรับ import/export StoryMap ในรูปแบบมาตรฐาน (เช่น JSON, GraphML) เพื่อความยืดหยุ่นและการทำงานร่วมกับเครื่องมืออื่น.
+// 8.  **Visual Editor Integration**: การออกแบบ schema นี้ควรคำนึงถึงการใช้งานจริงใน StoryMap Editor (เช่น การลากวาง, การเชื่อมโยง, การแก้ไขคุณสมบัติ).
+// 9.  **Versioning and Rollback**: ระบบ `version` และ `isActive` เป็นพื้นฐานสำหรับการจัดการเวอร์ชัน ควรมี UI และ logic ที่รองรับการดูประวัติ, เปรียบเทียบ, และย้อนกลับเวอร์ชัน.
+// 10. **Psychological Impact Path Analysis**: ข้อมูล `authorDefinedEmotionTags` และ `authorDefinedPsychologicalImpact` ในโหนดและเส้นเชื่อม สามารถนำมาใช้วิเคราะห์เส้นทางที่ผู้เล่นเลือกเดิน เพื่อประเมินผลกระทบทางอารมณ์/จิตใจสะสมได้.
+// ==================================================================================================
+

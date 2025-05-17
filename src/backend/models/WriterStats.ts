@@ -1,4 +1,4 @@
-// src/models/WriterStats.ts
+// src/backend//models/WriterStats.ts
 // โมเดลสถิตินักเขียน (WriterStats Model) - จัดเก็บข้อมูลสถิติที่เกี่ยวข้องกับผลงานและกิจกรรมของนักเขียนโดยเฉพาะ
 // ออกแบบให้เป็นส่วนหนึ่งของ User model (ผ่าน sub-document) หรือเป็น collection แยกที่อ้างอิง User._id
 // ในที่นี้จะออกแบบเป็น schema ที่สามารถนำไปใช้เป็น sub-document ใน User model ได้ เพื่อความสะดวกในการ query ข้อมูลนักเขียน

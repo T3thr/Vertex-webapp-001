@@ -1,154 +1,264 @@
-// src/models/ReadingAnalytic.ts
-// โมเดลการวิเคราะห์การอ่าน (ReadingAnalytic Model) - จัดเก็บข้อมูลการอ่านของผู้ใช้เพื่อการวิเคราะห์และสร้างคำแนะนำ
-// ออกแบบให้บันทึกกิจกรรมการอ่านอย่างละเอียด, ความชอบ, และพฤติกรรมของผู้ใช้
+// src/backend/models/ReadingAnalytic.ts
+// โมเดลโปรไฟล์การวิเคราะห์การอ่านของผู้ใช้ (User Reading Analytic Profile Model)
+// ทำหน้าที่เป็นศูนย์กลางสำหรับข้อมูลการวิเคราะห์ของผู้ใช้แต่ละคน โดยเชื่อมโยงไปยัง Event Streams และ Summaries ที่เกี่ยวข้อง
+// และเก็บสถานะการตั้งค่าการวิเคราะห์ระดับสูงของผู้ใช้
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import { IUser } from "./User"; // สำหรับ userId
+import { IReadingAnalytic_EventStream } from "./ReadingAnalytic_EventStream"; // สำหรับ eventStreamDocId
+import { IReadingAnalytic_Summary } from "./ReadingAnalytic_Summary"; // สำหรับ overallSummaryDocId
 
-// อินเทอร์เฟซสำหรับบันทึกเหตุการณ์การอ่าน (Reading Event)
-export interface IReadingEvent {
-  eventType: "start_novel" | "end_novel" | "start_episode" | "end_episode" | "read_scene" | "make_choice" | "pause_reading" | "resume_reading" | "rate_novel" | "comment_on_episode";
-  novel: Types.ObjectId; // นิยายที่เกี่ยวข้อง
-  episode?: Types.ObjectId; // ตอนที่เกี่ยวข้อง (ถ้ามี)
-  scene?: Types.ObjectId; // ฉากที่เกี่ยวข้อง (ถ้ามี)
-  choice?: Types.ObjectId; // ตัวเลือกที่เลือก (ถ้า eventType = "make_choice")
-  timestamp: Date; // เวลาที่เกิดเหตุการณ์
-  durationSeconds?: number; // ระยะเวลาของเหตุการณ์ (เช่น เวลาที่ใช้ในฉาก, เวลาที่ pause)
-  // ข้อมูลเพิ่มเติมตามประเภทเหตุการณ์
-  // เช่น choiceMade: { choiceId: Types.ObjectId, outcomeSceneId?: Types.ObjectId }
-  // เช่น ratingGiven: number
-  // เช่น scrollDepth?: number (สำหรับ scene)
-  // เช่น wordCountRead?: number (สำหรับ scene/episode)
-  sessionIdentifier?: string; // ID ของ session การอ่าน (ถ้าต้องการ group events)
+// ==================================================================================================
+// SECTION: Enums และ Types ที่ใช้ในโมเดล ReadingAnalytic (User Analytics Profile)
+// ==================================================================================================
+
+/**
+ * @enum {string} AnalyticsProcessingStatus
+ * @description สถานะการประมวลผลข้อมูลวิเคราะห์
+ * - `IDLE`: ไม่มีการประมวลผล
+ * - `PENDING`: รอการประมวลผล
+ * - `PROCESSING`: กำลังประมวลผล
+ * - `COMPLETED`: ประมวลผลสำเร็จ
+ * - `FAILED`: การประมวลผลล้มเหลว
+ */
+export enum AnalyticsProcessingStatus {
+  IDLE = "idle",
+  PENDING = "pending",
+  PROCESSING = "processing",
+  COMPLETED = "completed",
+  FAILED = "failed",
 }
 
-// อินเทอร์เฟซหลักสำหรับเอกสารการวิเคราะห์การอ่าน (ReadingAnalytic Document)
-// อาจมีหลายแนวทางในการออกแบบ: 1. เก็บ event stream ต่อผู้ใช้, 2. สรุปข้อมูลต่อผู้ใช้/นิยาย
-// แนวทางที่ 1: Event Stream (ละเอียดมาก, เหมาะสำหรับ ML, แต่อาจใหญ่)
-export interface IReadingAnalytic_EventStream extends Document {
-  _id: Types.ObjectId;
-  user: Types.ObjectId; // ผู้ใช้ (อ้างอิง User model หรือ SocialMediaUser model)
-  events: Types.DocumentArray<IReadingEvent>; // รายการเหตุการณ์การอ่าน
-  // อาจมีข้อมูลสรุปบางอย่างที่ update เป็นระยะ
-  lastEventAt: Date;
+/**
+ * @interface IAnalyticsConsentSnapshot
+ * @description ภาพรวมสถานะความยินยอมในการวิเคราะห์ข้อมูลของผู้ใช้ (Snapshot)
+ * @property {boolean} hasConsented - ผู้ใช้ให้ความยินยอมหรือไม่
+ * @property {Date} [consentLastUpdatedAt] - วันที่อัปเดตความยินยอมล่าสุด
+ * @property {string[]} [consentedPurposes] - วัตถุประสงค์ที่ผู้ใช้ยินยอม (เช่น " personalization", "mental_health_insights")
+ */
+export interface IAnalyticsConsentSnapshot {
+  hasConsented: boolean;
+  consentLastUpdatedAt?: Date;
+  consentedPurposes?: string[];
 }
-
-// แนวทางที่ 2: Aggregated User-Novel Reading Stats (สรุป, query ง่ายกว่าสำหรับบาง use case)
-// (ในที่นี้จะเน้น Event Stream ตามโจทย์ที่ต้องการความละเอียด แต่จะใส่โครงร่างของ Aggregated ไว้เป็นแนวคิด)
-/*
-export interface IUserNovelReadingSummary {
-  novel: Types.ObjectId;
-  totalTimeSpentSeconds: number;
-  episodesCompleted: number;
-  lastReadAt: Date;
-  averageReadingSpeedWPM?: number;
-  genresReadInNovel: string[]; // genres ของนิยายนี้ที่ผู้ใช้อ่าน
-  choicesMadeStats?: any; // สถิติตัวเลือกที่เคยเลือกในนิยายนี้
-  // ... more aggregated data
-}
-export interface IReadingAnalytic_Aggregated extends Document {
-  _id: Types.ObjectId;
-  user: Types.ObjectId;
-  overallReadingTimeSeconds: number;
-  novelsStarted: number;
-  novelsCompleted: number;
-  favoriteGenres: Array<{ genre: Types.ObjectId, readCount: number }>;
-  readingHabits: { // เช่น เวลาที่อ่านบ่อย, วันที่อ่านบ่อย
-    mostActiveHour?: number; // 0-23
-    mostActiveDayOfWeek?: number; // 0-6 (Sun-Sat)
-  };
-  novelSummaries: Types.DocumentArray<IUserNovelReadingSummary>;
-  lastUpdatedAt: Date;
-}
-*/
-
-// Schema ย่อยสำหรับ IReadingEvent (สำหรับแนวทาง Event Stream)
-const ReadingEventSchema = new Schema<IReadingEvent>(
+const AnalyticsConsentSnapshotSchema = new Schema<IAnalyticsConsentSnapshot>(
   {
-    eventType: {
-      type: String,
-      enum: ["start_novel", "end_novel", "start_episode", "end_episode", "read_scene", "make_choice", "pause_reading", "resume_reading", "rate_novel", "comment_on_episode"],
-      required: true,
-    },
-    novel: { type: Schema.Types.ObjectId, ref: "Novel", required: true, index: true },
-    episode: { type: Schema.Types.ObjectId, ref: "Episode", index: true },
-    scene: { type: Schema.Types.ObjectId, ref: "Scene", index: true },
-    choice: { type: Schema.Types.ObjectId, ref: "Choice" },
-    timestamp: { type: Date, required: true, default: Date.now, index: true },
-    durationSeconds: { type: Number, min: 0 },
-    sessionIdentifier: { type: String, trim: true, index: true },
+    hasConsented: { type: Boolean, required: true, default: false },
+    consentLastUpdatedAt: { type: Date },
+    consentedPurposes: [{ type: String, trim: true }],
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ sub-document นี้โดยอัตโนมัติ
+  { _id: false }
 );
 
-// Schema หลักสำหรับ ReadingAnalytic (Event Stream approach)
-const ReadingAnalyticSchema = new Schema<IReadingAnalytic_EventStream>(
+/**
+ * @interface IProcessingStatusDetails
+ * @description รายละเอียดสถานะการประมวลผลข้อมูล
+ * @property {AnalyticsProcessingStatus} eventStreamProcessingStatus - สถานะการประมวลผล Event Stream ล่าสุด
+ * @property {Date} [lastEventProcessedTimestamp] - Timestamp ของ Event ล่าสุดที่ประมวลผล
+ * @property {AnalyticsProcessingStatus} summaryAggregationStatus - สถานะการ Aggregate ข้อมูลสรุป ล่าสุด
+ * @property {Date} [lastSummaryAggregatedTimestamp] - Timestamp ของการ Aggregate ข้อมูลสรุปล่าสุด
+ */
+export interface IProcessingStatusDetails {
+  eventStreamProcessingStatus?: AnalyticsProcessingStatus;
+  lastEventProcessedTimestamp?: Date;
+  summaryAggregationStatus?: AnalyticsProcessingStatus;
+  lastSummaryAggregatedTimestamp?: Date;
+}
+const ProcessingStatusDetailsSchema = new Schema<IProcessingStatusDetails>(
   {
-    user: {
+    eventStreamProcessingStatus: { type: String, enum: Object.values(AnalyticsProcessingStatus), default: AnalyticsProcessingStatus.IDLE },
+    lastEventProcessedTimestamp: { type: Date },
+    summaryAggregationStatus: { type: String, enum: Object.values(AnalyticsProcessingStatus), default: AnalyticsProcessingStatus.IDLE },
+    lastSummaryAggregatedTimestamp: { type: Date },
+  },
+  { _id: false }
+);
+
+// ==================================================================================================
+// SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร ReadingAnalytic (IReadingAnalytic Document Interface)
+// ==================================================================================================
+
+/**
+ * @interface IReadingAnalytic
+ * @extends Document (Mongoose Document)
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารโปรไฟล์การวิเคราะห์การอ่านของผู้ใช้ใน Collection "readinganalytics"
+ *              ทำหน้าที่เป็น Hub เชื่อมโยงข้อมูลวิเคราะห์ต่างๆ ของผู้ใช้
+ * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร
+ * @property {Types.ObjectId | IUser} userId - ID ของผู้ใช้ (**จำเป็น**, อ้างอิง User model, unique)
+ * @property {Types.ObjectId | IReadingAnalytic_EventStream} [eventStreamDocId] - ID ของเอกสาร Event Stream ของผู้ใช้ (ถ้ามี)
+ * @property {Types.ObjectId | IReadingAnalytic_Summary} [overallUserSummaryDocId] - ID ของเอกสารสรุปข้อมูลการอ่านโดยรวมของผู้ใช้ (ถ้ามี, summaryForType: USER, timePeriod: ALL_TIME)
+ * @property {Date} [lastActivityAt] - Timestamp ของกิจกรรมการอ่านล่าสุดของผู้ใช้
+ * @property {IAnalyticsConsentSnapshot} analyticsConsentSnapshot - ภาพรวมสถานะความยินยอมในการวิเคราะห์ข้อมูล (ข้อมูลหลักอยู่ที่ User model)
+ * @property {IProcessingStatusDetails} processingStatus - สถานะการประมวลผลข้อมูลวิเคราะห์
+ * @property {boolean} personalizedRecommendationsEnabled - ผู้ใช้เปิดใช้งานการแนะนำส่วนบุคคลจากข้อมูลวิเคราะห์หรือไม่
+ * @property {Date} [profileLastVerifiedAt] - วันที่ตรวจสอบความถูกต้องของโปรไฟล์นี้ล่าสุด (เช่น ตรวจสอบว่า ref IDs ยังถูกต้อง)
+ * @property {number} schemaVersion - เวอร์ชันของ schema (สำหรับการจัดการการเปลี่ยนแปลง schema ในอนาคต)
+ * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
+ * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
+ */
+export interface IReadingAnalytic extends Document {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId | IUser;
+  eventStreamDocId?: Types.ObjectId | IReadingAnalytic_EventStream;
+  overallUserSummaryDocId?: Types.ObjectId | IReadingAnalytic_Summary;
+  lastActivityAt?: Date;
+  analyticsConsentSnapshot: IAnalyticsConsentSnapshot;
+  processingStatus: IProcessingStatusDetails;
+  personalizedRecommendationsEnabled: boolean;
+  profileLastVerifiedAt?: Date;
+  schemaVersion: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ==================================================================================================
+// SECTION: Schema หลักสำหรับ ReadingAnalytic (ReadingAnalyticSchema)
+// ==================================================================================================
+const ReadingAnalyticSchema = new Schema<IReadingAnalytic>(
+  {
+    userId: {
       type: Schema.Types.ObjectId,
-      ref: "User", // หรือ refPath เพื่อรองรับทั้ง User และ SocialMediaUser
-      required: true,
-      unique: true, // หนึ่ง document ต่อหนึ่งผู้ใช้ (ถ้าเป็น event stream ของผู้ใช้นั้นๆ)
+      ref: "User",
+      required: [true, "กรุณาระบุ User ID (User ID is required)"],
+      unique: true, // หนึ่งโปรไฟล์ต่อหนึ่งผู้ใช้
       index: true,
     },
-    events: [ReadingEventSchema],
-    lastEventAt: { type: Date, index: true },
+    eventStreamDocId: {
+      type: Schema.Types.ObjectId,
+      ref: "ReadingAnalytic_EventStream", // อ้างอิงไปยัง Model ที่อัปเกรดแล้ว
+      index: true,
+    },
+    overallUserSummaryDocId: {
+      type: Schema.Types.ObjectId,
+      ref: "ReadingAnalytic_Summary", // อ้างอิงไปยัง Model ที่อัปเกรดแล้ว
+      index: true,
+    },
+    lastActivityAt: { type: Date, index: true },
+    analyticsConsentSnapshot: { 
+      type: AnalyticsConsentSnapshotSchema,
+      required: [true, "กรุณาระบุข้อมูล Snapshot ของความยินยอม (Analytics consent snapshot is required)"],
+      default: () => ({ hasConsented: false }) 
+    },
+    processingStatus: { 
+      type: ProcessingStatusDetailsSchema,
+      required: [true, "กรุณาระบุสถานะการประมวลผล (Processing status is required)"],
+      default: () => ({}) 
+    },
+    personalizedRecommendationsEnabled: { 
+      type: Boolean, 
+      default: false 
+    },
+    profileLastVerifiedAt: { type: Date },
+    schemaVersion: { type: Number, default: 1, min: 1 },
   },
   {
-    timestamps: true, // createdAt, updatedAt (updatedAt จะเปลี่ยนเมื่อมี event ใหม่ หรือมีการแก้ไข)
-    // capped: { size: 1024 * 1024 * 100, max: 100000, autoIndexId: true } // พิจารณา Capped Collection ถ้า event stream ใหญ่มากและต้องการ FIFO
+    timestamps: true, // createdAt, updatedAt
+    collection: "readinganalytics", // ชื่อ collection ที่ชัดเจนสำหรับโปรไฟล์นี้
+    toObject: { virtuals: true },
+    toJSON: { virtuals: true },
   }
 );
 
-// ----- Indexes -----
-// Index สำหรับ query events ของผู้ใช้ตาม novel และ timestamp
-ReadingAnalyticSchema.index({ user: 1, "events.novel": 1, "events.timestamp": -1 });
-ReadingAnalyticSchema.index({ user: 1, lastEventAt: -1 }); // ผู้ใช้ที่มีกิจกรรมล่าสุด
-// Index สำหรับ query events ตามประเภท (ถ้ามีการ query บ่อย)
-// ReadingAnalyticSchema.index({ "events.eventType": 1, "events.timestamp": -1 });
+// ==================================================================================================
+// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
+// ==================================================================================================
 
-// ----- Middleware -----
-ReadingAnalyticSchema.pre("save", function (this: IReadingAnalytic_EventStream, next) {
-  if (this.events && this.events.length > 0) {
-    // เรียง events ตาม timestamp ล่าสุดก่อน save (ถ้าจำเป็น)
-    // this.events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    // หา timestamp ล่าสุดจาก events array
-    let latestTimestamp = new Date(0); // Initialize with a very old date
-    for (const event of this.events) {
-      if (event.timestamp > latestTimestamp) {
-        latestTimestamp = event.timestamp;
-      }
-    }
-    this.lastEventAt = latestTimestamp;
+// Index สำหรับการค้นหาตาม userId (unique อยู่แล้ว แต่ใส่เพื่อความชัดเจน)
+// ReadingAnalyticSchema.index({ userId: 1 }, { unique: true }); // Mongoose สร้างให้จาก unique: true ด้านบน
+
+// Index สำหรับการค้นหาผู้ใช้ที่มีกิจกรรมล่าสุด
+ReadingAnalyticSchema.index({ lastActivityAt: -1 }, { name: "UserLastActivityIndex" });
+
+// Index สำหรับการค้นหาผู้ใช้ที่เปิดใช้งานการแนะนำส่วนบุคคล
+ReadingAnalyticSchema.index({ personalizedRecommendationsEnabled: 1 }, { name: "PersonalizedRecommendationsIndex" });
+
+// ==================================================================================================
+// SECTION: Middleware (Mongoose Hooks)
+// ==================================================================================================
+
+ReadingAnalyticSchema.pre<IReadingAnalytic>("save", function (next) {
+  if (this.isNew) {
+    this.profileLastVerifiedAt = new Date();
   }
+  // สามารถเพิ่ม logic อื่นๆ เช่น การอัปเดต schemaVersion อัตโนมัติ
   next();
 });
 
-// ----- Static Methods (ตัวอย่าง) -----
-// เพิ่ม event ใหม่เข้าไปใน stream ของผู้ใช้
-ReadingAnalyticSchema.statics.addReadingEvent = async function (
-  userId: Types.ObjectId,
-  eventData: Omit<IReadingEvent, "timestamp">
-) {
-  const eventWithTimestamp: IReadingEvent = {
-    ...eventData,
-    timestamp: new Date(),
-  } as IReadingEvent;
+// ==================================================================================================
+// SECTION: Static Methods (เมธอดสำหรับ Model ReadingAnalytic)
+// ==================================================================================================
 
+/**
+ * @static findOrCreateProfile
+ * @description ค้นหาหรือสร้างโปรไฟล์การวิเคราะห์สำหรับผู้ใช้
+ * @param userId ID ของผู้ใช้
+ * @returns {Promise<IReadingAnalytic>} โปรไฟล์การวิเคราะห์ของผู้ใช้
+ */
+ReadingAnalyticSchema.statics.findOrCreateProfile = async function (
+  userId: Types.ObjectId
+): Promise<IReadingAnalytic> {
+  let profile = await this.findOne({ userId });
+  if (!profile) {
+    // ดึงข้อมูลความยินยอมเบื้องต้นจาก User model (ถ้าต้องการ)
+    // const UserModel = models.User as mongoose.Model<IUser>;
+    // const user = await UserModel.findById(userId).select("privacySettings.analyticsConsent").lean();
+    // const initialConsent = user?.privacySettings?.analyticsConsent || { hasConsented: false };
+
+    profile = new this({
+      userId: userId,
+      // analyticsConsentSnapshot: initialConsent, // ตั้งค่าจาก User model
+      // personalizedRecommendationsEnabled: user?.preferences?.personalizedRecommendationsEnabled || false,
+    });
+    await profile.save();
+  }
+  return profile;
+};
+
+/**
+ * @static updateLastActivity
+ * @description อัปเดตเวลาของกิจกรรมล่าสุดของผู้ใช้
+ * @param userId ID ของผู้ใช้
+ * @param activityTimestamp Timestamp ของกิจกรรม
+ * @returns {Promise<IReadingAnalytic | null>} โปรไฟล์ที่อัปเดตแล้ว
+ */
+ReadingAnalyticSchema.statics.updateLastActivity = async function (
+  userId: Types.ObjectId,
+  activityTimestamp: Date
+): Promise<IReadingAnalytic | null> {
   return this.findOneAndUpdate(
-    { user: userId },
-    {
-      $push: { events: { $each: [eventWithTimestamp], $slice: -1000 } }, // เก็บเฉพาะ 1000 events ล่าสุด (ปรับตามต้องการ)
-      $set: { lastEventAt: eventWithTimestamp.timestamp },
-      $setOnInsert: { user: userId, createdAt: new Date() } // สร้าง document ใหม่ถ้ายังไม่มี
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { userId },
+    { $set: { lastActivityAt: activityTimestamp } },
+    { new: true, upsert: false } // ไม่ควร upsert จาก method นี้, profile ควรมีอยู่แล้ว
   );
 };
 
-// ----- Model Export -----
-// การใช้ชื่อ Model นี้ต้องพิจารณาว่าข้อมูลจะถูก query และใช้งานอย่างไร
-// ถ้ามีระบบประมวลผล batch เพื่อสร้าง aggregated data, อาจมี model อีกตัวสำหรับ aggregated results
-const ReadingAnalyticModel = () => models.ReadingAnalytic as mongoose.Model<IReadingAnalytic_EventStream> || model<IReadingAnalytic_EventStream>("ReadingAnalytic", ReadingAnalyticSchema);
+// ==================================================================================================
+// SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
+// ==================================================================================================
+
+// ตรวจสอบว่า Model "ReadingAnalytic" ถูกสร้างไปแล้วหรือยัง ถ้ายัง ให้สร้าง Model ใหม่
+// ชื่อ Model ยังคงเป็น "ReadingAnalytic" ตามไฟล์เดิม แต่ schema และบทบาทได้ถูกปรับปรุงใหม่
+const ReadingAnalyticModel = 
+  (models.ReadingAnalytic as mongoose.Model<IReadingAnalytic>) ||
+  model<IReadingAnalytic>("ReadingAnalytic", ReadingAnalyticSchema);
 
 export default ReadingAnalyticModel;
 
+// ==================================================================================================
+// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
+// ==================================================================================================
+// 1.  **Role Clarification**: Model นี้ได้รับการปรับปรุงบทบาทให้เป็น "User Reading Analytic Profile"
+//     ทำหน้าที่เป็น Hub กลางสำหรับข้อมูลวิเคราะห์ของผู้ใช้, แตกต่างจาก `ReadingAnalytic_EventStreamModel`
+//     ที่เก็บ Event โดยละเอียด และ `ReadingAnalytic_SummaryModel` ที่เก็บข้อมูลสรุป.
+// 2.  **Data Consistency**: ข้อมูล `analyticsConsentSnapshot` และ `personalizedRecommendationsEnabled`
+//     ควรมีการซิงค์กับข้อมูลหลักใน `UserModel` อย่างสม่ำเสมอ หรือใช้เป็น snapshot ที่อัปเดตเมื่อมีการเปลี่ยนแปลงสำคัญ.
+// 3.  **Linking Documents**: การใช้ `eventStreamDocId` และ `overallUserSummaryDocId` เป็น ObjectId
+//     ช่วยให้สามารถ populate ข้อมูลที่เกี่ยวข้องได้เมื่อต้องการ.
+// 4.  **Processing Logic**: Logic ในการอัปเดต `processingStatus` และการเชื่อมโยงเอกสารต่างๆ
+//     (เช่น การสร้าง Event Stream หรือ Summary document แล้วนำ ID มาใส่ในโปรไฟล์นี้)
+//     จะต้องถูก implement ใน service layer ของแอปพลิเคชัน.
+// 5.  **Scalability**: สำหรับแพลตฟอร์มขนาดใหญ่, การ query และ update โปรไฟล์นี้ควรทำได้อย่างรวดเร็ว.
+//     Indexes ที่เหมาะสมมีความสำคัญ.
+// 6.  **Data Privacy**: การจัดการข้อมูลในโปรไฟล์นี้ต้องสอดคล้องกับนโยบายความเป็นส่วนตัวและ PDPA.
+//     ผู้ใช้ควรมีสิทธิ์ในการเข้าถึงและจัดการข้อมูลของตนเอง.
+// ==================================================================================================
