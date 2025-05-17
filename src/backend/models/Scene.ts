@@ -1,7 +1,6 @@
 // src/backend/models/Scene.ts
 // โมเดลฉากใน Visual Novel (Scene Model) - หัวใจหลักของ Visual Novel Editor แพลตฟอร์ม NovelMaze
 // เวอร์ชันปรับปรุง: เพิ่มความสามารถในการจัดการสถานะที่ซับซ้อน, UI elements, และ Timeline control ที่ละเอียดขึ้น
-// เพื่อรองรับ Visual Novel สมัยใหม่ที่มีกลไกเกมที่หลากหลาย (สไตล์ปี 2025)
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 // IUser, INovel, IEpisode, ICharacter, IChoice, IMedia, IOfficialMedia, IItem, IStoryState จะถูก import ตามการใช้งานจริง
