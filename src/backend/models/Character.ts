@@ -1,474 +1,507 @@
 // src/backend/models/Character.ts
-// โมเดลสำหรับตัวละครใน Visual Novel (Character Model)
+// โมเดลตัวละคร (Character Model)
+// จัดการข้อมูลตัวละครในนิยาย, รูปแบบการแสดงออก, ความสัมพันธ์, การปรับแต่ง, และการตั้งค่าการรับบริจาค
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import { INovel } from "./Novel"; // สำหรับ novelId
+import { IUser } from "./User"; // สำหรับ authorId และ voiceActorInfo.sampleMediaId (ถ้าผู้พากย์เป็น User ในระบบ)
+import { IMedia, OfficialMediaType } from "./Media"; // สำหรับ profileImageMediaId และ expressions.mediaId
+// import { IScene } from "./Scene"; // ไม่จำเป็นต้อง import โดยตรง เว้นแต่จะมีการอ้างอิง scene context ใน character stats
+// import { IChoice } from "./Choice"; // ไม่จำเป็นต้อง import โดยตรง เว้นแต่จะมีการอ้างอิง choice context ใน character stats
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Character
 // ==================================================================================================
 
 /**
- * @enum {string} CharacterRole
- * @description บทบาทของตัวละครในนิยาย
- * - `protagonist`: ตัวเอกหลัก
- * - `main_character`: ตัวละครหลัก (อาจมีหลายคน)
- * - `supporting_character`: ตัวละครสมทบ
- * - `minor_character`: ตัวละครรอง / ตัวประกอบ
- * - `antagonist`: ตัวร้ายหลัก
- * - `love_interest`: ตัวละครที่เป็นเป้าหมายความรัก (สำหรับเกมจีบหนุ่ม/จีบสาว)
- * - `narrator`: ผู้บรรยาย (ถ้าผู้บรรยายมีตัวตนเป็นตัวละคร)
- * - `cameo`: ตัวละครรับเชิญ
+ * @enum {string} CharacterRoleInStory
+ * @description บทบาทของตัวละครในเนื้อเรื่อง
+ * (คง Enum เดิมไว้)
  */
-export enum CharacterRole {
-  PROTAGONIST = "protagonist",
-  MAIN_CHARACTER = "main_character",
-  SUPPORTING_CHARACTER = "supporting_character",
-  MINOR_CHARACTER = "minor_character",
+export enum CharacterRoleInStory {
+  MAIN_PROTAGONIST = "main_protagonist",
+  SECONDARY_PROTAGONIST = "secondary_protagonist",
   ANTAGONIST = "antagonist",
+  SUPPORTING_CHARACTER = "supporting_character",
   LOVE_INTEREST = "love_interest",
+  MENTOR = "mentor",
+  COMIC_RELIEF = "comic_relief",
   NARRATOR = "narrator",
   CAMEO = "cameo",
+  MINOR_CHARACTER = "minor_character",
+  CUSTOM = "custom",
 }
 
 /**
- * @enum {string} CharacterGender
- * @description เพศของตัวละคร (เพื่อให้มีความหลากหลายและครอบคลุม)
- * - `male`: ชาย
- * - `female`: หญิง
- * - `non_binary`: ไม่ระบุเพศ / เพศทางเลือก
- * - `agender`: ไม่มีเพศ
- * - `genderfluid`: เพศลื่นไหล
- * - `other`: อื่นๆ (ระบุเพิ่มเติม)
- * - `not_specified`: ไม่ต้องการระบุ
+ * @enum {string} CharacterGenderIdentity
+ * @description อัตลักษณ์ทางเพศของตัวละคร
+ * (คง Enum เดิมไว้)
  */
-export enum CharacterGender {
+export enum CharacterGenderIdentity {
   MALE = "male",
   FEMALE = "female",
   NON_BINARY = "non_binary",
-  AGENDER = "agender",
   GENDERFLUID = "genderfluid",
+  AGENDER = "agender",
   OTHER = "other",
   NOT_SPECIFIED = "not_specified",
 }
 
 /**
- * @enum {string} CharacterAlignment
- * @description แนวคิด/อุดมการณ์ของตัวละคร (ถ้ามีระบบ Alignment)
- * มักใช้ในเกม RPG แต่สามารถประยุกต์ใช้เพื่อเพิ่มมิติให้ตัวละคร VN ได้
- * - `lawful_good`: ยึดมั่นคุณธรรมและกฎระเบียบ
- * - `neutral_good`: ทำดีโดยไม่ยึดติดกฎเกณฑ์
- * - `chaotic_good`: ทำดีตามใจตน ไม่สนกฎ
- * - `lawful_neutral`: ยึดถือกฎหมายเป็นหลัก ไม่สนดีชั่ว
- * - `true_neutral`: เป็นกลางอย่างแท้จริง
- * - `chaotic_neutral`: ทำตามใจตน ไม่สนดีชั่วหรือกฎหมาย
- * - `lawful_evil`: ทำชั่วอย่างมีแบบแผนและกฎเกณฑ์
- * - `neutral_evil`: ทำชั่วเพื่อผลประโยชน์ตน
- * - `chaotic_evil`: ทำชั่วตามสัญชาตญาณและความวุ่นวาย
- * - `unaligned`: ไม่มีแนวคิดที่ชัดเจน / สัตว์ / สิ่งไม่มีชีวิต
- */
-export enum CharacterAlignment {
-    LAWFUL_GOOD = "lawful_good",
-    NEUTRAL_GOOD = "neutral_good",
-    CHAOTIC_GOOD = "chaotic_good",
-    LAWFUL_NEUTRAL = "lawful_neutral",
-    TRUE_NEUTRAL = "true_neutral",
-    CHAOTIC_NEUTRAL = "chaotic_neutral",
-    LAWFUL_EVIL = "lawful_evil",
-    NEUTRAL_EVIL = "neutral_evil",
-    CHAOTIC_EVIL = "chaotic_evil",
-    UNALIGNED = "unaligned",
-}
-
-
-// ==================================================================================================
-// SECTION: อินเทอร์เฟซย่อย (Sub-Interfaces) และ Schemas ย่อยสำหรับข้อมูลเชิงลึกของตัวละคร
-// ==================================================================================================
-
-/**
  * @interface ICharacterExpression
- * @description การแสดงออกทางสีหน้า/อารมณ์ของตัวละคร
- * ประกอบด้วย ID ของ Media ที่ใช้ (อาจเป็นรูปภาพ sprite sheet หรือไฟล์แยก)
+ * @description การตั้งค่าการแสดงออกทางสีหน้าและท่าทางของตัวละคร
+ * (คง Interface เดิมไว้)
  */
 export interface ICharacterExpression {
-  expressionId: string; // ID ที่ผู้ใช้กำหนดเองสำหรับอ้างอิงใน Scene Editor (เช่น "happy", "sad_01")
-  name: string; // ชื่อของการแสดงออก (เช่น "ยิ้ม", "ร้องไห้")
-  description?: string; // คำอธิบายเพิ่มเติม (ถ้ามี)
-  mediaId: Types.ObjectId; // ID ของ Media (รูปภาพ) ที่ใช้สำหรับการแสดงออกนี้
-  mediaSourceType: "Media" | "OfficialMedia"; // แหล่งที่มาของ Media
-  tags?: string[]; // Tags สำหรับการค้นหา (เช่น "positive", "subtle_smile")
+  expressionId: string;
+  name: string;
+  mediaId: Types.ObjectId;
+  mediaSourceType: "Media" | "OfficialMedia";
+  audioEffectOnDisplay?: Types.ObjectId;
+  animationTrigger?: string;
+  tags?: string[];
 }
-const CharacterExpressionSchema = new Schema<ICharacterExpression>({
-  expressionId: { type: String, required: [true, "Expression ID is required"], trim: true, index: true },
-  name: { type: String, required: [true, "Expression name is required"], trim: true, maxlength: [100, "Expression name is too long"] },
-  description: { type: String, trim: true, maxlength: [500, "Expression description is too long"] },
-  mediaId: { type: Schema.Types.ObjectId, required: [true, "Media ID for expression is required"], refPath: 'expressions.mediaSourceType' },
-  mediaSourceType: { type: String, enum: ["Media", "OfficialMedia"], required: true, alias: 'expressions.mediaSourceType' },
-  tags: [{ type: String, trim: true, lowercase: true, maxlength: [50, "Expression tag is too long"] }],
-}, { _id: false });
+const CharacterExpressionSchema = new Schema<ICharacterExpression>(
+  {
+    expressionId: {
+      type: String,
+      required: [true, "กรุณาระบุ ID ของ Expression (Expression ID is required)"],
+      trim: true,
+      maxlength: [100, "Expression ID ยาวเกินไป"],
+    },
+    name: { type: String, required: [true, "กรุณาระบุชื่อ Expression (Expression name is required)"], trim: true, maxlength: [100, "ชื่อ Expression ยาวเกินไป"] },
+    mediaId: { type: Schema.Types.ObjectId, required: [true, "กรุณาระบุ Media ID สำหรับ Expression"], refPath: "expressions.mediaSourceType" },
+    mediaSourceType: { type: String, enum: ["Media", "OfficialMedia"], required: true },
+    audioEffectOnDisplay: { type: Schema.Types.ObjectId, ref: "Media" },
+    animationTrigger: { type: String, trim: true, maxlength: [100, "Animation trigger ยาวเกินไป"] },
+    tags: [{ type: String, trim: true, lowercase: true, maxlength: [50, "Tag ยาวเกินไป"] }],
+  },
+  { _id: false }
+);
 
+/**
+ * @interface ICharacterDonationSettings
+ * @description การตั้งค่าการรับบริจาคสำหรับตัวละครโดยเฉพาะ
+ * (คง Interface เดิมไว้ แต่พิจารณาการเชื่อมโยงกับ DonationApplication ที่ชัดเจน)
+ */
+export interface ICharacterDonationSettings {
+  isEnabled: boolean;
+  /** @description ID ของ DonationApplication ที่เกี่ยวข้องกับตัวละครนี้ (ถ้ามี) อาจเชื่อมโยงกับระบบการอนุมัติรับบริจาค */
+  activeDonationApplicationId?: Types.ObjectId; // อ้างอิง DonationApplication
+  donationPromptMessage?: string;
+  minDonationAmountCoin?: number;
+  maxDonationAmountCoin?: number;
+  donationTiers?: string[];
+  /** @description จำนวนเหรียญทั้งหมดที่ตัวละครนี้ได้รับจากการบริจาค (Denormalized, อัปเดตจาก EarningTransaction) */
+  totalCoinsReceived?: number;
+  /** @description จำนวนเงินจริงทั้งหมดที่ตัวละครนี้ได้รับจากการบริจาค (Denormalized, หลังหักค่าธรรมเนียม, สกุลเงินหลักของระบบ) */
+  totalRealMoneyReceived?: number;
+  /** @description จำนวนครั้งที่ได้รับการบริจาค (Denormalized) */
+  totalDonationCount?: number;
+  /** @description วันที่ได้รับการบริจาคล่าสุด */
+  lastDonatedAt?: Date;
+}
+const CharacterDonationSettingsSchema = new Schema<ICharacterDonationSettings>(
+  {
+    isEnabled: { type: Boolean, default: false, comment: "เปิด/ปิด การรับบริจาคสำหรับตัวละครนี้" },
+    activeDonationApplicationId: { type: Schema.Types.ObjectId, ref: "DonationApplication", comment: "ID การอนุมัติรับบริจาค (ถ้ามี)" },
+    donationPromptMessage: { type: String, trim: true, maxlength: [1000, "ข้อความเชิญชวนบริจาคยาวเกินไป"] },
+    minDonationAmountCoin: { type: Number, min: 0, default: 0, comment: "เหรียญขั้นต่ำที่บริจาคได้" },
+    maxDonationAmountCoin: { type: Number, min: 0, comment: "เหรียญสูงสุดที่บริจาคได้" },
+    donationTiers: [{ type: String, trim: true, maxlength: [255, "รายละเอียดระดับการบริจาคยาวเกินไป"] }],
+    totalCoinsReceived: { type: Number, default: 0, min: 0, comment: "เหรียญทั้งหมดที่ได้รับ (Denormalized)" },
+    totalRealMoneyReceived: { type: Number, default: 0, min: 0, comment: "เงินจริงทั้งหมดที่ได้รับ (Denormalized)" },
+    totalDonationCount: { type: Number, default: 0, min: 0, comment: "จำนวนครั้งที่ได้รับบริจาค (Denormalized)" },
+    lastDonatedAt: { type: Date, comment: "วันที่ได้รับบริจาคล่าสุด" },
+  },
+  { _id: false }
+);
+
+/**
+ * @interface ICharacterRelationship
+ * @description ข้อมูลความสัมพันธ์ของตัวละครนี้กับตัวละครอื่น
+ * (คง Interface เดิมไว้)
+ */
+export interface ICharacterRelationship {
+  targetCharacterId: Types.ObjectId;
+  relationshipType: string;
+  relationshipValue?: number;
+  description?: string;
+}
+const CharacterRelationshipSchema = new Schema<ICharacterRelationship>(
+  {
+    targetCharacterId: { type: Schema.Types.ObjectId, ref: "Character", required: true },
+    relationshipType: { type: String, required: true, trim: true, maxlength: [100, "Relationship type is too long"] },
+    relationshipValue: { type: Number },
+    description: { type: String, trim: true, maxlength: [500, "Relationship description is too long"] },
+  },
+  { _id: false }
+);
 
 /**
  * @interface IPhysicalAttributes
- * @description (ใหม่) ลักษณะทางกายภาพของตัวละคร
+ * @description (เพิ่มใหม่) คุณลักษณะทางกายภาพของตัวละคร
  */
 export interface IPhysicalAttributes {
-  /** @description ส่วนสูง (เซนติเมตร) */
-  heightCm?: number;
-  /** @description น้ำหนัก (กิโลกรัม) */
-  weightKg?: number;
-  /** @description สีตา */
-  eyeColor?: string;
-  /** @description สีผม */
-  hairColor?: string;
-  /** @description ลักษณะเด่นอื่นๆ (เช่น รอยแผลเป็น, ไฝ, รอยสัก) */
-  distinguishingFeatures?: string[];
-  /** @description ลักษณะอายุที่ปรากฏ (เช่น "วัยรุ่นตอนต้น", "ราวๆ 20 ปี") */
-  ageAppearance?: string;
+  heightCm?: number; // ส่วนสูง (เซนติเมตร)
+  weightKg?: number; // น้ำหนัก (กิโลกรัม)
+  eyeColor?: string; // สีตา
+  hairColor?: string; // สีผม
+  distinguishingFeatures?: string[]; // ลักษณะเด่น (เช่น รอยแผลเป็น, ไฝ)
+  ageAppearance?: string; // ลักษณะอายุที่ปรากฏ (เช่น "ต้น 20", "วัยรุ่น")
 }
-const PhysicalAttributesSchema = new Schema<IPhysicalAttributes>({
-  heightCm: { type: Number, min: 0, comment: "ส่วนสูง (เซนติเมตร)" },
-  weightKg: { type: Number, min: 0, comment: "น้ำหนัก (กิโลกรัม)" },
-  eyeColor: { type: String, trim: true, maxlength: [50, "สีตาสั้นเกินไป"] },
-  hairColor: { type: String, trim: true, maxlength: [50, "สีผมสั้นเกินไป"] },
-  distinguishingFeatures: [{ type: String, trim: true, maxlength: [150, "ลักษณะเด่นยาวเกินไป"] }],
-  ageAppearance: { type: String, trim: true, maxlength: [100, "ลักษณะอายุที่ปรากฏยาวเกินไป"] },
-}, { _id: false });
-
+const PhysicalAttributesSchema = new Schema<IPhysicalAttributes>(
+  {
+    heightCm: { type: Number, min: 0, comment: "ส่วนสูง (เซนติเมตร)" },
+    weightKg: { type: Number, min: 0, comment: "น้ำหนัก (กิโลกรัม)" },
+    eyeColor: { type: String, trim: true, maxlength: [50, "สีตายาวเกินไป"] },
+    hairColor: { type: String, trim: true, maxlength: [50, "สีผมยาวเกินไป"] },
+    distinguishingFeatures: [{ type: String, trim: true, maxlength: [150, "ลักษณะเด่นยาวเกินไป"] }],
+    ageAppearance: { type: String, trim: true, maxlength: [100, "ลักษณะอายุที่ปรากฏยาวเกินไป"] },
+  },
+  { _id: false }
+);
 
 /**
  * @interface IPersonalityTraits
- * @description (ใหม่) ลักษณะนิสัยและบุคลิกภาพของตัวละคร
+ * @description (เพิ่มใหม่) ลักษณะนิสัยและข้อมูลเชิงลึกของตัวละคร
  */
 export interface IPersonalityTraits {
-  /** @description เป้าหมายในชีวิต/แรงจูงใจหลัก */
-  goals?: string[];
-  /** @description สิ่งที่กลัว/จุดอ่อนทางใจ */
-  fears?: string[];
-  /** @description จุดแข็ง/ความสามารถพิเศษ */
-  strengths?: string[];
-  /** @description จุดอ่อน/ข้อด้อย */
-  weaknesses?: string[];
-  /** @description แนวคิด/อุดมการณ์ (ถ้ามีระบบ Alignment) */
-  alignment?: CharacterAlignment;
-  /** @description คำอธิบายบุคลิกภาพโดยรวม (อาจเป็น MBTI, Enneagram หรือคำอธิบายอิสระ) */
-  summary?: string;
-  /** @description ลักษณะการพูดจา/น้ำเสียง */
-  mannerOfSpeaking?: string;
-  /** @description งานอดิเรก/สิ่งที่ชอบทำ */
-  hobbies?: string[];
+  goals?: string[]; // เป้าหมายของตัวละคร
+  fears?: string[]; // สิ่งที่ตัวละครกลัว
+  strengths?: string[]; // จุดแข็ง
+  weaknesses?: string[]; // จุดอ่อน
+  alignment?: string; // การวางตัว (เช่น Lawful Good, Chaotic Neutral - ถ้ามีระบบนี้)
+  likes?: string[]; // สิ่งที่ชอบ
+  dislikes?: string[]; // สิ่งที่ไม่ชอบ
+  hobbies?: string[]; // งานอดิเรก
+  quotes?: string[]; // คำพูดติดปาก หรือคำคมประจำตัว
+  mbtiType?: string; // (Optional) MBTI Type (ถ้าผู้เขียนต้องการระบุ)
+  enneagramType?: string; // (Optional) Enneagram Type (ถ้าผู้เขียนต้องการระบุ)
 }
-const PersonalityTraitsSchema = new Schema<IPersonalityTraits>({
-  goals: [{ type: String, trim: true, maxlength: [255, "เป้าหมายยาวเกินไป"] }],
-  fears: [{ type: String, trim: true, maxlength: [255, "สิ่งที่กลัวยาวเกินไป"] }],
-  strengths: [{ type: String, trim: true, maxlength: [255, "จุดแข็งยาวเกินไป"] }],
-  weaknesses: [{ type: String, trim: true, maxlength: [255, "จุดอ่อนยาวเกินไป"] }],
-  alignment: { type: String, enum: Object.values(CharacterAlignment), comment: "แนวคิด/อุดมการณ์ของตัวละคร" },
-  summary: { type: String, trim: true, maxlength: [2000, "คำอธิบายบุคลิกภาพยาวเกินไป"] },
-  mannerOfSpeaking: { type: String, trim: true, maxlength: [500, "ลักษณะการพูดจายาวเกินไป"] },
-  hobbies: [{ type: String, trim: true, maxlength: [100, "งานอดิเรกยาวเกินไป"] }],
-}, { _id: false });
-
+const PersonalityTraitsSchema = new Schema<IPersonalityTraits>(
+  {
+    goals: [{ type: String, trim: true, maxlength: [200, "เป้าหมายยาวเกินไป"] }],
+    fears: [{ type: String, trim: true, maxlength: [200, "สิ่งที่กลัวยาวเกินไป"] }],
+    strengths: [{ type: String, trim: true, maxlength: [200, "จุดแข็งยาวเกินไป"] }],
+    weaknesses: [{ type: String, trim: true, maxlength: [200, "จุดอ่อนยาวเกินไป"] }],
+    alignment: { type: String, trim: true, maxlength: [50, "Alignment ยาวเกินไป"] },
+    likes: [{ type: String, trim: true, maxlength: [150, "สิ่งที่ชอบยาวเกินไป"] }],
+    dislikes: [{ type: String, trim: true, maxlength: [150, "สิ่งที่ไม่ชอบยาวเกินไป"] }],
+    hobbies: [{ type: String, trim: true, maxlength: [150, "งานอดิเรกยาวเกินไป"] }],
+    quotes: [{ type: String, trim: true, maxlength: [500, "คำพูดติดปากยาวเกินไป"] }],
+    mbtiType: { type: String, trim: true, maxlength: [10, "MBTI Type ยาวเกินไป"] },
+    enneagramType: { type: String, trim: true, maxlength: [10, "Enneagram Type ยาวเกินไป"] },
+  },
+  { _id: false }
+);
 
 /**
  * @interface IVoiceActorInfo
- * @description (ใหม่) ข้อมูลนักพากย์ (ถ้ามี)
+ * @description (เพิ่มใหม่) ข้อมูลนักพากย์ (ถ้ามี)
  */
 export interface IVoiceActorInfo {
-  /** @description ชื่อนักพากย์ */
-  name?: string;
-  /** @description ID ของ Media (เสียงตัวอย่าง) */
-  sampleMediaId?: Types.ObjectId;
-  /** @description แหล่งที่มาของ Media (เสียงตัวอย่าง) */
+  name?: string; // ชื่อนักพากย์
+  sampleMediaId?: Types.ObjectId; // ID ของ Media (ไฟล์เสียงตัวอย่าง) อาจอ้างอิง OfficialMedia หรือ Media ของ User ที่เป็นนักพากย์
   sampleMediaSourceType?: "Media" | "OfficialMedia";
-  /** @description หมายเหตุเพิ่มเติมเกี่ยวกับนักพากย์ หรือการพากย์เสียงตัวละครนี้ */
-  notes?: string;
+  language?: string; // ภาษาที่พากย์
+  portfolioUrl?: string; // URL ผลงานของนักพากย์
 }
-const VoiceActorInfoSchema = new Schema<IVoiceActorInfo>({
-  name: { type: String, trim: true, maxlength: [150, "ชื่อนักพากย์ยาวเกินไป"] },
-  sampleMediaId: { type: Schema.Types.ObjectId, refPath: 'voiceActorInfo.sampleMediaSourceType', comment: "ID ของเสียงตัวอย่าง" },
-  sampleMediaSourceType: { type: String, enum: ["Media", "OfficialMedia"], alias: 'voiceActorInfo.sampleMediaSourceType' },
-  notes: { type: String, trim: true, maxlength: [1000, "หมายเหตุนักพากย์ยาวเกินไป"] },
-}, { _id: false });
-
+const VoiceActorInfoSchema = new Schema<IVoiceActorInfo>(
+  {
+    name: { type: String, trim: true, maxlength: [150, "ชื่อนักพากย์ยาวเกินไป"] },
+    sampleMediaId: { type: Schema.Types.ObjectId, refPath: "voiceActorInfo.sampleMediaSourceType" },
+    sampleMediaSourceType: { type: String, enum: ["Media", "OfficialMedia"] },
+    language: { type: String, trim: true, maxlength: [50, "ภาษาที่พากย์ยาวเกินไป"] },
+    portfolioUrl: { type: String, trim: true, maxlength: [2048, "URL ผลงานนักพากย์ยาวเกินไป"] },
+  },
+  { _id: false }
+);
 
 /**
- * @interface ICharacterStatDefinition
- * @description (ใหม่) นิยามของค่าสถานะ/ทักษะพื้นฐานที่สามารถมีได้ในเกม
- * ตัว Character จะมี instance ของค่าสถานะเหล่านี้ (ICharacterStatInstance)
+ * @interface ICharacterStat
+ * @description (เพิ่มใหม่) ค่าสถานะของตัวละคร (สำหรับ Gameplay)
+ * @property {string} statId - ID เฉพาะของ stat นี้ (เช่น "HP", "MP", "STRENGTH", "KARMA") อาจจะตรงกับ IDefinedStat.statId ใน StoryMap
+ * @property {string} name - ชื่อที่แสดงผลของ stat (เช่น "พลังชีวิต", "ความแข็งแกร่ง")
+ * @property {number} baseValue - ค่าพื้นฐาน
+ * @property {number} currentValue - ค่าปัจจุบัน (อาจมีการเปลี่ยนแปลงระหว่างเล่น)
+ * @property {number} [maxValue] - (Optional) ค่าสูงสุดที่เป็นไปได้ (สำหรับ HP, MP)
+ * @property {string} [description] - คำอธิบาย stat
+ * @property {boolean} [isVisibleToPlayer] - ผู้เล่นสามารถเห็น stat นี้ได้หรือไม่
+ * @property {Types.ObjectId} [iconMediaId] - ไอคอนของ Stat (ถ้ามี)
+ * @property {"Media" | "OfficialMedia"} [iconMediaSourceType] - แหล่งที่มาของไอคอน
  */
-export interface ICharacterStatDefinition extends Document {
-    _id: Types.ObjectId;
-    novelId: Types.ObjectId; // เพื่อให้ค่าสถานะเป็นแบบเฉพาะของแต่ละนิยาย
-    statKey: string; // Unique key สำหรับอ้างอิง (e.g., "strength", "intelligence", "charisma_level")
-    displayName: string; // ชื่อที่แสดงผล (e.g., "ความแข็งแกร่ง", "สติปัญญา", "ระดับเสน่ห์")
-    description?: string;
-    minValue?: number;
-    maxValue?: number;
-    defaultValue?: number;
-    iconMediaId?: Types.ObjectId;
-    iconMediaSourceType?: "Media" | "OfficialMedia";
-    isVisibleToPlayer?: boolean; // ผู้เล่นสามารถเห็นค่าสถานะนี้ได้หรือไม่
-    canBeModifiedBySystem?: boolean; // ระบบสามารถปรับเปลี่ยนค่านี้ได้หรือไม่ (เช่น จาก Scene Event, Choice)
-    tags?: string[]; // สำหรับจัดกลุ่มหรือกรอง
-    createdAt: Date;
-    updatedAt: Date;
-}
-// CharacterStatDefinitionSchema จะถูกสร้างในไฟล์ของตัวเอง (e.g., CharacterStatDefinition.ts)
-// ใน Character.ts เราจะอ้างอิงถึงมัน
-
-/**
- * @interface ICharacterStatInstance
- * @description (ใหม่) ค่าสถานะ/ทักษะของตัวละครแต่ละตัว (อ้างอิงจาก ICharacterStatDefinition)
- */
-export interface ICharacterStatInstance {
-  /** @description ID ของ Stat Definition ที่ตัวละครนี้มี */
-  statDefinitionId: Types.ObjectId; // Ref to CharacterStatDefinition
-  /** @description ค่าปัจจุบันของสถานะนี้สำหรับตัวละคร */
+export interface ICharacterStat {
+  statId: string; // Unique ID for the stat, e.g., "HP", "MP", "KARMA"
+  name: string; // Display name, e.g., "Health Points", "Karma Score"
+  baseValue: number;
   currentValue: number;
-  /** @description ค่าสูงสุดเฉพาะตัวละครนี้ (ถ้ามีการ override จาก definition) */
-  characterMaxValue?: number;
-  /** @description ค่าต่ำสุดเฉพาะตัวละครนี้ (ถ้ามีการ override จาก definition) */
-  characterMinValue?: number;
-  /** @description หมายเหตุหรือข้อมูลเพิ่มเติมเกี่ยวกับสถานะนี้ของตัวละคร */
-  notes?: string;
-  /**
-   * @description แหล่งที่มาของการเปลี่ยนแปลงล่าสุด (เช่น "initial", "choice_xyz", "scene_event_abc")
-   * เพื่อช่วยในการ debug หรือแสดงผลว่าทำไมค่าสถานะถึงเป็นแบบนี้
-   */
-  lastModifiedSource?: string;
+  maxValue?: number;
+  description?: string;
+  isVisibleToPlayer?: boolean;
+  iconMediaId?: Types.ObjectId;
+  iconMediaSourceType?: "Media" | "OfficialMedia";
+  // การอ้างอิงถึง Scene, Novel, Choice อาจไม่จำเป็นต้องเก็บใน stat โดยตรง
+  // แต่ stat นี้จะถูกใช้ใน context ของ Scene/Novel/Choice นั้นๆ ผ่าน StoryMap หรือ Game Engine
 }
-const CharacterStatInstanceSchema = new Schema<ICharacterStatInstance>({
-  statDefinitionId: { type: Schema.Types.ObjectId, ref: "CharacterStatDefinition", required: true, comment: "ID ของ Stat Definition" },
-  currentValue: { type: Number, required: true, comment: "ค่าปัจจุบันของสถานะ" },
-  characterMaxValue: { type: Number, comment: "ค่าสูงสุดเฉพาะตัวละคร (ถ้ามี override)" },
-  characterMinValue: { type: Number, comment: "ค่าต่ำสุดเฉพาะตัวละคร (ถ้ามี override)" },
-  notes: { type: String, trim: true, maxlength: [500, "หมายเหตุสถานะตัวละครยาวเกินไป"] },
-  lastModifiedSource: { type: String, trim: true, maxlength: [100, "แหล่งที่มาการเปลี่ยนแปลงล่าสุดยาวเกินไป"] },
-}, { _id: false });
-
+const CharacterStatSchema = new Schema<ICharacterStat>(
+  {
+    statId: { type: String, required: true, trim: true, maxlength: [50, "Stat ID ยาวเกินไป"], comment: "ID เฉพาะของ Stat (ควรตรงกับ StoryMap.gameMechanicsConfig.definedStats.statId)" },
+    name: { type: String, required: true, trim: true, maxlength: [100, "ชื่อ Stat ยาวเกินไป"] },
+    baseValue: { type: Number, required: true, default: 0 },
+    currentValue: { type: Number, required: true, default: function(this: ICharacterStat) { return this.baseValue; } },
+    maxValue: { type: Number, min: 0 },
+    description: { type: String, trim: true, maxlength: [500, "คำอธิบาย Stat ยาวเกินไป"] },
+    isVisibleToPlayer: { type: Boolean, default: true },
+    iconMediaId: { type: Schema.Types.ObjectId, refPath: "stats.iconMediaSourceType" },
+    iconMediaSourceType: { type: String, enum: ["Media", "OfficialMedia"] },
+  },
+  { _id: false }
+);
 
 
 // ==================================================================================================
-// SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Character (ICharacter Document Interface)
+// SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Character (ICharacter Document Interface) - ปรับปรุง
 // ==================================================================================================
+
 /**
  * @interface ICharacter
- * @extends Document (Mongoose Document)
- * @description อินเทอร์เฟซหลักสำหรับเอกสารตัวละครใน Collection "characters"
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารตัวละคร ปรับปรุงเพื่อเพิ่มข้อมูลเชิงลึก
  */
 export interface ICharacter extends Document {
+  // ... (คง field เดิมไว้)
   _id: Types.ObjectId;
-  novelId: Types.ObjectId; // ID ของนิยายที่ตัวละครนี้สังกัดอยู่
-  name: string; // ชื่อตัวละคร (ที่ผู้เล่นเห็น)
-  internalName?: string; // ชื่อภายในสำหรับผู้เขียน (ถ้าต้องการแยก)
-  description?: string; // คำอธิบายสั้นๆ เกี่ยวกับตัวละคร
-  role: CharacterRole; // บทบาทของตัวละครในเนื้อเรื่อง
-  gender?: CharacterGender; // เพศของตัวละคร (ถ้ามีการระบุ)
-  age?: number | string; // อายุ (อาจเป็นตัวเลข หรือข้อความเช่น "อมตะ", "ไม่ทราบ")
-  defaultSpriteMediaId?: Types.ObjectId; // ID ของ Media ที่เป็น Sprite เริ่มต้น (ถ้ามี)
-  defaultSpriteMediaSourceType?: "Media" | "OfficialMedia";
-  expressions: Types.DocumentArray<ICharacterExpression>; // รายการการแสดงออกทางสีหน้า
-  colorCode?: string; // สีประจำตัวละคร (สำหรับ UI เช่น สีกรอบคำพูด)
-  tags?: string[]; // Tags สำหรับการค้นหาหรือจัดกลุ่มตัวละคร
-  isPlayable?: boolean; // ตัวละครนี้ผู้เล่นสามารถควบคุมได้หรือไม่ (สำหรับบางเกม)
-  isHiddenFromCastList?: boolean; // ซ่อนจากรายชื่อตัวละครที่แสดงให้ผู้เล่นเห็นหรือไม่ (เช่น ตัวละครลับ)
-
-  // SECTION: ข้อมูลเชิงลึก (ใหม่) - Optional fields
-  /** @description (ใหม่) ลักษณะทางกายภาพ */
-  physicalAttributes?: IPhysicalAttributes;
-  /** @description (ใหม่) ประวัติตัวละครโดยละเอียด (อาจรองรับ Markdown/Rich Text ในอนาคต) */
-  detailedBackstory?: string;
-  /** @description (ใหม่) ลักษณะนิสัยและบุคลิกภาพ */
-  personalityTraits?: IPersonalityTraits;
-  /** @description (ใหม่) ข้อมูลนักพากย์ (ถ้ามี) */
-  voiceActorInfo?: IVoiceActorInfo;
-  /** @description (ใหม่) ค่าสถานะ/ทักษะของตัวละคร (ถ้ามีระบบ Gameplay) */
-  stats?: Types.DocumentArray<ICharacterStatInstance>;
-
-  // SECTION: ความสัมพันธ์ (Relationships) - อาจจะแยกเป็น Model ใหม่ในอนาคตถ้าซับซ้อนมาก
-  relationships?: {
-    characterId: Types.ObjectId; // ID ของตัวละครอื่น
-    relationshipType: string; // เช่น "เพื่อนสนิท", "ศัตรู", "คนรัก"
-    affinityScore?: number; // ค่าความสัมพันธ์ (ถ้ามีระบบ)
-    description?: string; // คำอธิบายความสัมพันธ์
-  }[];
-
-  customFields?: { [key: string]: any }; // field ที่ผู้ใช้กำหนดเอง (ถ้าต้องการความยืดหยุ่นสูง)
-  authorNotes?: string; // หมายเหตุสำหรับผู้เขียนเท่านั้น
+  novelId: Types.ObjectId | INovel;
+  authorId: Types.ObjectId | IUser;
+  characterCode: string;
+  name: string;
+  fullName?: string;
+  nickname?: string;
+  profileImageMediaId?: Types.ObjectId;
+  profileImageSourceType?: "Media" | "OfficialMedia";
+  description?: string;
+  age?: string; // ยังคงไว้สำหรับข้อมูลทั่วไป
+  gender?: CharacterGenderIdentity;
+  customGenderDetails?: string;
+  // personalityTraits?: string[]; // <--- Field เดิม จะถูกแทนที่ด้วย object ด้านล่าง
+  roleInStory?: CharacterRoleInStory;
+  customRoleDetails?: string;
+  colorTheme?: string;
+  expressions: Types.DocumentArray<ICharacterExpression>;
+  defaultExpressionId?: string;
+  donationSettings?: ICharacterDonationSettings;
+  relationships: Types.DocumentArray<ICharacterRelationship>;
+  tags?: string[];
+  customFields?: Record<string, any>;
+  editorNotes?: string;
+  isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
-  lastSceneAppearanceId?: Types.ObjectId; // ID ของ Scene ล่าสุดที่ตัวละครนี้ปรากฏ (สำหรับ tracking)
+
+  // --- Fields ที่เพิ่มใหม่ ---
+  /** @description (ใหม่) คุณลักษณะทางกายภาพของตัวละคร */
+  physicalAttributes?: IPhysicalAttributes;
+  /** @description (ใหม่) ประวัติความเป็นมาโดยละเอียด (รองรับ Markdown ในอนาคต) */
+  detailedBackstory?: string;
+  /** @description (ใหม่) ลักษณะนิสัยและข้อมูลเชิงลึกของตัวละคร */
+  personalityTraits?: IPersonalityTraits; // <--- แทนที่ string[] เดิม
+  /** @description (ใหม่) ข้อมูลนักพากย์ (ถ้ามี) */
+  voiceActorInfo?: IVoiceActorInfo;
+  /** @description (ใหม่, Optional) ค่าสถานะของตัวละครสำหรับ Gameplay (ถ้ามีระบบ Stats/Skills) */
+  stats?: Types.DocumentArray<ICharacterStat>;
 }
 
 // ==================================================================================================
-// SECTION: Schema หลักสำหรับ Character (CharacterSchema)
+// SECTION: Schema หลักสำหรับ Character (CharacterSchema) - ปรับปรุง
 // ==================================================================================================
 const CharacterSchema = new Schema<ICharacter>(
   {
-    novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: [true, "Novel ID is required for character"], index: true },
-    name: { type: String, required: [true, "Character name is required"], trim: true, maxlength: [150, "Character name is too long"], index: true },
-    internalName: { type: String, trim: true, maxlength: [150, "Internal character name is too long"] },
-    description: { type: String, trim: true, maxlength: [2000, "Character description is too long"] },
-    role: { type: String, enum: Object.values(CharacterRole), default: CharacterRole.MINOR_CHARACTER, required: true },
-    gender: { type: String, enum: Object.values(CharacterGender), default: CharacterGender.NOT_SPECIFIED },
-    age: { type: Schema.Types.Mixed, comment: "สามารถเป็นตัวเลข (ปี) หรือข้อความก็ได้" }, // Number or String
-    defaultSpriteMediaId: { type: Schema.Types.ObjectId, refPath: 'defaultSpriteMediaSourceType' },
-    defaultSpriteMediaSourceType: { type: String, enum: ["Media", "OfficialMedia"], alias: 'defaultSpriteMediaSourceType' },
-    expressions: { type: [CharacterExpressionSchema], default: [] },
-    colorCode: {
-        type: String, trim: true, uppercase: true,
-        validate: {
-            validator: (v: string) => !v || /^#([0-9A-F]{3}){1,2}$/i.test(v) || /^[a-zA-Z]+$/.test(v), // Basic HEX or color name
-            message: (props: any) => `${props.value} is not a valid color code (HEX or name)!`
-        },
-        maxlength: [50, "Color code is too long"]
+    novelId: {
+      type: Schema.Types.ObjectId,
+      ref: "Novel",
+      required: [true, "กรุณาระบุ ID ของนิยาย (Novel ID is required)"],
+      index: true,
     },
-    tags: [{ type: String, trim: true, lowercase: true, maxlength: [50, "Character tag is too long"] }],
-    isPlayable: { type: Boolean, default: false },
-    isHiddenFromCastList: { type: Boolean, default: false },
+    authorId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "กรุณาระบุ ID ของผู้สร้างตัวละคร (Author ID is required)"],
+      index: true,
+    },
+    characterCode: {
+      type: String,
+      required: [true, "กรุณาระบุรหัสตัวละคร (Character code is required)"],
+      trim: true,
+      uppercase: true,
+      maxlength: [50, "รหัสตัวละครยาวเกินไป"],
+    },
+    name: {
+      type: String,
+      required: [true, "กรุณาระบุชื่อตัวละคร (Character name is required)"],
+      trim: true,
+      maxlength: [150, "ชื่อตัวละครยาวเกินไป"],
+      index: true,
+    },
+    fullName: { type: String, trim: true, maxlength: [255, "ชื่อเต็มตัวละครยาวเกินไป"] },
+    nickname: { type: String, trim: true, maxlength: [100, "ชื่อเล่นตัวละครยาวเกินไป"] },
+    profileImageMediaId: { type: Schema.Types.ObjectId, refPath: "profileImageSourceType" },
+    profileImageSourceType: { type: String, enum: ["Media", "OfficialMedia"], comment: "แหล่งที่มาของรูปโปรไฟล์หลัก" },
+    description: { type: String, trim: true, maxlength: [5000, "คำอธิบายตัวละครยาวเกินไป"] },
+    age: { type: String, trim: true, maxlength: [100, "ข้อมูลอายุยาวเกินไป"] },
+    gender: { type: String, enum: Object.values(CharacterGenderIdentity), comment: "อัตลักษณ์ทางเพศของตัวละคร" },
+    customGenderDetails: { type: String, trim: true, maxlength: [255, "รายละเอียดเพศที่กำหนดเองยาวเกินไป"] },
+    // personalityTraits: [{ type: String, trim: true, maxlength: [100, "ลักษณะนิสัยยาวเกินไป"] }], // Comment out the old field
+    roleInStory: { type: String, enum: Object.values(CharacterRoleInStory), comment: "บทบาทหลักในเนื้อเรื่อง" },
+    customRoleDetails: { type: String, trim: true, maxlength: [255, "รายละเอียดบทบาทที่กำหนดเองยาวเกินไป"] },
+    colorTheme: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      match: [/^#(?:[0-9A-F]{3}){1,2}$/i, "กรุณากรอก Hex color code ให้ถูกต้อง (เช่น #FF0000)"],
+      maxlength: [7, "Hex color code ไม่ถูกต้อง"],
+      comment: "สีประจำตัวละคร (Hex code)",
+    },
+    expressions: { type: [CharacterExpressionSchema], default: [], comment: "รายการการแสดงออกทางสีหน้า/ท่าทาง" },
+    defaultExpressionId: { type: String, trim: true, maxlength: [100, "Default Expression ID ยาวเกินไป"], comment: "Expression เริ่มต้นเมื่อตัวละครปรากฏ" },
+    donationSettings: { type: CharacterDonationSettingsSchema, default: () => ({ isEnabled: false, totalCoinsReceived: 0, totalRealMoneyReceived: 0, totalDonationCount: 0 }), comment: "การตั้งค่าการรับบริจาคสำหรับตัวละครนี้" },
+    relationships: { type: [CharacterRelationshipSchema], default: [], comment: "ความสัมพันธ์กับตัวละครอื่น" },
+    tags: [{ type: String, trim: true, lowercase: true, maxlength: [50, "Tag ยาวเกินไป"], index: true }],
+    customFields: { type: Schema.Types.Mixed, default: () => ({}), comment: "ข้อมูลเพิ่มเติมที่ผู้เขียนกำหนดเอง" },
+    editorNotes: { type: String, trim: true, maxlength: [5000, "Editor notes ยาวเกินไป"], select: false },
+    isArchived: { type: Boolean, default: false, index: true, comment: "ตัวละครนี้ถูกเก็บเข้าคลังหรือไม่" },
 
-    // ข้อมูลเชิงลึก (ใหม่)
-    physicalAttributes: { type: PhysicalAttributesSchema, required: false },
-    detailedBackstory: { type: String, trim: false, maxlength: [100000, "Detailed backstory is too long"], required: false, comment: "อาจรองรับ Markdown/Rich Text ในอนาคต" }, // เพิ่ม maxlength
-    personalityTraits: { type: PersonalityTraitsSchema, required: false },
-    voiceActorInfo: { type: VoiceActorInfoSchema, required: false },
-    stats: { type: [CharacterStatInstanceSchema], default: [], required: false },
-
-
-    relationships: [{
-      _id: false,
-      characterId: { type: Schema.Types.ObjectId, ref: "Character", required: true },
-      relationshipType: { type: String, trim: true, required: true, maxlength: [100, "Relationship type is too long"] },
-      affinityScore: { type: Number },
-      description: { type: String, trim: true, maxlength: [500, "Relationship description is too long"] },
-    }],
-
-    customFields: { type: Schema.Types.Map, of: Schema.Types.Mixed, default: {} },
-    authorNotes: { type: String, trim: true, maxlength: [10000, "Author notes are too long"] },
-    lastSceneAppearanceId: { type: Schema.Types.ObjectId, ref: "Scene", default: null },
+    // --- Fields ที่เพิ่มใหม่ ---
+    physicalAttributes: { type: PhysicalAttributesSchema, default: () => ({}), comment: "คุณลักษณะทางกายภาพ" },
+    detailedBackstory: { type: String, trim: true, maxlength: [50000, "ประวัติความเป็นมาตัวละครยาวเกินไป (รองรับ Markdown ในอนาคต)"] }, // เพิ่ม MaxLength
+    personalityTraits: { type: PersonalityTraitsSchema, default: () => ({}), comment: "ลักษณะนิสัยและข้อมูลเชิงลึก" },
+    voiceActorInfo: { type: VoiceActorInfoSchema, default: () => ({}), comment: "ข้อมูลนักพากย์ (ถ้ามี)" },
+    stats: { type: [CharacterStatSchema], default: [], comment: "ค่าสถานะของตัวละคร (สำหรับ Gameplay)" },
   },
   {
     timestamps: true,
-    toObject: { virtuals: true, aliases: true },
-    toJSON: { virtuals: true, aliases: true },
-    collection: "characters_v2", // เปลี่ยนชื่อ collection เป็น _v2 เพื่อรองรับการเปลี่ยนแปลงโครงสร้าง
+    toObject: { virtuals: true },
+    toJSON: { virtuals: true },
+    collection: "characters_v2", // กำหนดชื่อ collection ใหม่ (ถ้าต้องการแยกจาก version เก่า) หรือใช้ชื่อเดิม
   }
 );
 
 // ==================================================================================================
-// SECTION: Indexes, Virtuals, Middleware
+// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance) - ปรับปรุง
 // ==================================================================================================
 
-CharacterSchema.index({ novelId: 1, name: 1 }, { unique: true, name: "idx_character_novel_name_unique_v2" });
-CharacterSchema.index({ novelId: 1, role: 1 }, { name: "idx_character_novel_role_v2" });
-CharacterSchema.index({ novelId: 1, tags: 1 }, { name: "idx_character_novel_tags_v2" });
-CharacterSchema.index({ novelId: 1, "expressions.expressionId": 1}, { name: "idx_character_expression_id_v2", sparse: true });
-CharacterSchema.index({ name: "text", description: "text", "personalityTraits.summary": "text", tags: "text" }, { name: "idx_character_text_search_v2", default_language: "none" });
+CharacterSchema.index({ novelId: 1, characterCode: 1 }, { unique: true, name: "idx_char_novel_code_unique_v2" });
+CharacterSchema.index({ novelId: 1, name: 1 }, { name: "idx_char_novel_name_v2" }); // อาจจะไม่ unique ถ้าอนุญาตชื่อซ้ำในนิยายเดียว
+CharacterSchema.index({ novelId: 1, tags: 1 }, { name: "idx_char_novel_tags_v2" });
+CharacterSchema.index({ novelId: 1, isArchived: 1 }, { name: "idx_char_novel_archived_v2" });
+CharacterSchema.index(
+  { name: "text", description: "text", fullName: "text", nickname: "text", "personalityTraits.strengths": "text", "personalityTraits.weaknesses": "text" },
+  {
+    name: "idx_char_text_search_v2",
+    weights: { name: 10, fullName: 8, nickname: 7, description: 5, "personalityTraits.strengths": 3, "personalityTraits.weaknesses": 3 },
+    default_language: "none",
+  }
+);
+CharacterSchema.index({ novelId: 1, "donationSettings.isEnabled": 1 }, { name: "idx_char_donation_enabled_v2", sparse: true });
 
-// Virtual for combined name and internal name (if internal name exists)
-CharacterSchema.virtual('displayName').get(function(this: ICharacter) {
-  return this.internalName ? `${this.name} (${this.internalName})` : this.name;
+
+// ==================================================================================================
+// SECTION: Virtuals (ฟิลด์เสมือน)
+// ==================================================================================================
+CharacterSchema.virtual("profileImageUrlFull").get(function (this: ICharacter) {
+  if (this.profileImageMediaId && this.profileImageSourceType) {
+    // TODO: Implement actual URL generation logic based on Media/OfficialMedia structure and CDN
+    // For now, returning a placeholder or assuming direct URL stored in Media.
+    // Example: return (this.profileImageMediaId as IMedia)?.accessUrl;
+    return `placeholder_image_url_for_${this.profileImageMediaId}`;
+  }
+  return `/images/default-avatar.png`; // Default avatar
 });
 
-
-// Middleware
-CharacterSchema.pre<ICharacter>("save", function (next: (err?: mongoose.Error) => void) {
-  // ตรวจสอบ expressionId ซ้ำภายในตัวละครเดียวกัน
-  if (this.expressions && this.expressions.length > 0) {
-    const expressionIds = new Set<string>();
-    for (const exp of this.expressions) {
-      if (expressionIds.has(exp.expressionId)) {
-        const err = new mongoose.Error.ValidatorError({ message: `Duplicate expressionId "${exp.expressionId}" found within character "${this.name}".` });
-        return next(err);
-      }
-      expressionIds.add(exp.expressionId);
+// ==================================================================================================
+// SECTION: Middleware (Mongoose Hooks)
+// ==================================================================================================
+CharacterSchema.pre<ICharacter>("save", async function (next) {
+  if (this.isModified("expressions") && this.expressions && this.expressions.length > 0) {
+    const expressionIds = this.expressions.map(exp => exp.expressionId);
+    const uniqueExpressionIds = new Set(expressionIds);
+    if (expressionIds.length !== uniqueExpressionIds.size) {
+      return next(new mongoose.Error.ValidatorError({ message: "รหัส Expression ID ภายในตัวละครต้องไม่ซ้ำกัน" }));
     }
   }
 
-  // ตรวจสอบ statDefinitionId ซ้ำภายใน stats ของตัวละครเดียวกัน
-  if (this.stats && this.stats.length > 0) {
-      const statDefIds = new Set<string>();
-      for (const statInstance of this.stats) {
-          const statDefIdString = statInstance.statDefinitionId.toString();
-          if (statDefIds.has(statDefIdString)) {
-              const err = new mongoose.Error.ValidatorError({ message: `Duplicate statDefinitionId "${statDefIdString}" found in stats for character "${this.name}".`});
-              return next(err);
-          }
-          statDefIds.add(statDefIdString);
-      }
+  if (this.defaultExpressionId && this.expressions && !this.expressions.some(exp => exp.expressionId === this.defaultExpressionId)) {
+    return next(new mongoose.Error.ValidatorError({ message: `รหัส Expression เริ่มต้น "${this.defaultExpressionId}" ไม่พบในรายการ Expressions` }));
   }
+
+  // ตรวจสอบความสมเหตุสมผลของ donationTargetAmount (ถ้ามีการตั้งค่า)
+  if (this.donationSettings?.donationTargetAmount && this.donationSettings.donationTargetAmount < 0) {
+      this.donationSettings.donationTargetAmount = 0; // หรือ throw error
+  }
+
+  // ตรวจสอบ unique ของ statId ภายใน character stats (ถ้ามี)
+  if (this.stats && this.stats.length > 0) {
+    const statIds = this.stats.map(stat => stat.statId);
+    const uniqueStatIds = new Set(statIds);
+    if (statIds.length !== uniqueStatIds.size) {
+        return next(new mongoose.Error.ValidatorError({ message: "Stat ID ภายในตัวละครต้องไม่ซ้ำกัน" }));
+    }
+  }
+
   next();
 });
 
-// Middleware เพื่ออัปเดต novel's lastContentUpdatedAt timestamp เมื่อมีการเปลี่ยนแปลงข้อมูลตัวละคร
-async function updateNovelTimestamp(character: ICharacter | null) {
-  if (character && character.novelId) {
+CharacterSchema.post<ICharacter>("save", async function (doc) {
+  try {
+    const NovelModel = models.Novel || model("Novel");
+    await NovelModel.findByIdAndUpdate(doc.novelId, { $set: { lastContentUpdatedAt: new Date() } });
+    // อาจจะต้องมี logic เพิ่มเติมในการอัปเดตจำนวนตัวละครใน Novel หรือข้อมูลสรุปอื่นๆ
+  } catch (error) {
+    console.error(`[CharacterMiddlewareError] Failed to update Novel after saving character ${doc._id}:`, error);
+  }
+});
+
+CharacterSchema.post<mongoose.Query<ICharacter, ICharacter>>("findOneAndDelete", async function (doc) {
+  const deletedDoc = doc as ICharacter | null;
+  if (deletedDoc) {
     try {
-      const NovelModel = mongoose.models.Novel || mongoose.model("Novel");
-      await NovelModel.findByIdAndUpdate(character.novelId, {
-        $set: { lastContentUpdatedAt: new Date(), updatedAt: new Date() }
+      const NovelModel = models.Novel || model("Novel");
+      await NovelModel.findByIdAndUpdate(deletedDoc.novelId, {
+        $set: { lastContentUpdatedAt: new Date() },
+        // $pull: { characterIds: deletedDoc._id } // ถ้า Novel model มี array ของ characterIds
       });
+      // TODO: ควรมีการล้างข้อมูลที่เกี่ยวข้องกับตัวละครนี้ใน Scene, StoryMap, Choice ฯลฯ (Cascading delete logic)
     } catch (error) {
-        const castedError = error as Error;
-        console.error(`[CharacterMiddlewareError] Failed to update Novel timestamp for character ${character._id} in novel ${character.novelId}:`, castedError.message);
+      console.error(`[CharacterMiddlewareError] Failed to update Novel after deleting character ${deletedDoc._id}:`, error);
     }
   }
-}
-
-CharacterSchema.post<ICharacter>("save", async function (doc: ICharacter) {
-  await updateNovelTimestamp(doc);
 });
-
-CharacterSchema.post<mongoose.Query<ICharacter | null, ICharacter>>("findOneAndUpdate", async function(result: ICharacter | null) {
-  if (result) {
-    await updateNovelTimestamp(result);
-  }
-});
-
-CharacterSchema.post<mongoose.Query<ICharacter | null, ICharacter>>("findOneAndDelete", async function(doc: ICharacter | null) {
-  if (doc) {
-    await updateNovelTimestamp(doc);
-    // TODO: อาจจะต้องมีการล้างข้อมูลตัวละครนี้ออกจาก Scenes, Choices, หรือส่วนอื่นๆ ที่อ้างอิงถึง
-    // เช่น CharacterInSceneSchema ใน Scene.ts
-    // หรือ relationships ใน Character อื่นๆ
-  }
-});
-
 
 // ==================================================================================================
-// SECTION: Model Export
+// SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-
 const CharacterModel = (models.Character as mongoose.Model<ICharacter>) || model<ICharacter>("Character", CharacterSchema);
 
 export default CharacterModel;
 
-
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
 // ==================================================================================================
-// 1.  **Expression Management**: `expressionId` ควร unique ภายใน character. การมี UI ที่ดีสำหรับจัดการ expressions และ sprites เป็นสิ่งสำคัญ.
-// 2.  **Default Sprite**: การมี `defaultSpriteMediaId` ช่วยให้ง่ายต่อการแสดงตัวละครครั้งแรกในฉาก.
-// 3.  **Relationships**: ระบบความสัมพันธ์ (`relationships`) ปัจจุบันเป็นแบบง่าย. หากต้องการความซับซ้อน (เช่น ค่าความสัมพันธ์ที่เปลี่ยนแปลงตามเนื้อเรื่อง, ประเภทความสัมพันธ์ที่หลากหลาย) อาจพิจารณาแยกเป็น Model ใหม่ และมี Service Layer สำหรับจัดการ.
-// 4.  **Tags & Search**: `tags` ช่วยในการค้นหาและจัดหมวดหมู่.
-// 5.  **Custom Fields**: `customFields` ให้ความยืดหยุ่นสูง แต่ต้องระมัดระวังในการ query และจัดการข้อมูล.
-// 6.  **Internationalization (i18n)**: ชื่อ, คำอธิบาย, และข้อมูลอื่นๆ อาจจะต้องรองรับหลายภาษาในอนาคต.
-// 7.  **Versioning**: การเปลี่ยนแปลงข้อมูลตัวละครสำคัญ (เช่น บทบาท, เนื้อเรื่องเบื้องหลัง) อาจต้องมีระบบ versioning หรือ audit log.
-// 8.  **Integration with Scene/Choice**: Character ID จะถูกอ้างอิงใน Scene (ใครพูด, ใครปรากฏ) และ Choice (เงื่อนไขการแสดงตัวเลือก, ผลกระทบต่อความสัมพันธ์).
-// 9.  **Performance**: สำหรับนิยายที่มีตัวละครจำนวนมาก, การ query และ populate ข้อมูลต้องมีประสิทธิภาพ. พิจารณา selective population.
-// 10. **Physical Attributes, Backstory, Personality, Voice Actor Info (ใหม่)**: เพิ่ม field เหล่านี้เพื่อให้ผู้เขียนสามารถใส่รายละเอียดตัวละครได้ลึกซึ้งยิ่งขึ้น ทั้งหมดเป็น optional เพื่อไม่ให้เป็นภาระสำหรับผู้เขียนที่ไม่ต้องการรายละเอียดมากนัก
-//     - `detailedBackstory` สามารถพัฒนาให้รองรับ Markdown หรือ Rich Text Editor ในอนาคตเพื่อการจัดรูปแบบที่สวยงาม
-// 11. **Character Stats/Skills (ใหม่ - `ICharacterStatInstance`)**:
-//     - เพิ่ม `stats` เป็น array ของ `ICharacterStatInstanceSchema`.
-//     - `ICharacterStatInstance` จะอ้างอิงถึง `CharacterStatDefinition` (ซึ่งควรเป็น Model แยกต่างหาก กำหนดโดยผู้เขียนนิยายว่ามี stat อะไรบ้างในเรื่องนั้นๆ เช่น HP, MP, Strength, Charisma).
-//     - การอ้างอิง models อื่นๆ (Scene, Novel, Choice):
-//         - `Novel`: `CharacterStatDefinition` ควรผูกกับ `novelId` เพื่อให้แต่ละนิยายมีชุด stat ของตัวเอง.
-//         - `Scene`: Event ใน Scene (`TimelineEventType.MODIFY_CHARACTER_STAT`) สามารถปรับเปลี่ยน `currentValue` ของ `ICharacterStatInstance` ได้.
-//         - `Choice`: `ChoiceActionType.SET_CHARACTER_STAT` สามารถใช้ปรับค่า stat ตามการตัดสินใจของผู้เล่น.
-//         - การแสดงผล stat อาจใช้ `StatusUIElement` ใน `Scene.ts` หรือ UI เฉพาะสำหรับ Character Sheet.
-//     - การออกแบบนี้ช่วยให้มีความยืดหยุ่นสำหรับนิยายที่มีองค์ประกอบ Gameplay โดยไม่กระทบกับนิยายที่เน้นเนื้อเรื่องอย่างเดียว
-// 12. **Alignment System**: เพิ่ม `CharacterAlignment` enum และ field `alignment` ใน `IPersonalityTraits` สำหรับนิยายที่ต้องการใช้ระบบนี้
-// 13. **Collection Naming**: เปลี่ยนชื่อ collection เป็น `characters_v2` เพื่อบ่งบอกถึงการเปลี่ยนแปลงโครงสร้างข้อมูลที่สำคัญ. หากมีการ migrate ข้อมูลจากเวอร์ชันเก่า จะต้องมี script จัดการ.
-// 14. **Data Integrity on Deletion**: การลบตัวละคร (findOneAndDelete) ควรพิจารณา cascading effects หรือการตั้งค่า null ในส่วนที่อ้างอิงถึงตัวละครนี้ (เช่นใน Scene, Choice, relationships ของตัวละครอื่น).
-// 15. **Localization of Enums**: ค่า enum เช่น `CharacterRole`, `CharacterGender`, `CharacterAlignment` ปัจจุบันเป็นภาษาอังกฤษ หากต้องการแสดงผลใน UI เป็นภาษาไทย อาจต้องมี mapping layer หรือใช้ i18n library.
+// 1.  **Character Code Generation**: (คงเดิม) `characterCode` ควรมีระบบการสร้างที่ robust.
+// 2.  **Relationships & Stats**: (ปรับปรุงแล้ว) `relationships` ยังคงอยู่, เพิ่ม `stats` สำหรับ Gameplay.
+//     ความซับซ้อนของ `relationships` อาจย้ายไป StoryMap ถ้าจำเป็น. `stats` ควรเชื่อมโยงกับ `IDefinedStat` ใน StoryMap.
+// 3.  **Donation Logic**: (ปรับปรุงแล้ว) `donationSettings` ได้รับการปรับปรุงเพื่อรวม `totalCoinsReceived` และ `totalRealMoneyReceived`
+//     ซึ่งควรถูกอัปเดตโดย EarningTransaction service หรือ Donation service เมื่อมีการบริจาคสำเร็จ.
+//     การเชื่อมโยงกับ `DonationApplication` จะช่วยในการจัดการการอนุมัติ.
+// 4.  **VoiceActorInfo & PhysicalAttributes**: (เพิ่มใหม่) เพิ่มรายละเอียดเชิงลึกตามโจทย์.
+// 5.  **DetailedBackstory**: (เพิ่มใหม่) หากจะรองรับ Rich Text หรือ Markdown, frontend editor และ renderer จะต้องสามารถจัดการได้.
+// 6.  **PersonalityTraits**: (เพิ่มใหม่) เพิ่ม field ที่หลากหลายขึ้น สามารถขยายได้ตามต้องการ.
+// 7.  **Consistency with Other Models**: การเปลี่ยนแปลงใน Character model อาจส่งผลต่อ Scene (ICharacterInScene), StoryMap (การอ้างอิงตัวละคร), และ Choice (เงื่อนไข/ผลลัพธ์ที่เกี่ยวกับตัวละคร).
+// 8.  **Monetization Links**: การบริจาคให้ตัวละครจะถูกบันทึกใน Donation.ts และ EarningTransaction.ts.
+//     Character.ts จะ denormalize ยอดรวมการบริจาคเพื่อการแสดงผล.
+//     การตั้งค่า `donationSettings.isEnabled` ควรได้รับการอนุมัติผ่าน `DonationApplication.ts` ก่อน.
+// 9.  **User Model (for Authors/Voice Actors)**: `authorId` และ `voiceActorInfo.sampleMediaId` (ถ้าผู้พากย์เป็น User) อ้างอิง User model.
+// 10. **Flexibility for Writers**: การออกแบบให้มี optional fields จำนวนมาก ช่วยให้นักเขียนสามารถใส่รายละเอียดได้ตามต้องการโดยไม่บังคับ.
+// 11. **Gamification - Stats**: `ICharacterStat` ถูกออกแบบให้ยืดหยุ่น, `statId` ควรจะ map กับ stat ที่กำหนดใน `StoryMap.gameMechanicsConfig.definedStats`
+//     เพื่อให้ Game Engine สามารถจัดการค่าเหล่านี้ได้อย่างถูกต้อง.
+// 12. **Comments and Thai Language**: คอมเมนต์ภาษาไทยถูกคงไว้และเพิ่มเติมตามมาตรฐานเดิม.
 // ==================================================================================================
