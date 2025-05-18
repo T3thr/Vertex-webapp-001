@@ -86,7 +86,7 @@ const CharacterExpressionSchema = new Schema<ICharacterExpression>(
  * (คง Interface เดิมไว้ แต่พิจารณาการเชื่อมโยงกับ DonationApplication ที่ชัดเจน)
  */
 export interface ICharacterDonationSettings {
-  [x: string]: number;
+  donationTargetAmount: number;
   isEnabled: boolean;
   /** @description ID ของ DonationApplication ที่เกี่ยวข้องกับตัวละครนี้ (ถ้ามี) อาจเชื่อมโยงกับระบบการอนุมัติรับบริจาค */
   activeDonationApplicationId?: Types.ObjectId; // อ้างอิง DonationApplication
