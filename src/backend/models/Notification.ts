@@ -383,7 +383,7 @@ const NotificationSchema = new Schema<INotification>(
 // ==================================================================================================
 NotificationSchema.index({ recipientId: 1, isArchived: 1, isRead: 1, createdAt: -1 }, { name: "UserNotificationsQueryIndex" });
 NotificationSchema.index({ recipientId: 1, type: 1, createdAt: -1 }, { name: "UserNotificationsByTypeIndex" });
-NotificationSchema.index({ channels: 1, createdAt: 1 }, { name: "NotificationQueueProcessingIndexV2" }); // เปลี่ยน V2, เอา status ออก เพราะอาจไม่จำเป็น
+NotificationSchema.index({ channels: 1, createdAt: 1 }, { name: "NotificationQueueProcessingIndex" }); // เปลี่ยนเอา status ออก เพราะอาจไม่จำเป็น
 NotificationSchema.index({ expiresAt: 1 }, { name: "NotificationExpiryIndex", sparse: true });
 
 // ==================================================================================================

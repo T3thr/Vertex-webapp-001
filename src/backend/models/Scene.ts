@@ -955,11 +955,12 @@ const SceneTransitionSchema = new Schema<ISceneTransition>({
 /**
  * @interface IScene
  * @extends Document (Mongoose Document)
- * @description อินเทอร์เฟซหลักสำหรับเอกสารฉากใน Collection "scenes_v2"
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารฉากใน Collection "scenes"
  */
 export interface IScene extends Document {
   _id: Types.ObjectId; novelId: Types.ObjectId; episodeId: Types.ObjectId; sceneOrder: number;
   title?: string; background: IBackgroundSetting;
+  version: number;
   layers: Types.DocumentArray<ISceneLayer>;
   characters: Types.DocumentArray<ICharacterInScene>;
   textContents: Types.DocumentArray<ITextContent>;
@@ -996,6 +997,13 @@ export interface IScene extends Document {
 const SceneSchema = new Schema<IScene>(
   {
     novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: [true, "Novel ID is required"], index: true },
+    version: { 
+      type: Number,
+      required: [true, "Scene version is required"],
+      default: 1,
+      min: [1, "Scene version must be at least 1"],
+      comment: "Version number of this scene document, incremented on each significant change.",
+    },
     episodeId: { type: Schema.Types.ObjectId, ref: "Episode", required: [true, "Episode ID is required"], index: true },
     sceneOrder: { type: Number, required: [true, "Scene order is required"], min: [0, "Scene order must be non-negative"] },
     title: { type: String, trim: true, maxlength: [255, "Scene title is too long"] },
@@ -1041,19 +1049,19 @@ const SceneSchema = new Schema<IScene>(
     timestamps: true,
     toObject: { virtuals: true, aliases: true },
     toJSON: { virtuals: true, aliases: true },
-    collection: "scenes_v2",
+    collection: "scenes",
   }
 );
 
 // ==================================================================================================
 // SECTION: Indexes, Virtuals, Middleware (คงเดิมจากโค้ดก่อนหน้า และปรับปรุงตามความเหมาะสม)
 // ==================================================================================================
-SceneSchema.index({ episodeId: 1, sceneOrder: 1 }, { unique: true, name: "idx_episode_scene_order_unique_v2" });
-SceneSchema.index({ novelId: 1, episodeId: 1, sceneOrder: 1 }, { name: "idx_novel_episode_scene_sort_v2" });
-SceneSchema.index({ novelId: 1, authorDefinedEmotionTags: 1 }, { name: "idx_novel_emotion_tags_v2" });
-SceneSchema.index({ novelId: 1, sceneTags: 1 }, { name: "idx_novel_scene_tags_v2" });
-SceneSchema.index({ title: "text", "textContents.content": "text", editorNotes: "text" }, { name: "idx_scene_text_search_v2", default_language: "none" });
-SceneSchema.index({ novelId: 1, "entryConditions.variableName": 1 }, { name: "idx_scene_entry_conditions_var_v2", sparse: true });
+SceneSchema.index({ episodeId: 1, sceneOrder: 1 }, { unique: true, name: "idx_episode_scene_order_unique" });
+SceneSchema.index({ novelId: 1, episodeId: 1, sceneOrder: 1 }, { name: "idx_novel_episode_scene_sort" });
+SceneSchema.index({ novelId: 1, authorDefinedEmotionTags: 1 }, { name: "idx_novel_emotion_tags" });
+SceneSchema.index({ novelId: 1, sceneTags: 1 }, { name: "idx_novel_scene_tags" });
+SceneSchema.index({ title: "text", "textContents.content": "text", editorNotes: "text" }, { name: "idx_scene_text_search", default_language: "none" });
+SceneSchema.index({ novelId: 1, "entryConditions.variableName": 1 }, { name: "idx_scene_entry_conditions_var", sparse: true });
 
 SceneSchema.virtual("estimatedTimelineDurationMs").get(function (this: IScene): number {
   if (!this.timelineTracks || this.timelineTracks.length === 0) return 0;

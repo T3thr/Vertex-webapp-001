@@ -383,7 +383,7 @@ const CharacterSchema = new Schema<ICharacter>(
     timestamps: true,
     toObject: { virtuals: true },
     toJSON: { virtuals: true },
-    collection: "characters_v2", // กำหนดชื่อ collection ใหม่ (ถ้าต้องการแยกจาก version เก่า) หรือใช้ชื่อเดิม
+    collection: "characters", 
   }
 );
 
@@ -391,19 +391,19 @@ const CharacterSchema = new Schema<ICharacter>(
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance) - ปรับปรุง
 // ==================================================================================================
 
-CharacterSchema.index({ novelId: 1, characterCode: 1 }, { unique: true, name: "idx_char_novel_code_unique_v2" });
-CharacterSchema.index({ novelId: 1, name: 1 }, { name: "idx_char_novel_name_v2" }); // อาจจะไม่ unique ถ้าอนุญาตชื่อซ้ำในนิยายเดียว
-CharacterSchema.index({ novelId: 1, tags: 1 }, { name: "idx_char_novel_tags_v2" });
-CharacterSchema.index({ novelId: 1, isArchived: 1 }, { name: "idx_char_novel_archived_v2" });
+CharacterSchema.index({ novelId: 1, characterCode: 1 }, { unique: true, name: "idx_char_novel_code_unique" });
+CharacterSchema.index({ novelId: 1, name: 1 }, { name: "idx_char_novel_name" }); // อาจจะไม่ unique ถ้าอนุญาตชื่อซ้ำในนิยายเดียว
+CharacterSchema.index({ novelId: 1, tags: 1 }, { name: "idx_char_novel_tags" });
+CharacterSchema.index({ novelId: 1, isArchived: 1 }, { name: "idx_char_novel_archived" });
 CharacterSchema.index(
   { name: "text", description: "text", fullName: "text", nickname: "text", "personalityTraits.strengths": "text", "personalityTraits.weaknesses": "text" },
   {
-    name: "idx_char_text_search_v2",
+    name: "idx_char_text_search",
     weights: { name: 10, fullName: 8, nickname: 7, description: 5, "personalityTraits.strengths": 3, "personalityTraits.weaknesses": 3 },
     default_language: "none",
   }
 );
-CharacterSchema.index({ novelId: 1, "donationSettings.isEnabled": 1 }, { name: "idx_char_donation_enabled_v2", sparse: true });
+CharacterSchema.index({ novelId: 1, "donationSettings.isEnabled": 1 }, { name: "idx_char_donation_enabled", sparse: true });
 
 
 // ==================================================================================================

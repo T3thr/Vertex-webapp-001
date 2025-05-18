@@ -191,6 +191,7 @@ export interface IChoice extends Document {
   _id: Types.ObjectId;
   novelId: Types.ObjectId;
   authorId: Types.ObjectId;
+  version: number;
   originStoryMapNodeId?: string; // ID ของ choice_node ใน StoryMap
   choiceCode: string; // Unique code ภายใน Novel หรือ originStoryMapNodeId
   text: string;
@@ -231,6 +232,13 @@ const ChoiceSchema = new Schema<IChoice>(
       ref: "User", // อ้างอิง User.ts
       required: [true, "กรุณาระบุ ID ของผู้สร้างตัวเลือก (Author ID is required)"],
       index: true,
+    },
+    version: { 
+      type: Number,
+      required: [true, "Choice version is required"],
+      default: 1,
+      min: [1, "Choice version must be at least 1"],
+      comment: "Version number of this choice document, incremented on each significant change.",
     },
     originStoryMapNodeId: { type: String, trim: true, index: true, comment: "ID ของ choice_node ใน StoryMap ที่ตัวเลือกนี้ปรากฏ" },
     choiceCode: {
