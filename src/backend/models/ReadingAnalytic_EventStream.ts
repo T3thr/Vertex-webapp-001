@@ -49,22 +49,27 @@ import { IChoice } from "./Choice"; // สำหรับ choiceId
  * - `SESSION_END`: จบ session การอ่าน (อาจจะ log เมื่อปิดแอป หรือไม่มี activity เป็นระยะเวลานาน)
  */
 export enum ReadingEventType {
-  START_NOVEL = "start_novel",
-  END_NOVEL = "end_novel",
-  START_EPISODE = "start_episode",
-  END_EPISODE = "end_episode",
-  READ_SCENE = "read_scene",
-  MAKE_CHOICE = "make_choice",
-  PAUSE_READING = "pause_reading",
-  RESUME_READING = "resume_reading",
-  EMOTIONAL_RESPONSE_LOGGED = "emotional_response_logged",
-  CONTENT_SKIPPED = "content_skipped",
-  BOOKMARK_ADDED = "bookmark_added",
-  HIGHLIGHT_ADDED = "highlight_added",
-  NOTE_ADDED = "note_added",
-  SESSION_START = "session_start", // เพิ่มเติม
-  SESSION_END = "session_end",     // เพิ่มเติม
+  START_NOVEL = "START_NOVEL", // ผู้ใช้เริ่มอ่านนิยายเรื่องใหม่ หรือกลับมาอ่าน
+  END_NOVEL = "END_NOVEL",     // ผู้ใช้อ่านนิยายเรื่องนั้นจบ (ถึงตอนจบตาม StoryMap หรือผู้ใช้ระบุ)
+  START_EPISODE = "START_EPISODE", // ผู้ใช้เริ่มอ่านตอนใหม่
+  END_EPISODE = "END_EPISODE",   // ผู้ใช้อ่านตอนนั้นจบ (เช่น อ่านถึง node สุดท้ายของตอน หรือถึงจุดที่กำหนดว่าจบตอน)
+  READ_SCENE = "READ_SCENE",   // ผู้ใช้เข้าสู่/อ่านฉาก (node ใน story map)
+  MAKE_CHOICE = "MAKE_CHOICE", // ผู้ใช้ทำการเลือกตัวเลือกในเนื้อเรื่อง
+  PAUSE_READING = "PAUSE_READING", // ผู้ใช้หยุดอ่านชั่วคราว
+  RESUME_READING = "RESUME_READING", // ผู้ใช้กลับมาอ่านต่อ
+  EMOTIONAL_RESPONSE_LOGGED = "EMOTIONAL_RESPONSE_LOGGED", // ผู้ใช้ระบุอารมณ์ของตัวเองโดยตรง
+  CONTENT_SKIPPED = "CONTENT_SKIPPED", // ผู้ใช้ข้ามเนื้อหาส่วนใดส่วนหนึ่ง
+  BOOKMARK_ADDED = "BOOKMARK_ADDED", // ผู้ใช้เพิ่มบุ๊คมาร์ก
+  HIGHLIGHT_ADDED = "HIGHLIGHT_ADDED", // ผู้ใช้ไฮไลท์ข้อความ
+  NOTE_ADDED = "NOTE_ADDED",         // ผู้ใช้เพิ่มโน้ตส่วนตัว
+  SESSION_START = "SESSION_START",   // เริ่ม session การอ่านใหม่
+  SESSION_END = "SESSION_END",       // จบ session การอ่าน
+  READ_SPEED_CHANGE = "READ_SPEED_CHANGE", // (ใหม่) ผู้ใช้ปรับความเร็วการอ่าน (ถ้ามี)
+  FONT_SETTINGS_CHANGE = "FONT_SETTINGS_CHANGE", // (ใหม่) ผู้ใช้ปรับการตั้งค่าฟอนต์/การแสดงผล
+  COMPLETED_INTERACTIVE_ELEMENT = "COMPLETED_INTERACTIVE_ELEMENT", // (ใหม่) ผู้ใช้ทำ element โต้ตอบสำเร็จ (เช่น mini-game, puzzle ภายในฉาก)
+  REACHED_ENDING_NODE = "REACHED_ENDING_NODE", // (ใหม่) ผู้เล่นไปถึงฉากจบแบบใดแบบหนึ่ง (มี endingNodeId ใน details)
 }
+
 
 /**
  * @enum {string} EmotionCategory
@@ -100,22 +105,24 @@ export enum EmotionCategory {
 /**
  * @interface IMakeChoiceEventDetails
  * @description ข้อมูลเพิ่มเติมสำหรับเหตุการณ์ประเภท 'MAKE_CHOICE'
- * @property {Types.ObjectId | IChoice} choiceId - ID ของตัวเลือกที่ผู้ใช้เลือก (อ้างอิง Choice model)
- * @property {string} choiceTextSnapshot - ข้อความของตัวเลือก ณ เวลาที่ผู้ใช้เลือก (เพื่อป้องกันกรณีข้อความตัวเลือกมีการแก้ไขในภายหลัง)
- * @property {string[]} [associatedEmotionTags] - Tags อารมณ์ที่ผู้เขียนผูกกับตัวเลือกนี้ (snapshot จาก Choice.ts หรือ StoryMap.ts ณ เวลาที่เลือก)
- * @property {number} [psychologicalImpactScore] - คะแนนผลกระทบทางจิตวิทยาของตัวเลือกนี้ (snapshot จาก Choice.ts หรือ StoryMap.ts ณ เวลาที่เลือก)
- * @property {Types.ObjectId | IScene} sceneId - ID ของฉาก (หรือ node) ที่เกิดการเลือกตัวเลือกนี้
- * @property {number} [timeToDecideSeconds] - เวลาที่ผู้ใช้ใช้ในการตัดสินใจเลือกตัวเลือกนี้ (คำนวณจาก client-side, หน่วยเป็นวินาที)
- * @property {string} [outcomeSceneId] - (Optional) ID ของฉากที่เป็นผลลัพธ์จากการเลือกตัวเลือกนี้ (ถ้ามี)
+ * @property {Types.ObjectId | IChoice} choiceId - ID ของตัวเลือกที่ผู้ใช้เลือก
+ * @property {string} choiceTextSnapshot - ข้อความของตัวเลือก ณ เวลาที่ผู้ใช้เลือก
+ * @property {string[]} [associatedEmotionTags] - Tags อารมณ์ที่ผู้เขียนผูกกับตัวเลือกนี้
+ * @property {number} [psychologicalImpactScore] - คะแนนผลกระทบทางจิตวิทยาของตัวเลือกนี้
+ * @property {Types.ObjectId | IScene} sceneId - ID ของฉากที่เกิดการเลือก
+ * @property {number} [timeToDecideSeconds] - เวลาที่ใช้ในการตัดสินใจ
+ * @property {string} [outcomeNodeId] - (เปลี่ยนจาก outcomeSceneId) Node ID ใน StoryMap ที่เป็นผลลัพธ์จากการเลือก
+ * @property {any} [choiceMetadata] - (ใหม่) ข้อมูล metadata เพิ่มเติมของตัวเลือก (เช่น ประเภท, ความยาก) ที่อาจมีประโยชน์
  */
 export interface IMakeChoiceEventDetails {
   choiceId: Types.ObjectId | IChoice;
   choiceTextSnapshot: string;
   associatedEmotionTags?: string[];
   psychologicalImpactScore?: number;
-  sceneId: Types.ObjectId | IScene; // Scene ที่เกิดการเลือก
+  sceneId: Types.ObjectId | IScene;
   timeToDecideSeconds?: number;
-  outcomeSceneId?: Types.ObjectId | IScene; // Scene ที่เป็นผลลัพธ์
+  outcomeNodeId?: string; // อ้างอิง nodeId จาก StoryMap.ts
+  choiceMetadata?: any;
 }
 const MakeChoiceEventDetailsSchema = new Schema<IMakeChoiceEventDetails>(
   {
@@ -149,30 +156,36 @@ const MakeChoiceEventDetailsSchema = new Schema<IMakeChoiceEventDetails>(
       type: Number,
       min: [0, "เวลาในการตัดสินใจต้องไม่ติดลบ"]
     },
-    outcomeSceneId: { type: Schema.Types.ObjectId, ref: "Scene" }, // Scene ที่เป็นผลลัพธ์
+    outcomeNodeId: { type: String, trim:true }, // nodeId ใน StoryMap
   },
   { _id: false }
 );
 
 /**
  * @interface IReadSceneEventDetails
- * @description ข้อมูลเพิ่มเติมสำหรับเหตุการณ์ประเภท 'READ_SCENE' (หรือ 'SCENE_ENTER' / 'SCENE_EXIT')
+ * @description ข้อมูลเพิ่มเติมสำหรับเหตุการณ์ประเภท 'READ_SCENE'
  * @property {Types.ObjectId | IScene} sceneId - ID ของฉากที่ผู้ใช้อ่าน/เข้าถึง
- * @property {number} [durationSeconds] - ระยะเวลาที่ผู้ใช้ใช้ในฉากนี้ (อาจคำนวณเมื่อออกจากฉาก หรือส่งเป็นช่วงๆ)
- * @property {string[]} [dominantEmotionsInSceneText] - (Optional, อาจได้จากการวิเคราะห์ NLP ของเนื้อหาฉาก) อารมณ์เด่นในเนื้อหาของฉากนั้น
- * @property {number} [playerEngagementScore] - (Optional, อาจคำนวณจากหลายปัจจัย) คะแนนความมีส่วนร่วม/ความสนใจของผู้เล่นในฉากนี้
- * @property {boolean} [isReread] - ระบุว่าเป็นการอ่านฉากนี้ซ้ำหรือไม่ (เช่น ผู้ใช้ย้อนกลับมาอ่าน)
- * @property {number} [scrollDepthPercent] - (Optional) เปอร์เซ็นต์การ scroll ในฉาก (สำหรับฉากที่ยาว)
- * @property {number} [wordsRead] - (Optional) จำนวนคำที่อ่านในฉาก (ถ้าติดตามได้)
+ * @property {string} [nodeIdInStoryMap] - (ใหม่) ID ของ Node ใน StoryMap ที่ฉากนี้เชื่อมโยงอยู่
+ * @property {number} [durationSeconds] - ระยะเวลาที่ผู้ใช้ใช้ในฉากนี้
+ * @property {string[]} [dominantEmotionsInSceneText] - อารมณ์เด่นในเนื้อหาของฉากนั้น
+ * @property {number} [playerEngagementScore] - คะแนนความมีส่วนร่วมของผู้เล่นในฉากนี้
+ * @property {boolean} [isReread] - เป็นการอ่านฉากนี้ซ้ำหรือไม่
+ * @property {number} [scrollDepthPercent] - เปอร์เซ็นต์การ scroll ในฉาก
+ * @property {number} [wordsReadInScene] - (เปลี่ยนชื่อจาก wordsRead) จำนวนคำที่อ่านในฉากนี้
+ * @property {Types.ObjectId} [novelId] - (เพิ่มใหม่, Denormalized) ID ของ Novel เพื่อความสะดวกในการ query สำหรับ Gamification
+ * @property {Types.ObjectId} [episodeId] - (เพิ่มใหม่, Denormalized) ID ของ Episode
  */
 export interface IReadSceneEventDetails {
   sceneId: Types.ObjectId | IScene;
+  nodeIdInStoryMap?: string;
   durationSeconds?: number;
   dominantEmotionsInSceneText?: string[];
   playerEngagementScore?: number;
   isReread?: boolean;
   scrollDepthPercent?: number;
-  wordsRead?: number;
+  wordsReadInScene?: number;
+  novelId?: Types.ObjectId; // เพื่อให้ Service ดึงข้อมูล Genre ของนิยายจาก NovelId นี้ได้
+  episodeId?: Types.ObjectId;
 }
 const ReadSceneEventDetailsSchema = new Schema<IReadSceneEventDetails>(
   {
@@ -181,6 +194,7 @@ const ReadSceneEventDetailsSchema = new Schema<IReadSceneEventDetails>(
       ref: "Scene",
       required: [true, "กรุณาระบุ ID ของฉาก (Scene ID is required)"]
     },
+    nodeIdInStoryMap: { type: String, trim: true },
     durationSeconds: {
       type: Number,
       min: [0, "ระยะเวลาต้องไม่ติดลบ"]
@@ -195,15 +209,45 @@ const ReadSceneEventDetailsSchema = new Schema<IReadSceneEventDetails>(
       min: [0, "คะแนนความมีส่วนร่วมต้องไม่ติดลบ"],
       max: [10, "คะแนนความมีส่วนร่วมต้องไม่มากกว่า 10"] // หรือตาม scale ที่ออกแบบ
     },
-    isReread: {
-      type: Boolean,
-      default: false
-    },
     scrollDepthPercent: { type: Number, min:0, max: 100},
-    wordsRead: {type: Number, min: 0}
+    wordsReadInScene: {type: Number, min: 0},
+    novelId: { type: Schema.Types.ObjectId, ref: "Novel" }, // เพิ่ม novelId
+    episodeId: { type: Schema.Types.ObjectId, ref: "Episode" }, // เพิ่ม episodeId
   },
   { _id: false }
 );
+
+/**
+ * @interface IEndNovelEventDetails
+ * @description (ใหม่) ข้อมูลเพิ่มเติมสำหรับเหตุการณ์ END_NOVEL
+ * @property {Types.ObjectId | IScene} [endingSceneId] - ID ของฉากจบที่ผู้ใช้อ่านถึง (ถ้ามีหลายฉากจบ)
+ * @property {string} [endingNodeIdInStoryMap] - ID ของ EndingNode ใน StoryMap ที่ผู้ใช้อ่านถึง
+ * @property {string} [endingName] - ชื่อของฉากจบ (เช่น "Good End", "Bad End A")
+ * @property {number} totalPlaytimeSeconds - เวลารวมที่ใช้ในการอ่านนิยายเรื่องนี้จนจบ (ใน session ปัจจุบันหรือรวมทั้งหมด)
+ * @property {number} completionPercentage - เปอร์เซ็นต์ความสมบูรณ์ของเนื้อเรื่องที่ผู้เล่นได้สัมผัส (ถ้ามีระบบ tracking)
+ */
+export interface IEndNovelEventDetails {
+    endingSceneId?: Types.ObjectId | IScene;
+    endingNodeIdInStoryMap?: string;
+    endingName?: string;
+    totalPlaytimeSeconds?: number;
+    completionPercentage?: number;
+    // เพิ่ม novelId ที่นี่อีกครั้งเพื่อความชัดเจน แม้ว่า event หลักจะมี novelId อยู่แล้ว
+    // แต่การมีใน details ทำให้ schema ของ details นี้สมบูรณ์ในตัวเอง
+    novelId: Types.ObjectId; // **จำเป็น** สำหรับ Gamification Service ในการดึงข้อมูล Genre
+}
+const EndNovelEventDetailsSchema = new Schema<IEndNovelEventDetails>(
+    {
+        endingSceneId: { type: Schema.Types.ObjectId, ref: "Scene"},
+        endingNodeIdInStoryMap: { type: String, trim: true },
+        endingName: {type: String, trim: true, maxlength: 200},
+        totalPlaytimeSeconds: { type: Number, min: 0 },
+        completionPercentage: { type: Number, min: 0, max: 100 },
+        novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true }, // **จำเป็น**
+    },
+    { _id: false }
+);
+
 
 /**
  * @interface IEmotionalResponseLoggedEventDetails
@@ -307,6 +351,7 @@ const ContentSkippedEventDetailsSchema = new Schema<IContentSkippedEventDetails>
  * @property {Types.ObjectId | IEpisode} [episodeId] - ID ของตอนที่เกี่ยวข้อง (ถ้าเหตุการณ์เกิดในระดับตอน)
  * @property {IMakeChoiceEventDetails} [makeChoiceDetails] - รายละเอียดเฉพาะสำหรับ eventType = MAKE_CHOICE
  * @property {IReadSceneEventDetails} [readSceneDetails] - รายละเอียดเฉพาะสำหรับ eventType = READ_SCENE
+ * @property {IEndNovelEventDetails} [endNovelDetails] - (ใหม่) รายละเอียดสำหรับ END_NOVEL
  * @property {IEmotionalResponseLoggedEventDetails} [emotionalResponseLoggedDetails] - รายละเอียดเฉพาะสำหรับ eventType = EMOTIONAL_RESPONSE_LOGGED
  * @property {IContentSkippedEventDetails} [contentSkippedDetails] - รายละเอียดเฉพาะสำหรับ eventType = CONTENT_SKIPPED
  * @property {string} [sessionId] - ID ของ session การอ่านปัจจุบัน (เพื่อ group events ที่เกิดใน session หรือการเปิดอ่านครั้งเดียวกัน)
@@ -316,15 +361,16 @@ const ContentSkippedEventDetailsSchema = new Schema<IContentSkippedEventDetails>
  * @property {string} [ipAddress] - (Optional, ควรพิจารณาความเป็นส่วนตัว) IP Address ของ client
  * @property {Record<string, any>} [metadata] - ข้อมูลเพิ่มเติมอื่นๆ ที่เกี่ยวข้องกับ event นี้ (เช่น ตำแหน่ง scroll, การตั้งค่าการอ่าน)
  */
-export interface IReadingEvent { // ไม่ extends Document เพราะเป็น sub-document ที่ควบคุมโดย schema ของมันเอง
+export interface IReadingEvent {
   eventId: Types.ObjectId;
   eventType: ReadingEventType;
   timestamp: Date;
-  novelId: Types.ObjectId | INovel; // หรือแค่ Types.ObjectId ถ้าไม่ populate โดยตรงใน array
-  episodeId?: Types.ObjectId | IEpisode; // หรือแค่ Types.ObjectId
-  // รายละเอียด event เฉพาะประเภท (มีเพียงอันเดียวที่จะถูก populate ขึ้นกับ eventType)
+  novelId: Types.ObjectId | INovel;
+  episodeId?: Types.ObjectId | IEpisode;
+  // รายละเอียด event เฉพาะประเภท
   makeChoiceDetails?: IMakeChoiceEventDetails;
   readSceneDetails?: IReadSceneEventDetails;
+  endNovelDetails?: IEndNovelEventDetails; 
   emotionalResponseLoggedDetails?: IEmotionalResponseLoggedEventDetails;
   contentSkippedDetails?: IContentSkippedEventDetails;
   // ข้อมูลบริบทเพิ่มเติม
@@ -332,8 +378,8 @@ export interface IReadingEvent { // ไม่ extends Document เพราะ�
   deviceType?: string;
   deviceId?: string;
   appVersion?: string;
-  ipAddress?: string; // ควรระมัดระวังเรื่อง privacy
-  metadata?: Record<string, any>;
+  ipAddress?: string;
+  metadata?: Record<string, any>; // สำหรับ event types อื่นๆ หรือข้อมูลเพิ่มเติม
 }
 
 // Schema ย่อยสำหรับ IReadingEvent (Sub-document Schema)
@@ -371,6 +417,7 @@ const ReadingEventSchema = new Schema<IReadingEvent>(
     // Details specific to event types (only one should be present per event)
     makeChoiceDetails: { type: MakeChoiceEventDetailsSchema, default: undefined },
     readSceneDetails: { type: ReadSceneEventDetailsSchema, default: undefined },
+    endNovelDetails: { type: EndNovelEventDetailsSchema, default: undefined }, // (ใหม่)
     emotionalResponseLoggedDetails: { type: EmotionalResponseLoggedEventDetailsSchema, default: undefined },
     contentSkippedDetails: { type: ContentSkippedEventDetailsSchema, default: undefined },
     // Contextual information
@@ -425,7 +472,7 @@ const ReadingEventSchema = new Schema<IReadingEvent>(
  * @property {Date} updatedAt - วันที่อัปเดตเอกสารนี้ล่าสุด (Mongoose `timestamps`)
  */
 export interface IReadingAnalytic_EventStream extends Document {
-  [x: string]: any;
+  [x: string]: any; // สำหรับ Mongoose internals หรือ custom properties
   _id: Types.ObjectId;
   userId: Types.ObjectId | IUser;
   events: Types.DocumentArray<IReadingEvent>;
@@ -480,52 +527,47 @@ const ReadingAnalytic_EventStreamSchema = new Schema<IReadingAnalytic_EventStrea
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
 
-// Index สำหรับ query events ล่าสุดของผู้ใช้ (userId และ timestamp ของ event ภายใน array)
-// MongoDB สามารถ index array ของ sub-documents ได้ (multikey index)
+ReadingAnalytic_EventStreamSchema.index({ userId: 1, "events.timestamp": -1 }, { name: "UserEventsStreamTimestampIndexV2" }); // V2 เพื่อแยกจากเดิม
+ReadingAnalytic_EventStreamSchema.index({ "events.novelId": 1, "events.eventType": 1 }, { name: "EventsByNovelAndTypeIndexV2" });
+ReadingAnalytic_EventStreamSchema.index({ "events.sessionId": 1, "events.timestamp": 1 }, { name: "EventsBySessionIndexV2", sparse: true });
+// Index ใหม่สำหรับ Gamification: ค้นหา event ที่ผู้ใช้อ่านนิยายเรื่องใดเรื่องหนึ่งจบ (END_NOVEL)
 ReadingAnalytic_EventStreamSchema.index(
-  { userId: 1, "events.timestamp": -1 },
-  { name: "UserEventsStreamTimestampIndex" }
+  { userId: 1, "events.eventType": 1, "events.endNovelDetails.novelId": 1 },
+  {
+    name: "UserCompletedNovelEventIndex",
+    partialFilterExpression: { "events.eventType": ReadingEventType.END_NOVEL }
+  }
 );
-
-// Index สำหรับ query event ตาม novelId และ eventType ภายใน array events
+// Index สำหรับ event ที่มีการเลือก choice ที่มี impact score
 ReadingAnalytic_EventStreamSchema.index(
-  { "events.novelId": 1, "events.eventType": 1 },
-  { name: "EventsByNovelAndTypeIndex" }
-);
-
-// Index สำหรับ query event ตาม sessionId ภายใน array events
-ReadingAnalytic_EventStreamSchema.index(
-  { "events.sessionId": 1, "events.timestamp": 1 },
-  { name: "EventsBySessionIndex", sparse: true } // sparse เพราะ sessionId อาจไม่มีทุก event
+  { userId: 1, "events.eventType": 1, "events.makeChoiceDetails.psychologicalImpactScore": 1 },
+  {
+    name: "UserChoiceImpactScoreIndex",
+    partialFilterExpression: { "events.eventType": ReadingEventType.MAKE_CHOICE, "events.makeChoiceDetails.psychologicalImpactScore": { $exists: true } }
+  }
 );
 
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)
 // ==================================================================================================
 
-ReadingAnalytic_EventStreamSchema.pre<IReadingAnalytic_EventStream>("save", function (next: any) { // next: any ตามข้อจำกัด
-  // อัปเดต lastEventTimestamp เมื่อมีการเปลี่ยนแปลงใน events array
-  // totalEventsProcessed จะถูก $inc ใน static method `addEvent` เพื่อความแม่นยำและ atomicity
+ReadingAnalytic_EventStreamSchema.pre<IReadingAnalytic_EventStream>("save", function (next) {
   if (this.isModified("events")) {
     if (this.events && this.events.length > 0) {
-      // หา timestamp ล่าสุดจาก events array ที่อาจถูก $slice มา
-      // (logic นี้อาจจะไม่จำเป็นถ้า $set lastEventTimestamp ใน addEvent โดยตรง)
-      // this.lastEventTimestamp = this.events[this.events.length - 1]?.timestamp;
-      // แต่เนื่องจาก addEvent มี $slice การ set โดยตรงใน addEvent จะแน่นอนกว่า
+      // การเรียง events อาจไม่จำเป็นถ้า $push + $slice + $sort ทำงานถูกต้อง
+      // หรือถ้ามั่นใจว่า client ส่ง event มาเรียงตามเวลาแล้ว
+      // this.events.sort((a, b) => (a.timestamp as Date).getTime() - (b.timestamp as Date).getTime());
+      // this.lastEventTimestamp = this.events[this.events.length - 1]?.timestamp; // ตั้งค่าโดยตรงใน addEvent จะแม่นยำกว่าเมื่อใช้ $slice
     } else if (this.events && this.events.length === 0) {
-      this.lastEventTimestamp = undefined; // ถ้า array ว่างเปล่า
+      this.lastEventTimestamp = undefined;
     }
   }
-
-  // ตรวจสอบสถานะความยินยอมก่อนบันทึก event ใหม่ (เป็น double check, การตรวจสอบหลักควรอยู่ใน addEvent)
-  if (this.isModified("events") && this.events.length > (this.$__.priorDoc?.events?.length || 0) && !this.hasConsentToAnalytics) {
-    console.warn(`[ReadingAnalytic_EventStream PRE-SAVE] Attempted to add events for user ${this.userId} who has not given analytics consent. This should ideally be blocked in the service layer or static method.`);
-    // อาจจะ throw error หรือ filter events ออกถ้าไม่ต้องการให้บันทึกจริง
-    // next(new Error("User has not consented to analytics.")); // ตัวอย่างการ block
+  if (this.isNew && this.hasConsentToAnalytics) {
+      this.consentLastUpdatedAt = new Date();
   }
-
   next();
 });
+
 
 // ==================================================================================================
 // SECTION: Static Methods (เมธอดสำหรับ Model ReadingAnalytic_EventStream)

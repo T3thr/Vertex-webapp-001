@@ -3,6 +3,7 @@
 // ตามมาตรฐาน NovelMaze
 // เพิ่มการรวม WriterStats และการรองรับ Mental Wellbeing Insights
 // อัปเดตล่าสุด: เพิ่ม VisualNovelGameplayPreferences สำหรับการตั้งค่าเฉพาะของ Visual Novel
+// อัปเดตล่าสุด (Gamification): ปรับปรุง IUserGamification ให้ achievements ref ไปที่ 'UserAchievement'
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
@@ -308,7 +309,7 @@ export interface IUserSocialStats {
 
 /**
  * @interface IUserWallet
- * @description ข้อมูลกระเป๋าเงินของผู้ใช้
+ * @description ข้อมูลกระเป๋าเงินของผู้ใช้. Field `coinBalance` พร้อมให้ Service อัปเดตเมื่อมีการมอบรางวัล Coin.
  * @property {number} coinBalance - ยอดเหรียญสะสมปัจจุบัน
  * @property {Date} [lastCoinTransactionAt] - วันที่ทำธุรกรรมเหรียญล่าสุด
  */
@@ -319,11 +320,13 @@ export interface IUserWallet {
 
 /**
  * @interface IUserGamification
- * @description ข้อมูลเกี่ยวกับระบบ Gamification ของผู้ใช้
+ * @description ข้อมูลเกี่ยวกับระบบ Gamification ของผู้ใช้.
+ * Field `experiencePoints` พร้อมให้ Service อัปเดตเมื่อมีการมอบรางวัล XP.
+ * Field `achievements` อ้างอิงไปยังเอกสารใน Collection 'UserAchievement' เพื่อติดตามความสำเร็จที่ผู้ใช้ปลดล็อก.
  * @property {number} level - ระดับ (Level) ของผู้ใช้
  * @property {number} experiencePoints - คะแนนประสบการณ์ (XP) สะสม
  * @property {number} nextLevelXPThreshold - คะแนนประสบการณ์ที่ต้องใช้เพื่อขึ้นระดับถัดไป
- * @property {Types.ObjectId[]} achievements - รายการ ID ของ Achievement ที่ผู้ใช้ปลดล็อก (อ้างอิง Achievement model)
+ * @property {Types.ObjectId[]} achievements - รายการ ID ของ **UserAchievement** ที่ผู้ใช้ปลดล็อก (อ้างอิง UserAchievement model)
  * @property {object} loginStreaks - ข้อมูลสตรีคการล็อกอิน
  * @property {number} loginStreaks.currentStreakDays - จำนวนวันสตรีคการล็อกอินปัจจุบัน
  * @property {number} loginStreaks.longestStreakDays - จำนวนวันสตรีคการล็อกอินนานที่สุดที่เคยทำได้
@@ -336,7 +339,7 @@ export interface IUserGamification {
   level: number; // ระดับผู้ใช้
   experiencePoints: number; // คะแนนประสบการณ์
   nextLevelXPThreshold: number; // XP ที่ต้องการสำหรับเลเวลถัดไป
-  achievements: Types.ObjectId[]; // ID ความสำเร็จที่ปลดล็อก
+  achievements: Types.ObjectId[]; // ID ของ UserAchievement ที่ปลดล็อก
   loginStreaks: { // สถิติการล็อกอินต่อเนื่อง
     currentStreakDays: number; // วันที่ล็อกอินต่อเนื่องปัจจุบัน
     longestStreakDays: number; // วันที่ล็อกอินต่อเนื่องนานที่สุด
@@ -541,8 +544,8 @@ export interface IWriterStats {
  * @property {IUserTrackingStats} trackingStats - สถิติการใช้งานแพลตฟอร์ม
  * @property {IUserSocialStats} socialStats - สถิติทางสังคม
  * @property {IUserPreferences} preferences - การตั้งค่าส่วนตัวของผู้ใช้ (ซึ่งรวม analyticsConsent และ visualNovelGameplay)
- * @property {IUserWallet} wallet - ข้อมูลกระเป๋าเงินของผู้ใช้
- * @property {IUserGamification} gamification - ข้อมูลระบบ Gamification
+ * @property {IUserWallet} wallet - ข้อมูลกระเป๋าเงินของผู้ใช้ (พร้อมสำหรับการอัปเดต Coin จาก Service)
+ * @property {IUserGamification} gamification - ข้อมูลระบบ Gamification (พร้อมสำหรับการอัปเดต XP และ Achievements จาก Service)
  * @property {string[]} [verifiedBadges] - ป้ายยืนยันต่างๆ ที่ผู้ใช้ได้รับ (เช่น "Verified Writer", "Top Commenter")
  * @property {IUserVerification} [verification] - ข้อมูลการยืนยันตัวตน (KYC) และสถานะการเป็นนักเขียน
  * @property {IUserDonationSettings} [donationSettings] - การตั้งค่าเกี่ยวกับการรับบริจาค (สำหรับนักเขียน)
@@ -849,7 +852,7 @@ const UserSocialStatsSchema = new Schema<IUserSocialStats>(
 // Schema กระเป๋าเงิน
 const UserWalletSchema = new Schema<IUserWallet>(
   {
-    coinBalance: { type: Number, default: 0, min: 0, required: true, comment: "ยอดเหรียญคงเหลือ" },
+    coinBalance: { type: Number, default: 0, min: 0, required: true, comment: "ยอดเหรียญคงเหลือ, พร้อมให้ Service อัปเดต" },
     lastCoinTransactionAt: { type: Date, comment: "วันที่ทำธุรกรรมเหรียญล่าสุด" },
   },
   { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
@@ -859,9 +862,9 @@ const UserWalletSchema = new Schema<IUserWallet>(
 const UserGamificationSchema = new Schema<IUserGamification>(
   {
     level: { type: Number, default: 1, min: 1, required: true, comment: "ระดับผู้ใช้" },
-    experiencePoints: { type: Number, default: 0, min: 0, required: true, comment: "คะแนนประสบการณ์" },
+    experiencePoints: { type: Number, default: 0, min: 0, required: true, comment: "คะแนนประสบการณ์, พร้อมให้ Service อัปเดต" },
     nextLevelXPThreshold: { type: Number, default: 100, min: 0, required: true, comment: "XP ที่ต้องการสำหรับเลเวลถัดไป" },
-    achievements: [{ type: Schema.Types.ObjectId, ref: "Achievement", comment: "ID ความสำเร็จที่ปลดล็อก" }],
+    achievements: [{ type: Schema.Types.ObjectId, ref: "UserAchievement", comment: "ID ของ UserAchievement ที่ปลดล็อก (เอกสารที่บันทึกความสำเร็จของผู้ใช้แต่ละคน)" }], // << ปรับปรุง ref เป็น UserAchievement
     loginStreaks: {
       currentStreakDays: { type: Number, default: 0, min: 0, comment: "วันที่ล็อกอินต่อเนื่องปัจจุบัน" },
       longestStreakDays: { type: Number, default: 0, min: 0, comment: "วันที่ล็อกอินต่อเนื่องนานที่สุด" },
@@ -1040,13 +1043,13 @@ const UserSchema = new Schema<IUser>(
     wallet: {
         type: UserWalletSchema, // ใช้ schema ย่อยที่กำหนดไว้
         default: () => ({ coinBalance: 0 }),
-        comment: "ข้อมูลกระเป๋าเงิน (เหรียญ)",
+        comment: "ข้อมูลกระเป๋าเงิน (เหรียญ), field coinBalance พร้อมให้ Service อัปเดต",
     },
     /** ข้อมูลระบบ Gamification ของผู้ใช้ */
     gamification: {
         type: UserGamificationSchema, // ใช้ schema ย่อยที่กำหนดไว้
         default: () => ({ level: 1, experiencePoints: 0, nextLevelXPThreshold: 100, achievements: [], loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 }, dailyCheckIn: { currentStreakDays: 0 } }),
-        comment: "ข้อมูลระบบ Gamification",
+        comment: "ข้อมูลระบบ Gamification, field experiencePoints และ achievements พร้อมให้ Service อัปเดต",
     },
     /** ป้ายยืนยันต่างๆ ที่ผู้ใช้ได้รับ */
     verifiedBadges: {
@@ -1134,6 +1137,7 @@ UserSchema.index({ "accounts.provider": 1, "accounts.providerAccountId": 1 }, { 
 UserSchema.index({ roles: 1 }, { name: "UserRolesIndex" }); // Index สำหรับบทบาท
 UserSchema.index({ "preferences.language": 1 }, { name: "UserLanguagePreferenceIndex" }); // Index สำหรับภาษาที่ตั้งค่า
 UserSchema.index({ "gamification.level": -1 }, { name: "UserGamificationLevelIndex" }); // Index สำหรับระดับใน Gamification
+UserSchema.index({ "gamification.achievements": 1 }, { name: "UserGamificationAchievementsRefIndex" }); // Index สำหรับ achievements array ใน gamification
 UserSchema.index({ lastLoginAt: -1 }, { name: "UserLastLoginIndex" }); // Index สำหรับวันที่ล็อกอินล่าสุด
 UserSchema.index({ isDeleted: 1, deletedAt: 1 }, { name: "UserSoftDeleteIndex" }); // Index สำหรับการ soft delete
 UserSchema.index( // Index สำหรับการค้นหาผู้ใช้ที่ยินยอมให้วิเคราะห์ข้อมูล
@@ -1372,5 +1376,15 @@ export default UserModel;
 //     ยังคงเป็นส่วนหนึ่งของ User model เพื่อรองรับฟีเจอร์ด้านสุขภาพจิตในอนาคต.
 // 3.  **Security and Privacy**: `select: false` ถูกใช้กับ field ที่ละเอียดอ่อน.
 // 4.  **Modularity**: การใช้ Sub-Schemas ช่วยให้โค้ดเป็นระเบียบและจัดการง่ายขึ้น.
-// 5.  **VisualNovelGameplayPreferences**: เพิ่มส่วนนี้เข้ามาเพื่อรองรับการตั้งค่าเฉพาะของ Visual Novel ตามโจทย์
+// 5.  **VisualNovelGameplayPreferences**: เพิ่มส่วนนี้เข้ามาเพื่อรองรับการตั้งค่าเฉพาะของ Visual Novel ตามโจทย์.
+// 6.  **Gamification Fields**:
+//     -   `User.gamification.experiencePoints`: Field นี้พร้อมสำหรับ Service ที่จะมาอัปเดตคะแนน XP ของผู้ใช้.
+//     -   `User.wallet.coinBalance`: Field นี้พร้อมสำหรับ Service ที่จะมาอัปเดตยอด Coin ของผู้ใช้.
+//     -   `User.gamification.achievements`: Field นี้ได้รับการปรับปรุงให้ ref ไปยัง 'UserAchievement' Model แล้ว
+//         ทำให้สามารถเก็บรายการ ObjectId ของเอกสาร UserAchievement ที่ผู้ใช้คนนั้นๆ ปลดล็อกได้
+//         ซึ่ง Service หรือ Event Listener กลางจะใช้ข้อมูลนี้ในการอัปเดตรางวัล (XP, Coins) เข้าสู่ `User.ts`
+//         และบันทึกการปลดล็อกใน `UserAchievement.ts`.
+// 7.  **Service Layer Responsibility**: การอัปเดต `gamification.experiencePoints`, `wallet.coinBalance`,
+//     และการเพิ่ม ID เข้า `gamification.achievements` ควรเป็นความรับผิดชอบของ Gamification Service/Event Listener
+//     ที่จะถูกสร้างขึ้น. User model เตรียม field เหล่านี้ให้พร้อมใช้งานแล้ว.
 // ==================================================================================================
