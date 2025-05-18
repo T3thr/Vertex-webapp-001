@@ -148,6 +148,7 @@ const OfficialMediaCollectionInfoSchema = new Schema<IOfficialMediaCollectionInf
  * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
  */
 export interface IOfficialMedia extends Document {
+  url: any;
   _id: Types.ObjectId;
   title: string;
   description?: string;

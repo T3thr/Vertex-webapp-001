@@ -71,23 +71,6 @@ export enum VariableScope {
  * @enum {string} ChoiceActionType
  * @description ประเภทของการกระทำ (Action) ที่จะเกิดขึ้นเมื่อผู้เล่นเลือกตัวเลือก (Choice)
  * ปรับปรุงให้รองรับการจัดการสถานะและตัวแปรที่ละเอียดขึ้น
- * - `GO_TO_SCENE`: ไปยังฉาก (Scene ID) ที่กำหนด (parameters: { sceneId: Types.ObjectId })
- * - `SET_VARIABLE`: ตั้งค่าตัวแปร (parameters: ISetVariableParams)
- * - `UPDATE_RELATIONSHIP`: อัปเดตค่าความสัมพันธ์ (parameters: { characterId1: Types.ObjectId, characterId2: Types.ObjectId, changeAmount: number, relationshipType?: string })
- * - `UNLOCK_ACHIEVEMENT`: ปลดล็อก Achievement (parameters: { achievementId: string })
- * - `PLAY_SOUND`: เล่นเสียง (parameters: IPlayAudioParams)
- * - `SHOW_MEDIA_ELEMENT`: แสดง VisualElement หรือ VideoElement (parameters: { instanceId: string })
- * - `HIDE_MEDIA_ELEMENT`: ซ่อน VisualElement หรือ VideoElement (parameters: { instanceId: string })
- * - `ADD_ITEM_TO_INVENTORY`: เพิ่มไอเทมเข้าช่องเก็บของ (parameters: { itemId: Types.ObjectId (ref: 'Item'), quantity: number, targetInventoryOwnerId?: Types.ObjectId (ref: 'Character' or 'PlayerProfile'), inventoryType?: string })
- * - `REMOVE_ITEM_FROM_INVENTORY`: นำไอเทมออกจากช่องเก็บของ (parameters: { itemId: Types.ObjectId (ref: 'Item'), quantity: number, targetInventoryOwnerId?: Types.ObjectId, inventoryType?: string })
- * - `USE_ITEM`: ใช้ไอเทม (parameters: { itemId: Types.ObjectId (ref: 'Item'), targetCharacterInstanceId?: string, effectParameters?: any })
- * - `CUSTOM_SCRIPT`: รันสคริปต์ (parameters: { scriptId?: string, scriptContent?: string, contextParameters?: any })
- * - `END_NOVEL_BRANCH`: จบเนื้อเรื่องในแขนงนั้นๆ
- * - `CONDITIONAL_ACTION`: การกระทำที่มีเงื่อนไข (parameters: { condition: IConditionLogic, trueActions: IConfigurableAction[], falseActions?: IConfigurableAction[] })
- * - `START_QUEST`: เริ่มเควส (parameters: { questId: string })
- * - `UPDATE_QUEST_PROGRESS`: อัปเดตความคืบหน้าเควส (parameters: { questId: string, objectiveKey?: string, progressUpdate: any })
- * - `APPLY_STATUS_EFFECT`: ใช้สถานะเอฟเฟกต์ (parameters: { targetCharacterInstanceId: string, effectToApply: IStatusEffect })
- * - `REMOVE_STATUS_EFFECT`: ลบสถานะเอฟเฟกต์ (parameters: { targetCharacterInstanceId: string, effectName: string })
  */
 export enum ChoiceActionType {
   GO_TO_SCENE = "go_to_scene",
@@ -131,7 +114,11 @@ export enum TimelineEventType {
   // Audio Control
   PLAY_AUDIO = "play_audio",
   STOP_AUDIO = "stop_audio",
-  FADE_AUDIO_VOLUME = "fade_audio_volume",
+  ADJUST_AUDIO_VOLUME = "adjust_audio_volume", // << เพิ่มใหม่
+  FADE_AUDIO_VOLUME = "fade_audio_volume",   // << เพิ่มใหม่
+  SET_AUDIO_PITCH = "set_audio_pitch",       // << เพิ่มใหม่
+  SET_AUDIO_PAN = "set_audio_pan",         // << เพิ่มใหม่
+
 
   // Background Control
   CHANGE_BACKGROUND = "change_background",
@@ -160,44 +147,57 @@ export enum TimelineEventType {
   SET_VARIABLE = "set_variable",
   RUN_CUSTOM_SCRIPT = "run_custom_script",
   SCREEN_EFFECT = "screen_effect",
-  TRANSITION_EFFECT = "transition_effect", // เอฟเฟกต์การเปลี่ยนภาพ/องค์ประกอบ *ภายใน* ฉาก
-  APPLY_SCENE_EFFECT = "apply_scene_effect", // เอฟเฟกต์ที่ส่งผลต่อบรรยากาศทั้งฉาก เช่น หมอก, ฝน
+  TRANSITION_EFFECT = "transition_effect",
+  APPLY_SCENE_EFFECT = "apply_scene_effect",
   REMOVE_SCENE_EFFECT = "remove_scene_effect",
-  TRIGGER_HOTSPOT = "trigger_hotspot", // จำลองการคลิก hotspot โดย event
-  ENABLE_HOTSPOT = "enable_hotspot", // เปิด/ปิดการใช้งาน hotspot
+  TRIGGER_HOTSPOT = "trigger_hotspot",
+  ENABLE_HOTSPOT = "enable_hotspot",
+
+  // Camera Control << เพิ่มใหม่
+  CAMERA_ZOOM = "camera_zoom",
+  CAMERA_PAN = "camera_pan",
+  CAMERA_ROTATE = "camera_rotate",
+  CAMERA_SHAKE = "camera_shake",
+  CAMERA_FOCUS_ON_TARGET = "camera_focus_on_target", // << เพิ่มใหม่ (Optional)
+  CAMERA_RESET = "camera_reset",                 // << เพิ่มใหม่ (Optional)
 }
 
 /**
  * @enum {string} SceneTransitionType
  * @description ประเภทของการเปลี่ยนฉาก (Transition) เมื่อจะไปยังฉากถัดไป
- * - `none`: ไม่มีการเปลี่ยนฉากแบบพิเศษ (ตัดภาพไปเลย - hard cut)
- * - `fade`: ค่อยๆ จางภาพ (fade out ฉากปัจจุบัน, fade in ฉากใหม่)
- * - `slide_left`: ฉากใหม่เลื่อนมาจากทางขวา (ฉากปัจจุบันเลื่อนไปทางซ้าย)
- * - `slide_right`: ฉากใหม่เลื่อนมาจากทางซ้าย
- * - `slide_up`: ฉากใหม่เลื่อนมาจากข้างล่าง
- * - `slide_down`: ฉากใหม่เลื่อนมาจากข้างบน
- * - `wipe`: กวาดภาพ (มีหลายรูปแบบย่อย เช่น wipe_left, wipe_diagonal)
- * - `dissolve`: ภาพค่อยๆ ละลายเปลี่ยนเป็นฉากใหม่
- * - `zoom_in_out`: ซูมเข้าภาพปัจจุบันแล้วซูมออกจากภาพใหม่
- * - `custom`: กำหนดเองผ่าน script หรือ animation ที่ซับซ้อน (ระบุใน transitionCustomName)
  */
 export enum SceneTransitionType {
   NONE = "none", FADE = "fade", SLIDE_LEFT = "slide_left", SLIDE_RIGHT = "slide_right",
-  SLIDE_UP = "slide_up", SLIDE_DOWN = "slide_down", WIPE = "wipe", DISSOLVE = "dissolve",
-  ZOOM_IN_OUT = "zoom_in_out", CUSTOM = "custom",
+  SLIDE_UP = "slide_up", SLIDE_DOWN = "slide_down",
+  WIPE_LEFT = "wipe_left",         // << เพิ่มใหม่
+  WIPE_RIGHT = "wipe_right",       // << เพิ่มใหม่
+  WIPE_UP = "wipe_up",           // << เพิ่มใหม่
+  WIPE_DOWN = "wipe_down",         // << เพิ่มใหม่
+  DISSOLVE = "dissolve",         // << เพิ่มใหม่
+  ZOOM_IN = "zoom_in",           // << เพิ่มใหม่
+  ZOOM_OUT = "zoom_out",          // << เพิ่มใหม่
+  CUSTOM = "custom",
 }
+
+/**
+ * @enum {string} ScreenEffectType
+ * @description (เพิ่มใหม่ ถ้ายังไม่มี) ประเภทของ Screen Effect
+ */
+export enum ScreenEffectType {
+    SHAKE = "shake",
+    FLASH = "flash",
+    BLUR = "blur",
+    FADE_TO_COLOR = "fade_to_color", // << เพิ่มใหม่
+    GRAYSCALE = "grayscale",
+    SEPIA = "sepia",
+    INVERT_COLORS = "invert_colors",
+    CUSTOM_SHADER = "custom_shader", // สำหรับเอฟเฟกต์ที่ซับซ้อน
+}
+
 
 /**
  * @enum {string} StatusEffectType
  * @description ประเภทของ Status Effect
- * - `BUFF`: เพิ่มค่า stat ชั่วคราว
- * - `DEBUFF`: ลดค่า stat ชั่วคราว
- * - `DAMAGE_OVER_TIME`: สร้างความเสียหายต่อเนื่อง (เช่น พิษ, ไฟไหม้)
- * - `HEAL_OVER_TIME`: ฟื้นฟูต่อเนื่อง
- * - `STUN`: ทำให้หยุดการกระทำ
- * - `SILENCE`: ห้ามใช้สกิล/เวทมนตร์
- * - `MODIFIER`: เปลี่ยนแปลงพฤติกรรมหรือค่าอื่นๆ ที่ไม่ใช่ stat โดยตรง
- * - `CUSTOM`: กำหนดเองผ่าน script หรือ logic เฉพาะ
  */
 export enum StatusEffectType {
   BUFF = "buff", DEBUFF = "debuff", DAMAGE_OVER_TIME = "damage_over_time",
@@ -208,12 +208,6 @@ export enum StatusEffectType {
 /**
  * @enum {string} StatusUIType
  * @description ประเภทของ UI ที่ใช้แสดงสถานะ
- * - `GAUGE_BAR`: แถบพลัง, HP, MP (แสดงค่าปัจจุบันเทียบกับค่าสูงสุด)
- * - `NUMERIC_DISPLAY`: แสดงตัวเลข เช่น ค่าเงิน, คะแนน, จำนวนไอเทม
- * - `ICON_LIST`: รายการไอคอนแสดงสถานะ (เช่น buff/debuff icons)
- * - `TEXT_LABEL`: ป้ายข้อความแสดงสถานะ หรือข้อมูลที่ไม่ใช่ตัวเลขตรงๆ
- * - `RADIAL_GAUGE`: เกจวงกลม
- * - `CUSTOM_HTML`: แสดงผลด้วย HTML ที่กำหนดเอง (ต้องระมัดระวังด้านความปลอดภัย)
  */
 export enum StatusUIType {
   GAUGE_BAR = "gauge_bar", NUMERIC_DISPLAY = "numeric_display", ICON_LIST = "icon_list",
@@ -227,15 +221,6 @@ export enum StatusUIType {
 /**
  * @interface ITransform
  * @description ข้อมูลการแปลงรูปทรงขององค์ประกอบในฉาก (ตำแหน่ง, ขนาด, การหมุน, ความโปร่งใส, ลำดับการแสดงผล)
- * @property {number} [positionX] - ตำแหน่งแกน X (หน่วยเป็น % ของพื้นที่ฉาก หรือ pixel, ขึ้นกับการออกแบบ Editor)
- * @property {number} [positionY] - ตำแหน่งแกน Y
- * @property {number} [scaleX] - อัตราส่วนการขยายแกน X (1 คือขนาดปกติ)
- * @property {number} [scaleY] - อัตราส่วนการขยายแกน Y
- * @property {number} [rotation] - องศาการหมุน (0-360)
- * @property {number} [opacity] - ความโปร่งใส (0 คือโปร่งใสสมบูรณ์, 1 คือทึบแสง)
- * @property {number} [zIndex] - ลำดับการซ้อนทับขององค์ประกอบ (ค่ามากจะแสดงอยู่ด้านบน)
- * @property {"left" | "center" | "right"} [anchorPointX] - จุดอ้างอิงแนวนอน ("center" โดยทั่วไป)
- * @property {"top" | "center" | "bottom"} [anchorPointY] - จุดอ้างอิงแนวตั้ง ("center" โดยทั่วไป)
  */
 export interface ITransform {
   positionX?: number; positionY?: number; scaleX?: number; scaleY?: number;
@@ -259,12 +244,6 @@ const TransformSchema = new Schema<ITransform>({
 /**
  * @interface IBackgroundSetting
  * @description การตั้งค่าพื้นหลังของฉาก
- * @property {"color" | "image" | "video"} type - ประเภทของพื้นหลัง
- * @property {string} value - ค่าของพื้นหลัง (รหัสสี HEX, Media ID, หรือ URL)
- * @property {boolean} [isOfficialMedia] - ระบุว่า Media ที่ใช้ใน `value` (ถ้าเป็น ID) มาจากคลัง OfficialMedia หรือไม่ (ถ้า `type` เป็น "image" หรือ "video")
- * @property {string} [blurEffect] - ระดับการเบลอ (เช่น "5px")
- * @property {string} [colorOverlay] - สีที่ซ้อนทับ (เช่น "rgba(0,0,0,0.5)")
- * @property {"cover" | "contain" | "tile" | "stretch"} [fitMode] - วิธีการปรับขนาด (สำหรับ image/video)
  */
 export interface IBackgroundSetting {
   type: "color" | "image" | "video"; value: string; isOfficialMedia?: boolean;
@@ -282,25 +261,7 @@ const BackgroundSettingSchema = new Schema<IBackgroundSetting>({
 
 /**
  * @interface IConditionLogic
- * @description โครงสร้างสำหรับเงื่อนไขที่ซับซ้อน (สามารถพัฒนาเป็น expression tree หรือ query language)
- * ใช้สำหรับตรวจสอบเงื่อนไขต่างๆ ในเกม เช่น การแสดงผล Choice, การทำงานของ Hotspot, หรือการทำงานของ Event/Action
- * @property {"variable_check" | "inventory_check" | "status_effect_check" | "script_check" | "compound_logic"} type - ประเภทของเงื่อนไข
- * @property {string} [variableName] - (สำหรับ variable_check) ชื่อตัวแปรที่จะตรวจสอบ
- * @property {VariableScope} [scope] - (สำหรับ variable_check) ขอบเขตของตัวแปร
- * @property {string} [characterInstanceIdForVar] - (สำหรับ variable_check และ scope=CHARACTER_STATUS) Instance ID ของตัวละคร
- * @property {Types.ObjectId} [characterIdForVar] - (สำหรับ variable_check และ scope=CHARACTER_STATUS) Character ID หลัก (อาจใช้กรณีไม่มี instanceId)
- * @property {"==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "not_contains" | "has_flag" | "missing_flag"} [comparisonOperator] - (สำหรับ variable_check) ตัวดำเนินการเปรียบเทียบ
- * @property {any} [expectedValue] - (สำหรับ variable_check) ค่าที่คาดหวัง
- * @property {Types.ObjectId} [itemId] - (สำหรับ inventory_check) ID ของไอเทม (ref: 'Item')
- * @property {number} [quantityRequired] - (สำหรับ inventory_check) จำนวนที่ต้องการ (default: 1)
- * @property {string} [inventoryOwnerInstanceId] - (สำหรับ inventory_check) Instance ID ของเจ้าของ Inventory (เช่น characterInstanceId) หรือ "player"
- * @property {string} [targetCharacterInstanceIdForStatus] - (สำหรับ status_effect_check) Instance ID ของตัวละครเป้าหมาย
- * @property {string} [statusEffectName] - (สำหรับ status_effect_check) ชื่อของ Status Effect
- * @property {boolean} [hasStatusEffect] - (สำหรับ status_effect_check) true = ตรวจสอบว่ามี, false = ตรวจสอบว่าไม่มี
- * @property {string} [scriptIdToCheck] - (สำหรับ script_check) ID ของ Script ที่จะ return true/false
- * @property {string} [scriptContentToCheck] - (สำหรับ script_check) เนื้อหา Script ที่จะ return true/false
- * @property {"AND" | "OR" | "NOT"} [logicalOperator] - (สำหรับ compound_logic) ตัวดำเนินการทางตรรกะ
- * @property {IConditionLogic[]} [subConditions] - (สำหรับ compound_logic) รายการเงื่อนไขย่อย
+ * @description โครงสร้างสำหรับเงื่อนไขที่ซับซ้อน
  */
 export interface IConditionLogic {
   type: "variable_check" | "inventory_check" | "status_effect_check" | "script_check" | "compound_logic";
@@ -311,7 +272,7 @@ export interface IConditionLogic {
   targetCharacterInstanceIdForStatus?: string; statusEffectName?: string; hasStatusEffect?: boolean;
   scriptIdToCheck?: string; scriptContentToCheck?: string;
   logicalOperator?: "AND" | "OR" | "NOT";
-  subConditions?: IConditionLogic[]; // Array of IConditionLogic
+  subConditions?: IConditionLogic[];
 }
 const ConditionLogicSchema = new Schema<IConditionLogic>({
   type: { type: String, enum: ["variable_check", "inventory_check", "status_effect_check", "script_check", "compound_logic"], required: true },
@@ -321,9 +282,9 @@ const ConditionLogicSchema = new Schema<IConditionLogic>({
   characterIdForVar: { type: Schema.Types.ObjectId, ref: 'Character' },
   comparisonOperator: { type: String, enum: ["==", "!=", ">", "<", ">=", "<=", "contains", "not_contains", "has_flag", "missing_flag"] },
   expectedValue: { type: Schema.Types.Mixed },
-  itemId: { type: Schema.Types.ObjectId, ref: 'Item' }, // อ้างอิง Item Model
+  itemId: { type: Schema.Types.ObjectId, ref: 'Item' },
   quantityRequired: { type: Number, default: 1 },
-  inventoryOwnerInstanceId: { type: String, trim: true }, // "player" หรือ characterInstanceId
+  inventoryOwnerInstanceId: { type: String, trim: true },
   targetCharacterInstanceIdForStatus: { type: String, trim: true },
   statusEffectName: { type: String, trim: true },
   hasStatusEffect: { type: Boolean },
@@ -331,30 +292,12 @@ const ConditionLogicSchema = new Schema<IConditionLogic>({
   scriptContentToCheck: { type: String, trim: true },
   logicalOperator: { type: String, enum: ["AND", "OR", "NOT"] },
 }, { _id: false });
-// การสร้าง subConditions: ConditionLogicSchema.add({ subConditions: [ConditionLogicSchema] }) เพื่อ recursive reference
 (ConditionLogicSchema as any).add({ subConditions: [ConditionLogicSchema] });
 
 
 /**
  * @interface IStatusEffect
  * @description ข้อมูล Status Effect ที่สามารถนำไปใช้กับตัวละครหรือองค์ประกอบอื่นๆ
- * @property {string} effectName - ชื่อเฉพาะของ effect (unique ภายในนิยามของเกม, เช่น "Poison_lvl1")
- * @property {StatusEffectType} type - ประเภทของ effect (BUFF, DEBUFF, etc.)
- * @property {string} [description] - คำอธิบายสำหรับ Editor หรือ Player
- * @property {Types.ObjectId} [iconMediaId] - Media ID ของไอคอนแสดงผล (ref: 'Media' หรือ 'OfficialMedia')
- * @property {"Media" | "OfficialMedia"} [iconMediaSourceType] - แหล่งที่มาของ iconMediaId
- * @property {number} [durationMs] - ระยะเวลาของ effect (0 หรือ undefined หมายถึงถาวรหรือควบคุมโดยปัจจัยอื่น)
- * @property {number} [magnitude] - ความรุนแรง/ค่าของ effect (เช่น +10 ATK, 5 damage)
- * @property {number} [tickIntervalMs] - (สำหรับ DoT/HoT) ความถี่ในการทำงาน (ms)
- * @property {{ statName: string; changeValue: string | number; isPercentage?: boolean; }[]} [affectedStats] - รายการ stat ที่ได้รับผลกระทบและค่าการเปลี่ยนแปลง
- * @property {string} [customLogicScriptId] - ID ของ Script สำหรับ logic ที่ซับซ้อน
- * @property {Types.DocumentArray<IConditionLogic>} [applicationConditions] - เงื่อนไขที่ต้องเป็นจริงเพื่อให้ effect นี้ทำงาน (เช่น "ถ้า HP < 25%")
- * @property {boolean} [stackable] - ซ้อนทับกันได้หรือไม่ (default: false)
- * @property {number} [maxStacks] - จำนวน stack สูงสุด (ถ้า stackable, default: 1)
- * @property {string} [visualEffectOnCharacter] - ชื่อหรือ ID ของ visual effect ที่จะแสดงบนตัวละคร (เช่น particle effect)
- * @property {string} [soundEffectOnApply] - Media ID ของเสียงเมื่อ effect เริ่มทำงาน
- * @property {string} [soundEffectOnTick] - Media ID ของเสียงเมื่อ effect ทำงานแต่ละ tick
- * @property {string} [soundEffectOnExpire] - Media ID ของเสียงเมื่อ effect หมดอายุ
  */
 export interface IStatusEffect {
   effectName: string; type: StatusEffectType; description?: string;
@@ -362,12 +305,12 @@ export interface IStatusEffect {
   durationMs?: number; magnitude?: number; tickIntervalMs?: number;
   affectedStats?: { statName: string; changeValue: string | number; isPercentage?: boolean; }[];
   customLogicScriptId?: string;
-  applicationConditions?: Types.DocumentArray<IConditionLogic>; // แก้ไขให้เป็น DocumentArray
+  applicationConditions?: Types.DocumentArray<IConditionLogic>;
   stackable?: boolean; maxStacks?: number;
   visualEffectOnCharacter?: string;
-  soundEffectOnApply?: string; // ควรเป็น Media ID
-  soundEffectOnTick?: string;  // ควรเป็น Media ID
-  soundEffectOnExpire?: string; // ควรเป็น Media ID
+  soundEffectOnApply?: string;
+  soundEffectOnTick?: string;
+  soundEffectOnExpire?: string;
 }
 const StatusEffectSchema = new Schema<IStatusEffect>({
   effectName: { type: String, required: true, trim: true, maxlength: 100 },
@@ -385,68 +328,41 @@ const StatusEffectSchema = new Schema<IStatusEffect>({
     isPercentage: { type: Boolean, default: false },
   }],
   customLogicScriptId: { type: String, trim: true },
-  applicationConditions: [ConditionLogicSchema], // ใช้ ConditionLogicSchema ที่กำหนดไว้
+  applicationConditions: [ConditionLogicSchema],
   stackable: { type: Boolean, default: false },
   maxStacks: { type: Number, min: 1, default: 1 },
   visualEffectOnCharacter: { type: String, trim: true },
-  soundEffectOnApply: { type: String, trim: true }, // หรือ Types.ObjectId ref 'Media'
-  soundEffectOnTick: { type: String, trim: true },   // หรือ Types.ObjectId ref 'Media'
-  soundEffectOnExpire: { type: String, trim: true }, // หรือ Types.ObjectId ref 'Media'
+  soundEffectOnApply: { type: String, trim: true },
+  soundEffectOnTick: { type: String, trim: true },
+  soundEffectOnExpire: { type: String, trim: true },
 }, { _id: false });
+
 
 /**
  * @interface ICharacterInScene
  * @description การตั้งค่าตัวละครที่ปรากฏในฉาก
- * @property {string} instanceId - ID เฉพาะของ instance ตัวละครนี้ในฉาก (ผู้เขียนกำหนด, unique ภายใน scene.characters)
- * @property {Types.ObjectId} characterId - ID ของตัวละครหลัก (ref: 'Character')
- * @property {string} [expressionId] - ID หรือชื่อของการแสดงออกทางสีหน้า/ท่าทาง (อ้างอิงจาก `Character.expressions` หรือเป็น key ที่ runtime จะ map ไปยัง Media)
- * หากเป็น Media ID โดยตรง ควรพิจารณาเพิ่ม `expressionMediaSourceType`
- * @property {ITransform} [transform] - ตำแหน่ง, ขนาด, การหมุน, ความโปร่งใสของตัวละคร
- * @property {boolean} [isVisible] - ตัวละครนี้กำลังแสดงอยู่ในฉากหรือไม่ (default: true)
- * @property {string} [enterAnimation] - ชื่อ/ID ของอนิเมชันตอนปรากฏตัว
- * @property {string} [exitAnimation] - ชื่อ/ID ของอนิเมชันตอนหายไป
- * @property {string} [layerId] - ID ของ Layer ที่ตัวละครนี้สังกัด (ref: 'ISceneLayer.layerId')
- * @property {Types.DocumentArray<IStatusEffect>} [currentStatusEffects] - สถานะ (buff/debuff) ที่ตัวละครนี้ได้รับในปัจจุบัน
- * @property {Types.DocumentArray<ISceneVariable>} [characterSpecificVariables] - (Optional) ตัวแปรเฉพาะของ instance ตัวละครนี้ (เช่น ค่า HP ปัจจุบันของศัตรูตัวนี้)
  */
 export interface ICharacterInScene {
   instanceId: string; characterId: Types.ObjectId; expressionId?: string;
   transform?: ITransform; isVisible?: boolean;
   enterAnimation?: string; exitAnimation?: string; layerId?: string;
   currentStatusEffects?: Types.DocumentArray<IStatusEffect>;
-  // characterSpecificVariables?: Types.DocumentArray<ISceneVariable>; // ยังคง comment ไว้ตามโค้ดเดิม
 }
 const CharacterInSceneSchema = new Schema<ICharacterInScene>({
   instanceId: { type: String, required: [true, "Instance ID is required for character in scene"] },
   characterId: { type: Schema.Types.ObjectId, ref: "Character", required: [true, "กรุณาระบุ ID ของตัวละคร (Character ID is required)"] },
-  expressionId: { type: String, trim: true }, // ควรมีกลไก mapping expressionId ไปยัง Media ใน Character model หรือ runtime
+  expressionId: { type: String, trim: true },
   transform: { type: TransformSchema, default: () => ({}) },
   isVisible: { type: Boolean, default: true },
   enterAnimation: { type: String, trim: true, maxlength: [100, "Enter animation name is too long"] },
   exitAnimation: { type: String, trim: true, maxlength: [100, "Exit animation name is too long"] },
   layerId: { type: String, trim: true },
   currentStatusEffects: [StatusEffectSchema],
-  // characterSpecificVariables: [SceneVariableSchema], // ยังคง comment ไว้
 }, { _id: false });
 
 /**
  * @interface ITextContent
  * @description การตั้งค่าข้อความที่แสดงในฉาก (เช่น บทสนทนา, คำบรรยาย)
- * @property {string} instanceId - ID เฉพาะของ instance ข้อความนี้ในฉาก (unique ภายใน scene.textContents)
- * @property {TextContentType} type - ประเภทของข้อความ (dialogue, narration, etc.)
- * @property {Types.ObjectId} [characterId] - ID ของตัวละครที่พูด (ถ้าเป็น dialogue, ref: 'Character')
- * @property {string} [speakerDisplayName] - ชื่อผู้พูดที่จะแสดง (อาจไม่ตรงกับชื่อตัวละคร, เช่น "???")
- * @property {string} content - เนื้อหาข้อความ (รองรับ Markdown, BBCode, หรือ HTML subset)
- * @property {string} [fontFamily] - ชื่อฟอนต์ (ถ้า override default)
- * @property {number} [fontSize] - ขนาดฟอนต์ (ถ้า override default)
- * @property {string} [color] - สีข้อความ (HEX, RGB, RGBA)
- * @property {"left" | "center" | "right" | "justify"} [textAlign] - การจัดเรียงข้อความ
- * @property {ITransform} [transform] - ตำแหน่งและขนาดของกล่องข้อความ
- * @property {Types.ObjectId} [voiceOverMediaId] - ID ของไฟล์เสียงพากย์ (ref: 'Media' หรือ 'OfficialMedia')
- * @property {"Media" | "OfficialMedia"} [voiceOverMediaSourceType] - แหล่งที่มาของ voiceOverMediaId
- * @property {number} [displaySpeed] - ความเร็วในการแสดงข้อความ (char per sec, 0 = ทันที)
- * @property {string} [textStylePresetId] - ID ของ preset สไตล์ข้อความ
- * @property {string} [layerId] - ID ของ Layer ที่ข้อความนี้สังกัด
  */
 export interface ITextContent {
   instanceId: string; type: TextContentType; characterId?: Types.ObjectId;
@@ -474,18 +390,10 @@ const TextContentSchema = new Schema<ITextContent>({
   layerId: { type: String, trim: true },
 }, { _id: false });
 
+
 /**
  * @interface IVisualElement
  * @description การตั้งค่าองค์ประกอบภาพ (เช่น รูปภาพ CG, icons, overlays) ในฉาก
- * @property {string} instanceId - ID เฉพาะของ instance องค์ประกอบนี้ (unique ภายใน scene.images)
- * @property {Types.ObjectId} mediaId - ID ของ Media (รูปภาพ) (ref: 'Media' หรือ 'OfficialMedia')
- * @property {"Media" | "OfficialMedia"} mediaSourceType - แหล่งที่มาของ mediaId
- * @property {ITransform} [transform] - ตำแหน่ง, ขนาด, การหมุน, ความโปร่งใส
- * @property {boolean} [isVisible] - องค์ประกอบนี้กำลังแสดงอยู่หรือไม่ (default: true)
- * @property {string} [altText] - คำอธิบายรูปภาพสำหรับ accessibility
- * @property {string} [onClickActionScript] - Script ที่จะทำงานเมื่อคลิก (อาจเปลี่ยนเป็น IConfigurableAction ในอนาคต)
- * @property {string} [hoverEffect] - ชื่อเอฟเฟกต์เมื่อ hover
- * @property {string} [layerId] - ID ของ Layer ที่องค์ประกอบนี้สังกัด
  */
 export interface IVisualElement {
   instanceId: string; mediaId: Types.ObjectId; mediaSourceType: "Media" | "OfficialMedia";
@@ -500,26 +408,15 @@ const VisualElementSchema = new Schema<IVisualElement>({
   transform: { type: TransformSchema, default: () => ({}) },
   isVisible: { type: Boolean, default: true },
   altText: { type: String, trim: true, maxlength: [255, "Alt text is too long"] },
-  onClickActionScript: { type: String, trim: true, maxlength: [1000, "onClickAction script is too long"] }, // เปลี่ยนจาก onClickAction
+  onClickActionScript: { type: String, trim: true, maxlength: [1000, "onClickAction script is too long"] },
   hoverEffect: {type: String, trim: true, maxlength: [100, "Hover effect name is too long"]},
   layerId: { type: String, trim: true },
 }, { _id: false });
 
+
 /**
  * @interface IVideoElement
  * @description การตั้งค่าวิดีโอในฉาก
- * @property {string} instanceId - ID เฉพาะของ instance วิดีโอนี้ (unique ภายใน scene.videos)
- * @property {Types.ObjectId} mediaId - ID ของ Media (ไฟล์วิดีโอ) (ref: 'Media' หรือ 'OfficialMedia')
- * @property {"Media" | "OfficialMedia"} mediaSourceType - แหล่งที่มาของ mediaId
- * @property {ITransform} [transform] - ตำแหน่งและขนาดของพื้นที่แสดงผลวิดีโอ
- * @property {boolean} [autoplay] - เล่นอัตโนมัติเมื่อฉากโหลด/event trigger (default: false)
- * @property {boolean} [loop] - เล่นซ้ำวนลูปหรือไม่ (default: false)
- * @property {boolean} [controls] - แสดงแถบควบคุมวิดีโอของ browser/player (default: false)
- * @property {number} [volume] - ระดับเสียงเริ่มต้น (0.0-1.0, default: 1.0)
- * @property {boolean} [isMuted] - ปิดเสียงวิดีโอเริ่มต้นหรือไม่ (default: false)
- * @property {boolean} [isVisible] - วิดีโอนี้กำลังแสดงอยู่หรือไม่ (default: true)
- * @property {string} [onEndedActionScript] - Script ที่จะเกิดเมื่อวิดีโอเล่นจบ
- * @property {string} [layerId] - ID ของ Layer ที่วิดีโอนี้สังกัด
  */
 export interface IVideoElement {
   instanceId: string; mediaId: Types.ObjectId; mediaSourceType: "Media" | "OfficialMedia";
@@ -537,86 +434,65 @@ const VideoElementSchema = new Schema<IVideoElement>({
   volume: { type: Number, min: 0, max: 1, default: 1 },
   isMuted: { type: Boolean, default: false },
   isVisible: { type: Boolean, default: true },
-  onEndedActionScript: { type: String, trim: true, maxlength: [1000, "onEndedAction script is too long"]}, // เปลี่ยนจาก onEndedAction
+  onEndedActionScript: { type: String, trim: true, maxlength: [1000, "onEndedAction script is too long"]},
   layerId: { type: String, trim: true },
 }, { _id: false });
+
 
 /**
  * @interface IAudioElement
  * @description การตั้งค่าเสียงในฉาก (SFX, BGM, Voice Over ที่ไม่ได้ผูกกับ TextContent โดยตรง)
- * @property {string} instanceId - ID เฉพาะของ instance เสียงนี้ (unique ภายใน scene.audios)
- * @property {"audio_effect" | "background_music" | "voice_over"} type - ประเภทของเสียง
- * @property {Types.ObjectId} mediaId - ID ของ Media (ไฟล์เสียง) (ref: 'Media' หรือ 'OfficialMedia')
- * @property {"Media" | "OfficialMedia"} mediaSourceType - แหล่งที่มาของ mediaId
- * @property {number} [volume] - ระดับเสียง (0.0-1.0, default: 1.0)
- * @property {boolean} [loop] - เล่นซ้ำวนลูปหรือไม่ (default: false)
- * @property {boolean} [autoplayOnLoad] - เล่นอัตโนมัติเมื่อฉากโหลด (default: false)
- * @property {number} [fadeInDurationMs] - ระยะเวลา fade in (ms)
- * @property {number} [fadeOutDurationMs] - ระยะเวลา fade out (ms)
- * @property {string} [audioChannel] - ช่องทางเสียง (เช่น "sfx", "music", "voice" เพื่อควบคุม volume แยกส่วน)
+ * เพิ่ม volume, pan, pitch, fadeInSeconds, fadeOutSeconds, loopStartPointMs, loopEndPointMs ตามโจทย์
  */
 export interface IAudioElement {
-  instanceId: string; type: "audio_effect" | "background_music" | "voice_over";
-  mediaId: Types.ObjectId; mediaSourceType: "Media" | "OfficialMedia";
-  volume?: number; loop?: boolean; autoplayOnLoad?: boolean;
-  fadeInDurationMs?: number; fadeOutDurationMs?: number; audioChannel?: string;
+  instanceId: string;
+  type: "audio_effect" | "background_music" | "voice_over";
+  mediaId: Types.ObjectId;
+  mediaSourceType: "Media" | "OfficialMedia";
+  /** @description ระดับความดังของเสียง (0.0 ถึง 1.0, ค่าเริ่มต้น 1.0) */
+  volume?: number;
+  /** @description ตำแหน่งเสียงในระบบสเตอริโอ (-1 ซ้ายสุด, 0 กลาง, 1 ขวาสุด, ค่าเริ่มต้น 0) */
+  pan?: number;
+  /** @description ระดับ pitch ของเสียง (เช่น 0.5 ถึง 2.0, ค่าเริ่มต้น 1.0) */
+  pitch?: number;
+  loop?: boolean;
+  autoplayOnLoad?: boolean;
+  /** @description (สำหรับ BGM/Loopable) ระยะเวลา fade in (วินาที) */
+  fadeInSeconds?: number;
+  /** @description (สำหรับ BGM/Loopable) ระยะเวลา fade out (วินาที) */
+  fadeOutSeconds?: number;
+  /** @description (สำหรับ BGM/Loopable) จุดเริ่มต้นการวนลูป (มิลลิวินาที) */
+  loopStartPointMs?: number;
+  /** @description (สำหรับ BGM/Loopable) จุดสิ้นสุดการวนลูป (มิลลิวินาที) */
+  loopEndPointMs?: number;
+  audioChannel?: string;
 }
 const AudioElementSchema = new Schema<IAudioElement>({
   instanceId: { type: String, required: [true, "Instance ID is required for audio element"] },
   type: { type: String, enum: ["audio_effect", "background_music", "voice_over"], required: true },
   mediaId: { type: Schema.Types.ObjectId, required: [true, "Media ID is required for audio element"], refPath: "audioElementMediaSourceType" },
   mediaSourceType: { type: String, enum: ["Media", "OfficialMedia"], required: true, alias: "audioElementMediaSourceType" },
-  volume: { type: Number, min: 0, max: 1, default: 1 },
+  volume: { type: Number, min: 0, max: 1, default: 1, comment: "ระดับความดัง (0-1)" },
+  pan: { type: Number, min: -1, max: 1, default: 0, comment: "ตำแหน่งสเตอริโอ (-1 ซ้าย, 0 กลาง, 1 ขวา)" },
+  pitch: { type: Number, default: 1, comment: "ระดับ Pitch (เช่น 0.5-2.0)" },
   loop: { type: Boolean, default: false },
   autoplayOnLoad: { type: Boolean, default: false },
-  fadeInDurationMs: { type: Number, min: 0, default: 0 },
-  fadeOutDurationMs: { type: Number, min: 0, default: 0 },
+  fadeInSeconds: { type: Number, min: 0, comment: "ระยะเวลา Fade In (วินาที)" },
+  fadeOutSeconds: { type: Number, min: 0, comment: "ระยะเวลา Fade Out (วินาที)" },
+  loopStartPointMs: { type: Number, min: 0, comment: "จุดเริ่ม Loop (ms)" },
+  loopEndPointMs: { type: Number, min: 0, comment: "จุดจบ Loop (ms)" },
   audioChannel: { type: String, trim: true, maxlength: [50, "Audio channel name is too long"] },
 }, { _id: false });
 
 
 /**
- * @interface IChoiceDetail (Interface Definition)
- * @description รายละเอียดของแต่ละตัวเลือกภายใน Choice Group.
- * Interface นี้มีไว้เพื่อกำหนดโครงสร้างของ Choice ที่ Model "Choice" (ซึ่ง `choiceGroupId` อ้างอิงถึง) ควรจะมี.
- * ไม่ได้หมายความว่า IChoiceDetail จะถูก embed โดยตรงใน IChoiceGroupInScene เสมอไป (เว้นแต่จะมีการออกแบบเช่นนั้นในอนาคต).
- * @property {string} choiceId - ID เฉพาะของตัวเลือกนี้ (unique ภายใน ChoiceGroup)
- * @property {string} choiceText - ข้อความที่แสดงบนตัวเลือก
- * @property {Types.DocumentArray<IConfigurableAction>} actions - ชุดของการกระทำที่จะเกิดขึ้นเมื่อเลือกตัวเลือกนี้
- * @property {string | IConditionLogic} [conditionToDisplay] - เงื่อนไข (string หรือ IConditionLogic) ที่ต้องเป็นจริงเพื่อให้ตัวเลือกนี้แสดงผล
- * @property {string} [tooltip] - ข้อความอธิบายเพิ่มเติมเมื่อ hover
- * @property {boolean} [isLockedInitially] - ตัวเลือกนี้ถูกล็อคในตอนแรกหรือไม่
- * @property {string} [unlockHint] - คำใบ้ถ้าถูกล็อค
- * @property {boolean} [isDefault] - ตัวเลือกนี้เป็น default หรือไม่ (หากมีระบบ auto-choice หรือ timeout)
- */
-export interface IChoiceDetail {
-    choiceId: string;
-    choiceText: string;
-    actions: Types.DocumentArray<IConfigurableAction>;
-    conditionToDisplay?: string | IConditionLogic;
-    tooltip?: string;
-    isLockedInitially?: boolean;
-    unlockHint?: string;
-    isDefault?: boolean;
-}
-// const ChoiceDetailSchema = new Schema<IChoiceDetail>({...}); // สามารถสร้าง Schema นี้ถ้าต้องการ embed หรือใช้ใน Model "Choice"
-
-
-/**
  * @interface IChoiceGroupInScene
  * @description การอ้างอิงกลุ่มตัวเลือก (Choice Group) ที่จะแสดงในฉากนี้
- * @property {string} instanceId - ID เฉพาะของ instance กลุ่มตัวเลือกนี้ในฉาก (unique ภายใน scene.choiceGroupsAvailable)
- * @property {Types.ObjectId} choiceGroupId - ID ของกลุ่มตัวเลือกหลัก (ref: 'Choice' model, ซึ่งคาดว่า Choice model จะมี array ของ IChoiceDetail)
- * @property {ITransform} [transform] - ตำแหน่งและขนาดของพื้นที่แสดงผลกลุ่มตัวเลือก
- * @property {boolean} [isModal] - แสดงเป็น modal dialog หรือไม่ (default: true)
- * @property {string | IConditionLogic} [displayCondition] - เงื่อนไข (string หรือ IConditionLogic) ที่ต้องเป็นจริงเพื่อให้กลุ่มตัวเลือกนี้แสดง
- * @property {string} [layerId] - ID ของ Layer ที่กลุ่มตัวเลือกนี้สังกัด
- * @property {string} [choiceGroupLayout] - (Optional) ชื่อ layout ที่กำหนดไว้สำหรับกลุ่มตัวเลือกนี้ (เช่น "horizontal_buttons", "vertical_list")
  */
 export interface IChoiceGroupInScene {
   instanceId: string; choiceGroupId: Types.ObjectId;
   transform?: ITransform; isModal?: boolean;
-  displayCondition?: string | IConditionLogic; // ใช้ IConditionLogicSchema
+  displayCondition?: string | IConditionLogic;
   layerId?: string;
   choiceGroupLayout?: string;
 }
@@ -625,50 +501,33 @@ const ChoiceGroupInSceneSchema = new Schema<IChoiceGroupInScene>({
   choiceGroupId: { type: Schema.Types.ObjectId, ref: "Choice", required: [true, "Choice Group ID (referencing a Choice document) is required"] },
   transform: { type: TransformSchema, default: () => ({}) },
   isModal: { type: Boolean, default: true },
-  displayCondition: { type: ConditionLogicSchema }, // เปลี่ยนเป็น ConditionLogicSchema โดยตรง
+  displayCondition: { type: ConditionLogicSchema },
   layerId: { type: String, trim: true },
   choiceGroupLayout: { type: String, trim: true },
 }, { _id: false });
 
+
 /**
  * @interface IConfigurableAction
- * @description โครงสร้าง Action ที่สามารถกำหนดค่าได้ (ใช้สำหรับ Hotspot, Choice, Event Parameters)
- * @property {ChoiceActionType} actionType - ประเภทของ Action
- * @property {any} actionParameters - พารามิเตอร์สำหรับ Action (โครงสร้างขึ้นอยู่กับ `actionType`)
- * @property {number} [delayMs] - หน่วงเวลาก่อน Action นี้ทำงาน (ms)
- * @property {string | IConditionLogic} [conditionToExecute] - เงื่อนไข (string หรือ IConditionLogic) ที่ต้องเป็นจริงเพื่อให้ Action นี้ทำงาน
+ * @description โครงสร้าง Action ที่สามารถกำหนดค่าได้
  */
 export interface IConfigurableAction {
   actionType: ChoiceActionType;
   actionParameters: any;
   delayMs?: number;
-  conditionToExecute?: string | IConditionLogic; // ใช้ IConditionLogicSchema
+  conditionToExecute?: string | IConditionLogic;
 }
 const ConfigurableActionSchema = new Schema<IConfigurableAction>({
   actionType: { type: String, enum: Object.values(ChoiceActionType), required: true },
   actionParameters: { type: Schema.Types.Mixed, required: true },
   delayMs: { type: Number, min: 0, default: 0 },
-  conditionToExecute: { type: ConditionLogicSchema }, // เปลี่ยนเป็น ConditionLogicSchema โดยตรง
+  conditionToExecute: { type: ConditionLogicSchema },
 }, { _id: false });
+
 
 /**
  * @interface IInteractiveHotspot
- * @description พื้นที่ (รูปทรงต่างๆ) ที่ผู้เล่นสามารถคลิกได้บนฉาก เพื่อให้เกิด action บางอย่าง
- * @property {string} hotspotId - ID เฉพาะของ hotspot นี้ (unique ภายใน scene.interactiveHotspots)
- * @property {ITransform} transform - กำหนดพื้นที่, ขนาด, และตำแหน่งของ hotspot (โดยทั่วไปคือ bounding box)
- * @property {"rectangle" | "circle" | "polygon"} [shapeType] - ประเภทรูปร่างของ hotspot (default: "rectangle" ถ้าไม่ระบุ)
- * @property {any} [shapeData] - ข้อมูลเพิ่มเติมสำหรับรูปร่าง (เช่น [{x,y},...] สำหรับ polygon, {radius} สำหรับ circle)
- * @property {string} [tooltip] - ข้อความที่จะแสดงเมื่อผู้ใช้ hover เมาส์เหนือ hotspot
- * @property {Types.DocumentArray<IConfigurableAction>} actions - ชุดของ actions ที่จะทำงานเมื่อคลิก hotspot
- * @property {boolean} [isVisibleDebug] - Hotspot นี้มองเห็นกรอบ debug ใน Editor หรือไม่ (default: false)
- * @property {boolean} [isActive] - Hotspot นี้คลิกได้หรือไม่ (default: true)
- * @property {string | IConditionLogic} [activationCondition] - เงื่อนไขที่ต้องเป็นจริงเพื่อให้ hotspot นี้ active/clickable
- * @property {boolean} [consumeClick] - เมื่อคลิกแล้ว hotspot นี้จะใช้งานไม่ได้อีกหรือไม่ (default: false)
- * @property {string} [layerId] - ID ของ Layer ที่ hotspot นี้สังกัด
- * @property {number} [maxClicks] - จำนวนครั้งที่คลิกได้ (0 = ไม่จำกัด, default: 0)
- * @property {Types.DocumentArray<IConfigurableAction>} [hoverEnterActions] - Actions ที่จะทำงานเมื่อผู้ใช้ hover เมาส์เข้าสู่พื้นที่ hotspot
- * @property {Types.DocumentArray<IConfigurableAction>} [hoverExitActions] - Actions ที่จะทำงานเมื่อผู้ใช้ hover เมาส์ออกจากพื้นที่ hotspot
- * @property {string} [cursorStyle] - CSS cursor style เมื่อ hover (เช่น "pointer", "help", "url(...)")
+ * @description พื้นที่ (รูปทรงต่างๆ) ที่ผู้เล่นสามารถคลิกได้บนฉาก
  */
 export interface IInteractiveHotspot {
   hotspotId: string; transform: ITransform;
@@ -677,7 +536,7 @@ export interface IInteractiveHotspot {
   tooltip?: string;
   actions: Types.DocumentArray<IConfigurableAction>;
   isVisibleDebug?: boolean; isActive?: boolean;
-  activationCondition?: string | IConditionLogic; // ใช้ IConditionLogicSchema
+  activationCondition?: string | IConditionLogic;
   consumeClick?: boolean; layerId?: string; maxClicks?: number;
   hoverEnterActions?: Types.DocumentArray<IConfigurableAction>;
   hoverExitActions?: Types.DocumentArray<IConfigurableAction>;
@@ -686,13 +545,13 @@ export interface IInteractiveHotspot {
 const InteractiveHotspotSchema = new Schema<IInteractiveHotspot>({
   hotspotId: { type: String, required: [true, "Hotspot ID is required"] },
   transform: { type: TransformSchema, required: [true, "Transform is required for hotspot to define its area"] },
-  shapeType: { type: String, enum: ["rectangle", "circle", "polygon"], default: "rectangle" }, // เพิ่ม shapeType
-  shapeData: { type: Schema.Types.Mixed }, // เพิ่ม shapeData
+  shapeType: { type: String, enum: ["rectangle", "circle", "polygon"], default: "rectangle" },
+  shapeData: { type: Schema.Types.Mixed },
   tooltip: { type: String, trim: true, maxlength: [255, "Tooltip for hotspot is too long"] },
   actions: [ConfigurableActionSchema],
-  isVisibleDebug: { type: Boolean, default: false }, // เปลี่ยนชื่อจาก isVisible
+  isVisibleDebug: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
-  activationCondition: { type: ConditionLogicSchema }, // เปลี่ยนเป็น ConditionLogicSchema โดยตรง
+  activationCondition: { type: ConditionLogicSchema },
   consumeClick: { type: Boolean, default: false },
   layerId: { type: String, trim: true },
   maxClicks: { type: Number, min:0, default:0 },
@@ -701,284 +560,244 @@ const InteractiveHotspotSchema = new Schema<IInteractiveHotspot>({
   cursorStyle: { type: String, trim: true },
 }, { _id: false });
 
+
 /**
  * @interface ISceneLayer
- * @description การจัดการ Layer ภายในฉาก เพื่อควบคุมลำดับการแสดงผลและคุณสมบัติของกลุ่มองค์ประกอบ
- * @property {string} layerId - ID เฉพาะของ Layer นี้ (unique ภายใน scene.layers)
- * @property {string} layerName - ชื่อที่ผู้ใช้อ่านได้ของ Layer (สำหรับ Editor)
- * @property {number} zIndex - ลำดับการซ้อนทับของ Layer นี้ (ค่ามากจะแสดงอยู่ด้านบนสุด, unique ภายใน scene.layers)
- * @property {boolean} [isVisible] - Layer นี้และองค์ประกอบทั้งหมดใน Layer นี้จะแสดงผลหรือไม่ (default: true)
- * @property {boolean} [isLocked] - Layer นี้ถูกล็อกการแก้ไขใน Editor หรือไม่ (default: false)
- * @property {number} [opacity] - ความโปร่งใสของทั้ง Layer (0.0-1.0, default: 1.0)
- * @property {"normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "color-dodge" | "color-burn" | "hard-light" | "soft-light" | "difference" | "exclusion" | "hue" | "saturation" | "color" | "luminosity"} [blendingMode] - (Optional) Blending mode ของ Layer (คล้าย Photoshop)
- * @property {Types.DocumentArray<ISceneEffectInstance>} [layerEffects] - (Optional) เอฟเฟกต์ที่ใช้กับทั้ง Layer นี้โดยเฉพาะ
+ * @description การจัดการ Layer ภายในฉาก
  */
 export interface ISceneLayer {
   layerId: string; layerName: string; zIndex: number;
   isVisible?: boolean; isLocked?: boolean; opacity?: number;
   blendingMode?: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "color-dodge" | "color-burn" | "hard-light" | "soft-light" | "difference" | "exclusion" | "hue" | "saturation" | "color" | "luminosity";
-  // layerEffects?: Types.DocumentArray<ISceneEffectInstance>; // ยังไม่เพิ่ม Schema โดยตรง รอการใช้งานจริง
 }
 const SceneLayerSchema = new Schema<ISceneLayer>({
   layerId: { type: String, required: [true, "Layer ID is required"] },
   layerName: { type: String, required: [true, "Layer name is required"], trim: true, maxlength: [100, "Layer name is too long"] },
-  zIndex: { type: Number, required: [true, "zIndex is required for layer ordering"] }, // ควร unique ภายใน scene
+  zIndex: { type: Number, required: [true, "zIndex is required for layer ordering"] },
   isVisible: { type: Boolean, default: true },
-  isLocked: { type: Boolean, default: false }, // For editor use
+  isLocked: { type: Boolean, default: false },
   opacity: { type: Number, min: 0, max: 1, default: 1 },
-  blendingMode: { type: String, enum: ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"], default: "normal" }, // เพิ่ม blendingMode
+  blendingMode: { type: String, enum: ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"], default: "normal" },
 }, { _id: false });
 
 
-// SECTION: Specific Timeline Event Parameter Interfaces
+// SECTION: Specific Timeline Event Parameter Interfaces (ตามที่ผู้ใช้กำหนดและเพิ่มเติม)
 
 /** @interface ITimelineEventParametersBase - Base for all event parameters. */
 export interface ITimelineEventParametersBase {
-    transitionDurationMs?: number; // Common for many visual changes
-    easingFunction?: "linear" | "easeInQuad" | "easeOutQuad" | "easeInOutQuad" | "easeInCubic" | "easeOutCubic" | "easeInOutCubic" | "easeInQuart" | "easeOutQuart" | "easeInOutQuart" | "easeInQuint" | "easeOutQuint" | "easeInOutQuint" | string; // Common easing functions
+    transitionDurationMs?: number;
+    easingFunction?: "linear" | "easeInQuad" | "easeOutQuad" | "easeInOutQuad" | string;
+    /** @description (สำหรับ PLAY_AUDIO, STOP_AUDIO) ID ของ Audio Element instance ที่ต้องการควบคุม */
+    audioElementInstanceId?: string; // << เพิ่มตามโจทย์
 }
 
 /** @description Parameters for SHOW_CHARACTER / HIDE_CHARACTER events */
 export interface IShowHideCharacterEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to characterInstanceId
-    // For SHOW_CHARACTER
-    targetTransform?: ITransform; // Optional: Override initial transform from ICharacterInScene
-    expressionId?: string;      // Optional: Override initial expression
-    entryAnimation?: string;    // Optional: Override entry animation
-    // For HIDE_CHARACTER
-    exitAnimation?: string;     // Optional: Override exit animation
+    targetTransform?: ITransform; expressionId?: string; entryAnimation?: string; exitAnimation?: string;
 }
-
 /** @description Parameters for CHANGE_CHARACTER_EXPRESSION event */
 export interface IChangeCharacterExpressionEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to characterInstanceId
-    newExpressionId: string; // The new expression ID (key from Character.expressions or mapped by runtime)
+    newExpressionId: string;
 }
-
 /** @description Parameters for MOVE_CHARACTER event */
 export interface IMoveCharacterEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to characterInstanceId
-    newTransform: ITransform; // The target transform state
-    // transitionDurationMs and easingFunction are inherited from ITimelineEventParametersBase
+    newTransform: ITransform;
 }
-
 /** @description Parameters for CHARACTER_ANIMATION event */
 export interface ICharacterAnimationEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to characterInstanceId
-    animationName: string; // Name of the animation to play (e.g., "wave", "jump", "customSpriteAnimation")
-    loop?: boolean; // Whether the animation should loop
-    iterations?: number; // Number of times to play if not looping (0 or undefined for infinite if loop=true)
+    animationName: string; loop?: boolean; iterations?: number;
 }
-
 /** @description Parameters for SHOW_TEXT_BLOCK / HIDE_TEXT_BLOCK events */
-export interface IShowHideTextBlockEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to textContentInstanceId
-    // For SHOW_TEXT_BLOCK
-    // content?: string; // Optionally override content if text block is dynamically generated by event
-    // speakerDisplayName?: string; // Optionally override speaker
-    // voiceOverMediaId?: Types.ObjectId; // Optionally override voice over
-    // voiceOverMediaSourceType?: "Media" | "OfficialMedia";
-}
-
+export interface IShowHideTextBlockEventParams extends ITimelineEventParametersBase {}
 /** @description Parameters for UPDATE_TEXT_BLOCK event */
 export interface IUpdateTextBlockEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to textContentInstanceId
-    newContent?: string; // New text content to display
-    newSpeakerDisplayName?: string; // Change speaker name
-    newColor?: string; // Change text color
-    typewriterEffectSpeed?: number; // Apply or change typewriter speed (chars/sec, 0 for instant)
+    newContent?: string; newSpeakerDisplayName?: string; newColor?: string; typewriterEffectSpeed?: number;
 }
 
-/** @description Parameters for PLAY_AUDIO / STOP_AUDIO / FADE_AUDIO_VOLUME events */
+/** @description Parameters for PLAY_AUDIO events (รวมจากโจทย์) */
 export interface IPlayAudioParams extends ITimelineEventParametersBase {
-    // targetInstanceId (optional) refers to IAudioElement.instanceId defined in scene.audios
-    // If not provided, or if overriding, specify mediaId.
-    audioInstanceId?: string;
-    mediaId?: Types.ObjectId; // ref: 'Media' or 'OfficialMedia'
-    mediaSourceType?: "Media" | "OfficialMedia";
-    loop?: boolean;
-    volume?: number; // 0.0 to 1.0
-    channel?: string; // e.g., "sfx", "bgm", "voice"
-    fadeInDurationMs?: number; // For PLAY_AUDIO
-    startTimeInAudioMs?: number; // Start playing from a specific point in the audio file
+    // audioElementInstanceId ถูกย้ายไป ITimelineEventParametersBase
+    mediaId?: Types.ObjectId; mediaSourceType?: "Media" | "OfficialMedia";
+    loop?: boolean; volume?: number; channel?: string; fadeInDurationMs?: number; startTimeInAudioMs?: number;
 }
+/** @description Parameters for STOP_AUDIO events (รวมจากโจทย์) */
 export interface IStopAudioParams extends ITimelineEventParametersBase {
-    // targetInstanceId (optional) refers to IAudioElement.instanceId or use audioChannel or mediaId
-    audioInstanceId?: string;
-    mediaId?: Types.ObjectId; // ref: 'Media' or 'OfficialMedia' (if stopping specific media not tied to an instance)
-    channel?: string;
-    fadeOutDurationMs?: number;
+    // audioElementInstanceId ถูกย้ายไป ITimelineEventParametersBase
+    mediaId?: Types.ObjectId; channel?: string; fadeOutDurationMs?: number;
 }
+/** @description Parameters for ADJUST_AUDIO_VOLUME events (ใหม่) */
+export interface IAdjustAudioVolumeParams extends ITimelineEventParametersBase {
+    // audioElementInstanceId ถูกย้ายไป ITimelineEventParametersBase
+    targetVolume: number; // 0.0 ถึง 1.0
+    // durationSeconds (สำหรับ transition) ควรมาจาก ITimelineEvent.durationMs
+}
+/** @description Parameters for FADE_AUDIO_VOLUME events (ใหม่) */
 export interface IFadeAudioVolumeParams extends ITimelineEventParametersBase {
-    // targetInstanceId (optional) refers to IAudioElement.instanceId or use audioChannel or mediaId
-    audioInstanceId?: string;
-    mediaId?: Types.ObjectId;
-    channel?: string;
-    targetVolume: number; // 0.0 to 1.0
-    // durationMs is inherited from ITimelineEventParametersBase and indicates fade duration
+    // audioElementInstanceId ถูกย้ายไป ITimelineEventParametersBase
+    targetVolume: number; // 0.0 ถึง 1.0
+    // durationSeconds (ระยะเวลา fade) ควรมาจาก ITimelineEvent.durationMs
 }
+/** @description Parameters for SET_AUDIO_PITCH events (ใหม่) */
+export interface ISetAudioPitchParams extends ITimelineEventParametersBase {
+    // audioElementInstanceId ถูกย้ายไป ITimelineEventParametersBase
+    targetPitch: number; // เช่น 0.5 ถึง 2.0
+}
+/** @description Parameters for SET_AUDIO_PAN events (ใหม่) */
+export interface ISetAudioPanParams extends ITimelineEventParametersBase {
+    // audioElementInstanceId ถูกย้ายไป ITimelineEventParametersBase
+    targetPan: number; // -1 (L) ถึง 1 (R)
+}
+
 
 /** @description Parameters for CHANGE_BACKGROUND event */
 export interface IChangeBackgroundEventParams extends ITimelineEventParametersBase {
-    newBackground: IBackgroundSetting; // The complete new background setting
-    // transitionDurationMs and easingFunction for the background change itself
+    newBackground: IBackgroundSetting;
 }
-
 /** @description Parameters for SHOW_VISUAL_ELEMENT / HIDE_VISUAL_ELEMENT events */
-export interface IShowHideVisualElementParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to visualElementInstanceId
-}
-
+export interface IShowHideVisualElementParams extends ITimelineEventParametersBase {}
 /** @description Parameters for ANIMATE_VISUAL_ELEMENT event */
 export interface IAnimateVisualElementEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to visualElementInstanceId
-    animationName?: string; // Predefined animation name
-    targetTransform?: ITransform; // Animate towards this transform state
-    // transitionDurationMs and easingFunction for the animation
-    loop?: boolean;
-    iterations?: number;
+    animationName?: string; targetTransform?: ITransform; loop?: boolean; iterations?: number;
 }
-
 /** @description Parameters for SHOW_VIDEO_ELEMENT / HIDE_VIDEO_ELEMENT events */
-export interface IShowHideVideoElementParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to videoElementInstanceId
-}
-
+export interface IShowHideVideoElementParams extends ITimelineEventParametersBase {}
 /** @description Parameters for CONTROL_VIDEO event */
 export interface IControlVideoParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to videoElementInstanceId
     controlType: "play" | "pause" | "stop" | "seek" | "set_volume" | "mute" | "unmute";
-    seekTimeMs?: number; // For "seek"
-    volumeLevel?: number; // For "set_volume" (0.0-1.0)
+    seekTimeMs?: number; volumeLevel?: number;
 }
-
 /** @description Parameters for SHOW_STATUS_UI_ELEMENT / HIDE_STATUS_UI_ELEMENT events */
-export interface IShowHideStatusUIElementParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to statusUIElementInstanceId
-}
-
+export interface IShowHideStatusUIElementParams extends ITimelineEventParametersBase {}
 /** @description Parameters for UPDATE_STATUS_UI_ELEMENT event */
 export interface IUpdateStatusUIElementParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to statusUIElementInstanceId
-    newValue?: any; // New value for the data source (runtime updates based on this)
-    overrideText?: string; // For text-based UI elements, directly set text
-    // animationType?: string; // Animation for the update (e.g., "flash", "highlight")
+    newValue?: any; overrideText?: string;
 }
-
 /** @description Parameters for SHOW_CHOICE_GROUP / HIDE_CHOICE_GROUP events */
-export interface IShowHideChoiceGroupParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to choiceGroupInstanceId
-}
-
+export interface IShowHideChoiceGroupParams extends ITimelineEventParametersBase {}
 /** @description Parameters for WAIT event */
-export interface IWaitEventParams extends ITimelineEventParametersBase {
-    // durationMs is directly on ITimelineEvent for WAIT
-}
-
+export interface IWaitEventParams extends ITimelineEventParametersBase {}
 /** @description Parameters for SET_VARIABLE event */
 export interface ISetVariableParams extends ITimelineEventParametersBase {
-  variableName: string;
-  value: any; // The new value or expression (e.g., "+=1", "-=10", "true")
-  scope: VariableScope;
-  characterInstanceId?: string; // If scope is CHARACTER_STATUS
-  // novelIdForGlobal?: Types.ObjectId; // If scope is NOVEL_GLOBAL and needs explicit novel targeting (rare)
+  variableName: string; value: any; scope: VariableScope; characterInstanceId?: string;
 }
-
 /** @description Parameters for RUN_CUSTOM_SCRIPT event */
 export interface IRunCustomScriptParams extends ITimelineEventParametersBase {
-    scriptId?: string; // ID of a predefined script
-    scriptContent?: string; // Actual script content
-    contextParameters?: { [key: string]: any }; // Parameters to pass to the script
+    scriptId?: string; scriptContent?: string; contextParameters?: { [key: string]: any };
 }
-
-/** @description Parameters for SCREEN_EFFECT event */
+/** @description Parameters for SCREEN_EFFECT event (ปรับปรุงตามโจทย์) */
 export interface IScreenEffectParams extends ITimelineEventParametersBase {
-    effectType: "shake" | "flash" | "blur" | "grayscale" | "sepia" | "invert" | "custom_shader";
-    intensity?: number; // 0.0 to 1.0, or specific units for shake (pixels)
-    durationMs?: number; // Duration of the effect (overrides ITimelineEvent.durationMs if needed for the effect itself)
-    color?: string; // For flash effect
-    shaderId?: string; // For custom_shader
-    shaderParameters?: { [key: string]: any };
+    effectType: ScreenEffectType; // ใช้ Enum ใหม่
+    /** @description ความรุนแรง (0.0-1.0 หรือ pixel สำหรับ shake) */
+    intensity?: number;
+    /** @description ระยะเวลาของเอฟเฟกต์ (ms) ถ้าไม่ระบุจะใช้ durationMs ของ Event */
+    durationSeconds?: number; // << โจทย์ระบุเป็น seconds
+    /** @description สี (HEX/RGBA) สำหรับ FLASH หรือ FADE_TO_COLOR */
+    color?: string;
+    shaderId?: string; shaderParameters?: { [key: string]: any };
 }
-
 /** @description Parameters for TRANSITION_EFFECT (intra-scene element transition) */
 export interface ITransitionEffectParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent is the element being transitioned (e.g. image, character)
-    // This is different from SceneTransitionType which is for scene-to-scene.
-    // This implies an animation or transform change on an element, covered by MOVE_CHARACTER or ANIMATE_VISUAL_ELEMENT.
-    // If this is for a general "filter" transition on an element, it's more like a temporary shader/effect.
-    // For now, assume this is covered by other animation/move events. If it's a specific visual transition like a "wipe" on an image,
-    // it might need more detailed parameters.
-    transitionName: string; // e.g. "pixel_dissolve_in", "blur_out"
+    transitionName: string;
 }
-
 /** @description Parameters for APPLY_CHARACTER_STATUS event */
 export interface IApplyCharacterStatusEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to characterInstanceId
-    statusEffectToApply: IStatusEffect; // The full status effect definition or a reference ID to a predefined one
+    statusEffectToApply: IStatusEffect;
 }
 /** @description Parameters for REMOVE_CHARACTER_STATUS event */
 export interface IRemoveCharacterStatusEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId from ITimelineEvent refers to characterInstanceId
-    statusEffectName: string; // Name of the status effect to remove
+    statusEffectName: string;
 }
+
+/** @interface ISceneEffectInstance */
+export interface ISceneEffectInstance {
+    instanceId: string;
+    effectType: "fog" | "rain" | "snow" | "color_filter" | "post_process_shader" | "custom_overlay" | string;
+    parameters: any;
+    startTimeMsOffset?: number;
+    durationMs?: number;
+    targetLayerId?: string;
+    zIndexInSceneEffects?: number;
+}
+const SceneEffectInstanceSchema = new Schema<ISceneEffectInstance>({
+    instanceId: { type: String, required: true },
+    effectType: { type: String, required: true },
+    parameters: { type: Schema.Types.Mixed },
+    startTimeMsOffset: { type: Number, min: 0, default:0 },
+    durationMs: { type: Number, min: 0 },
+    targetLayerId: { type: String, trim: true },
+    zIndexInSceneEffects: { type: Number, default: 0 },
+}, { _id: false });
 
 /** @description Parameters for APPLY_SCENE_EFFECT event */
 export interface IApplySceneEffectEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId can be used if the effect is tied to a specific ISceneEffectInstance.instanceId
-    // Otherwise, parameters define the effect.
-    effectInstance: ISceneEffectInstance; // Definition of the scene effect to apply or update
+    effectInstance: ISceneEffectInstance;
 }
 /** @description Parameters for REMOVE_SCENE_EFFECT event */
-export interface IRemoveSceneEffectEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId refers to ISceneEffectInstance.instanceId to remove
-}
-
+export interface IRemoveSceneEffectEventParams extends ITimelineEventParametersBase {}
 /** @description Parameters for TRIGGER_HOTSPOT event */
-export interface ITriggerHotspotEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId refers to hotspotId
-}
-
+export interface ITriggerHotspotEventParams extends ITimelineEventParametersBase {}
 /** @description Parameters for ENABLE_HOTSPOT event */
 export interface IEnableHotspotEventParams extends ITimelineEventParametersBase {
-    // targetInstanceId refers to hotspotId
     shouldBeEnabled: boolean;
 }
+
+// Camera Control Event Parameters (ใหม่)
+/** @description Parameters for CAMERA_ZOOM event */
+export interface ICameraZoomEventParams extends ITimelineEventParametersBase {
+    targetZoom: number; // เช่น 1.5 (150%), 0.8 (80%)
+    // durationSeconds จากโจทย์ ควรแปลงเป็น durationMs ใน ITimelineEvent
+}
+/** @description Parameters for CAMERA_PAN event */
+export interface ICameraPanEventParams extends ITimelineEventParametersBase {
+    targetPosition: { x: number; y: number };
+    // durationSeconds จากโจทย์ ควรแปลงเป็น durationMs ใน ITimelineEvent
+}
+/** @description Parameters for CAMERA_ROTATE event */
+export interface ICameraRotateEventParams extends ITimelineEventParametersBase {
+    targetRotation: number; // องศา
+    // durationSeconds จากโจทย์ ควรแปลงเป็น durationMs ใน ITimelineEvent
+}
+/** @description Parameters for CAMERA_SHAKE event */
+export interface ICameraShakeEventParams extends ITimelineEventParametersBase {
+    intensity: number; // ความรุนแรง
+    // durationSeconds จากโจทย์ ควรแปลงเป็น durationMs ใน ITimelineEvent
+}
+/** @description Parameters for CAMERA_FOCUS_ON_TARGET event */
+export interface ICameraFocusOnTargetEventParams extends ITimelineEventParametersBase {
+    targetInstanceId: string; // characterInstanceId หรือ elementInstanceId
+    zoomLevel?: number; // Optional: zoom level when focusing
+}
+/** @description Parameters for CAMERA_RESET event */
+export interface ICameraResetEventParams extends ITimelineEventParametersBase {}
 
 
 /**
  * @interface ITimelineEvent
  * @description เหตุการณ์ (Event) ที่เกิดขึ้นใน Timeline ของฉาก เพื่อควบคุมการแสดงผลและ logic ต่างๆ
- * @property {string} eventId - ID เฉพาะของ Event นี้ (unique ภายใน Track หรือ Scene)
- * @property {number} startTimeMs - เวลาเริ่มต้นของ Event (นับจากเริ่ม Track, หน่วยเป็น ms)
- * @property {number} [durationMs] - ระยะเวลาของ Event (ถ้ามี, เช่น animation, wait, text display time)
- * @property {TimelineEventType} eventType - ประเภทของ Event
- * @property {string} [targetInstanceId] - ID ของ instance องค์ประกอบที่เป็นเป้าหมายของ Event (เช่น character.instanceId, textContent.instanceId, etc.)
- * @property {any} parameters - พารามิเตอร์เพิ่มเติมสำหรับ Event (โครงสร้างขึ้นอยู่กับ `eventType`, ควรใช้ Specific Interface ที่ define ไว้)
- * @property {string} [notes] - หมายเหตุสำหรับ Event นี้ใน Editor (ไม่แสดงผลในเกม)
- * @property {boolean} [waitForCompletion] - (สำหรับ events ที่มี duration) Timeline จะหยุดรอให้ event นี้จบก่อนไป event ถัดไปหรือไม่ (default: true สำหรับส่วนใหญ่)
  */
 export interface ITimelineEvent {
   eventId: string; startTimeMs: number; durationMs?: number;
   eventType: TimelineEventType; targetInstanceId?: string;
   parameters: // Union of all specific event parameter types
+    | ITimelineEventParametersBase // General base
     | IShowHideCharacterEventParams | IChangeCharacterExpressionEventParams | IMoveCharacterEventParams | ICharacterAnimationEventParams
     | IShowHideTextBlockEventParams | IUpdateTextBlockEventParams
-    | IPlayAudioParams | IStopAudioParams | IFadeAudioVolumeParams
+    | IPlayAudioParams | IStopAudioParams | IAdjustAudioVolumeParams | IFadeAudioVolumeParams | ISetAudioPitchParams | ISetAudioPanParams // << เพิ่ม Audio Params ใหม่
     | IChangeBackgroundEventParams
     | IShowHideVisualElementParams | IAnimateVisualElementEventParams
     | IShowHideVideoElementParams | IControlVideoParams
     | IShowHideStatusUIElementParams | IUpdateStatusUIElementParams
     | IShowHideChoiceGroupParams
-    | IWaitEventParams // Typically empty, duration is on ITimelineEvent
+    | IWaitEventParams
     | ISetVariableParams
     | IRunCustomScriptParams
-    | IScreenEffectParams
-    | ITransitionEffectParams // Consider if this is distinct enough
+    | IScreenEffectParams // << ปรับปรุงตามโจทย์
+    | ITransitionEffectParams
     | IApplyCharacterStatusEventParams | IRemoveCharacterStatusEventParams
     | IApplySceneEffectEventParams | IRemoveSceneEffectEventParams
     | ITriggerHotspotEventParams | IEnableHotspotEventParams
-    | { [key: string]: any }; // Fallback for non-typed or custom event types
+    | ICameraZoomEventParams | ICameraPanEventParams | ICameraRotateEventParams | ICameraShakeEventParams | ICameraFocusOnTargetEventParams | ICameraResetEventParams // << เพิ่ม Camera Params ใหม่
+    | { [key: string]: any };
   notes?: string;
   waitForCompletion?: boolean;
 }
@@ -993,16 +812,10 @@ const TimelineEventSchema = new Schema<ITimelineEvent>({
   waitForCompletion: { type: Boolean, default: true },
 }, { _id: false });
 
+
 /**
  * @interface ITimelineTrack
- * @description Track ใน Timeline สำหรับจัดกลุ่ม Events (เช่น Track สำหรับตัวละคร A, Track สำหรับ BGM)
- * @property {string} trackId - ID เฉพาะของ Track นี้ (unique ภายใน scene.timelineTracks)
- * @property {string} trackName - ชื่อของ Track (สำหรับ Editor)
- * @property {string} [trackType] - ประเภทของ Track (เช่น "character_animation", "audio", "screen_effects", "general_logic")
- * @property {Types.DocumentArray<ITimelineEvent>} events - รายการ Events ใน Track นี้ (ควรเรียงตาม startTimeMs)
- * @property {boolean} [isMuted] - Track นี้ถูกปิดเสียง/ปิดการทำงานชั่วคราวหรือไม่ (สำหรับ Editor หรือ debug)
- * @property {boolean} [isLocked] - Track นี้ถูกล็อกการแก้ไขใน Editor หรือไม่
- * @property {string} [targetLayerId] - (Optional) ถ้า Track นี้ควบคุมองค์ประกอบใน Layer ที่เฉพาะเจาะจง
+ * @description Track ใน Timeline สำหรับจัดกลุ่ม Events
  */
 export interface ITimelineTrack {
   trackId: string; trackName: string; trackType?: string;
@@ -1019,14 +832,10 @@ const TimelineTrackSchema = new Schema<ITimelineTrack>({
   targetLayerId: { type: String, trim: true},
 }, { _id: false });
 
+
 /**
  * @interface ISceneVariable
- * @description ตัวแปรที่ใช้ได้เฉพาะภายในฉากนี้ (Local Scope Variables)
- * @property {string} name - ชื่อตัวแปร (ต้อง unique ภายใน scene.sceneVariables array)
- * @property {any} value - ค่าเริ่มต้นของตัวแปร (สามารถเป็น string, number, boolean, object, array)
- * @property {string} [description] - คำอธิบายตัวแปร (สำหรับ Editor)
- * @property {"string" | "number" | "boolean" | "object" | "array"} [dataType] - (Optional) ประเภทข้อมูลของตัวแปร (เพื่อช่วย Editor)
- * @property {boolean} [isReadOnlyForPlayer] - (Optional) ผู้เล่นไม่สามารถแก้ไขค่านี้ได้โดยตรงผ่าน UI ทั่วไป (แต่ script อาจแก้ไขได้)
+ * @description ตัวแปรที่ใช้ได้เฉพาะภายในฉากนี้
  */
 export interface ISceneVariable {
   name: string; value: any; description?: string;
@@ -1044,25 +853,7 @@ const SceneVariableSchema = new Schema<ISceneVariable>({
 
 /**
  * @interface IStatusUIElement
- * @description องค์ประกอบ UI สำหรับแสดงสถานะต่างๆ เช่น HP bar, ค่าเงิน, ไอคอน buff/debuff
- * @property {string} instanceId - ID เฉพาะของ UI element นี้ในฉาก (unique ภายใน scene.statusUIElements)
- * @property {StatusUIType} uiType - ประเภทของ UI (gauge, number, icon list, etc.)
- * @property {string} dataSourceVariablePath - Path ไปยังตัวแปรที่จะแสดงผล (เช่น "sceneVariables.playerHP", "storyState.karma", "characters['char_instance_id'].currentStatusEffects")
- * @property {ITransform} transform - ตำแหน่ง, ขนาด, และการจัดเรียงของ UI element
- * @property {string} [stylePresetId] - ID ของ preset สไตล์ที่กำหนดไว้ล่วงหน้า (จาก Theme หรือ Global UI Styles)
- * @property {boolean} [isVisible] - UI element นี้กำลังแสดงอยู่หรือไม่ (default: true)
- * @property {string} [layerId] - ID ของ Layer ที่ UI element นี้สังกัด (ref: 'ISceneLayer.layerId')
- * @property {string} [maxValueSourcePath] - (สำหรับ GAUGE_BAR) Path ไปยังตัวแปรค่าสูงสุด (ถ้ามี, เช่น "sceneVariables.playerMaxHP")
- * @property {string} [gaugeColor] - (สำหรับ GAUGE_BAR) สีของแถบเกจ
- * @property {string} [gaugeBackgroundColor] - (สำหรับ GAUGE_BAR) สีพื้นหลังของแถบเกจ
- * @property {number} [iconSize] - (สำหรับ ICON_LIST) ขนาดไอคอน (px)
- * @property {number} [iconSpacing] - (สำหรับ ICON_LIST) ระยะห่างระหว่างไอคอน (px)
- * @property {number} [maxIconsToShow] - (สำหรับ ICON_LIST) จำนวนไอคอนสูงสุดที่จะแสดง
- * @property {string} [prefixText] - (สำหรับ NUMERIC_DISPLAY, TEXT_LABEL) ข้อความนำหน้า
- * @property {string} [suffixText] - (สำหรับ NUMERIC_DISPLAY, TEXT_LABEL) ข้อความต่อท้าย
- * @property {string} [numberFormatString] - (สำหรับ NUMERIC_DISPLAY) รูปแบบการแสดงผลตัวเลข (เช่น "N0", "#,##0.00")
- * @property {Types.ObjectId} [customHtmlTemplateId] - (สำหรับ CUSTOM_HTML) ID ของ template HTML ที่กำหนดไว้ (อาจเก็บใน model อื่น)
- * @property {string | IConditionLogic} [visibilityCondition] - (Optional) เงื่อนไขเพิ่มเติมในการแสดง/ซ่อน UI นอกเหนือจาก isVisible
+ * @description องค์ประกอบ UI สำหรับแสดงสถานะต่างๆ
  */
 export interface IStatusUIElement {
   instanceId: string; uiType: StatusUIType; dataSourceVariablePath: string;
@@ -1087,88 +878,84 @@ const StatusUIElementSchema = new Schema<IStatusUIElement>({
   iconSize: { type: Number, min: 1 },
   iconSpacing: { type: Number, min: 0 },
   maxIconsToShow: { type: Number, min: 1 },
-  prefixText: { type: String, trim: true, maxlength: 100 }, // เปลี่ยนจาก prefix
-  suffixText: { type: String, trim: true, maxlength: 100 }, // เปลี่ยนจาก suffix
-  numberFormatString: { type: String, trim: true, maxlength: 50 }, // เปลี่ยนจาก formatString
-  customHtmlTemplateId: { type: Schema.Types.ObjectId }, // อาจ ref ไปยัง model อื่น
+  prefixText: { type: String, trim: true, maxlength: 100 },
+  suffixText: { type: String, trim: true, maxlength: 100 },
+  numberFormatString: { type: String, trim: true, maxlength: 50 },
+  customHtmlTemplateId: { type: Schema.Types.ObjectId },
   visibilityCondition: { type: ConditionLogicSchema },
 }, { _id: false });
 
+
+// Camera Control Interfaces (ใหม่)
 /**
- * @interface ISceneEffectInstance
- * @description Instance ของเอฟเฟกต์ที่ใช้กับทั้งฉาก เช่น หมอก, ฝน, ฟิลเตอร์สีพิเศษ
- * @property {string} instanceId - ID ของ instance effect นี้ (unique ภายใน scene.activeSceneEffects)
- * @property {"fog" | "rain" | "snow" | "color_filter" | "post_process_shader" | "custom_overlay" | string} effectType - ประเภทของเอฟเฟกต์ (อนุญาต string เผื่อ custom type)
- * @property {any} parameters - พารามิเตอร์เฉพาะของ effectType
- * @property {number} [startTimeMsOffset] - (Optional) Delay ก่อน effect นี้เริ่มทำงาน (นับจาก event ที่ trigger หรือตอนโหลดฉาก)
- * @property {number} [durationMs] - (Optional) ระยะเวลาของ effect (0 หรือ undefined หมายถึงควบคุมโดยปัจจัยอื่น หรือจนกว่าจะถูกลบ)
- * @property {string} [targetLayerId] - (Optional) ID ของ Layer ที่ effect นี้จะแสดงผลอยู่ (ถ้าไม่ระบุ อาจหมายถึง global หรือ فوق Layer ทั้งหมด)
- * @property {number} [zIndexInSceneEffects] - (Optional) ลำดับการซ้อนทับของ Scene Effect ด้วยกันเอง (ถ้ามีหลาย Scene Effect พร้อมกัน)
+ * @interface ICameraTransform
+ * @description กำหนด Transform ของกล้อง
  */
-export interface ISceneEffectInstance {
-    instanceId: string;
-    effectType: "fog" | "rain" | "snow" | "color_filter" | "post_process_shader" | "custom_overlay" | string;
-    parameters: any;
-    startTimeMsOffset?: number;
-    durationMs?: number;
-    targetLayerId?: string;
-    zIndexInSceneEffects?: number;
+export interface ICameraTransform {
+    /** @description ตำแหน่งของกล้อง {x, y} ใน Scene coordinates */
+    position: { x: number; y: number };
+    /** @description ระดับการซูม, e.g., 1 = 100%, 2 = 200% */
+    zoom: number;
+    /** @description การหมุนของกล้องเป็นองศา */
+    rotation: number; // degrees
 }
-const SceneEffectInstanceSchema = new Schema<ISceneEffectInstance>({
-    instanceId: { type: String, required: true },
-    effectType: { type: String, required: true }, // Allow custom string for extensibility
-    parameters: { type: Schema.Types.Mixed },
-    startTimeMsOffset: { type: Number, min: 0, default:0 },
-    durationMs: { type: Number, min: 0 },
-    targetLayerId: { type: String, trim: true },
-    zIndexInSceneEffects: { type: Number, default: 0 },
+const CameraTransformSchema = new Schema<ICameraTransform>({
+    position: {
+        x: { type: Number, required: true, default: 0 },
+        y: { type: Number, required: true, default: 0 },
+        _id: false,
+    },
+    zoom: { type: Number, required: true, default: 1, min: [0.01, "Zoom level must be positive"] },
+    rotation: { type: Number, required: true, default: 0 },
 }, { _id: false });
+
+/**
+ * @interface ISceneCamera
+ * @description การตั้งค่ากล้องสำหรับฉาก
+ */
+export interface ISceneCamera {
+    /** @description Transform เริ่มต้นของกล้องเมื่อเข้าฉาก */
+    initialTransform: ICameraTransform;
+    /** @description (Optional) ID ของ Character Instance ที่กล้องจะติดตาม */
+    followTarget?: string; // characterInstanceId
+    // อาจมี field อื่นๆ เช่น camera boundaries, lerp speed for following, etc.
+}
+const SceneCameraSchema = new Schema<ISceneCamera>({
+    initialTransform: { type: CameraTransformSchema, required: true, default: () => ({ position: {x:0, y:0}, zoom: 1, rotation: 0 }) },
+    followTarget: { type: String, trim: true },
+}, { _id: false });
+
+
+/**
+ * @interface ISceneTransition
+ * @description การตั้งค่า Transition เมื่อออกจากฉากนี้ไปยังฉากถัดไป (ปรับปรุงตามโจทย์)
+ */
+export interface ISceneTransition {
+    /** @description ประเภทของ Transition (e.g., "fade", "wipe_left") */
+    type: SceneTransitionType;
+    /** @description ระยะเวลาของ Transition (หน่วยเป็นวินาที) */
+    durationSeconds?: number;
+    /** @description (Optional) พารามิเตอร์เพิ่มเติมสำหรับ Transition ที่ซับซ้อน
+     * เช่น สำหรับ "wipe": { wipeDirection?: "left_to_right" | "top_to_bottom", wipeShape?: "circle" | "star" }
+     * เช่น สำหรับ "zoom_in": { targetElementInstanceId?: string, zoomFactor?: number } (ซูมเข้าหา element ก่อนเปลี่ยนฉาก)
+     */
+    parameters?: any; // อาจเป็น object ที่มีโครงสร้างตามประเภท transition
+}
+const SceneTransitionSchema = new Schema<ISceneTransition>({
+    type: { type: String, enum: Object.values(SceneTransitionType), default: SceneTransitionType.NONE },
+    durationSeconds: { type: Number, min: 0, default: 0.5, comment: "ระยะเวลาการเปลี่ยนฉาก (วินาที)" },
+    parameters: { type: Schema.Types.Mixed, comment: "พารามิเตอร์เพิ่มเติมสำหรับ transition ที่ซับซ้อน" },
+}, { _id: false });
+
+
 
 // ==================================================================================================
 // SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Scene (IScene Document Interface)
 // ==================================================================================================
-
 /**
  * @interface IScene
  * @extends Document (Mongoose Document)
- * @description อินเทอร์เฟซหลักสำหรับเอกสารฉากใน Collection "scenes_v2" ซึ่งเป็นหัวใจของ Visual Novel Editor
- * ประกอบด้วยข้อมูลทั้งหมดที่จำเป็นในการ render และควบคุมปฏิสัมพันธ์ภายในฉากหนึ่งๆ.
- * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสารฉาก
- * @property {Types.ObjectId} novelId - ID ของนิยายแม่ (ref: 'Novel')
- * @property {Types.ObjectId} episodeId - ID ของตอนที่ฉากนี้เป็นส่วนหนึ่ง (ref: 'Episode')
- * @property {number} sceneOrder - ลำดับของฉากภายในตอน (unique ภายใน episodeId)
- * @property {string} [title] - ชื่อหรือคำอธิบายสั้นๆ ของฉาก (สำหรับ Editor)
- * @property {IBackgroundSetting} background - การตั้งค่าพื้นหลังหลักของฉาก
- * @property {Types.DocumentArray<ISceneLayer>} layers - การจัดการ Layer ภายในฉาก
- * @property {Types.DocumentArray<ICharacterInScene>} characters - รายการตัวละคร (instances) ที่สามารถปรากฏในฉากนี้
- * @property {Types.DocumentArray<ITextContent>} textContents - รายการข้อความ (dialogue, narration instances)
- * @property {Types.DocumentArray<IVisualElement>} images - รายการรูปภาพ (CG, icons, overlays)
- * @property {Types.DocumentArray<IVideoElement>} videos - รายการวิดีโอ
- * @property {Types.DocumentArray<IAudioElement>} audios - รายการเสียง (SFX, BGM instances ที่ pre-define)
- * @property {Types.DocumentArray<IChoiceGroupInScene>} choiceGroupsAvailable - กลุ่มตัวเลือก (instances) ที่สามารถแสดงในฉากนี้
- * @property {Types.DocumentArray<IInteractiveHotspot>} interactiveHotspots - พื้นที่ (hotspots) ที่ผู้เล่นสามารถคลิกได้
- * @property {Types.DocumentArray<IStatusUIElement>} statusUIElements - UI Elements สำหรับแสดงสถานะต่างๆ
- * @property {Types.DocumentArray<ISceneEffectInstance>} activeSceneEffects - เอฟเฟกต์ที่ส่งผลต่อทั้งฉาก (เช่น หมอก, ฝน)
- * @property {Types.DocumentArray<ITimelineTrack>} timelineTracks - Timeline และ Tracks สำหรับควบคุมเหตุการณ์ต่างๆ ในฉาก
- * @property {Types.ObjectId} [defaultNextSceneId] - ID ของฉากถัดไปตามปกติ (ref: 'Scene')
- * @property {Types.ObjectId} [previousSceneId] - ID ของฉากก่อนหน้า (ref: 'Scene')
- * @property {SceneTransitionType} [transitionToNextSceneType] - ประเภท animation การเปลี่ยนไปฉากถัดไป
- * @property {number} [transitionToNextSceneDurationMs] - ระยะเวลาของ transition (ms)
- * @property {string} [transitionToNextSceneCustomName] - (ถ้า type="custom") ชื่อของ custom transition
- * @property {number} [autoAdvanceDelayMs] - ระยะเวลา (ms) ก่อนจะไปยังฉากถัดไปโดยอัตโนมัติ (0 = ไม่อัตโนมัติ)
- * @property {Types.DocumentArray<ISceneVariable>} sceneVariables - ตัวแปรที่ใช้ได้เฉพาะภายในฉากนี้ (local scope)
- * @property {string} [onLoadScriptContent] - Script ที่จะรันเมื่อฉากเริ่มโหลด (เก็บเนื้อหา script โดยตรง)
- * @property {string} [onExitScriptContent] - Script ที่จะรันเมื่อออกจากฉาก (เก็บเนื้อหา script โดยตรง)
- * @property {string} [editorNotes] - หมายเหตุสำหรับผู้เขียน/ทีมงาน (ไม่แสดงผลในเกม)
- * @property {string} [thumbnailUrl] - URL รูปภาพตัวอย่างของฉาก (สำหรับ Editor)
- * @property {string[]} [authorDefinedEmotionTags] - แท็กอารมณ์ที่ผู้เขียนกำหนด (เช่น "ตลก", "เศร้า")
- * @property {string[]} [sceneTags] - Tags ทั่วไปสำหรับจัดหมวดหมู่ หรือค้นหา
- * @property {Types.DocumentArray<IConditionLogic>} [entryConditions] - (Optional) เงื่อนไขที่ต้องเป็นจริงทั้งหมดเพื่อให้สามารถเข้าสู่ฉากนี้ได้
- * @property {"low" | "medium" | "high" | "very_high"} [estimatedComplexity] - ระดับความซับซ้อนของฉาก (ช่วยในการจัดการทรัพยากร)
- * @property {{ mediaId: Types.ObjectId, mediaSourceType: "Media" | "OfficialMedia" }[]} [criticalAssets] - ทรัพยากรที่ควรโหลดล่วงหน้าเป็นพิเศษ
- * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
- * @property {Date} updatedAt - วันที่อัปเดตล่าสุด (Mongoose `timestamps`)
- * @property {number} [estimatedTimelineDurationMs] - (Virtual) ระยะเวลารวมของ Timeline โดยประมาณ
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารฉากใน Collection "scenes_v2"
  */
 export interface IScene extends Document {
   _id: Types.ObjectId; novelId: Types.ObjectId; episodeId: Types.ObjectId; sceneOrder: number;
@@ -1184,14 +971,15 @@ export interface IScene extends Document {
   statusUIElements: Types.DocumentArray<IStatusUIElement>;
   activeSceneEffects: Types.DocumentArray<ISceneEffectInstance>;
   timelineTracks: Types.DocumentArray<ITimelineTrack>;
+  /** @description (ใหม่) การตั้งค่ากล้องสำหรับฉากนี้ */
+  camera?: ISceneCamera; // << เพิ่มใหม่
   defaultNextSceneId?: Types.ObjectId; previousSceneId?: Types.ObjectId;
-  transitionToNextSceneType?: SceneTransitionType;
-  transitionToNextSceneDurationMs?: number;
-  transitionToNextSceneCustomName?: string;
+  /** @description (ปรับปรุง) การตั้งค่า Transition เมื่อออกจากฉากนี้ */
+  sceneTransitionOut?: ISceneTransition; // << เปลี่ยนชื่อและ type จากเดิม
   autoAdvanceDelayMs?: number;
   sceneVariables: Types.DocumentArray<ISceneVariable>;
-  onLoadScriptContent?: string; // เปลี่ยนจาก onLoadScript
-  onExitScriptContent?: string; // เปลี่ยนจาก onExitScript
+  onLoadScriptContent?: string;
+  onExitScriptContent?: string;
   editorNotes?: string; thumbnailUrl?: string;
   authorDefinedEmotionTags?: string[];
   sceneTags?: string[];
@@ -1223,15 +1011,14 @@ const SceneSchema = new Schema<IScene>(
     statusUIElements: [StatusUIElementSchema],
     activeSceneEffects: [SceneEffectInstanceSchema],
     timelineTracks: { type: [TimelineTrackSchema], default: () => ([{ trackId: "main_track", trackName: "Main Track", events: [] }]) },
+    camera: { type: SceneCameraSchema, default: () => ({ initialTransform: { position: {x:0, y:0}, zoom: 1, rotation: 0 } }) }, // << เพิ่มใหม่พร้อม default
     defaultNextSceneId: { type: Schema.Types.ObjectId, ref: "Scene", default: null },
     previousSceneId: { type: Schema.Types.ObjectId, ref: "Scene", default: null },
-    transitionToNextSceneType: { type: String, enum: Object.values(SceneTransitionType), default: SceneTransitionType.NONE },
-    transitionToNextSceneDurationMs: { type: Number, min: 0, default: 300 },
-    transitionToNextSceneCustomName: { type: String, trim: true, maxlength: 100 },
+    sceneTransitionOut: { type: SceneTransitionSchema, default: () => ({ type: SceneTransitionType.NONE, durationSeconds: 0.5 }) }, // << ปรับปรุง
     autoAdvanceDelayMs: { type: Number, min: 0, default: 0 },
     sceneVariables: [SceneVariableSchema],
-    onLoadScriptContent: { type: String, trim: false, maxlength: [150000, "OnLoadScript content is too long"] }, // trim:false เผื่อเว้นวรรคสำคัญใน script
-    onExitScriptContent: { type: String, trim: false, maxlength: [150000, "OnExitScript content is too long"] }, // trim:false
+    onLoadScriptContent: { type: String, trim: false, maxlength: [150000, "OnLoadScript content is too long"] },
+    onExitScriptContent: { type: String, trim: false, maxlength: [150000, "OnExitScript content is too long"] },
     editorNotes: { type: String, trim: true, maxlength: [10000, "Editor notes are too long"] },
     thumbnailUrl: {
         type: String, trim: true, maxlength: [2048, "Thumbnail URL is too long"],
@@ -1254,30 +1041,27 @@ const SceneSchema = new Schema<IScene>(
     timestamps: true,
     toObject: { virtuals: true, aliases: true },
     toJSON: { virtuals: true, aliases: true },
-    collection: "scenes_v2", // ชื่อ collection ที่ชัดเจน
+    collection: "scenes_v2",
   }
 );
 
 // ==================================================================================================
-// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
+// SECTION: Indexes, Virtuals, Middleware (คงเดิมจากโค้ดก่อนหน้า และปรับปรุงตามความเหมาะสม)
 // ==================================================================================================
 SceneSchema.index({ episodeId: 1, sceneOrder: 1 }, { unique: true, name: "idx_episode_scene_order_unique_v2" });
 SceneSchema.index({ novelId: 1, episodeId: 1, sceneOrder: 1 }, { name: "idx_novel_episode_scene_sort_v2" });
 SceneSchema.index({ novelId: 1, authorDefinedEmotionTags: 1 }, { name: "idx_novel_emotion_tags_v2" });
 SceneSchema.index({ novelId: 1, sceneTags: 1 }, { name: "idx_novel_scene_tags_v2" });
-SceneSchema.index({ title: "text", "textContents.content": "text", editorNotes: "text" }, { name: "idx_scene_text_search_v2", default_language: "none" }); // เพิ่ม editorNotes ใน text index
-SceneSchema.index({ novelId: 1, "entryConditions.variableName": 1 }, { name: "idx_scene_entry_conditions_var_v2", sparse: true }); // Index สำหรับ query ฉากตามเงื่อนไข (ถ้ามีการใช้บ่อย)
+SceneSchema.index({ title: "text", "textContents.content": "text", editorNotes: "text" }, { name: "idx_scene_text_search_v2", default_language: "none" });
+SceneSchema.index({ novelId: 1, "entryConditions.variableName": 1 }, { name: "idx_scene_entry_conditions_var_v2", sparse: true });
 
-// ==================================================================================================
-// SECTION: Virtuals (ฟิลด์เสมือน)
-// ==================================================================================================
 SceneSchema.virtual("estimatedTimelineDurationMs").get(function (this: IScene): number {
   if (!this.timelineTracks || this.timelineTracks.length === 0) return 0;
   let maxEndTime = 0;
   this.timelineTracks.forEach(track => {
     if (track.events && track.events.length > 0) {
       track.events.forEach(event => {
-        const eventEffectiveDuration = event.durationMs || 0; // บาง event อาจไม่มี duration แต่มีผลทันที
+        const eventEffectiveDuration = event.durationMs || 0;
         const endTime = event.startTimeMs + eventEffectiveDuration;
         if (endTime > maxEndTime) maxEndTime = endTime;
       });
@@ -1286,19 +1070,15 @@ SceneSchema.virtual("estimatedTimelineDurationMs").get(function (this: IScene): 
   return maxEndTime;
 });
 
-// ==================================================================================================
-// SECTION: Middleware (Mongoose Hooks)
-// ==================================================================================================
-
 SceneSchema.pre<IScene>("save", function (next: (err?: mongoose.Error) => void) {
   const idSet = new Set<string>();
   let error: mongoose.Error | null = null;
 
   const checkUniqueIdInScope = (id: string | undefined, idName: string, scopeName: string, parentPathForError: string): boolean => {
-    if (!id) return true; // ID ที่เป็น optional และไม่ได้ระบุ จะไม่ถูกตรวจสอบ
+    if (!id) return true;
     const uniqueKeyInScope = `${scopeName}[${idName}=${id}]`;
     if (idSet.has(uniqueKeyInScope)) {
-      error = new mongoose.Error(`Duplicate ID "${id}" for property "${idName}" within scope "${scopeName}" at "${parentPathForError}". IDs must be unique within their respective collections/scopes in the scene (novel: ${this.novelId}, episode: ${this.episodeId}, order: ${this.sceneOrder}).`);
+      error = new mongoose.Error.ValidatorError({ message: `Duplicate ID "${id}" for property "${idName}" within scope "${scopeName}" at "${parentPathForError}". IDs must be unique.` });
       return false;
     }
     idSet.add(uniqueKeyInScope);
@@ -1324,7 +1104,7 @@ SceneSchema.pre<IScene>("save", function (next: (err?: mongoose.Error) => void) 
       for (const item of collection.data) {
         if (item && typeof item === 'object' && item.hasOwnProperty(collection.idField)) {
           if (!checkUniqueIdInScope(item[collection.idField], collection.idField, collection.collectionScopeName, `scene.${collection.collectionScopeName}`)) {
-            return next(error!); // error will not be null here
+            return next(error!);
           }
         }
       }
@@ -1335,7 +1115,7 @@ SceneSchema.pre<IScene>("save", function (next: (err?: mongoose.Error) => void) 
     const sceneVarNames = new Set<string>();
     for (const variable of this.sceneVariables) {
       if (sceneVarNames.has(variable.name)) {
-        error = new mongoose.Error(`Duplicate sceneVariable name "${variable.name}" found. Variable names must be unique within the scene.`);
+        error = new mongoose.Error.ValidatorError({ message: `Duplicate sceneVariable name "${variable.name}" found.`});
         return next(error);
       }
       sceneVarNames.add(variable.name);
@@ -1348,7 +1128,7 @@ SceneSchema.pre<IScene>("save", function (next: (err?: mongoose.Error) => void) 
         const eventIdsInTrack = new Set<string>();
         for (const event of track.events) {
           if (eventIdsInTrack.has(event.eventId)) {
-            error = new mongoose.Error(`Duplicate eventId "${event.eventId}" found in track "${track.trackName}" (ID: ${track.trackId}). Event IDs must be unique within their track.`);
+            error = new mongoose.Error.ValidatorError({ message: `Duplicate eventId "${event.eventId}" in track "${track.trackName}".`});
             return next(error);
           }
           eventIdsInTrack.add(event.eventId);
@@ -1357,26 +1137,33 @@ SceneSchema.pre<IScene>("save", function (next: (err?: mongoose.Error) => void) 
     }
   }
 
-  // ตรวจสอบ zIndex unique ใน layers (สำคัญมากสำหรับการ render ที่ถูกต้อง)
   if (this.layers && this.layers.length > 0) {
     const zIndexSet = new Set<number>();
     for (const layer of this.layers) {
-        if (layer.zIndex === undefined) { // zIndex is required in SceneLayerSchema
-            error = new mongoose.Error(`Layer "${layer.layerName}" (ID: ${layer.layerId}) is missing zIndex.`);
+        if (layer.zIndex === undefined) {
+            error = new mongoose.Error.ValidatorError({ message: `Layer "${layer.layerName}" is missing zIndex.`});
             return next(error);
         }
         if (zIndexSet.has(layer.zIndex)) {
-            error = new mongoose.Error(`Duplicate zIndex ${layer.zIndex} found for layer "${layer.layerName}" (ID: ${layer.layerId}). Layer zIndexes must be unique within the scene.`);
+            error = new mongoose.Error.ValidatorError({ message: `Duplicate zIndex ${layer.zIndex} for layer "${layer.layerName}".`});
             return next(error);
         }
         zIndexSet.add(layer.zIndex);
     }
   }
 
-
-  if (error) { // Should have been caught by returns above, but as a final check
-    return next(error);
+  // ตรวจสอบ loopEndPointMs > loopStartPointMs สำหรับ Audio Elements
+  if (this.audios) {
+    for (const audio of this.audios) {
+        if (audio.loop && audio.loopStartPointMs !== undefined && audio.loopEndPointMs !== undefined) {
+            if (audio.loopEndPointMs <= audio.loopStartPointMs) {
+                error = new mongoose.Error.ValidatorError({ message: `Audio instance "${audio.instanceId}": loopEndPointMs (${audio.loopEndPointMs}) must be greater than loopStartPointMs (${audio.loopStartPointMs}).` });
+                return next(error);
+            }
+        }
+    }
   }
+
   next();
 });
 
@@ -1385,8 +1172,6 @@ async function updateParentTimestamps(doc: IScene | null, actionType: 'save' | '
     return;
   }
   try {
-    // ใช้ Mongoose.model() เพื่อเข้าถึง Model ที่อาจจะยังไม่ได้ import โดยตรง ป้องกัน circular dependency
-    // และเพื่อให้แน่ใจว่าใช้ Model ที่ Mongoose รู้จักในขณะนั้น
     const EpisodeModel = mongoose.models.Episode || mongoose.model("Episode");
     const NovelModel = mongoose.models.Novel || mongoose.model("Novel");
     
@@ -1395,13 +1180,9 @@ async function updateParentTimestamps(doc: IScene | null, actionType: 'save' | '
 
     await EpisodeModel.findByIdAndUpdate(doc.episodeId, updateData);
     await NovelModel.findByIdAndUpdate(doc.novelId, updateData);
-
-    // console.log(`[SceneMiddleware - ${actionType}] Updated parent timestamps for scene ${doc._id}`);
-    // ที่นี่สามารถเพิ่ม logic อื่นๆ เช่น การ trigger re-calculation ของ word count หรือข้อมูลสรุปอื่นๆ ของ Episode/Novel
   } catch (err) {
     const castedError = err as Error;
     console.error(`[SceneMiddlewareError - ${actionType}] Failed to update parent timestamps for scene ${doc._id}:`, castedError.message, castedError.stack);
-    // ใน production ควรมีระบบ logging ที่ดีกว่านี้
   }
 }
 
@@ -1411,18 +1192,13 @@ SceneSchema.post<IScene>("save", async function (doc: IScene, next: () => void) 
 });
 
 SceneSchema.post<mongoose.Query<IScene | null, IScene>>("findOneAndUpdate", async function (result: IScene | null, next: () => void) {
-  // 'this' คือ Query object. 'result' คือ document ที่ถูกอัปเดต (ถ้า query option new:true) หรือ document ก่อนอัปเดต
-  // เพื่อให้ได้ document ที่อัปเดตแล้วเสมอ (ถ้ามีการแก้ไข)
   if (result) {
-    // หากไม่ได้ใช้ { new: true } ใน query อาจจะต้อง fetch document ใหม่อีกครั้งเพื่อให้ได้ข้อมูลล่าสุด
-    // แต่โดยทั่วไปถ้ามีการ update, 'result' (เมื่อ new:true) จะเป็น document ที่อัปเดตแล้ว
     await updateParentTimestamps(result, 'save');
   }
   next();
 });
 
 SceneSchema.post<mongoose.Query<IScene | null, IScene>>("findOneAndDelete", async function (doc: IScene | null, next: () => void) {
-  // 'doc' คือ document ที่ถูกลบ (หรือ null ถ้าไม่พบ)
   await updateParentTimestamps(doc, 'delete');
   next();
 });
@@ -1436,26 +1212,28 @@ const SceneModel = (mongoose.models.Scene as mongoose.Model<IScene>) || mongoose
 export default SceneModel;
 
 // ==================================================================================================
-// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements) - อ้างอิงและปรับปรุงจากเดิม
+// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
 // ==================================================================================================
-// 1.  **Instance ID & Other IDs**: การ generate ID (UUID v4 แนะนำ) และการ validate uniqueness ควรทำอย่างเข้มงวดทั้ง client-side (Editor) และ server-side (middleware). Middleware ปัจจุบันตรวจสอบ uniqueness ภายใน Scene.
-// 2.  **`refPath` Aliases**: การใช้ `alias` ใน schema field ที่มี `refPath` ช่วยจัดการกรณีที่ subdocument schema เดียวกันถูกใช้ในหลาย path และต้องการ `refPath` ที่ต่างกัน.
-// 3.  **Timeline Event Parameters (`ITimelineEvent.parameters`)**: การสร้าง interfaces เฉพาะสำหรับ `parameters` ของแต่ละ `TimelineEventType` (ดังที่ได้ทำเพิ่มเติม) ช่วยเพิ่ม type safety และความชัดเจน. ควรทำต่อให้ครบถ้วนสำหรับ event type ที่ซับซ้อนหรือใช้บ่อย.
-// 4.  **Conditional Logic (`IConditionLogic`)**: `ConditionLogicSchema` ที่เพิ่มเข้ามาช่วย validate โครงสร้างพื้นฐาน. การพัฒนาระบบเงื่อนไขนี้ให้เป็น expression tree editor หรือ DSL จะเป็น feature ที่ทรงพลัง. Runtime ต้องมี parser/evaluator สำหรับเงื่อนไขเหล่านี้.
-// 5.  **Scripting Engine Integration**: `onLoadScriptContent`, `onExitScriptContent`, `CUSTOM_SCRIPT`, `RUN_CUSTOM_SCRIPT` ต้องการ scripting engine ที่ปลอดภัย (sandboxed) และมี API ที่ชัดเจน. API ควรอนุญาตให้เข้าถึง/แก้ไข `sceneVariables`, `StoryState` (global), `Inventory`, `CharacterStatus` ฯลฯ.
-// 6.  **Choice System**: `IChoiceGroupInScene.choiceGroupId` อ้างอิง `Choice` model. `Choice` model ควรอบอุ้ม array ของ `IChoiceDetail` (หรือโครงสร้างที่คล้ายกัน). การปรับแต่ง UI ของ Choice (style, animation, เสียง) สามารถทำผ่าน properties ใน `Choice` model หรือ `IChoiceGroupInScene`.
-// 7.  **Performance**: ฉากที่ซับซ้อนต้องการการจัดการ performance ที่ดี.
-//     * **Editor**: Virtualization, lazy loading, selective rendering.
-//     * **Runtime**: Asset preloading (`criticalAssets`), efficient event processing, optimized rendering. `estimatedComplexity` ช่วยในการตัดสินใจ.
-// 8.  **Versioning & Collaboration**: สำหรับ Editor, การทำ version control (snapshots) และ real-time collaboration (CRDTs) เป็น features ขั้นสูงที่สำคัญ. (อยู่นอกขอบเขต Model นี้โดยตรง)
-// 9.  **Accessibility (A11y)**: `altText` ใน `IVisualElement` เป็นจุดเริ่มต้นที่ดี. พิจารณา keyboard navigation, ARIA attributes, และการปรับขนาด font/contrast สำหรับ UI ทั้งหมด.
-// 10. **Psychological Impact & Analytics**: `authorDefinedEmotionTags` และ `sceneTags` มีประโยชน์. สามารถใช้ AI/NLP วิเคราะห์เนื้อหา `textContents` เพื่อแนะนำ tags หรือประเมินโทน. Analytics ของ player choices, item usage, status changes ช่วยในการปรับปรุงเกม.
-// 11. **Hotspot Shapes & Interactivity**: `IInteractiveHotspot` ได้เพิ่ม `shapeType` และ `shapeData` เพื่อรองรับรูปร่างที่ซับซ้อน. `hoverEnterActions`, `hoverExitActions`, และ `cursorStyle` เพิ่มมิติการโต้ตอบ.
-// 12. **Status System (`IStatusEffect`, `IStatusUIElement`)**: ระบบนี้สามารถขยายให้รองรับ status ที่มีเงื่อนไขการ trigger ที่ซับซ้อน, การ dispel, stack modifiers, หรือ synergy ระหว่าง status ต่างๆ.
-// 13. **Modularity และ External Models**: `SceneModel` นี้ออกแบบมาเพื่อเชื่อมต่อกับ Models ภายนอก (`Novel`, `Episode`, `Character`, `Media`, `Choice`, `Item`, `StoryState`, `Quest` etc.) ผ่าน Service Layer. การออกแบบ Models เหล่านั้นให้ดีเป็นสิ่งสำคัญ.
-// 14. **Error Handling & Logging**: Middleware มีการจัดการ error พื้นฐาน. ใน production, ควรมีระบบ logging และ error reporting ที่ละเอียดและมีประสิทธิภาพ (เช่น Sentry, Winston).
-// 15. **Real-time Collaboration**: (ซ้ำกับ #8) หากเป็น Editor บนเว็บ, CRDTs หรือ Operational Transforms มีประโยชน์.
-// 16. **Extensibility**: การออกแบบ field ที่เป็น `string` สำหรับ type (เช่น `ISceneEffectInstance.effectType`) หรือ `Schema.Types.Mixed` สำหรับ parameters ช่วยให้สามารถเพิ่ม custom types/logics ได้ง่ายขึ้นในอนาคต. อาจพิจารณาระบบ plugin สำหรับ Editor/Runtime.
-// 17. **Unique zIndex for Layers**: Middleware ได้เพิ่มการตรวจสอบ zIndex ที่ไม่ซ้ำกันสำหรับ layers เพื่อป้องกันปัญหาการ render.
-// 18. **Ref Consistency**: ตรวจสอบว่า `ref` ใน Schema ถูกต้องและตรงกับชื่อ Model ที่จะใช้ (เช่น `ref: "Novel"`, `ref: "Character"`, `ref: "Media"`, `ref: "OfficialMedia"`, `ref: "Choice"`, `ref: "Item"`).
+// 1.  **Instance ID & Other IDs**: การ generate ID และการ validate uniqueness ยังคงสำคัญ
+// 2.  **`refPath` Aliases**: การใช้ `alias` ช่วยจัดการ refPath ที่ซับซ้อน
+// 3.  **Timeline Event Parameters (`ITimelineEvent.parameters`)**: การสร้าง interfaces เฉพาะสำหรับ `parameters` ของแต่ละ `TimelineEventType` (ดังที่ได้ทำเพิ่มเติม) ช่วยเพิ่ม type safety และความชัดเจน.
+// 4.  **Conditional Logic (`IConditionLogic`)**: `ConditionLogicSchema` ได้รับการปรับปรุง. Runtime ต้องมี parser/evaluator.
+// 5.  **Scripting Engine Integration**: `onLoadScriptContent`, `onExitScriptContent`, `CUSTOM_SCRIPT`, `RUN_CUSTOM_SCRIPT` ต้องการ scripting engine ที่ปลอดภัย.
+// 6.  **Choice System**: `IChoiceGroupInScene.choiceGroupId` อ้างอิง `Choice` model.
+// 7.  **Performance**: ฉากที่ซับซ้อนต้องการการจัดการ performance ที่ดี. Asset preloading (`criticalAssets`), efficient event processing.
+// 8.  **Versioning & Collaboration**: อยู่นอกขอบเขต Model นี้โดยตรง.
+// 9.  **Accessibility (A11y)**: `altText` เป็นจุดเริ่มต้น.
+// 10. **Psychological Impact & Analytics**: `authorDefinedEmotionTags` และ `sceneTags` มีประโยชน์.
+// 11. **Hotspot Shapes & Interactivity**: `IInteractiveHotspot` ได้เพิ่ม `shapeType` และ `shapeData`.
+// 12. **Status System (`IStatusEffect`, `IStatusUIElement`)**: สามารถขยายได้อีก.
+// 13. **Modularity และ External Models**: การเชื่อมต่อกับ Models ภายนอกผ่าน Service Layer.
+// 14. **Error Handling & Logging**: ควรมีระบบ logging ที่ดี.
+// 15. **Unique zIndex for Layers**: Middleware ตรวจสอบ zIndex ที่ไม่ซ้ำกัน.
+// 16. **Camera Control**: เพิ่ม `camera: ISceneCamera` และ Timeline Events ที่เกี่ยวข้องกับการควบคุมกล้อง.
+// 17. **Screen Effects**: เพิ่ม `ScreenEffectType` enum และปรับปรุง `IScreenEffectParams` ให้รองรับ `durationSeconds` และ `color` ตามโจทย์.
+// 18. **Scene Transitions**: `SceneTransitionType` enum ได้รับการขยาย และ `ISceneTransition` (ใน `sceneTransitionOut`) เพิ่ม `durationSeconds` และ `parameters`.
+// 19. **Audio Control**: `IAudioElement` ได้รับการเพิ่ม field `volume`, `pan`, `pitch`, `fadeInSeconds`, `fadeOutSeconds`, `loopStartPointMs`, `loopEndPointMs`.
+//     Timeline Events ใหม่ (`ADJUST_AUDIO_VOLUME`, `FADE_AUDIO_VOLUME`, `SET_AUDIO_PITCH`, `SET_AUDIO_PAN`) และ Parameter Interfaces ที่เกี่ยวข้องได้ถูกเพิ่มเข้าไปใน `TimelineEventType` และ `ITimelineEvent.parameters`.
+// 20. **หมายเหตุการอัปเดตโค้ด**: โค้ดนี้ได้รับการอัปเดตให้สอดคล้องกับคำแนะนำของผู้ใช้ โดยยังคงรักษาโครงสร้างและความสามารถเดิมของ `Scene.ts` ไว้ให้มากที่สุด
+//     พร้อมทั้งเพิ่มความคิดเห็นภาษาไทยตามสไตล์เดิมของโค้ดใน repo. การปรับปรุง "SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม" จะรวมถึงการเปลี่ยนแปลงเหล่านี้ด้วย.
 // ==================================================================================================
