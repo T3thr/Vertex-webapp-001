@@ -5,7 +5,8 @@
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { INovel } from "./Novel"; // สำหรับ novelId
 import { IUser } from "./User"; // สำหรับ authorId และ voiceActorInfo.sampleMediaId (ถ้าผู้พากย์เป็น User ในระบบ)
-import { IMedia, OfficialMediaType } from "./Media"; // สำหรับ profileImageMediaId และ expressions.mediaId
+import { IMedia, } from "./Media"; // สำหรับ profileImageMediaId และ expressions.mediaId
+import { OfficialMediaType } from "./OfficialMedia";
 // import { IScene } from "./Scene"; // ไม่จำเป็นต้อง import โดยตรง เว้นแต่จะมีการอ้างอิง scene context ใน character stats
 // import { IChoice } from "./Choice"; // ไม่จำเป็นต้อง import โดยตรง เว้นแต่จะมีการอ้างอิง choice context ใน character stats
 
@@ -85,6 +86,7 @@ const CharacterExpressionSchema = new Schema<ICharacterExpression>(
  * (คง Interface เดิมไว้ แต่พิจารณาการเชื่อมโยงกับ DonationApplication ที่ชัดเจน)
  */
 export interface ICharacterDonationSettings {
+  [x: string]: number;
   isEnabled: boolean;
   /** @description ID ของ DonationApplication ที่เกี่ยวข้องกับตัวละครนี้ (ถ้ามี) อาจเชื่อมโยงกับระบบการอนุมัติรับบริจาค */
   activeDonationApplicationId?: Types.ObjectId; // อ้างอิง DonationApplication
