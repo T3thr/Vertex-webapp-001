@@ -3,11 +3,14 @@
 // ตามมาตรฐาน NovelMaze
 // เพิ่มการรวม WriterStats และการรองรับ Mental Wellbeing Insights
 // อัปเดตล่าสุด: เพิ่ม VisualNovelGameplayPreferences สำหรับการตั้งค่าเฉพาะของ Visual Novel
-// อัปเดตล่าสุด (Gamification): ปรับปรุง IUserGamification ให้ achievements ref ไปที่ 'UserAchievement'
+// อัปเดตล่าสุด (Gamification): ปรับปรุง IUserGamification, เพิ่ม totalExperiencePointsEverEarned, currentLevelObject, showcasedItems, displayBadges
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { ILevel } from "./Level"; // << ใหม่: Import ILevel
+// UserAchievement ไม่จำเป็นต้อง import โดยตรงที่นี่ แต่ gamification.achievements จะอ้างอิงถึง _id ของ UserEarnedItem ใน UserAchievement
+// ซึ่ง UserEarnedItem เองก็มี itemId ที่ ref ไปยัง Achievement/Badge อีกที
 
 // ==================================================================================================
 // SECTION: อินเทอร์เฟซย่อย (Sub-Interfaces) สำหรับการตั้งค่าและข้อมูลเฉพาะส่วน
@@ -319,14 +322,39 @@ export interface IUserWallet {
 }
 
 /**
+ * @interface IShowcasedGamificationItem
+ * @description โครงสร้างสำหรับ item (Achievement หรือ Badge) ที่ผู้ใช้เลือกแสดงบนโปรไฟล์
+ * @property {Types.ObjectId} earnedItemId - ID ของ UserEarnedItem (จาก UserAchievement.earnedItems._id)
+ * @property {"Achievement" | "Badge"} itemType - ประเภทของ item (Achievement หรือ Badge)
+ */
+export interface IShowcasedGamificationItem {
+  earnedItemId: Types.ObjectId;
+  itemType: "Achievement" | "Badge";
+}
+
+/**
+ * @interface IUserDisplayBadge
+ * @description (ใหม่) โครงสร้างสำหรับ Badge ที่ผู้ใช้ตั้งค่าเพื่อแสดงผลในส่วนต่างๆ
+ * @property {Types.ObjectId} earnedBadgeId - ID ของ UserEarnedItem ที่เป็น Badge (จาก UserAchievement.earnedItems._id)
+ * @property {string} [displayContext] - (Optional) บริบทที่จะให้ Badge นี้แสดง (เช่น 'comment_signature', 'profile_header')
+ */
+export interface IUserDisplayBadge {
+    earnedBadgeId: Types.ObjectId; // อ้างอิง UserEarnedItem._id ที่เป็น Badge
+    displayContext?: string;
+}
+
+/**
  * @interface IUserGamification
  * @description ข้อมูลเกี่ยวกับระบบ Gamification ของผู้ใช้.
- * Field `experiencePoints` พร้อมให้ Service อัปเดตเมื่อมีการมอบรางวัล XP.
- * Field `achievements` อ้างอิงไปยังเอกสารใน Collection 'UserAchievement' เพื่อติดตามความสำเร็จที่ผู้ใช้ปลดล็อก.
  * @property {number} level - ระดับ (Level) ของผู้ใช้
+ * @property {Types.ObjectId | ILevel | null} currentLevelObject - (ใหม่) อ้างอิงไปยัง Level document ปัจจุบัน
  * @property {number} experiencePoints - คะแนนประสบการณ์ (XP) สะสม
- * @property {number} nextLevelXPThreshold - คะแนนประสบการณ์ที่ต้องใช้เพื่อขึ้นระดับถัดไป
- * @property {Types.ObjectId[]} achievements - รายการ ID ของ **UserAchievement** ที่ผู้ใช้ปลดล็อก (อ้างอิง UserAchievement model)
+ * @property {number} totalExperiencePointsEverEarned - (ใหม่) คะแนนประสบการณ์ทั้งหมดที่เคยได้รับ
+ * @property {number} nextLevelXPThreshold - คะแนนประสบการณ์ที่ต้องใช้เพื่อขึ้นระดับถัดไป (อาจจะดึงมาจาก `currentLevelObject.xpToNextLevelFromThis`)
+ * @property {Types.ObjectId[]} achievements - รายการ ID ของ **UserEarnedItem** (ที่มี itemType='Achievement') ที่ผู้ใช้ปลดล็อก
+ * @property {IShowcasedGamificationItem[]} [showcasedItems] - (ใหม่) รายการ Achievements/Badges ที่ผู้ใช้เลือกแสดงบนโปรไฟล์ [cite: 5]
+ * @property {IUserDisplayBadge} [primaryDisplayBadge] - (ใหม่) Badge หลักที่ผู้ใช้เลือกแสดง
+ * @property {IUserDisplayBadge[]} [secondaryDisplayBadges] - (ใหม่) Badge รองที่ผู้ใช้เลือกแสดง (จำกัด 2 อัน)
  * @property {object} loginStreaks - ข้อมูลสตรีคการล็อกอิน
  * @property {number} loginStreaks.currentStreakDays - จำนวนวันสตรีคการล็อกอินปัจจุบัน
  * @property {number} loginStreaks.longestStreakDays - จำนวนวันสตรีคการล็อกอินนานที่สุดที่เคยทำได้
@@ -334,21 +362,28 @@ export interface IUserWallet {
  * @property {object} dailyCheckIn - ข้อมูลการเช็คอินรายวัน
  * @property {Date} [dailyCheckIn.lastCheckInDate] - วันที่เช็คอินล่าสุด
  * @property {number} dailyCheckIn.currentStreakDays - จำนวนวันสตรีคการเช็คอินปัจจุบัน
+ * @property {Date} [lastActivityAt] - วันที่ผู้ใช้มีกิจกรรมล่าสุด (อาจใช้ในการคำนวณบางอย่าง)
  */
 export interface IUserGamification {
-  level: number; // ระดับผู้ใช้
-  experiencePoints: number; // คะแนนประสบการณ์
-  nextLevelXPThreshold: number; // XP ที่ต้องการสำหรับเลเวลถัดไป
-  achievements: Types.ObjectId[]; // ID ของ UserAchievement ที่ปลดล็อก
-  loginStreaks: { // สถิติการล็อกอินต่อเนื่อง
-    currentStreakDays: number; // วันที่ล็อกอินต่อเนื่องปัจจุบัน
-    longestStreakDays: number; // วันที่ล็อกอินต่อเนื่องนานที่สุด
-    lastLoginDate?: Date; // วันที่ล็อกอินล่าสุดที่นับสตรีค
+  level: number;
+  currentLevelObject?: Types.ObjectId | ILevel | null; // << ใหม่
+  experiencePoints: number;
+  totalExperiencePointsEverEarned?: number; // << ใหม่
+  nextLevelXPThreshold: number;
+  achievements: Types.ObjectId[]; // Array of UserEarnedItem._id (where itemType is Achievement)
+  showcasedItems?: IShowcasedGamificationItem[]; // << ใหม่
+  primaryDisplayBadge?: IUserDisplayBadge; // << ใหม่
+  secondaryDisplayBadges?: IUserDisplayBadge[]; // << ใหม่ (limit 2)
+  loginStreaks: {
+    currentStreakDays: number;
+    longestStreakDays: number;
+    lastLoginDate?: Date;
   };
-  dailyCheckIn: { // การเช็คอินรายวัน
-    lastCheckInDate?: Date; // วันที่เช็คอินล่าสุด
-    currentStreakDays: number; // วันที่เช็คอินต่อเนื่องปัจจุบัน
+  dailyCheckIn: {
+    lastCheckInDate?: Date;
+    currentStreakDays: number;
   };
+  lastActivityAt?: Date;
 }
 
 /**
@@ -616,9 +651,9 @@ export interface IUser extends Document {
 
 // ==================================================================================================
 // SECTION: Schema ย่อย (Sub-Schemas) สำหรับ Mongoose
+// (คัดลอก Schema ย่อยจากด้านบนมาวางที่นี่ เพื่อให้โค้ดสมบูรณ์ในไฟล์เดียว)
 // ==================================================================================================
 
-// Schema ย่อยสำหรับ INovelPerformanceStats (ส่วนหนึ่งของ WriterStats)
 const NovelPerformanceStatsSchema = new Schema<INovelPerformanceStats>(
   {
     novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true, comment: "ID ของนิยาย" },
@@ -631,10 +666,9 @@ const NovelPerformanceStatsSchema = new Schema<INovelPerformanceStats>(
     averageRating: { type: Number, min: 0, max: 5, comment: "คะแนนเฉลี่ย" },
     totalEarningsFromNovel: { type: Number, default: 0, min: 0, comment: "รายได้จากนิยายนี้" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema หลักสำหรับ WriterStats (สำหรับใช้เป็น sub-document ใน User model)
 const WriterStatsSchema = new Schema<IWriterStats>(
   {
     totalNovelsPublished: { type: Number, default: 0, min: 0, comment: "จำนวนนิยายที่เผยแพร่" },
@@ -654,10 +688,9 @@ const WriterStatsSchema = new Schema<IWriterStats>(
     writerTier: { type: String, trim: true, maxlength: 50, comment: "ระดับนักเขียน" },
     writerRank: { type: Number, min: 0, comment: "อันดับนักเขียน" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าการแสดงผลส่วนการอ่าน
 const UserReadingDisplayPreferencesSchema = new Schema<IUserReadingDisplayPreferences>(
   {
     fontFamily: { type: String, trim: true, maxlength: 100, comment: "ชื่อฟอนต์ที่ใช้" },
@@ -666,29 +699,26 @@ const UserReadingDisplayPreferencesSchema = new Schema<IUserReadingDisplayPrefer
     textAlignment: { type: String, enum: ["left", "justify"], default: "left", comment: "การจัดวางข้อความ" },
     readingModeLayout: { type: String, enum: ["paginated", "scrolling"], required: [true, "กรุณาระบุรูปแบบการอ่าน"], default: "scrolling", comment: "รูปแบบการแสดงผลหน้าอ่าน" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าการเข้าถึง
 const UserAccessibilityDisplayPreferencesSchema = new Schema<IUserAccessibilityDisplayPreferences>(
   {
     dyslexiaFriendlyFont: { type: Boolean, default: false, comment: "ใช้ฟอนต์สำหรับผู้มีภาวะดิสเล็กเซีย" },
     highContrastMode: { type: Boolean, default: false, comment: "โหมดความคมชัดสูง" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าการแสดงผลโดยรวม
 const UserDisplayPreferencesSchema = new Schema<IUserDisplayPreferences>(
   {
     theme: { type: String, enum: ["light", "dark", "system", "sepia"], required: [true, "กรุณาระบุธีม"], default: "system", comment: "ธีมที่ใช้ (สว่าง, มืด, ตามระบบ, ซีเปีย)" },
     reading: { type: UserReadingDisplayPreferencesSchema, default: () => ({ fontSize: "medium", readingModeLayout: "scrolling", lineHeight: 1.6, textAlignment: "left" }), comment: "การตั้งค่าการแสดงผลการอ่าน" },
     accessibility: { type: UserAccessibilityDisplayPreferencesSchema, default: () => ({ dyslexiaFriendlyFont: false, highContrastMode: false }), comment: "การตั้งค่าการเข้าถึง" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าแจ้งเตือนแต่ละช่องทาง
 const NotificationChannelSettingsSchema = new Schema<INotificationChannelSettings>(
   {
     enabled: { type: Boolean, default: true, comment: "เปิดใช้งานการแจ้งเตือนช่องทางนี้" },
@@ -703,10 +733,9 @@ const NotificationChannelSettingsSchema = new Schema<INotificationChannelSetting
     promotionalOffers: { type: Boolean, default: false, comment: "ข้อเสนอโปรโมชั่น" },
     achievementUnlocks: { type: Boolean, default: true, comment: "การปลดล็อกความสำเร็จ" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าแจ้งเตือนโดยรวม
 const UserPreferencesNotificationsSchema = new Schema<IUserPreferencesNotifications>(
   {
     masterNotificationsEnabled: { type: Boolean, default: true, comment: "เปิด/ปิดการแจ้งเตือนทั้งหมด" },
@@ -714,20 +743,18 @@ const UserPreferencesNotificationsSchema = new Schema<IUserPreferencesNotificati
     push: { type: NotificationChannelSettingsSchema, default: () => ({}), comment: "การตั้งค่าสำหรับ Push Notification" },
     inApp: { type: NotificationChannelSettingsSchema, default: () => ({}), comment: "การตั้งค่าสำหรับ In-app Notification" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าความยินยอมเกี่ยวกับการวิเคราะห์ข้อมูล
 const UserAnalyticsConsentSchema = new Schema<IUserAnalyticsConsent>(
   {
     allowPsychologicalAnalysis: { type: Boolean, default: false, required: [true, "กรุณาระบุความยินยอมในการวิเคราะห์ทางจิตวิทยา"], comment: "อนุญาตการวิเคราะห์ทางจิตวิทยา" },
     allowPersonalizedFeedback: { type: Boolean, default: false, comment: "อนุญาตการให้ผลตอบรับส่วนบุคคล" },
     lastConsentReviewDate: { type: Date, comment: "วันที่ตรวจสอบความยินยอมล่าสุด" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าเฉพาะสำหรับ Visual Novel
 const VisualNovelGameplayPreferencesSchema = new Schema<IVisualNovelGameplayPreferences>(
   {
     textSpeed: { type: String, enum: ["slow", "normal", "fast", "instant"], default: "normal", comment: "ความเร็วในการแสดงข้อความ" },
@@ -750,10 +777,9 @@ const VisualNovelGameplayPreferencesSchema = new Schema<IVisualNovelGameplayPref
     assetPreloading: { type: String, enum: ["none", "essential", "full", "wifi_only"], default: "essential", comment: "การตั้งค่าการโหลดทรัพยากรล่วงหน้า" },
     characterAnimationLevel: { type: String, enum: ["none", "simple", "full"], default: "full", comment: "ระดับการแสดงอนิเมชันตัวละคร" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าเนื้อหาและความเป็นส่วนตัว
 const UserContentPrivacyPreferencesSchema = new Schema<IUserContentPrivacyPreferences>(
   {
     showMatureContent: { type: Boolean, default: false, comment: "แสดงเนื้อหาสำหรับผู้ใหญ่" },
@@ -768,22 +794,20 @@ const UserContentPrivacyPreferencesSchema = new Schema<IUserContentPrivacyPrefer
     allowDirectMessagesFrom: { type: String, enum: ["everyone", "followers", "no_one"], default: "followers", comment: "อนุญาตข้อความส่วนตัวจาก" },
     analyticsConsent: { type: UserAnalyticsConsentSchema, default: () => ({ allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false }), required: [true, "การตั้งค่าความยินยอมในการวิเคราะห์ข้อมูลเป็นสิ่งจำเป็น"], comment: "การยินยอมในการวิเคราะห์ข้อมูล" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าผู้ใช้หลัก
 const UserPreferencesSchema = new Schema<IUserPreferences>(
   {
     language: { type: String, default: "th", enum: ["th", "en", "ja", "ko", "zh"], required: [true, "กรุณาระบุภาษา"], comment: "ภาษาที่ใช้ใน UI" },
     display: { type: UserDisplayPreferencesSchema, default: () => ({ theme: "system", reading: { fontSize: "medium", readingModeLayout: "scrolling", lineHeight: 1.6, textAlignment: "left" }, accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false } }), comment: "การตั้งค่าการแสดงผล" },
-    notifications: { type: UserPreferencesNotificationsSchema, default: () => ({}) }, // Default ย่อยจะถูกจัดการโดย UserPreferencesNotificationsSchema
+    notifications: { type: UserPreferencesNotificationsSchema, default: () => ({}) },
     contentAndPrivacy: { type: UserContentPrivacyPreferencesSchema, default: () => ({ showMatureContent: false, preferredGenres: [], profileVisibility: "public", readingHistoryVisibility: "followers_only", showActivityStatus: true, allowDirectMessagesFrom: "followers", analyticsConsent: { allowPsychologicalAnalysis: false } }) , comment: "การตั้งค่าเนื้อหาและความเป็นส่วนตัว"},
-    visualNovelGameplay: { type: VisualNovelGameplayPreferencesSchema, default: () => ({ textSpeed: "normal", autoPlayMode: "click", transitionsEnabled: true, screenEffectsEnabled: true, textWindowOpacity: 0.8, masterVolume: 1.0, bgmVolume: 0.7, sfxVolume: 0.8, voiceVolume: 1.0, voicesEnabled: true, showChoiceTimer: true, blurThumbnailsOfMatureContent: true, assetPreloading: "essential", characterAnimationLevel: "full" }), comment: "การตั้งค่าเฉพาะสำหรับ Visual Novel" }, // << เพิ่ม default ที่นี่
+    visualNovelGameplay: { type: VisualNovelGameplayPreferencesSchema, default: () => ({ textSpeed: "normal", autoPlayMode: "click", transitionsEnabled: true, screenEffectsEnabled: true, textWindowOpacity: 0.8, masterVolume: 1.0, bgmVolume: 0.7, sfxVolume: 0.8, voiceVolume: 1.0, voicesEnabled: true, showChoiceTimer: true, blurThumbnailsOfMatureContent: true, assetPreloading: "essential", characterAnimationLevel: "full" }), comment: "การตั้งค่าเฉพาะสำหรับ Visual Novel" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema บัญชีที่เชื่อมโยง
 const AccountSchema = new Schema<IAccount>(
   {
     provider: { type: String, required: [true, "กรุณาระบุ Provider"], trim: true, index: true, comment: "ชื่อผู้ให้บริการ (เช่น google, credentials)" },
@@ -798,10 +822,9 @@ const AccountSchema = new Schema<IAccount>(
     sessionState: { type: String, select: false, comment: "สถานะ Session (OpenID)" },
     providerData: { type: Schema.Types.Mixed, select: false, comment: "ข้อมูลเพิ่มเติมจาก Provider" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema โปรไฟล์ผู้ใช้
 const UserProfileSchema = new Schema<IUserProfile>(
   {
     displayName: { type: String, trim: true, minlength: [1, "ชื่อที่แสดงต้องมีอย่างน้อย 1 ตัวอักษร"], maxlength: [100, "ชื่อที่แสดงต้องไม่เกิน 100 ตัวอักษร"], comment: "ชื่อที่แสดงทั่วไป" },
@@ -816,10 +839,9 @@ const UserProfileSchema = new Schema<IUserProfile>(
     location: { type: String, trim: true, maxlength: [200, "ที่อยู่ต้องไม่เกิน 200 ตัวอักษร"], comment: "ที่อยู่/เมือง" },
     websiteUrl: { type: String, trim: true, maxlength: [2048, "URL เว็บไซต์ยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\//.test(v), message: "รูปแบบ URL เว็บไซต์ไม่ถูกต้อง" }, comment: "URL เว็บไซต์ส่วนตัว" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema สถิติการใช้งาน
 const UserTrackingStatsSchema = new Schema<IUserTrackingStats>(
   {
     totalLoginDays: { type: Number, default: 0, min: 0, comment: "จำนวนวันล็อกอินทั้งหมด" },
@@ -833,10 +855,9 @@ const UserTrackingStatsSchema = new Schema<IUserTrackingStats>(
     joinDate: { type: Date, default: Date.now, required: true, comment: "วันที่สมัครสมาชิก" },
     firstLoginAt: { type: Date, comment: "วันที่ล็อกอินครั้งแรก" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema สถิติทางสังคม
 const UserSocialStatsSchema = new Schema<IUserSocialStats>(
   {
     followersCount: { type: Number, default: 0, min: 0, comment: "จำนวนผู้ติดตาม" },
@@ -846,41 +867,71 @@ const UserSocialStatsSchema = new Schema<IUserSocialStats>(
     ratingsGivenCount: { type: Number, default: 0, min: 0, comment: "จำนวนการให้คะแนน" },
     likesGivenCount: { type: Number, default: 0, min: 0, comment: "จำนวนการกดถูกใจ" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema กระเป๋าเงิน
 const UserWalletSchema = new Schema<IUserWallet>(
   {
     coinBalance: { type: Number, default: 0, min: 0, required: true, comment: "ยอดเหรียญคงเหลือ, พร้อมให้ Service อัปเดต" },
     lastCoinTransactionAt: { type: Date, comment: "วันที่ทำธุรกรรมเหรียญล่าสุด" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
+);
+
+// << ใหม่: Schema สำหรับ IShowcasedGamificationItem (ใช้ใน IUserGamification.showcasedItems)
+const ShowcasedGamificationItemSchema = new Schema<IShowcasedGamificationItem>(
+    {
+        earnedItemId: { type: Schema.Types.ObjectId, required: true, comment: "ID ของ UserEarnedItem (จาก UserAchievement.earnedItems)" },
+        itemType: { type: String, enum: ["Achievement", "Badge"], required: true, comment: "ประเภทของ item (Achievement หรือ Badge)"},
+    },
+    { _id: false }
+);
+
+// << ใหม่: Schema สำหรับ IUserDisplayBadge (ใช้ใน IUserGamification.primaryDisplayBadge และ secondaryDisplayBadges)
+const UserDisplayBadgeSchema = new Schema<IUserDisplayBadge>(
+    {
+        earnedBadgeId: { type: Schema.Types.ObjectId, required: true, comment: "ID ของ UserEarnedItem ที่เป็น Badge (จาก UserAchievement.earnedItems)" },
+        displayContext: { type: String, trim: true, maxlength: 100, comment: "(Optional) บริบทที่จะแสดง Badge นี้" },
+    },
+    { _id: false }
 );
 
 // Schema ระบบ Gamification
 const UserGamificationSchema = new Schema<IUserGamification>(
   {
     level: { type: Number, default: 1, min: 1, required: true, comment: "ระดับผู้ใช้" },
+    currentLevelObject: { type: Schema.Types.ObjectId, ref: "Level", default: null, comment: "อ้างอิง Level ปัจจุบันของผู้ใช้" }, // << ใหม่
     experiencePoints: { type: Number, default: 0, min: 0, required: true, comment: "คะแนนประสบการณ์, พร้อมให้ Service อัปเดต" },
+    totalExperiencePointsEverEarned: { type: Number, default: 0, min: 0, comment: "คะแนนประสบการณ์ทั้งหมดที่เคยได้รับ" }, // << ใหม่
     nextLevelXPThreshold: { type: Number, default: 100, min: 0, required: true, comment: "XP ที่ต้องการสำหรับเลเวลถัดไป" },
-    achievements: [{ type: Schema.Types.ObjectId, ref: "UserAchievement", comment: "ID ของ UserAchievement ที่ปลดล็อก (เอกสารที่บันทึกความสำเร็จของผู้ใช้แต่ละคน)" }], // << ปรับปรุง ref เป็น UserAchievement
+    achievements: [{ type: Schema.Types.ObjectId, ref: "UserAchievement.earnedItems", comment: "ID ของ UserEarnedItem ที่เป็น Achievement (ใน UserAchievement document)" }],
+    showcasedItems: { type: [ShowcasedGamificationItemSchema], default: [], comment: "รายการ Achievements/Badges ที่เลือกแสดงบนโปรไฟล์" }, // << ใหม่
+    primaryDisplayBadge: { type: UserDisplayBadgeSchema, default: undefined, comment: "Badge หลักที่เลือกแสดง" }, // << ใหม่
+    secondaryDisplayBadges: { // << ใหม่
+        type: [UserDisplayBadgeSchema],
+        default: [],
+        validate: [
+            (val: IUserDisplayBadge[]) => val.length <= 2,
+            "สามารถเลือก Badge รองได้สูงสุด 2 อัน"
+        ],
+        comment: "Badge รองที่เลือกแสดง (สูงสุด 2 อัน)",
+    },
     loginStreaks: {
       currentStreakDays: { type: Number, default: 0, min: 0, comment: "วันที่ล็อกอินต่อเนื่องปัจจุบัน" },
       longestStreakDays: { type: Number, default: 0, min: 0, comment: "วันที่ล็อกอินต่อเนื่องนานที่สุด" },
       lastLoginDate: { type: Date, comment: "วันที่ล็อกอินล่าสุดที่นับสตรีค" },
-      _id: false, // ไม่สร้าง _id สำหรับ object ย่อยนี้
+      _id: false,
     },
     dailyCheckIn: {
       lastCheckInDate: { type: Date, comment: "วันที่เช็คอินล่าสุด" },
       currentStreakDays: { type: Number, default: 0, min: 0, comment: "วันที่เช็คอินต่อเนื่องปัจจุบัน" },
-      _id: false, // ไม่สร้าง _id สำหรับ object ย่อยนี้
+      _id: false,
     },
+    lastActivityAt: { type: Date, comment: "เวลาที่มีกิจกรรมล่าสุด (สำหรับ Gamification)"}
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การยืนยันตัวตน (KYC) และการเป็นนักเขียน
 const UserVerificationSchema = new Schema<IUserVerification>(
   {
     kycStatus: { type: String, enum: ["none", "pending", "verified", "rejected", "requires_resubmission"], default: "none", index: true, comment: "สถานะ KYC" },
@@ -891,19 +942,17 @@ const UserVerificationSchema = new Schema<IUserVerification>(
     kycApplicationId: { type: Schema.Types.ObjectId, comment: "ID ใบคำขอ KYC" },
     writerApplicationId: { type: Schema.Types.ObjectId, ref: "WriterApplication", comment: "ID ของใบสมัครนักเขียนล่าสุดหรือที่เกี่ยวข้อง" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าการรับบริจาค
 const UserDonationSettingsSchema = new Schema<IUserDonationSettings>(
   {
     activeAuthorDirectDonationAppId: { type: Schema.Types.ObjectId, ref: "DonationApplication", comment: "ID ใบคำขอรับบริจาคที่ใช้งานอยู่" },
     isEligibleForDonation: { type: Boolean, default: false, required: true, comment: "มีคุณสมบัติรับบริจาคหรือไม่" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema การตั้งค่าความปลอดภัย
 const UserSecuritySettingsSchema = new Schema<IUserSecuritySettings>(
   {
     lastPasswordChangeAt: { type: Date, comment: "วันที่เปลี่ยนรหัสผ่านล่าสุด" },
@@ -913,13 +962,13 @@ const UserSecuritySettingsSchema = new Schema<IUserSecuritySettings>(
       secret: { type: String, select: false, comment: "Secret Key (สำหรับ OTP)" },
       backupCodes: { type: [String], select: false, comment: "รหัสสำรอง" },
       verifiedAt: { type: Date, comment: "วันที่ยืนยัน 2FA" },
-      _id: false, // ไม่สร้าง _id สำหรับ object ย่อยนี้
+      _id: false,
     },
     loginAttempts: {
       count: { type: Number, default: 0, min: 0, comment: "จำนวนครั้งที่ผิดพลาด" },
       lastAttemptAt: { type: Date, comment: "เวลาที่พยายามล่าสุด" },
       lockoutUntil: { type: Date, comment: "ล็อกบัญชีถึงเมื่อไหร่" },
-      _id: false, // ไม่สร้าง _id สำหรับ object ย่อยนี้
+      _id: false,
     },
     activeSessions: [
       {
@@ -929,14 +978,13 @@ const UserSecuritySettingsSchema = new Schema<IUserSecuritySettings>(
         lastAccessedAt: { type: Date, required: true, comment: "เวลาที่เข้าถึงล่าสุด" },
         createdAt: { type: Date, required: true, default: Date.now, comment: "เวลาที่สร้างเซสชัน" },
         isCurrentSession: { type: Boolean, comment: "เป็นเซสชันปัจจุบันหรือไม่" },
-        _id: false, // ไม่สร้าง _id สำหรับ object ใน array นี้
+        _id: false,
       },
     ],
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
-// Schema สำหรับ Mental Wellbeing Insights
 const MentalWellbeingInsightsSchema = new Schema<IMentalWellbeingInsights>(
   {
     lastAssessedAt: { type: Date, comment: "วันที่ประเมินล่าสุด" },
@@ -949,7 +997,7 @@ const MentalWellbeingInsightsSchema = new Schema<IMentalWellbeingInsights>(
     lastRecommendationDismissedAt: { type: Date, comment: "วันที่ปิดคำแนะนำล่าสุด" },
     modelVersion: { type: String, trim: true, maxlength: 50, comment: "เวอร์ชันโมเดล AI" },
   },
-  { _id: false } // ไม่สร้าง _id สำหรับ schema ย่อยนี้
+  { _id: false }
 );
 
 // ==================================================================================================
@@ -957,80 +1005,70 @@ const MentalWellbeingInsightsSchema = new Schema<IMentalWellbeingInsights>(
 // ==================================================================================================
 const UserSchema = new Schema<IUser>(
   {
-    /** ชื่อผู้ใช้สำหรับ Login และแสดงผล, Unique และ Sparse */
     username: {
       type: String,
       unique: true,
-      sparse: true, // อนุญาตให้มีหลาย documents ที่ไม่มี username (เช่น สำหรับ OAuth ที่ยังไม่ได้ตั้ง username)
+      sparse: true,
       trim: true,
       minlength: [3, "ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร"],
       maxlength: [50, "ชื่อผู้ใช้ต้องไม่เกิน 50 ตัวอักษร"],
       match: [/^(?=.{3,50}$)(?![_.])(?!.*[_.]{2})[a-zA-Z0-9._]+(?<![_.])$/, "ชื่อผู้ใช้สามารถมีได้เฉพาะตัวอักษรภาษาอังกฤษ, ตัวเลข, จุด (.), และขีดล่าง (_) เท่านั้น และต้องไม่ขึ้นต้นหรือลงท้ายด้วยจุดหรือขีดล่าง และห้ามมีจุดหรือขีดล่างติดกัน"],
-      index: true, // สร้าง index เพื่อการค้นหาที่รวดเร็ว
+      index: true,
       comment: "ชื่อผู้ใช้ (unique, สำหรับ login และ URL profile)",
     },
-    /** อีเมลของผู้ใช้, Unique และ Sparse, ใช้สำหรับ Login และการติดต่อ */
     email: {
       type: String,
       unique: true,
-      sparse: true, // อนุญาตให้มีหลาย documents ที่ไม่มี email (เช่น สำหรับ OAuth บางประเภทที่ไม่ให้ email)
+      sparse: true,
       trim: true,
       lowercase: true,
       match: [/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/, "รูปแบบอีเมลไม่ถูกต้อง"],
-      index: true, // สร้าง index เพื่อการค้นหาที่รวดเร็ว
+      index: true,
       comment: "อีเมล (unique, สำหรับ login และการติดต่อ)",
     },
-    /** รหัสผ่านที่ถูก Hashed (สำหรับ Credentials-based authentication) */
     password: {
       type: String,
-      select: false, // ไม่ query รหัสผ่านออกมาโดย default เพื่อความปลอดภัย
+      select: false,
       comment: "รหัสผ่าน (Hashed, select: false)",
     },
-    /** รายการบัญชีที่เชื่อมโยง (Credentials, OAuth Providers) */
     accounts: {
-      type: [AccountSchema], // ใช้ schema ย่อยที่กำหนดไว้
-      validate: { // ตรวจสอบว่าต้องมีอย่างน้อย 1 account
+      type: [AccountSchema],
+      validate: {
         validator: function(v: IAccount[]) { return v && v.length > 0; },
         message: "ผู้ใช้ต้องมีอย่างน้อยหนึ่งบัญชี (credentials หรือ OAuth)"
       },
       comment: "บัญชีที่เชื่อมโยง (Credentials, OAuth)",
     },
-    /** บทบาทของผู้ใช้ในระบบ (สามารถมีได้หลายบทบาท) */
     roles: {
       type: [String],
       enum: ["Reader", "Writer", "Admin", "Moderator", "Editor"],
-      default: ["Reader"], // บทบาทเริ่มต้นคือ Reader
+      default: ["Reader"],
       required: [true, "กรุณาระบุบทบาทของผู้ใช้"],
       comment: "บทบาทของผู้ใช้ (Reader, Writer, Admin, etc.)",
     },
-    /** ข้อมูลโปรไฟล์สาธารณะของผู้ใช้ */
     profile: {
-        type: UserProfileSchema, // ใช้ schema ย่อยที่กำหนดไว้
-        default: () => ({}), // Default เป็น object ว่าง เพื่อให้ Mongoose สร้างให้ถ้าไม่มี
+        type: UserProfileSchema,
+        default: () => ({}),
         comment: "ข้อมูลโปรไฟล์สาธารณะ",
     },
-    /** สถิติสำหรับนักเขียน (Embed ถ้าผู้ใช้เป็น Writer) */
-    writerStats: { // field นี้จะถูกสร้าง/ล้างโดย middleware เมื่อ role "Writer" ถูกเพิ่ม/ลบ
-        type: WriterStatsSchema, // ใช้ schema ย่อยที่กำหนดไว้
-        default: undefined, // ไม่มีค่า default โดยตรง, middleware จะจัดการ
+    writerStats: {
+        type: WriterStatsSchema,
+        default: undefined,
         comment: "สถิติสำหรับนักเขียน (ถ้ามีบทบาท Writer)",
     },
-    /** สถิติการใช้งานแพลตฟอร์มของผู้ใช้ */
     trackingStats: {
-        type: UserTrackingStatsSchema, // ใช้ schema ย่อยที่กำหนดไว้
+        type: UserTrackingStatsSchema,
         default: () => ({ joinDate: new Date(), totalLoginDays: 0, totalNovelsRead: 0, totalEpisodesRead: 0, totalTimeSpentReadingSeconds: 0, totalCoinSpent: 0, totalRealMoneySpent: 0 }),
         comment: "สถิติการใช้งานแพลตฟอร์ม",
     },
-    /** สถิติทางสังคมของผู้ใช้ */
     socialStats: {
-        type: UserSocialStatsSchema, // ใช้ schema ย่อยที่กำหนดไว้
+        type: UserSocialStatsSchema,
         default: () => ({ followersCount: 0, followingCount: 0, novelsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0 }),
         comment: "สถิติทางสังคม",
     },
-    /** การตั้งค่าส่วนตัวของผู้ใช้ (รวมถึง analyticsConsent และ visualNovelGameplay) */
     preferences: {
-      type: UserPreferencesSchema, // ใช้ schema ย่อยที่กำหนดไว้
-      default: () => ({ // Default ที่ครอบคลุม sub-schemas ทั้งหมด
+      type: UserPreferencesSchema,
+      default: () => ({
         language: "th",
         display: { theme: "system", reading: { fontSize: "medium", readingModeLayout: "scrolling", lineHeight: 1.6, textAlignment: "left" }, accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false } },
         notifications: { masterNotificationsEnabled: true, email: {}, push: {}, inApp: {} },
@@ -1039,116 +1077,107 @@ const UserSchema = new Schema<IUser>(
       }),
       comment: "การตั้งค่าส่วนตัวของผู้ใช้",
     },
-    /** ข้อมูลกระเป๋าเงินของผู้ใช้ */
     wallet: {
-        type: UserWalletSchema, // ใช้ schema ย่อยที่กำหนดไว้
+        type: UserWalletSchema,
         default: () => ({ coinBalance: 0 }),
         comment: "ข้อมูลกระเป๋าเงิน (เหรียญ), field coinBalance พร้อมให้ Service อัปเดต",
     },
-    /** ข้อมูลระบบ Gamification ของผู้ใช้ */
     gamification: {
-        type: UserGamificationSchema, // ใช้ schema ย่อยที่กำหนดไว้
-        default: () => ({ level: 1, experiencePoints: 0, nextLevelXPThreshold: 100, achievements: [], loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 }, dailyCheckIn: { currentStreakDays: 0 } }),
-        comment: "ข้อมูลระบบ Gamification, field experiencePoints และ achievements พร้อมให้ Service อัปเดต",
+        type: UserGamificationSchema, // << ใช้ Schema ที่ปรับปรุงแล้ว
+        default: () => ({
+            level: 1,
+            currentLevelObject: null, // << ใหม่
+            experiencePoints: 0,
+            totalExperiencePointsEverEarned: 0, // << ใหม่
+            nextLevelXPThreshold: 100, // ค่าเริ่มต้น, ควรถูกอัปเดตเมื่อ Level Up หรือสร้าง User
+            achievements: [],
+            showcasedItems: [], // << ใหม่
+            primaryDisplayBadge: undefined, // << ใหม่
+            secondaryDisplayBadges: [], // << ใหม่
+            loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 },
+            dailyCheckIn: { currentStreakDays: 0 },
+            lastActivityAt: new Date(),
+        }),
+        comment: "ข้อมูลระบบ Gamification",
     },
-    /** ป้ายยืนยันต่างๆ ที่ผู้ใช้ได้รับ */
     verifiedBadges: {
-        type: [{ type: String, trim: true, maxlength: 100 }], // เก็บเป็น string ของ badge key หรือชื่อ
+        type: [{ type: String, trim: true, maxlength: 100 }],
         default: [],
         comment: "ป้ายยืนยันที่ผู้ใช้ได้รับ",
     },
-    /** ข้อมูลการยืนยันตัวตน (KYC) และสถานะการเป็นนักเขียน */
     verification: {
-        type: UserVerificationSchema, // ใช้ schema ย่อยที่กำหนดไว้
-        default: () => ({ kycStatus: "none" }), // writerApplicationStatus ถูกเอาออก
+        type: UserVerificationSchema,
+        default: () => ({ kycStatus: "none" }),
         comment: "ข้อมูลการยืนยันตัวตน (KYC) และการสมัครนักเขียน",
     },
-    /** การตั้งค่าเกี่ยวกับการรับบริจาค (สำหรับนักเขียน) */
     donationSettings: {
-        type: UserDonationSettingsSchema, // ใช้ schema ย่อยที่กำหนดไว้
+        type: UserDonationSettingsSchema,
         default: () => ({ isEligibleForDonation: false }),
         comment: "การตั้งค่าการรับบริจาค (สำหรับนักเขียน)",
     },
-    /** การตั้งค่าความปลอดภัยของบัญชี */
     securitySettings: {
-        type: UserSecuritySettingsSchema, // ใช้ schema ย่อยที่กำหนดไว้
+        type: UserSecuritySettingsSchema,
         default: () => ({ twoFactorAuthentication: { isEnabled: false }, loginAttempts: { count: 0 }, activeSessions: [] }),
         comment: "การตั้งค่าความปลอดภัย",
     },
-    /** ข้อมูลเชิงลึกเกี่ยวกับสุขภาพจิตใจ (สร้างโดย AI, ต้องได้รับความยินยอม) */
     mentalWellbeingInsights: {
-        type: MentalWellbeingInsightsSchema, // ใช้ schema ย่อยที่กำหนดไว้
+        type: MentalWellbeingInsightsSchema,
         default: () => ({ overallEmotionalTrend: "unknown", consultationRecommended: false }),
-        select: false, // ข้อมูลนี้ละเอียดอ่อนมาก ไม่ควร query ออกมาโดย default
+        select: false,
         comment: "ข้อมูลเชิงลึกสุขภาพจิต (AI-generated, select: false)",
     },
-    /** สถานะการยืนยันอีเมล */
     isEmailVerified: {
         type: Boolean,
         default: false,
         required: true,
         comment: "สถานะการยืนยันอีเมล",
     },
-    /** วันที่ยืนยันอีเมล (สำหรับ OAuth หรือเมื่อยืนยันสำเร็จ) */
     emailVerifiedAt: {
         type: Date,
         comment: "วันที่ยืนยันอีเมล",
     },
-    /** Token สำหรับยืนยันอีเมล (Hashed) */
     emailVerificationToken: { type: String, select: false, comment: "Token ยืนยันอีเมล (Hashed, select: false)" },
-    /** วันหมดอายุของ Token ยืนยันอีเมล */
     emailVerificationTokenExpiry: { type: Date, select: false, comment: "วันหมดอายุ Token ยืนยันอีเมล (select: false)" },
-    /** Token สำหรับรีเซ็ตรหัสผ่าน (Hashed) */
     passwordResetToken: { type: String, select: false, comment: "Token รีเซ็ตรหัสผ่าน (Hashed, select: false)" },
-    /** วันหมดอายุของ Token รีเซ็ตรหัสผ่าน */
     passwordResetTokenExpiry: { type: Date, select: false, comment: "วันหมดอายุ Token รีเซ็ตรหัสผ่าน (select: false)" },
-    /** วันที่ล็อกอินล่าสุด */
     lastLoginAt: { type: Date, comment: "วันที่ล็อกอินล่าสุด" },
-    /** IP Address ล่าสุดที่ใช้ล็อกอิน (Hashed/Anonymized) */
     lastIpAddress: { type: String, select: false, comment: "IP ล่าสุดที่ล็อกอิน (Hashed/Anonymized, select: false)" },
-    /** สถานะบัญชีว่าใช้งานได้หรือไม่ */
     isActive: { type: Boolean, default: true, index: true, comment: "บัญชีใช้งานได้หรือไม่" },
-    /** สถานะบัญชีว่าถูกระงับถาวรหรือไม่ */
     isBanned: { type: Boolean, default: false, index: true, comment: "ถูกแบนหรือไม่" },
-    /** เหตุผลการระงับบัญชี */
     banReason: { type: String, trim: true, maxlength: 1000, comment: "เหตุผลการแบน" },
-    /** วันที่การระงับบัญชีสิ้นสุดลง (สำหรับการระงับชั่วคราว) */
     bannedUntil: { type: Date, comment: "แบนถึงเมื่อไหร่" },
-    /** สถานะการลบบัญชี (Soft delete) */
     isDeleted: { type: Boolean, default: false, index: true, comment: "ลบบัญชีแล้วหรือยัง (Soft Delete)" },
-    /** วันที่ทำการลบบัญชี (Soft delete) */
     deletedAt: { type: Date, comment: "วันที่ลบบัญชี (Soft Delete)" },
   },
   {
-    timestamps: true, // สร้าง createdAt และ updatedAt โดยอัตโนมัติ
-    toJSON: { virtuals: true }, // ให้แสดง virtual fields เมื่อแปลงเป็น JSON
-    toObject: { virtuals: true }, // ให้แสดง virtual fields เมื่อแปลงเป็น Object
-    collection: "users", // ระบุชื่อ Collection ให้ชัดเจน
-    // comment: "โมเดลหลักสำหรับเก็บข้อมูลผู้ใช้ทั้งหมดของแพลตฟอร์ม NovelMaze" // Mongoose SchemaOptions ไม่รองรับ comment โดยตรง
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+    collection: "users",
   }
 );
 
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
-UserSchema.index({ email: 1 }, { unique: true, sparse: true, name: "UserEmailIndex" }); // Index สำหรับอีเมล (unique ถ้ามีค่า)
-UserSchema.index({ username: 1 }, { unique: true, sparse: true, name: "UserUsernameIndex" }); // Index สำหรับชื่อผู้ใช้ (unique ถ้ามีค่า)
-UserSchema.index({ "accounts.provider": 1, "accounts.providerAccountId": 1 }, { unique: true, sparse: true, name: "UserAccountsProviderIndex" }); // Index สำหรับบัญชี OAuth
-UserSchema.index({ roles: 1 }, { name: "UserRolesIndex" }); // Index สำหรับบทบาท
-UserSchema.index({ "preferences.language": 1 }, { name: "UserLanguagePreferenceIndex" }); // Index สำหรับภาษาที่ตั้งค่า
-UserSchema.index({ "gamification.level": -1 }, { name: "UserGamificationLevelIndex" }); // Index สำหรับระดับใน Gamification
-UserSchema.index({ "gamification.achievements": 1 }, { name: "UserGamificationAchievementsRefIndex" }); // Index สำหรับ achievements array ใน gamification
-UserSchema.index({ lastLoginAt: -1 }, { name: "UserLastLoginIndex" }); // Index สำหรับวันที่ล็อกอินล่าสุด
-UserSchema.index({ isDeleted: 1, deletedAt: 1 }, { name: "UserSoftDeleteIndex" }); // Index สำหรับการ soft delete
-UserSchema.index( // Index สำหรับการค้นหาผู้ใช้ที่ยินยอมให้วิเคราะห์ข้อมูล
+UserSchema.index({ email: 1 }, { unique: true, sparse: true, name: "UserEmailIndex" });
+UserSchema.index({ username: 1 }, { unique: true, sparse: true, name: "UserUsernameIndex" });
+UserSchema.index({ "accounts.provider": 1, "accounts.providerAccountId": 1 }, { unique: true, sparse: true, name: "UserAccountsProviderIndex" });
+UserSchema.index({ roles: 1 }, { name: "UserRolesIndex" });
+UserSchema.index({ "preferences.language": 1 }, { name: "UserLanguagePreferenceIndex" });
+UserSchema.index({ "gamification.level": -1 }, { name: "UserGamificationLevelIndex" });
+UserSchema.index({ "gamification.achievements": 1 }, { name: "UserGamificationAchievementsRefIndex" });
+UserSchema.index({ lastLoginAt: -1 }, { name: "UserLastLoginIndex" });
+UserSchema.index({ isDeleted: 1, deletedAt: 1 }, { name: "UserSoftDeleteIndex" });
+UserSchema.index(
   { "preferences.contentAndPrivacy.analyticsConsent.allowPsychologicalAnalysis": 1 },
   { name: "UserAnalyticsConsentIndex" }
 );
-UserSchema.index( // Index สำหรับวันที่ประเมินสุขภาพจิตล่าสุด
+UserSchema.index(
   { "mentalWellbeingInsights.lastAssessedAt": -1 },
   { name: "UserMentalWellbeingAssessmentDateIndex" }
 );
-UserSchema.index( // Index สำหรับนามปากกา (penName) (unique ถ้ามีค่า)
+UserSchema.index(
     { "profile.penName": 1 },
     { unique: true, sparse: true, name: "UserProfilePenNameIndex" }
 );
@@ -1157,74 +1186,60 @@ UserSchema.index( // Index สำหรับนามปากกา (penName) 
 // SECTION: Middleware (Mongoose Hooks)
 // ==================================================================================================
 
-// Middleware: ก่อนการบันทึก (save) - สำหรับ Hash รหัสผ่าน และสร้าง Username/Email ถ้ายังไม่มี
 UserSchema.pre<IUser>("save", async function (next) {
-  // 1. Hash รหัสผ่านถ้ามีการแก้ไข และเป็นบัญชี credentials
   if (this.isModified("password") && this.password) {
     const hasCredentialsAccount = this.accounts.some(acc => acc.type === "credentials" && acc.provider === "credentials");
-    if (hasCredentialsAccount) { // Hash เฉพาะเมื่อมี account type 'credentials'
+    if (hasCredentialsAccount) {
       try {
-        const salt = await bcrypt.genSalt(10); // เพิ่มความปลอดภัยด้วย salt ที่มากขึ้น
+        const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);
       } catch (error: any) {
         return next(new Error("เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน: " + error.message));
       }
     } else {
-      // ถ้าไม่มี credentials account และมีการตั้ง password (เช่น จากการแก้ไขโดย Admin ที่ไม่ควร)
-      // ให้ล้าง password field เพื่อป้องกันการเก็บรหัสผ่านที่ไม่ควรมี
       this.password = undefined;
     }
   } else if (this.isNew && !this.password && this.accounts.some(acc => acc.type === "credentials")) {
-    // กรณีสร้าง User ใหม่ด้วย credentials แต่ไม่ได้ส่ง password มา (ไม่ควรเกิดขึ้นถ้า validation ที่ API route ดีพอ)
     // return next(new Error("ต้องระบุรหัสผ่านสำหรับบัญชีประเภท credentials"));
   }
 
-
-  // 2. สร้าง username จาก email ถ้า username ว่าง (สำหรับ OAuth Sign Up)
   if (this.isNew && !this.username && this.email) {
-    let baseUsername = this.email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").toLowerCase(); // เอาอักขระพิเศษออก ยกเว้น _ และ .
-    if (!baseUsername || baseUsername.length < 3) baseUsername = "user"; // ถ้าสั้นไปหรือไม่มีเลย
-    while(baseUsername.length < 3) { // ทำให้ baseUsername ยาวอย่างน้อย 3 ตัว
+    let baseUsername = this.email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").toLowerCase();
+    if (!baseUsername || baseUsername.length < 3) baseUsername = "user";
+    while(baseUsername.length < 3) {
       baseUsername += Math.floor(Math.random() * 10);
     }
-    let potentialUsername = baseUsername.substring(0, 40); // จำกัดความยาวเริ่มต้น
+    let potentialUsername = baseUsername.substring(0, 40);
     let count = 0;
-    const UserModelInstance = models.User || model<IUser>("User"); // เข้าถึง Model อย่างถูกต้อง
-    // วนลูปหา username ที่ไม่ซ้ำ
+    const UserModelInstance = models.User || model<IUser>("User");
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const existingUser = await UserModelInstance.findOne({ username: potentialUsername });
-      if (!existingUser) break; // ถ้าไม่ซ้ำ ให้ออกจากลูป
+      if (!existingUser) break;
       count++;
-      potentialUsername = `${baseUsername.substring(0, 40 - String(count).length)}${count}`; // สร้าง username ใหม่
-      if (potentialUsername.length > 50) { // ป้องกันกรณีที่วนลูปนานเกินไป
-         // อาจจะโยน error หรือใช้ UUID แทน
+      potentialUsername = `${baseUsername.substring(0, 40 - String(count).length)}${count}`;
+      if (potentialUsername.length > 50) {
          return next(new Error("ไม่สามารถสร้างชื่อผู้ใช้ที่ไม่ซ้ำกันได้ กรุณาลองใช้อีเมลอื่นหรือตั้งชื่อผู้ใช้ด้วยตนเอง"));
       }
     }
-    this.username = potentialUsername; // กำหนด username ที่ไม่ซ้ำ
+    this.username = potentialUsername;
   }
 
-  // 3. ทำให้ email เป็น lowercase เสมอ (ถ้ามี)
   if (this.isModified("email") && this.email) {
     this.email = this.email.toLowerCase();
   }
 
-  // 4. ถ้าเป็น OAuth และมี email ให้ถือว่า email verified แล้ว
   if (this.isNew && this.accounts.some(acc => acc.type === "oauth") && this.email) {
     this.isEmailVerified = true;
     this.emailVerifiedAt = new Date();
   }
   
-  // ตรรกะการจัดการ Writer Role และ writerStats
   const isNowWriter = this.roles.includes("Writer");
   const wasPreviouslyWriter = this.$__.priorValid ? this.$__.priorValid.roles.includes("Writer") : false;
 
-
   if (isNowWriter && !wasPreviouslyWriter) {
-    // เพิ่งถูกเปลี่ยนเป็น Writer หรือเป็น Writer ตอนสร้างใหม่
-    if (!this.writerStats) { // สร้าง writerStats ถ้ายังไม่มี
-      this.writerStats = { // Default values for IWriterStats
+    if (!this.writerStats) {
+      this.writerStats = {
         totalNovelsPublished: 0,
         totalEpisodesPublished: 0,
         totalViewsAcrossAllNovels: 0,
@@ -1235,109 +1250,87 @@ UserSchema.pre<IUser>("save", async function (next) {
         totalCoinsReceived: 0,
         totalRealMoneyReceived: 0,
         totalDonationsReceived: 0,
-        // novelPerformanceSummaries: new Types.DocumentArray([]), // Mongoose จะสร้าง array ว่างให้
-        writerSince: new Date(), // ตั้งค่าวันที่เริ่มเป็นนักเขียน
+        writerSince: new Date(),
       };
     } else if (!this.writerStats.writerSince) {
-      // ถ้า writerStats มีอยู่แล้วแต่ยังไม่มี writerSince (กรณีอัปเกรดข้อมูลเก่า หรือ set role จาก admin panel)
       this.writerStats.writerSince = new Date();
     }
-    // การตั้งนามปากกา (penName)
-    // ถ้า profile.displayName มีค่า และ profile.penName ยังว่าง
     if (this.profile?.displayName && !this.profile.penName) {
-        // ตรวจสอบความซ้ำซ้อนของ penName ก่อนตั้งค่า
         const UserModelInstance = models.User || model<IUser>("User");
         const existingUserWithPenName = await UserModelInstance.findOne({
             "profile.penName": this.profile.displayName,
-             _id: { $ne: this._id } // ไม่ใช่ user คนปัจจุบัน
+             _id: { $ne: this._id }
         });
         if (!existingUserWithPenName) {
             this.profile.penName = this.profile.displayName;
-        } else {
-            // console.warn(`Pen name "${this.profile.displayName}" is already taken. User ${this.username} should set it manually.`);
-            // อาจจะแจ้งเตือนผู้ใช้หรือ admin ให้แก้ไข penName ด้วยตนเอง
         }
     }
-
   } else if (!isNowWriter && wasPreviouslyWriter) {
-    // ถูกเอาออกจาก Role Writer
-    this.writerStats = undefined; // ล้างข้อมูล writerStats
-    // พิจารณาล้าง penName หรือไม่ ขึ้นอยู่กับนโยบาย
-    // this.profile.penName = undefined;
+    this.writerStats = undefined;
   }
 
-
-  // 6. ตรวจสอบความถูกต้องของ Preferred Genres, Blocked Genres, Blocked Authors, Blocked Novels (ถ้ามีค่า)
-  //   ควรมีการ validate ว่า ObjectId เหล่านี้อ้างอิงไปยังเอกสารที่มีอยู่จริงใน Collection ที่เกี่ยวข้อง
-  //   การทำใน middleware อาจจะซับซ้อนและ tốn performance ถ้ามีจำนวนมาก
-  //   อาจจะเหมาะกับการทำใน Service Layer หรือมี background job คอยตรวจสอบ data integrity
-
-  next(); // ไปยัง middleware หรือ save operation ถัดไป
+  // << ใหม่: ตั้งค่า currentLevelObject และ nextLevelXPThreshold สำหรับผู้ใช้ใหม่ หรือเมื่อ level เปลี่ยน
+  if (this.isNew || this.isModified("gamification.level")) {
+    const LevelModel = models.Level as mongoose.Model<ILevel> || model<ILevel>("Level");
+    // ค้นหา Level document ที่ตรงกับ level ปัจจุบันของผู้ใช้
+    const currentLevelDoc = await LevelModel.findOne({ levelNumber: this.gamification.level }).lean();
+    if (currentLevelDoc) {
+      this.gamification.currentLevelObject = currentLevelDoc._id;
+      this.gamification.nextLevelXPThreshold = currentLevelDoc.xpToNextLevelFromThis || this.gamification.nextLevelXPThreshold; // ใช้ค่าเดิมถ้าไม่พบ
+    } else if (this.gamification.level === 1) {
+        // กรณีพิเศษสำหรับ Level 1 หากยังไม่มี Level.ts record
+        // เราสามารถตั้งค่า default หรือรอให้ Level.ts ถูก seed
+        // หาก Level.ts มีข้อมูล Level 1, ส่วนนี้อาจจะไม่จำเป็น
+        this.gamification.nextLevelXPThreshold = 100; // Default XP for next level from level 1
+        this.gamification.currentLevelObject = null; // หรือหา Level 1
+        // console.warn(`[User Pre-Save Hook] Level 1 document not found in Levels collection for user ${this.username}. Using default nextLevelXPThreshold.`);
+    }
+  }
+  next();
 });
 
 // ==================================================================================================
 // SECTION: Methods (เมธอดสำหรับ User Document)
 // ==================================================================================================
 
-/**
- * ตรวจสอบรหัสผ่านที่ป้อนเข้ามากับรหัสผ่านที่ถูกเข้ารหัสในฐานข้อมูล
- * @param enteredPassword รหัสผ่านที่ผู้ใช้ป้อน
- * @returns Promise<boolean> คืนค่า true ถ้ารหัสผ่านถูกต้อง, false ถ้าไม่ถูกต้อง
- */
 UserSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
-  if (!this.password) { // ถ้าไม่มีรหัสผ่านเก็บไว้ (เช่น บัญชี OAuth)
+  if (!this.password) {
     return false;
   }
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-/**
- * สร้าง Token สำหรับยืนยันอีเมล
- * @returns string - Plain token (สำหรับส่งในอีเมล)
- */
 UserSchema.methods.generateEmailVerificationToken = function (): string {
-  const token = crypto.randomBytes(32).toString("hex"); // สร้าง plain token
-  // Hash token ก่อนเก็บลง DB
+  const token = crypto.randomBytes(32).toString("hex");
   this.emailVerificationToken = crypto
     .createHash("sha256")
     .update(token)
     .digest("hex");
-  this.emailVerificationTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // Token หมดอายุใน 1 ชั่วโมง
-  return token; // คืนค่า plain token
+  this.emailVerificationTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+  return token;
 };
 
-/**
- * สร้าง Token สำหรับรีเซ็ตรหัสผ่าน
- * @returns string - Plain token (สำหรับส่งในอีเมล)
- */
 UserSchema.methods.generatePasswordResetToken = function (): string {
-  const token = crypto.randomBytes(32).toString("hex"); // สร้าง plain token
-  // Hash token ก่อนเก็บลง DB
+  const token = crypto.randomBytes(32).toString("hex");
   this.passwordResetToken = crypto
     .createHash("sha256")
     .update(token)
     .digest("hex");
-  this.passwordResetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // Token หมดอายุใน 1 ชั่วโมง
-  return token; // คืนค่า plain token
+  this.passwordResetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+  return token;
 };
 
 // ==================================================================================================
 // SECTION: Virtuals (ฟิลด์เสมือน)
 // ==================================================================================================
 
-/**
- * Virtual field สำหรับ URL โปรไฟล์ของผู้ใช้
- */
 UserSchema.virtual("profileUrl").get(function (this: IUser) {
   if (this.username) {
-    return `/u/${this.username}`; // เช่น /u/john_doe
+    return `/u/${this.username}`;
   }
-  return `/users/${this._id}`; // Fallback ถ้าไม่มี username
+  return `/users/${this._id}`;
 });
 
-/**
- * Virtual field สำหรับคำนวณอายุของผู้ใช้จาก dateOfBirth
- */
 UserSchema.virtual("age").get(function (this: IUser): number | undefined {
   if (this.profile && this.profile.dateOfBirth) {
     const today = new Date();
@@ -1347,44 +1340,58 @@ UserSchema.virtual("age").get(function (this: IUser): number | undefined {
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
-    return age >= 0 ? age : undefined; // คืนค่า undefined ถ้าอายุติดลบ (ข้อมูลวันเกิดผิดพลาด)
+    return age >= 0 ? age : undefined;
   }
-  return undefined; // คืนค่า undefined ถ้าไม่มีข้อมูลวันเกิด
+  return undefined;
 });
 
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-/**
- * โมเดลหลักสำหรับเก็บข้อมูลผู้ใช้ทั้งหมดของแพลตฟอร์ม NovelMaze.
- * ประกอบด้วยข้อมูลการยืนยันตัวตน, โปรไฟล์, การตั้งค่า, สถิติ, และข้อมูลอื่นๆ ที่เกี่ยวข้องกับผู้ใช้.
- */
 const UserModel = (models.User as mongoose.Model<IUser>) || model<IUser>("User", UserSchema);
 
 export default UserModel;
 
 // ==================================================================================================
-// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม
+// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements) - ปรับปรุงล่าสุด
 // ==================================================================================================
-// 1.  **WriterStats Integration**: `writerStats` ถูก Embed เข้ามาใน User model โดยตรงแล้ว
-//     - เมื่อผู้ใช้มี Role "Writer", field `writerStats` จะถูก populated ด้วยข้อมูลจาก `WriterStatsSchema`.
-//     - Middleware ใน `UserSchema.pre("save", ...)` จะจัดการการสร้าง `writerStats` เริ่มต้นเมื่อผู้ใช้ได้รับ role "Writer"
-//       หรือลบออกเมื่อ role "Writer" ถูกเอาออก
-//     - การอัปเดตข้อมูลภายใน `writerStats` (เช่น `totalNovelsPublished`, `totalEarningsToDate`) จะต้องทำผ่าน logic ใน service layer
-//       ที่เกี่ยวข้องกับการสร้าง/เผยแพร่นิยาย หรือการบันทึกรายได้.
-// 2.  **Mental Wellbeing**: `mentalWellbeingInsights` และ `preferences.contentAndPrivacy.analyticsConsent`
-//     ยังคงเป็นส่วนหนึ่งของ User model เพื่อรองรับฟีเจอร์ด้านสุขภาพจิตในอนาคต.
-// 3.  **Security and Privacy**: `select: false` ถูกใช้กับ field ที่ละเอียดอ่อน.
-// 4.  **Modularity**: การใช้ Sub-Schemas ช่วยให้โค้ดเป็นระเบียบและจัดการง่ายขึ้น.
-// 5.  **VisualNovelGameplayPreferences**: เพิ่มส่วนนี้เข้ามาเพื่อรองรับการตั้งค่าเฉพาะของ Visual Novel ตามโจทย์.
-// 6.  **Gamification Fields**:
-//     -   `User.gamification.experiencePoints`: Field นี้พร้อมสำหรับ Service ที่จะมาอัปเดตคะแนน XP ของผู้ใช้.
-//     -   `User.wallet.coinBalance`: Field นี้พร้อมสำหรับ Service ที่จะมาอัปเดตยอด Coin ของผู้ใช้.
-//     -   `User.gamification.achievements`: Field นี้ได้รับการปรับปรุงให้ ref ไปยัง 'UserAchievement' Model แล้ว
-//         ทำให้สามารถเก็บรายการ ObjectId ของเอกสาร UserAchievement ที่ผู้ใช้คนนั้นๆ ปลดล็อกได้
-//         ซึ่ง Service หรือ Event Listener กลางจะใช้ข้อมูลนี้ในการอัปเดตรางวัล (XP, Coins) เข้าสู่ `User.ts`
-//         และบันทึกการปลดล็อกใน `UserAchievement.ts`.
-// 7.  **Service Layer Responsibility**: การอัปเดต `gamification.experiencePoints`, `wallet.coinBalance`,
-//     และการเพิ่ม ID เข้า `gamification.achievements` ควรเป็นความรับผิดชอบของ Gamification Service/Event Listener
-//     ที่จะถูกสร้างขึ้น. User model เตรียม field เหล่านี้ให้พร้อมใช้งานแล้ว.
+// 1.  **WriterStats Integration**: (คงเดิม) `writerStats` ถูก Embed และจัดการผ่าน middleware
+// 2.  **Mental Wellbeing**: (คงเดิม) `mentalWellbeingInsights` และ `analyticsConsent` ยังคงอยู่
+// 3.  **Security and Privacy**: (คงเดิม) `select: false` ถูกใช้กับ field ที่ละเอียดอ่อน.
+// 4.  **Modularity**: (คงเดิม) การใช้ Sub-Schemas ช่วยให้โค้ดเป็นระเบียบ.
+// 5.  **VisualNovelGameplayPreferences**: (คงเดิม) เพิ่มส่วนนี้เข้ามา.
+// 6.  **Gamification Fields Update**: (ปรับปรุงแล้ว)
+//     -   `User.gamification.level`: ระดับปัจจุบันของผู้ใช้
+//     -   `User.gamification.currentLevelObject`: (ใหม่) ObjectId อ้างอิงไปยังเอกสาร Level ปัจจุบันใน `levels` collection
+//         ช่วยให้ดึงข้อมูล Level (เช่น `levelTitle`, `xpToNextLevelFromThis`) ได้ง่ายขึ้น
+//     -   `User.gamification.experiencePoints`: XP สะสมของผู้ใช้
+//     -   `User.gamification.totalExperiencePointsEverEarned`: (ใหม่) XP ทั้งหมดที่เคยได้รับ [cite: 3]
+//     -   `User.gamification.nextLevelXPThreshold`: XP ที่ต้องใช้เพื่อขึ้นระดับถัดไป
+//         ค่านี้ควรถูกอัปเดตโดยอัตโนมัติเมื่อ `currentLevelObject` เปลี่ยน (เช่น ผ่าน pre-save hook หรือ service layer)
+//         โดยดึงมาจาก `Level.xpToNextLevelFromThis`
+//     -   `User.gamification.achievements`: ยังคงเป็น Array ของ `Types.ObjectId` แต่ตอนนี้จะอ้างอิงไปยัง `_id` ของ `UserEarnedItem`
+//         ภายใน `UserAchievement` collection (เฉพาะ item ที่มี `itemType: 'Achievement'`)
+//         ไม่ใช่ ObjectId ของ `Achievement` ต้นแบบโดยตรง เพื่อให้ติดตามการได้รับแต่ละครั้งได้ (ถ้า Achievement นั้น repeatable)
+//         และเพื่อให้สามารถเก็บข้อมูล snapshot ของ Achievement ณ ตอนที่ได้รับได้
+//     -   `User.gamification.showcasedItems`: (ใหม่) Array ของ Object ที่มี `{ earnedItemId: Types.ObjectId, itemType: "Achievement" | "Badge" }`
+//         `earnedItemId` อ้างอิง `_id` ของ `UserEarnedItem` ใน `UserAchievement` collection [cite: 5]
+//         เพื่อให้ผู้ใช้เลือกแสดง Achievement หรือ Badge ที่ตนเองได้รับบนโปรไฟล์
+//     -   `User.gamification.primaryDisplayBadge` และ `secondaryDisplayBadges`: (ใหม่) Object และ Array ของ Object ตามลำดับ
+//         สำหรับเก็บ `earnedBadgeId` (จาก `UserAchievement.earnedItems._id` ที่เป็น Badge)
+//         เพื่อแสดงผล Badge ในส่วนต่างๆ ของแพลตฟอร์มตามที่ผู้ใช้ตั้งค่า.
+// 7.  **Service Layer Responsibility**: (คงเดิมและเน้นย้ำ) การอัปเดต `gamification.experiencePoints`, `gamification.level`,
+//     `gamification.currentLevelObject`, `gamification.nextLevelXPThreshold`, `wallet.coinBalance`,
+//     และการเพิ่ม/อัปเดตข้อมูลใน `UserAchievement` (ซึ่งจะ trigger การอัปเดต `gamification.achievements`)
+//     ควรเป็นความรับผิดชอบของ Gamification Service/Event Listener.
+//     User model เตรียม field เหล่านี้ให้พร้อมใช้งาน.
+// 8.  **Synchronization of Level Data**: `nextLevelXPThreshold` ใน `User.gamification` ควรจะซิงค์กับ
+//     `xpToNextLevelFromThis` (หรือการคำนวณที่เทียบเท่า) จาก `Level.ts` model.
+//     เมื่อผู้ใช้ level up, `currentLevelObject` ใน `User.gamification` ควรอัปเดต และ `nextLevelXPThreshold` ก็ควรดึงค่าใหม่
+//     จาก `Level` document ใหม่นั้น. การทำเช่นนี้ใน pre-save hook ของ `User.ts` อาจซับซ้อน
+//     การจัดการผ่าน Service Layer ตอนที่ผู้ใช้ได้รับ XP และมีการ Level up จะเหมาะสมกว่า.
+//     แต่ใน pre-save hook ปัจจุบัน ได้มีการเพิ่ม logic เบื้องต้นในการพยายามตั้งค่า `currentLevelObject` และ `nextLevelXPThreshold`
+//     เมื่อ `level` เปลี่ยน หรือเมื่อสร้าง user ใหม่ (ซึ่ง `level` คือ 1).
+// 9.  **UserAchievement Document**: ไม่จำเป็นต้องมี `User.gamification.badges` แยกอีกต่อไป เพราะ `UserAchievement`
+//     จะเก็บทั้ง Achievements และ Badges ที่ผู้ใช้ได้รับผ่าน `earnedItems` array และ `itemType`.
+//     `gamification.showcasedItems` และ `displayBadges` จะอ้างอิง `UserEarnedItem._id` จาก `UserAchievement` นั้นๆ.
 // ==================================================================================================

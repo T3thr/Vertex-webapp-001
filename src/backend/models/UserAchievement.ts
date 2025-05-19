@@ -1,13 +1,13 @@
 // src/backend/models/UserAchievement.ts
 // โมเดลความสำเร็จและเหรียญตราของผู้ใช้ (UserAchievement Model)
 // บันทึกความสำเร็จและเหรียญตราที่ผู้ใช้แต่ละคนได้รับ รวมถึงความคืบหน้าและรางวัลที่เกี่ยวข้อง
-// ทำงานร่วมกับ Achievement.ts, Badge.ts, และ User.ts เพื่อสร้างระบบ Gamification ที่สมบูรณ์
+// ทำงานร่วมกับ Achievement.ts, Badge.ts, Level.ts และ User.ts เพื่อสร้างระบบ Gamification ที่สมบูรณ์
+// อัปเดตล่าสุด: ปรับปรุงโครงสร้าง IUserEarnedItem, rewardsGranted และการเชื่อมโยงกับ User model
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import { IUser } from "./User"; // สำหรับ user (อ้างอิง User.ts ที่อัปเดตแล้ว)
-import { IAchievement } from "./Achievement"; // สำหรับ achievementId (อ้างอิง Achievement.ts ที่อัปเดตแล้ว)
-import { IBadge } from "./Badge"; // สำหรับ badgeId (อ้างอิง Badge.ts ที่อัปเดตแล้ว)
-// IOfficialMedia อาจจะไม่จำเป็นต้อง import โดยตรงที่นี่ ถ้า itemIconUrlSnapshot เก็บเป็น URL string
+import { IUser } from "./User";
+import { IAchievement, IAchievementReward } from "./Achievement"; // Import IAchievementReward
+import { IBadge, IBadgeReward } from "./Badge"; // Import IBadgeReward
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล UserAchievement
@@ -18,7 +18,7 @@ import { IBadge } from "./Badge"; // สำหรับ badgeId (อ้างอ
  * @description ประเภทของสิ่งที่ผู้ใช้ได้รับ (Achievement หรือ Badge)
  * - `ACHIEVEMENT`: ความสำเร็จที่กำหนดไว้ใน Achievement.ts
  * - `BADGE`: เหรียญตราที่กำหนดไว้ใน Badge.ts
- * - `TITLE`: (อนาคต) ฉายาที่ผู้ใช้สามารถเลือกแสดงได้ (ยังไม่ implement ในปัจจุบัน)
+ * - `TITLE`: (อนาคต) ฉายาที่ผู้ใช้สามารถเลือกแสดงได้
  */
 export enum EarnedItemType {
   ACHIEVEMENT = "achievement",
@@ -30,12 +30,16 @@ export enum EarnedItemType {
  * @interface IUserEarnedItemProgress
  * @description ข้อมูลความคืบหน้าสำหรับรายการ (Achievement/Badge) ที่ผู้ใช้กำลังพยายามปลดล็อก
  * ใช้กับ `ongoingProgress` Map ใน `IUserAchievement`.
+ * @property {string} itemKey - Key ของ Achievement (achievementCode) หรือ Badge (badgeKey) ที่กำลังติดตามความคืบหน้า.
+ * @property {EarnedItemType} itemType - ประเภทของ item (ACHIEVEMENT หรือ BADGE).
  * @property {number} currentProgress - ความคืบหน้าปัจจุบัน (เช่น จำนวนครั้งที่ทำกิจกรรม, จำนวนวันที่ล็อกอินต่อเนื่อง)
- * @property {number} targetProgress - ความคืบหน้าเป้าหมายที่ต้องการเพื่อปลดล็อก (ดึงมาจาก `unlockConditions.targetValue` ของ Achievement/Badge)
+ * @property {number} targetProgress - ความคืบหน้าเป้าหมายที่ต้องการเพื่อปลดล็อก (ดึงมาจาก `unlockConditions.targetValue`)
  * @property {any} [details] - ข้อมูลเพิ่มเติมเกี่ยวกับความคืบหน้า (เช่น array ของ novelId ที่อ่านไปแล้ว, last_event_timestamp)
  * @property {Date} lastProgressAt - วันที่อัปเดตความคืบหน้าล่าสุด
  */
 export interface IUserEarnedItemProgress {
+  itemKey: string;
+  itemType: EarnedItemType;
   currentProgress: number;
   targetProgress: number;
   details?: any;
@@ -43,45 +47,79 @@ export interface IUserEarnedItemProgress {
 }
 const UserEarnedItemProgressSchema = new Schema<IUserEarnedItemProgress>(
   {
+    itemKey: { type: String, required: true, trim: true },
+    itemType: { type: String, enum: Object.values(EarnedItemType), required: true },
     currentProgress: { type: Number, required: true, min: 0 },
     targetProgress: { type: Number, required: true, min: 0 },
     details: { type: Schema.Types.Mixed },
     lastProgressAt: { type: Date, required: true, default: Date.now },
   },
-  { _id: false } // ไม่จำเป็นต้องมี _id สำหรับ sub-document ใน Map
+  { _id: false }
 );
 
 /**
- * @interface IUserEarnedItem
- * @description โครงสร้างของรายการ Achievement หรือ Badge ที่ผู้ใช้ได้รับแล้ว
- * แต่ละ object ใน array `earnedItems` ของ `IUserAchievement` จะใช้โครงสร้างนี้.
- * @property {Types.ObjectId | IAchievement | IBadge} itemId - ID ของ Achievement หรือ Badge ที่ได้รับ (อ้างอิงตาม `itemTypeRef`)
- * เมื่อ populate แล้วจะเป็น IAchievement หรือ IBadge document.
- * @property {EarnedItemType} itemType - ประเภทของสิ่งที่ได้รับ (ACHIEVEMENT หรือ BADGE). **จำเป็น**
- * @property {string} itemTypeRef - ชื่อ Model ที่ `itemId` อ้างอิงถึง (เช่น "Achievement", "Badge").
- * จะถูกกำหนดค่าโดยอัตโนมัติผ่าน pre-save hook โดยอิงจากค่า `itemType`. **จำเป็น**
- * @property {string} itemNameSnapshot - ชื่อของรายการ (Achievement/Badge) ณ เวลาที่ผู้ใช้ได้รับ (denormalized). **จำเป็น**
- * @property {string} [itemDescriptionSnapshot] - คำอธิบายของรายการ ณ เวลาที่ผู้ใช้ได้รับ (denormalized).
- * @property {string} [itemIconUrlSnapshot] - URL ไอคอนของรายการ ณ เวลาที่ผู้ใช้ได้รับ (denormalized).
- * อาจเป็น URL จาก `customIconUrl` หรือ URL ของ `OfficialMedia` ที่แปลงแล้ว.
- * @property {Date} unlockedAt - วันที่และเวลาที่ผู้ใช้ปลดล็อก/ได้รับรายการนี้. **จำเป็น**
- * @property {number} [timesEarned] - (ใหม่) จำนวนครั้งที่ได้รับ (สำหรับ Achievement/Badge ที่ isRepeatable=true) (default: 1).
- * @property {any} [rewardsGranted] - รางวัลที่ผู้ใช้ได้รับจากการปลดล็อกรายการนี้ (เช่น XP, Coins, หรือ object ที่มีรายละเอียดรางวัล).
- * โครงสร้างควรสอดคล้องกับ `IAchievementReward` ใน Achievement.ts หรือโครงสร้างรางวัลของ Badge.
- * @property {boolean} isPubliclyVisible - ผู้ใช้ต้องการให้รายการนี้แสดงบนโปรไฟล์สาธารณะของตนหรือไม่ (default: true).
- * @property {Date} [claimedAt] - (Optional) วันที่ผู้ใช้กดรับรางวัล (ถ้ามีระบบ claim reward แยกต่างหาก).
- * @property {any} [unlockContext] - (Optional) ข้อมูลบริบทเพิ่มเติม ณ เวลาที่ปลดล็อก (เช่น novelId, episodeId ที่ทำให้ปลดล็อก).
+ * @interface IEarnedItemRewardSnapshot
+ * @description Snapshot ของรางวัลที่ได้รับจากการปลดล็อก Achievement หรือ Badge.
+ * คล้ายกับ IAchievementReward และ IBadgeReward แต่เก็บเฉพาะข้อมูลที่จำเป็น.
+ * @property {string} type - ประเภทของรางวัล (อ้างอิง AchievementRewardType)
+ * @property {number} [experiencePointsAwarded] - แต้ม XP ที่ได้รับ
+ * @property {number} [coinsAwarded] - จำนวน Coins ที่ได้รับ
+ * @property {string} [featureUnlockKey] - Key สำหรับปลดล็อกฟีเจอร์
+ * @property {string} [grantedBadgeKeySnapshot] - Key ของ Badge ที่มอบให้ (ถ้ามี)
+ * @property {string} [description] - คำอธิบายรางวัล
+ * @property {any} [value] - ค่าเฉพาะอื่นๆ ของรางวัล
  */
-export interface IUserEarnedItem extends Document { // Document สำหรับ sub-document array
-  itemId: Types.ObjectId | IAchievement | IBadge; // หรือ ITitle ในอนาคต
+export interface IEarnedItemRewardSnapshot {
+  type: string; // Should align with AchievementRewardType
+  experiencePointsAwarded?: number;
+  coinsAwarded?: number;
+  featureUnlockKey?: string;
+  grantedBadgeKeySnapshot?: string; // Snapshot of the key, not ObjectId
+  description?: string;
+  value?: any;
+}
+const EarnedItemRewardSnapshotSchema = new Schema<IEarnedItemRewardSnapshot>(
+    {
+        type: { type: String, required: true },
+        experiencePointsAwarded: { type: Number, min: 0 },
+        coinsAwarded: { type: Number, min: 0 },
+        featureUnlockKey: { type: String, trim: true },
+        grantedBadgeKeySnapshot: { type: String, trim: true },
+        description: { type: String, trim: true },
+        value: { type: Schema.Types.Mixed },
+    },
+    { _id: false }
+);
+
+
+/**
+ * @interface IUserEarnedItem
+ * @description โครงสร้างของรายการ Achievement หรือ Badge ที่ผู้ใช้ได้รับแล้ว.
+ * @property {Types.ObjectId | IAchievement | IBadge} itemId - ID ของ Achievement หรือ Badge ที่ได้รับ.
+ * @property {EarnedItemType} itemType - ประเภทของสิ่งที่ได้รับ (ACHIEVEMENT หรือ BADGE).
+ * @property {string} itemTypeRef - ชื่อ Model ที่ `itemId` อ้างอิง ("Achievement" หรือ "Badge").
+ * @property {string} itemNameSnapshot - ชื่อของรายการ (Achievement/Badge) ณ เวลาที่ได้รับ.
+ * @property {string} [itemDescriptionSnapshot] - คำอธิบายของรายการ ณ เวลาที่ได้รับ.
+ * @property {string} [itemIconUrlSnapshot] - URL ไอคอนของรายการ ณ เวลาที่ได้รับ.
+ * @property {string} itemRaritySnapshot - (ใหม่) ระดับความหายากของไอเทม ณ เวลาที่ได้รับ.
+ * @property {Date} unlockedAt - วันที่และเวลาที่ปลดล็อก/ได้รับ.
+ * @property {number} timesEarned - จำนวนครั้งที่ได้รับ (สำหรับ isRepeatable=true).
+ * @property {IEarnedItemRewardSnapshot[]} [rewardsGrantedSnapshot] - (ปรับปรุง) Snapshot ของรางวัลที่ผู้ใช้ได้รับ.
+ * @property {boolean} isPubliclyVisible - ผู้ใช้ต้องการให้แสดงบนโปรไฟล์สาธารณะหรือไม่.
+ * @property {Date} [claimedAt] - วันที่ผู้ใช้กดรับรางวัล (ถ้ามีระบบ claim).
+ * @property {any} [unlockContext] - ข้อมูลบริบทเพิ่มเติม ณ เวลาที่ปลดล็อก.
+ */
+export interface IUserEarnedItem extends Document {
+  itemId: Types.ObjectId | IAchievement | IBadge;
   itemType: EarnedItemType;
-  itemTypeRef: string;
+  itemTypeRef: "Achievement" | "Badge" | "Title"; // ทำให้เข้มงวดขึ้น
   itemNameSnapshot: string;
   itemDescriptionSnapshot?: string;
   itemIconUrlSnapshot?: string;
+  itemRaritySnapshot: string; // Rarity ณ ตอนที่ได้รับ
   unlockedAt: Date;
-  timesEarned: number; // เพิ่ม field นี้
-  rewardsGranted?: any; // ควรเป็นโครงสร้างที่ชัดเจน เช่น IAchievementReward[]
+  timesEarned: number;
+  rewardsGrantedSnapshot?: IEarnedItemRewardSnapshot[]; // ใช้ Snapshot schema
   isPubliclyVisible: boolean;
   claimedAt?: Date;
   unlockContext?: any;
@@ -91,17 +129,17 @@ const UserEarnedItemSchema = new Schema<IUserEarnedItem>(
     itemId: {
       type: Schema.Types.ObjectId,
       required: [true, "กรุณาระบุ ID ของรายการ (Item ID is required)"],
-      refPath: "itemTypeRef", // Dynamic reference based on itemTypeRef
+      refPath: "itemTypeRef",
     },
     itemType: {
       type: String,
       enum: Object.values(EarnedItemType),
       required: [true, "กรุณาระบุประเภทของรายการ (Item type is required)"],
     },
-    itemTypeRef: { // This field will be set by a pre-save hook
+    itemTypeRef: {
       type: String,
-      required: [true, "itemTypeRef is required for dynamic population and must be 'Achievement' or 'Badge' or 'Title'"],
-      enum: ["Achievement", "Badge", "Title"], // Ensure it's one of the expected model names
+      required: [true, "itemTypeRef is required and must be 'Achievement', 'Badge', or 'Title'"],
+      enum: ["Achievement", "Badge", "Title"],
     },
     itemNameSnapshot: {
       type: String,
@@ -119,23 +157,28 @@ const UserEarnedItemSchema = new Schema<IUserEarnedItem>(
       trim: true,
       maxlength: [2048, "URL ไอคอนยาวเกินไป (สูงสุด 2048 ตัวอักษร)"]
     },
+    itemRaritySnapshot: { // ใหม่
+        type: String,
+        required: [true, "กรุณาระบุ Rarity ของไอเทม ณ ตอนที่ได้รับ"],
+        trim: true,
+        maxlength: 50,
+    },
     unlockedAt: {
       type: Date,
       default: Date.now,
       required: [true, "กรุณาระบุวันที่ปลดล็อก (Unlock date is required)"],
       index: true
     },
-    timesEarned: { type: Number, default: 1, min: 1 }, // เพิ่ม field นี้
-    rewardsGranted: { type: Schema.Types.Mixed },
+    timesEarned: { type: Number, default: 1, min: 1 },
+    rewardsGrantedSnapshot: { type: [EarnedItemRewardSnapshotSchema], default: [] }, // ใช้ Snapshot schema
     isPubliclyVisible: { type: Boolean, default: true },
     claimedAt: { type: Date },
     unlockContext: { type: Schema.Types.Mixed },
   },
   {
-    _id: true, // Subdocuments will have their own _id by default unless set to false. Keeping it true is fine.
+    _id: true, // Subdocuments will have their own _id
   }
 );
-
 
 // ==================================================================================================
 // SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร UserAchievement (IUserAchievement Document Interface)
@@ -145,37 +188,29 @@ const UserEarnedItemSchema = new Schema<IUserEarnedItem>(
  * @interface IUserAchievement
  * @extends Document (Mongoose Document)
  * @description อินเทอร์เฟซหลักสำหรับเอกสารความสำเร็จของผู้ใช้ใน Collection "userachievements".
- * เอกสารนี้จะถูกสร้างหนึ่งรายการต่อผู้ใช้ และจะเก็บข้อมูล Gamification ทั้งหมดที่เกี่ยวข้องกับผู้ใช้นั้น.
- * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร
- * @property {Types.ObjectId | IUser} user - ID ของผู้ใช้ (อ้างอิง User model). **จำเป็นและ unique**
- * @property {Types.DocumentArray<IUserEarnedItem>} earnedItems - รายการความสำเร็จและเหรียญตราทั้งหมดที่ผู้ใช้ปลดล็อกแล้ว.
- * @property {Map<string, IUserEarnedItemProgress>} ongoingProgress - ความคืบหน้าของ Achievement/Badge ที่ผู้ใช้ยังไม่ปลดล็อก.
- * Key คือ `achievementCode` หรือ `badgeKey` (string), Value คือ `IUserEarnedItemProgress`.
- * @property {number} totalExperiencePointsEarned - สรุปแต้มประสบการณ์ (XP) ทั้งหมดที่ผู้ใช้ได้รับจากความสำเร็จและเหรียญตรา.
- * ค่านี้ควรจะถูกอัปเดตใน `User.gamification.experiencePoints` ด้วย.
- * @property {Types.ObjectId[]} showcasedItems - (เปลี่ยนชื่อจาก showcasedBadgeIds) Array ของ `UserEarnedItem._id` (ไม่ใช่ BadgeId โดยตรง)
- * ที่ผู้ใช้เลือกแสดงบนโปรไฟล์ (อาจจะจำกัดจำนวน).
- * การเก็บ UserEarnedItem._id ทำให้สามารถแยกแยะได้ในกรณีที่ Badge เดียวกันได้รับหลายครั้ง (ถ้า isRepeatable).
- * @property {string} [featuredTitleKey] - (อนาคต) Key ของ Title ที่ผู้ใช้เลือกแสดง (ถ้ามีระบบ Title และ Title Model).
- * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
- * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
+ * @property {Types.ObjectId | IUser} user - ID ของผู้ใช้.
+ * @property {Types.DocumentArray<IUserEarnedItem>} earnedItems - รายการ Achievement/Badge ที่ผู้ใช้ปลดล็อก.
+ * @property {Map<string, IUserEarnedItemProgress>} ongoingProgress - ความคืบหน้าของ Achievement/Badge ที่ยังไม่ปลดล็อก.
+ * Key คือ `achievementCode` หรือ `badgeKey`.
+ * @property {number} [totalExperiencePointsFromGamification] - (เปลี่ยนชื่อ) สรุป XP ทั้งหมดที่ผู้ใช้ได้รับจากระบบ Gamification (Achievements, Badges, etc.).
+ * ค่านี้ควรจะถูกซิงค์กับ `User.gamification.experiencePoints`.
+ * @property {Types.ObjectId[]} [showcasedItemIds] - (เปลี่ยนชื่อ) Array ของ `UserEarnedItem._id` ที่ผู้ใช้เลือกแสดงบนโปรไฟล์.
+ * @property {string} [featuredTitleKey] - (อนาคต) Key ของ Title ที่ผู้ใช้เลือกแสดง.
  */
 export interface IUserAchievement extends Document {
   _id: Types.ObjectId;
   user: Types.ObjectId | IUser;
   earnedItems: Types.DocumentArray<IUserEarnedItem>;
-  ongoingProgress: Map<string, IUserEarnedItemProgress>;
-  totalExperiencePointsEarned: number;
-  showcasedItems: Types.ObjectId[]; // Array of UserEarnedItem._id
-  featuredTitleKey?: string; // สำหรับอนาคต
+  ongoingProgress: Map<string, IUserEarnedItemProgress>; // Key: achievementCode หรือ badgeKey
+  totalExperiencePointsFromGamification?: number; // เปลี่ยนชื่อ
+  showcasedItemIds?: Types.ObjectId[]; // เปลี่ยนชื่อ, อ้างอิง UserEarnedItem._id
+  featuredTitleKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Interface สำหรับ Static method (ถ้ามี)
 export interface IUserAchievementModel extends mongoose.Model<IUserAchievement> {
-    // ตัวอย่าง static method
-    // findByUserAndUpsertProgress(userId: Types.ObjectId, itemKey: string, progress: Partial<IUserEarnedItemProgress>): Promise<IUserAchievement>;
+  // Static methods can be defined here if needed
 }
 
 // ==================================================================================================
@@ -185,31 +220,31 @@ const UserAchievementSchema = new Schema<IUserAchievement, IUserAchievementModel
   {
     user: {
       type: Schema.Types.ObjectId,
-      ref: "User", // อ้างอิง User.ts ที่อัปเดตแล้ว
+      ref: "User",
       required: [true, "กรุณาระบุ ID ของผู้ใช้ (User ID is required)"],
-      unique: true, // หนึ่ง document ต่อหนึ่งผู้ใช้
+      unique: true,
       index: true,
     },
-    earnedItems: [UserEarnedItemSchema], // Array of subdocuments
+    earnedItems: [UserEarnedItemSchema],
     ongoingProgress: {
       type: Map,
-      of: UserEarnedItemProgressSchema,
+      of: UserEarnedItemProgressSchema, // Value เป็น UserEarnedItemProgressSchema
       default: () => new Map(),
       comment: "Key คือ achievementCode หรือ badgeKey, Value คือ IUserEarnedItemProgress"
     },
-    totalExperiencePointsEarned: {
+    totalExperiencePointsFromGamification: { // เปลี่ยนชื่อ field
       type: Number,
       default: 0,
-      min: [0, "แต้มประสบการณ์ต้องไม่ติดลบ (Experience points cannot be negative)"]
+      min: [0, "แต้มประสบการณ์ต้องไม่ติดลบ"]
     },
-    showcasedItems: [{ type: Schema.Types.ObjectId, ref: "UserAchievement.earnedItems" }], // อ้างอิง _id ของ subdocument ใน earnedItems
-    featuredTitleKey: { type: String, trim: true }, // สำหรับอนาคต
+    showcasedItemIds: [{ type: Schema.Types.ObjectId }], // เปลี่ยนชื่อ, อ้างอิง UserEarnedItem._id โดยตรง
+    featuredTitleKey: { type: String, trim: true, maxlength: 100 },
   },
   {
     timestamps: true,
     toObject: { virtuals: true },
     toJSON: { virtuals: true },
-    collection: "userachievements"
+    collection: "user_gamification_data" // เปลี่ยนชื่อ collection ให้สื่อความหมายมากขึ้น
   }
 );
 
@@ -217,7 +252,6 @@ const UserAchievementSchema = new Schema<IUserAchievement, IUserAchievementModel
 // SECTION: Middleware (Mongoose Hooks)
 // ==================================================================================================
 
-// Middleware: ก่อนการบันทึก (save) สำหรับ UserEarnedItemSchema (ภายใน earnedItems array)
 UserEarnedItemSchema.pre<IUserEarnedItem>("save", function (next) {
   if (this.isModified("itemType") || this.isNew) {
     switch (this.itemType) {
@@ -228,9 +262,10 @@ UserEarnedItemSchema.pre<IUserEarnedItem>("save", function (next) {
         this.itemTypeRef = "Badge";
         break;
       case EarnedItemType.TITLE:
-        this.itemTypeRef = "Title"; // สำหรับอนาคต
+        this.itemTypeRef = "Title"; // Ensure 'Title' is a valid model name if used
         break;
       default:
+        // If itemType is somehow invalid, prevent saving or throw error
         const err = new Error(`Invalid itemType: '${this.itemType}' for itemTypeRef generation.`);
         return next(err);
     }
@@ -238,29 +273,44 @@ UserEarnedItemSchema.pre<IUserEarnedItem>("save", function (next) {
   next();
 });
 
-// Middleware: หลังจากการบันทึก UserAchievement (post-save)
 UserAchievementSchema.post<IUserAchievement>("save", async function (doc, next) {
-  // ถ้ามีการเปลี่ยนแปลง totalExperiencePointsEarned หรือ earnedItems
-  // ให้อัปเดต User.gamification.experiencePoints และ User.gamification.achievements
-  if (doc.isModified("totalExperiencePointsEarned") || doc.isModified("earnedItems")) {
-    const UserModel = models.User as mongoose.Model<IUser>;
-    try {
-      // ดึง ObjectId ของ UserEarnedItem document ที่เป็น Achievement
-      const achievementDocIds = doc.earnedItems
-          .filter(item => item.itemType === EarnedItemType.ACHIEVEMENT && item._id) // ตรวจสอบว่า _id มีอยู่
-          .map(item => item._id!); // ใช้ ! เพราะได้ filter กรณี _id ไม่มีค่าออกไปแล้ว
+  // ตรวจสอบว่ามีการแก้ไข field ที่ควร trigger การอัปเดต User model หรือไม่
+  const relevantFieldsModified = doc.isModified("totalExperiencePointsFromGamification") || doc.isModified("earnedItems");
 
-      await UserModel.findByIdAndUpdate(doc.user, {
-        $set: {
-          "gamification.experiencePoints": doc.totalExperiencePointsEarned,
-          "gamification.achievements": achievementDocIds, // เก็บ array ของ ObjectId ของ UserEarnedItem ที่เป็น achievement
-        },
-        $currentDate: { "gamification.lastActivityAt": true } // (สมมติว่า User.gamification มี field นี้)
-      });
-      // console.log(`[UserAchievement Post-Save] Updated User ${doc.user} gamification stats.`);
+  if (relevantFieldsModified) {
+    const UserModel = models.User as mongoose.Model<IUser>; // Type assertion
+    try {
+      const achievementDocIds = doc.earnedItems
+        .filter(item => item.itemType === EarnedItemType.ACHIEVEMENT && item._id)
+        .map(item => item._id as Types.ObjectId); // Explicitly cast to Types.ObjectId
+
+      const updatePayload: any = {
+        $currentDate: { "gamification.lastActivityAt": true }
+      };
+
+      if (doc.isModified("totalExperiencePointsFromGamification")) {
+        updatePayload.$set = {
+          ...updatePayload.$set,
+          "gamification.experiencePoints": doc.totalExperiencePointsFromGamification,
+        };
+      }
+      if (doc.isModified("earnedItems")) {
+         // This logic might be too simplistic if earnedItems can be removed.
+         // It assumes `gamification.achievements` should always reflect the current state of `earnedItems` of type ACHIEVEMENT.
+        updatePayload.$set = {
+            ...updatePayload.$set,
+            "gamification.achievements": achievementDocIds,
+        };
+      }
+
+      if (Object.keys(updatePayload.$set || {}).length > 0) {
+          await UserModel.findByIdAndUpdate(doc.user, updatePayload);
+          // console.log(`[UserAchievement Post-Save] Updated User ${doc.user} gamification stats.`);
+      }
+
     } catch (error) {
       console.error(`[UserAchievement Post-Save Hook] Error updating User model for user ${doc.user}:`, error);
-      // ควรมี error handling ที่ดีกว่านี้
+      // Consider more robust error handling, like queuing a retry or logging to an error service.
     }
   }
   next();
@@ -270,55 +320,45 @@ UserAchievementSchema.post<IUserAchievement>("save", async function (doc, next) 
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
+UserAchievementSchema.index({ user: 1, "earnedItems.itemType": 1, "earnedItems.unlockedAt": -1 }, { name: "UserGamificationData_EarnedItems_TypeDate_Idx" });
+UserAchievementSchema.index({ user: 1, showcasedItemIds: 1 }, { name: "UserGamificationData_ShowcasedItems_Idx", sparse:true });
+UserAchievementSchema.index({ user: 1, "ongoingProgress.itemKey": 1 }, { name: "UserGamificationData_OngoingProgress_ItemKey_Idx", sparse: true });
 
-// Index หลักคือ user ID เนื่องจากเป็น unique
-// UserAchievementSchema.index({ user: 1 }, { unique: true }); // Mongoose สร้างให้จาก unique: true ด้านบน
-
-// Index สำหรับค้นหา items ที่ผู้ใช้ได้รับตามประเภทและวันที่
-UserAchievementSchema.index({ user: 1, "earnedItems.itemType": 1, "earnedItems.unlockedAt": -1 }, { name: "UserEarnedItemsByTypeAndDateIndex" });
-// Index สำหรับค้นหา items ที่ผู้ใช้เลือกแสดง
-UserAchievementSchema.index({ user: 1, showcasedItems: 1 }, { name: "UserShowcasedItemsIndex" });
-// Index สำหรับ ongoingProgress (ถ้ามีการ query บ่อย)
-// การ query Map อาจซับซ้อน, อาจจะต้องพิจารณาโครงสร้างอื่นถ้า query based on progress key/value เป็นเรื่องปกติ
-// UserAchievementSchema.index({ user: 1, "ongoingProgress.$*": 1 }); // ตัวอย่าง (อาจจะไม่ใช่ syntax ที่ถูกต้องเสมอไป)
 
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-
 const UserAchievementModel =
-    (models.UserAchievement as IUserAchievementModel) || // ใช้ IUserAchievementModel สำหรับ static methods
-    model<IUserAchievement, IUserAchievementModel>("UserAchievement", UserAchievementSchema);
+    (models.UserGamificationData as IUserAchievementModel) || // Use the new collection name
+    model<IUserAchievement, IUserAchievementModel>("UserGamificationData", UserAchievementSchema); // Use the new collection name
 
 export default UserAchievementModel;
 
 // ==================================================================================================
-// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
+// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements) - ปรับปรุงล่าสุด
 // ==================================================================================================
-// 1.  **`itemTypeRef` Mechanism**: การใช้ `refPath` ร่วมกับ `itemTypeRef` ที่ถูกกำหนดค่าใน pre-save hook ของ subdocument
-//     เป็นวิธีที่ Mongoose รองรับสำหรับ dynamic population. `itemTypeRef` ใน IUserEarnedItemSchema
-//     ควรมี enum ที่ตรงกับชื่อ Model ที่จะอ้างอิง ("Achievement", "Badge", "Title") เพื่อความถูกต้อง.
-// 2.  **Data Integrity for Snapshots**: `itemNameSnapshot`, `itemDescriptionSnapshot`, `itemIconUrlSnapshot`
-//     เป็นข้อมูลที่ denormalize มา. ควรมีกลไก (อาจจะเป็นตอน grant item) ในการดึงข้อมูลล่าสุดจาก Achievement/Badge
-//     มาใส่ใน fields เหล่านี้ให้ถูกต้อง.
-// 3.  **`ongoingProgress` Map Key**: Key ของ Map `ongoingProgress` ควรเป็น ID ที่เสถียรและ unique
-//     เช่น `achievementCode` จาก `Achievement.ts` หรือ `badgeKey` จาก `Badge.ts`.
-//     ปัจจุบัน schema ใช้ Map<string, ...> ซึ่งหมายถึง key เป็น string.
-// 4.  **`rewardsGranted` Structure**: โครงสร้างของ `rewardsGranted` ใน `IUserEarnedItem` ควรจะชัดเจน
-//     และสอดคล้องกับ `IAchievementReward` หรือโครงสร้างรางวัลจาก `Badge`.
-// 5.  **Repeatable Achievements/Badges**:
-//     -   Field `timesEarned` ถูกเพิ่มใน `IUserEarnedItem` เพื่อรองรับกรณีที่ Achievement/Badge สามารถได้รับซ้ำได้.
-//     -   Gamification Service Layer จะต้องมี logic ในการตรวจสอบ `isRepeatable` และ `maxRepeats` จาก
-//         Achievement/Badge ต้นแบบก่อนที่จะเพิ่ม `timesEarned` หรือสร้าง `IUserEarnedItem` ใหม่ (ถ้าการรับซ้ำแต่ละครั้งถือเป็น item ใหม่).
-//         ปัจจุบัน `addEarnedItem` ในไฟล์ต้นฉบับจะอัปเดต item เดิมถ้าเจอซ้ำ, ซึ่งอาจต้องปรับถ้าการรับซ้ำหมายถึง record ใหม่.
-// 6.  **Synchronization with `User.gamification`**:
-//     -   `totalExperiencePointsEarned` ใน `UserAchievement` ควรจะถูกซิงค์กับ `User.gamification.experiencePoints`.
-//     -   `User.gamification.achievements` ได้ถูกปรับปรุงใน `User.ts` ให้อ้างอิง `UserAchievement` (ซึ่งในที่นี้หมายถึง `UserEarnedItem._id` ที่เป็น Achievement)
-//         Post-save hook ใน `UserAchievementSchema` ได้ถูกปรับปรุงเพื่ออัปเดตข้อมูลเหล่านี้ใน `User` model.
-// 7.  **Performance**: สำหรับผู้ใช้ที่มี `earnedItems` หรือ `ongoingProgress` จำนวนมาก การ query หรือ update document นี้
-//     อาจต้องพิจารณาเรื่อง performance. การใช้ index ที่เหมาะสมและการจำกัดจำนวน subdocuments ที่ populate เป็นสิ่งสำคัญ.
-// 8.  **`showcasedItems`**: การอ้างอิง `UserAchievement.earnedItems` โดยตรงอาจจะยังไม่ถูกต้องนักถ้า `earnedItems` ไม่ได้ใช้
-//     `_id` ของตัวเองเป็น subdocument (แต่ default คือมี). ถ้า `earnedItems` เป็น array ของ plain objects ที่ไม่มี `_id`,
-//     จะต้องเปลี่ยนวิธีการอ้างอิง (เช่น อ้างอิง `itemId` และ `itemType` แทน). ปัจจุบัน `UserEarnedItemSchema`
-//     ถูกกำหนดให้มี `_id: true` ซึ่งเป็น default ของ Mongoose subdocument และดีต่อการอ้างอิง.
+// 1.  **Collection Name**: เปลี่ยนชื่อ Collection เป็น `user_gamification_data` เพื่อให้สื่อความหมายครอบคลุมมากขึ้น.
+// 2.  **`itemTypeRef`**: ทำให้ `itemTypeRef` ใน `IUserEarnedItem` เข้มงวดขึ้นเป็น `"Achievement" | "Badge" | "Title"`.
+// 3.  **Snapshot Data**:
+//     -   เพิ่ม `itemRaritySnapshot` ใน `IUserEarnedItem` เพื่อเก็บ Rarity ณ ตอนที่ได้รับ.
+//     -   `rewardsGrantedSnapshot` ใช้ `IEarnedItemRewardSnapshot[]` เพื่อเก็บข้อมูลรางวัลที่ได้รับอย่างกระชับ.
+//     -   Service Layer ที่ grant item ควรรับผิดชอบในการ populate snapshot fields (name, description, icon, rarity, rewards) จาก Achievement/Badge ต้นแบบ.
+// 4.  **`ongoingProgress` Map Key**: Key ของ Map `ongoingProgress` ควรเป็น `achievementCode` หรือ `badgeKey` ที่ unique.
+//     `IUserEarnedItemProgress` ได้เพิ่ม `itemKey` และ `itemType` เพื่อให้ระบุ item ได้ชัดเจน.
+// 5.  **`totalExperiencePointsFromGamification`**: เปลี่ยนชื่อ field จาก `totalExperiencePointsEarned` เพื่อความชัดเจนว่ามาจากระบบ Gamification โดยรวม.
+// 6.  **`showcasedItemIds`**: เปลี่ยนชื่อ field จาก `showcasedItems` และยืนยันว่าเก็บ Array ของ `UserEarnedItem._id`.
+//     การอ้างอิง _id ของ subdocument `earnedItems` นั้นถูกต้อง เพราะ subdocuments ใน Mongoose จะมี _id ของตัวเองโดย default.
+// 7.  **Synchronization with `User.gamification`**:
+//     -   Post-save hook ได้รับการปรับปรุงเพื่ออัปเดต `User.gamification.experiencePoints` และ `User.gamification.achievements`
+//         (ซึ่งเก็บ `UserEarnedItem._id` ที่เป็น Achievement).
+//     -   Service Layer ควรเป็นผู้คำนวณ `totalExperiencePointsFromGamification` โดยรวม XP จาก `rewardsGrantedSnapshot` ของ `earnedItems` ทั้งหมด.
+// 8.  **Repeatable Items**: `timesEarned` ใน `IUserEarnedItem` ช่วยรองรับ. Logic การ grant item ใน Service Layer
+//     จะต้องจัดการว่าจะ increment `timesEarned` หรือสร้าง `IUserEarnedItem` record ใหม่
+//     ขึ้นอยู่กับว่าการได้รับซ้ำแต่ละครั้งถือเป็น instance ใหม่หรือไม่ หรือแค่เป็นการนับจำนวน.
+// 9.  **Data Integrity & Denormalization**: การใช้ snapshot มีประโยชน์ถ้า Achievement/Badge ต้นแบบมีการเปลี่ยนแปลง
+//     แต่ข้อมูลที่ผู้ใช้ได้รับไปแล้วควรจะคงเดิม. อย่างไรก็ตาม, ต้องมีกระบวนการที่ชัดเจนในการ populate ข้อมูล snapshot เหล่านี้.
+// 10. **Consistency of Rewards**: `IEarnedItemRewardSnapshot` ควรมีโครงสร้างที่สามารถรองรับรางวัลจากทั้ง `Achievement` และ `Badge` ได้
+//     แม้ว่า Badge จะเน้นรางวัลน้อยกว่า.
+// 11. **Future `Title` System**: `EarnedItemType.TITLE` และ `featuredTitleKey` เป็น placeholders.
+//     หากมีการ implement ระบบ Title, จะต้องสร้าง `Title.ts` model และปรับปรุง logic ที่เกี่ยวข้อง.
 // ==================================================================================================

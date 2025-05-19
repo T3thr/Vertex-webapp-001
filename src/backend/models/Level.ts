@@ -1,9 +1,11 @@
 // src/backend/models/Level.ts
 // โมเดลระดับผู้ใช้ (Level Model)
-// กำหนดโครงสร้างของระดับผู้ใช้ในระบบ Gamification รวมถึง XP ที่ต้องการ และรางวัลที่อาจได้รับ
+// กำหนดโครงสร้างของแต่ละระดับ (Level) ในระบบ Gamification, รวมถึง XP ที่ต้องการ และรางวัลที่อาจได้รับ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IAchievement } from "./Achievement"; // สำหรับ achievementOnReachId
+import { IBadge } from "./Badge"; // สำหรับ badgeOnReachId (ถ้าต้องการให้ Badge โดยตรงจาก Level)
+import { IUser } from "./User"; // สำหรับการอ้างอิงในอนาคต (ถ้าจำเป็น)
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Level
@@ -11,21 +13,37 @@ import { IAchievement } from "./Achievement"; // สำหรับ achievementO
 
 /**
  * @interface ILevelReward
- * @description (Optional) โครงสร้างรางวัลเพิ่มเติมที่อาจจะให้เมื่อถึง Level นี้โดยตรง
- * นอกเหนือจาก Achievement ที่อาจจะปลดล็อก
- * @property {string} rewardType - ประเภทรางวัล (เช่น "COINS", "PROFILE_FRAME_UNLOCK", "FEATURE_ACCESS")
- * @property {any} value - ค่าของรางวัล (เช่น จำนวน Coins, ชื่อ Frame, key ของ Feature)
- * @property {string} [description] - คำอธิบายรางวัล
+ * @description โครงสร้างของรางวัลที่ผู้ใช้จะได้รับเมื่อถึง Level นี้
+ * สามารถให้ Coins, ปลดล็อก Achievement, หรือให้ Badge ได้โดยตรง
+ * @property {"COINS" | "ACHIEVEMENT_UNLOCK" | "BADGE_AWARD" | "FEATURE_UNLOCK" | "PROFILE_COSMETIC"} type - ประเภทของรางวัล
+ * @property {number} [coinsAwarded] - จำนวน Coins ที่จะได้รับ (ถ้า type เป็น COINS)
+ * @property {Types.ObjectId | IAchievement | string} [achievementIdToUnlock] - ID หรือ Code ของ Achievement ที่จะปลดล็อก (ถ้า type เป็น ACHIEVEMENT_UNLOCK)
+ * @property {Types.ObjectId | IBadge | string} [badgeIdToAward] - ID หรือ Key ของ Badge ที่จะมอบให้ (ถ้า type เป็น BADGE_AWARD)
+ * @property {string} [featureKeyToUnlock] - Key ของฟีเจอร์ที่จะปลดล็อก (ถ้า type เป็น FEATURE_UNLOCK)
+ * @property {string} [cosmeticItemKey] - Key ของ Profile Cosmetic Item (ถ้า type เป็น PROFILE_COSMETIC)
+ * @property {string} [description] - คำอธิบายรางวัลเพิ่มเติม
  */
 export interface ILevelReward {
-  rewardType: string; // อาจจะใช้ Enum ร่วมกับ AchievementRewardType หรือสร้างใหม่
-  value: any;
+  type: "COINS" | "ACHIEVEMENT_UNLOCK" | "BADGE_AWARD" | "FEATURE_UNLOCK" | "PROFILE_COSMETIC";
+  coinsAwarded?: number;
+  achievementIdToUnlock?: Types.ObjectId | IAchievement | string; // สามารถเป็น ObjectId หรือ achievementCode
+  badgeIdToAward?: Types.ObjectId | IBadge | string; // สามารถเป็น ObjectId หรือ badgeKey
+  featureKeyToUnlock?: string;
+  cosmeticItemKey?: string;
   description?: string;
 }
 const LevelRewardSchema = new Schema<ILevelReward>(
   {
-    rewardType: { type: String, required: true, trim: true },
-    value: { type: Schema.Types.Mixed, required: true },
+    type: {
+      type: String,
+      enum: ["COINS", "ACHIEVEMENT_UNLOCK", "BADGE_AWARD", "FEATURE_UNLOCK", "PROFILE_COSMETIC"],
+      required: [true, "กรุณาระบุประเภทของรางวัล"],
+    },
+    coinsAwarded: { type: Number, min: 0 },
+    achievementIdToUnlock: { type: Schema.Types.Mixed }, // ObjectId หรือ String (code)
+    badgeIdToAward: { type: Schema.Types.Mixed }, // ObjectId หรือ String (key)
+    featureKeyToUnlock: { type: String, trim: true, maxlength: 100 },
+    cosmeticItemKey: { type: String, trim: true, maxlength: 100 },
     description: { type: String, trim: true, maxlength: 255 },
   },
   { _id: false }
@@ -39,35 +57,39 @@ const LevelRewardSchema = new Schema<ILevelReward>(
 /**
  * @interface ILevel
  * @extends Document (Mongoose Document)
- * @description อินเทอร์เฟซหลักสำหรับเอกสาร "ต้นแบบ" ของแต่ละ Level ใน Collection "levels"
- * @property {number} levelNumber - หมายเลข Level (เช่น 1, 2, 3, ..., **จำเป็น, unique**)
- * @property {number} xpRequiredForThisLevel - จำนวน XP สะสมที่ต้องมีเพื่อ "ถึง" Level นี้ (เช่น Level 1 = 0 XP, Level 2 = 100 XP, Level 3 = 300 XP)
- * ดังนั้น xpRequiredForNextLevel ของ Level ก่อนหน้า คือค่านี้
- * @property {number} xpRequiredForNextLevel - จำนวน XP สะสมทั้งหมดที่ต้องมีเพื่อ "ขึ้นไป" Level ถัดไปจาก Level ปัจจุบันนี้
- * (เช่น ถ้าปัจจุบันอยู่ Level 2 (XP=100), xpRequiredForNextLevel คือ 300 เพื่อไป Level 3)
- * สำหรับ Level สูงสุด อาจจะเป็น null หรือค่าที่สูงมาก
- * @property {string} levelTitle - ชื่อเรียกของ Level (เช่น "ผู้เริ่มต้น", "นักสำรวจ", "ปรมาจารย์", **จำเป็น**)
- * @property {string} [levelGroupName] - (Optional) ชื่อกลุ่มของ Level (เช่น "ช่วงมือใหม่" สำหรับ Level 1-10, "ระดับกลาง" สำหรับ 11-20)
- * @property {Types.ObjectId | IAchievement} [achievementOnReachId] - (Optional) ID ของ Achievement ที่จะปลดล็อกอัตโนมัติเมื่อผู้ใช้ถึง Level นี้
- * @property {Types.DocumentArray<ILevelReward>} [directRewardsOnReach] - (Optional) รางวัลเพิ่มเติมที่ผู้ใช้จะได้รับโดยตรงเมื่อถึง Level นี้
- * @property {string} [description] - (Optional) คำอธิบายเกี่ยวกับ Level นี้
- * @property {string} [iconUrl] - (Optional) URL ไอคอนสำหรับ Level นี้
- * @property {boolean} isActive - Level นี้ยังใช้งานในระบบหรือไม่ (default: true)
- * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
- * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
+ * @description อินเทอร์เฟซสำหรับเอกสาร "ต้นแบบ" ของแต่ละระดับใน Collection "levels"
+ * @property {number} levelNumber - หมายเลขระดับ (เช่น 1, 2, 3, ...). **จำเป็นและ unique**.
+ * @property {string} title - ชื่อระดับ (เช่น "มือใหม่หัดอ่าน", "นักสำรวจโลกนิยาย"). **จำเป็น**.
+ * @property {string} [levelGroupName] - (Optional) ชื่อกลุ่มของระดับ (เช่น "ช่วงเริ่มต้น", "ระดับกลาง", "ระดับสูง") เพื่อการจัดกลุ่มบน UI.
+ * @property {number} xpRequiredForThisLevel - จำนวน XP สะสมทั้งหมดที่ต้องการเพื่อ "ถึง" Level นี้.
+ * เช่น Level 1 = 0 XP, Level 2 = 100 XP, Level 3 = 250 XP.
+ * ผู้ใช้จะอยู่ Level X ถ้า XP สะสม >= Level X.xpRequiredForThisLevel และ < Level X+1.xpRequiredForThisLevel.
+ * **สำคัญ:** `xpRequiredForThisLevel` ของ Level 1 ควรเป็น 0.
+ * @property {number} [xpToNextLevelFromThis] - (Computed or Stored) จำนวน XP ที่ "ต้องการเพิ่ม" จากจุดเริ่มต้นของ Level นี้ เพื่อไปถึง Level ถัดไป.
+ * เช่น ถ้า Level 2 ต้องใช้ 100 XP สะสม และ Level 3 ต้องใช้ 250 XP สะสม,
+ * สำหรับ Level 2: `xpToNextLevelFromThis` = 250 - 100 = 150.
+ * สำหรับ Level 1 (0 XP): `xpToNextLevelFromThis` = 100 - 0 = 100.
+ * ค่านี้จะถูกใช้เป็น `User.gamification.nextLevelXPThreshold` เมื่อผู้ใช้อยู่ใน Level นี้.
+ * @property {Types.DocumentArray<ILevelReward>} [rewardsOnReach] - (Optional) รายการรางวัลที่จะได้รับเมื่อผู้ใช้มาถึง Level นี้.
+ * @property {string} [description] - (Optional) คำอธิบายเกี่ยวกับ Level นี้.
+ * @property {string} [iconUrl] - (Optional) URL ของไอคอนสำหรับ Level นี้.
+ * @property {string} [themeColor] - (Optional) สีธีมสำหรับ Level นี้ (hex code).
+ * @property {boolean} isActive - สถานะว่า Level นี้ยังใช้งานอยู่ในระบบหรือไม่ (default: true).
+ * @property {number} schemaVersion - เวอร์ชันของ Schema.
  */
 export interface ILevel extends Document {
   _id: Types.ObjectId;
   levelNumber: number;
-  xpRequiredForThisLevel: number; // XP สะสมที่ต้องมีเพื่อ "เป็น" Level นี้
-  xpRequiredForNextLevel: number; // XP สะสมที่ต้องมีเพื่อ "ผ่าน" Level นี้ไป Level ถัดไป
-  levelTitle: string;
+  title: string;
   levelGroupName?: string;
-  achievementOnReachId?: Types.ObjectId | IAchievement;
-  directRewardsOnReach?: Types.DocumentArray<ILevelReward>;
+  xpRequiredForThisLevel: number; // XP สะสมทั้งหมดที่ต้องการเพื่อ "ถึง" Level นี้
+  xpToNextLevelFromThis?: number; // XP ที่ต้องการ "เพิ่ม" เพื่อไป Level ถัดไป
+  rewardsOnReach?: Types.DocumentArray<ILevelReward>;
   description?: string;
   iconUrl?: string;
+  themeColor?: string;
   isActive: boolean;
+  schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,111 +101,109 @@ const LevelSchema = new Schema<ILevel>(
   {
     levelNumber: {
       type: Number,
-      required: [true, "กรุณาระบุหมายเลข Level (Level number is required)"],
+      required: [true, "กรุณาระบุหมายเลขระดับ"],
       unique: true,
-      min: [0, "Level ต้องไม่ต่ำกว่า 0 (Level 0 อาจเป็น baseline)"], // Level 0 อาจเป็น baseline ก่อนได้ XP แรก
+      min: [1, "หมายเลขระดับต้องเป็นค่าบวก"], // Level เริ่มต้นที่ 1
       index: true,
-      comment: "หมายเลข Level ที่ไม่ซ้ำกัน เริ่มจาก 0 หรือ 1",
     },
-    xpRequiredForThisLevel: {
-      type: Number,
-      required: [true, "กรุณาระบุ XP สะสมที่ต้องการเพื่อถึง Level นี้ (XP required for this level is required)"],
-      min: [0, "XP ที่ต้องการต้องไม่ติดลบ"],
-      validate: { // ตรวจสอบว่า xpRequiredForThisLevel ของ Level ปัจจุบันต้องไม่น้อยกว่า Level ก่อนหน้า (ถ้ามี)
-          validator: async function(this: ILevel, value: number): Promise<boolean> {
-              if (this.levelNumber > 0) { // Level 0 ไม่ต้องเช็ค
-                const LevelModel = models.Level as mongoose.Model<ILevel>;
-                const previousLevel = await LevelModel.findOne({ levelNumber: this.levelNumber - 1 });
-                if (previousLevel && value < previousLevel.xpRequiredForNextLevel) {
-                    return false;
-                }
-              }
-              return true;
-          },
-          message: (props: any) => `XP ที่ต้องการสำหรับ Level ${props.levelNumber} (${props.value}) ต้องไม่น้อยกว่า xpRequiredForNextLevel ของ Level ก่อนหน้า`
-      },
-      comment: "จำนวน XP สะสมที่ต้องมีเพื่อ 'เป็น' Level นี้ (เช่น Level 1 = 0 XP, Level 2 = 100 XP)",
-    },
-    xpRequiredForNextLevel: {
-      type: Number,
-      required: [true, "กรุณาระบุ XP สะสมที่ต้องมีเพื่อไป Level ถัดไป (XP required for next level is required)"],
-      min: [0, "XP ที่ต้องการสำหรับ Level ถัดไปต้องไม่ติดลบ"],
-      validate: [{ // ตรวจสอบว่าค่านี้ต้องมากกว่า xpRequiredForThisLevel
-          validator: function(this: ILevel, value: number): boolean {
-              return value > this.xpRequiredForThisLevel;
-          },
-          message: (props: any) => `XP ที่ต้องการสำหรับ Level ถัดไป (${props.value}) ต้องมากกว่า XP ที่ต้องการสำหรับ Level ปัจจุบัน (${props.xpRequiredForThisLevel})`
-      }],
-      comment: "จำนวน XP สะสมทั้งหมดที่ต้องมีเพื่อ 'ผ่าน' Level นี้ไปยัง Level ถัดไป (เช่น ถ้าอยู่ Level 2 (XP=100), ค่านี้คือ 300 เพื่อไป Level 3)",
-    },
-    levelTitle: {
+    title: {
       type: String,
-      required: [true, "กรุณาระบุชื่อ Level (Level title is required)"],
+      required: [true, "กรุณาระบุชื่อระดับ"],
       trim: true,
-      maxlength: [100, "ชื่อ Level ต้องไม่เกิน 100 ตัวอักษร"],
-      comment: "ชื่อเรียกของ Level เช่น 'มือใหม่หัดอ่าน', 'นักสำรวจแกร่งกล้า'",
+      maxlength: [100, "ชื่อระดับต้องไม่เกิน 100 ตัวอักษร"],
     },
     levelGroupName: {
       type: String,
       trim: true,
-      maxlength: [100, "ชื่อกลุ่ม Level ต้องไม่เกิน 100 ตัวอักษร"],
-      comment: "(Optional) ชื่อกลุ่มของ Level เช่น 'ช่วงเริ่มต้น', 'ระดับกลาง'",
+      maxlength: [100, "ชื่อกลุ่มระดับต้องไม่เกิน 100 ตัวอักษร"],
     },
-    achievementOnReachId: {
-      type: Schema.Types.ObjectId,
-      ref: "Achievement", // อ้างอิง Achievement.ts
-      comment: "(Optional) ID ของ Achievement ที่จะปลดล็อกเมื่อถึง Level นี้",
+    xpRequiredForThisLevel: { // XP สะสมที่ต้องการเพื่อ "ถึง" Level นี้
+      type: Number,
+      required: [true, "กรุณาระบุ XP สะสมที่ต้องการสำหรับระดับนี้"],
+      min: [0, "XP สะสมที่ต้องการต้องไม่ติดลบ (Level 1 ควรเป็น 0)"],
+      comment: "XP สะสมทั้งหมดที่ต้องการเพื่อ 'ถึง' Level นี้ (Level 1 ควรเป็น 0)",
     },
-    directRewardsOnReach: {
+    xpToNextLevelFromThis: { // XP ที่ต้องการ "เพิ่ม" เพื่อไป Level ถัดไป
+      type: Number,
+      min: [0, "XP ที่ต้องการสำหรับระดับถัดไปต้องไม่ติดลบ"],
+      comment: "(คำนวณหรือกำหนด) XP ที่ต้องใช้เพิ่มจากจุดเริ่มต้นของ Level นี้ เพื่อไป Level ถัดไป",
+    },
+    rewardsOnReach: {
         type: [LevelRewardSchema],
-        default: [],
-        comment: "(Optional) รางวัลเพิ่มเติมที่ได้รับโดยตรงเมื่อถึง Level นี้"
+        default: []
     },
     description: {
       type: String,
       trim: true,
-      maxlength: [500, "คำอธิบาย Level ต้องไม่เกิน 500 ตัวอักษร"],
-      comment: "(Optional) คำอธิบายเกี่ยวกับ Level นี้",
+      maxlength: [1000, "คำอธิบายระดับต้องไม่เกิน 1000 ตัวอักษร"],
     },
     iconUrl: {
-      type: String,
-      trim: true,
-      maxlength: [2048, "URL ไอคอนต้องไม่เกิน 2048 ตัวอักษร"],
-      validate: {
-        validator: function(v: string) { return !v || /^https?:\/\/|^\//.test(v); },
-        message: (props: any) => `${props.value} ไม่ใช่ URL ที่ถูกต้องสำหรับไอคอน!`
-      },
-      comment: "(Optional) URL ไอคอนสำหรับ Level นี้",
+        type: String,
+        trim: true,
+        maxlength: [2048, "URL ไอคอนยาวเกินไป"],
+        validate: {
+            validator: function(v: string) { return !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,/.test(v); },
+            message: "รูปแบบ URL ไอคอนไม่ถูกต้อง"
+        }
     },
-    isActive: { type: Boolean, default: true, index: true, comment: "Level นี้ยังใช้งานในระบบหรือไม่" },
+    themeColor: {
+        type: String,
+        trim: true,
+        uppercase: true,
+        match: [/^#(?:[0-9A-F]{3}){1,2}$/i, "กรุณากรอก Hex color code ให้ถูกต้อง (เช่น #FF0000)"],
+        maxlength: [7, "Hex color code ไม่ถูกต้อง"]
+    },
+    isActive: { type: Boolean, default: true, index: true },
+    schemaVersion: { type: Number, default: 1, min: 1 },
   },
   {
     timestamps: true,
-    collection: "levels", // ชื่อ collection ที่เหมาะสม
+    collection: "levels", // ชื่อ collection
+    // Mongoose จะคำนวณ xpToNextLevelFromThis ให้อัตโนมัติไม่ได้โดยตรงใน schema definition
+    // ควรคำนวณและจัดเก็บเมื่อสร้าง/อัปเดต Level definitions หรือคำนวณใน service layer
   }
 );
 
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
-
 LevelSchema.index({ levelNumber: 1 }, { unique: true, name: "LevelNumberUniqueIndex" });
+LevelSchema.index({ xpRequiredForThisLevel: 1 }, { name: "XPRequiredIndex" });
 LevelSchema.index({ isActive: 1, levelNumber: 1 }, { name: "ActiveLevelsSortIndex" });
-LevelSchema.index({ levelTitle: 1 }, { name: "LevelTitleIndex", collation: { locale: 'th', strength: 2 } }); // collation for Thai case-insensitive search if needed
 
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)
 // ==================================================================================================
+LevelSchema.pre<ILevel>("save", async function (next) {
+  // 1. Ensure Level 1 has xpRequiredForThisLevel = 0
+  if (this.levelNumber === 1 && this.xpRequiredForThisLevel !== 0) {
+    console.warn(`[Level Model] Forcing xpRequiredForThisLevel to 0 for Level 1. Original value was ${this.xpRequiredForThisLevel}.`);
+    this.xpRequiredForThisLevel = 0;
+  }
 
-// อาจจะมี middleware เพื่อตรวจสอบความสอดคล้องของ xpRequiredForThisLevel และ xpRequiredForNextLevel
-// กับ Level ก่อนหน้าและ Level ถัดไป (ถ้ามีการสร้าง Level ไม่เรียงตามลำดับ)
-// แต่การ validate ใน schema น่าจะเพียงพอสำหรับกรณีทั่วไป
+  // 2. Automatically calculate xpToNextLevelFromThis if possible
+  // This requires fetching the next level's definition.
+  // It's often better to pre-calculate and store this value when defining levels,
+  // or calculate it on-the-fly in the service layer when a user levels up.
+  // For simplicity here, we'll assume it might be set manually or by a seed script.
+  // If not set, and we can find the next level, we can try to calculate it.
+  if (this.isNew || this.isModified("xpRequiredForThisLevel")) {
+    const LevelModelInstance = models.Level as mongoose.Model<ILevel> || model<ILevel>("Level", LevelSchema);
+    const nextLevelDoc = await LevelModelInstance.findOne({ levelNumber: this.levelNumber + 1 }).sort({levelNumber: 1}).lean<ILevel>();
+    if (nextLevelDoc) {
+        this.xpToNextLevelFromThis = nextLevelDoc.xpRequiredForThisLevel - this.xpRequiredForThisLevel;
+    } else {
+        // If this is the highest level, xpToNextLevelFromThis might be Infinity, 0, or undefined based on game design
+        this.xpToNextLevelFromThis = undefined; // Or a very large number if there's a "max level" concept without further progression
+    }
+  }
+
+  next();
+});
 
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-
-// ตรวจสอบว่า Model "Level" ถูกสร้างไปแล้วหรือยัง ถ้ายัง ให้สร้าง Model ใหม่
 const LevelModel =
   (models.Level as mongoose.Model<ILevel>) ||
   model<ILevel>("Level", LevelSchema);
@@ -193,41 +213,45 @@ export default LevelModel;
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
 // ==================================================================================================
-// 1.  **XP Curve Management**:
-//     - `xpRequiredForThisLevel` และ `xpRequiredForNextLevel` เป็นหัวใจสำคัญในการกำหนด "ความเร็ว" ในการ Level Up.
-//     - การออกแบบค่า XP เหล่านี้ควรคำนึงถึง engagement ของผู้ใช้ และความรู้สึกถึงความก้าวหน้า.
-//     - อาจจะมีเครื่องมือหรือสูตรคำนวณสำหรับ Admin ในการสร้าง Level และ XP curve ที่เหมาะสม.
-// 2.  **Relationship with User Model**:
-//     - `User.gamification.level` (Number) จะเก็บหมายเลข Level ปัจจุบันของผู้ใช้.
-//     - `User.gamification.experiencePoints` (Number) เก็บ XP สะสมปัจจุบัน.
-//     - `User.gamification.nextLevelXPThreshold` (Number) จะถูกดึงมาจาก `xpRequiredForNextLevel` ของ `Level` ปัจจุบันของผู้ใช้.
-//     - `User.gamification.currentLevelObject` (ObjectId, ref: 'Level') จะอ้างอิงไปยัง Level document ปัจจุบันของผู้ใช้ใน Collection "levels".
-// 3.  **Level Up Logic (Service Layer)**:
-//     - เมื่อผู้ใช้ได้รับ XP (จาก Achievement, Badge, หรือกิจกรรมอื่นๆ), Service Layer จะต้อง:
-//       1. อัปเดต `User.gamification.experiencePoints`.
-//       2. ตรวจสอบว่า `experiencePoints` ถึง `nextLevelXPThreshold` หรือยัง.
-//       3. ถ้าถึงแล้ว:
-//          a. อัปเดต `User.gamification.level` เป็น Level ถัดไป.
-//          b. ค้นหา Level document ใหม่จาก `LevelModel` โดยใช้ `levelNumber` ใหม่.
-//          c. อัปเดต `User.gamification.currentLevelObject` เป็น `_id` ของ Level document ใหม่.
-//          d. อัปเดต `User.gamification.nextLevelXPThreshold` จาก `xpRequiredForNextLevel` ของ Level document ใหม่.
-//          e. มอบรางวัล (ถ้ามี `achievementOnReachId` หรือ `directRewardsOnReach` ใน Level document ใหม่).
-//          f. สร้าง Notification สำหรับ Level Up.
-// 4.  **Rewards on Level Up**:
-//     - `achievementOnReachId`: เมื่อผู้ใช้ถึง Level นี้, Achievement ที่ระบุจะถูกปลดล็อก. Gamification Service จะต้อง trigger การปลดล็อก Achievement นี้,
-//       ซึ่งอาจจะนำไปสู่การได้รับ Badge อีกทอดหนึ่งถ้า Achievement นั้นมีการ grant Badge.
-//     - `directRewardsOnReach`: สามารถให้รางวัลเล็กๆ น้อยๆ เช่น Coins, Profile Frame ชิ้นเล็กๆ หรือส่วนลดเล็กน้อยได้โดยตรงเมื่อถึง Level.
-// 5.  **Admin Interface**: ควรมี Admin UI ที่ดีสำหรับการสร้าง, แก้ไข, และจัดการ Levels ทั้งหมดในระบบ.
-//     รวมถึงการ rebalance XP curve หรือปรับรางวัล.
-// 6.  **Max Level**: ควรมีการกำหนด Level สูงสุดในระบบ และ `xpRequiredForNextLevel` ของ Level สูงสุดอาจจะเป็นค่าที่สูงมาก, null, หรือ Infinity
-//     เพื่อบ่งบอกว่าไม่มี Level ถัดไป.
-// 7.  **`xpRequiredForThisLevel` vs `xpBetweenLevels`**:
-//     - โมเดลนี้ใช้ `xpRequiredForThisLevel` (XP สะสมที่ต้องมีเพื่อ "เป็น" Level นั้น) และ `xpRequiredForNextLevel` (XP สะสมที่ต้องมีเพื่อ "ผ่าน" Level นั้น).
-//     - การแสดงผล "XP ที่ต้องใช้เพื่อขึ้น Level ถัดไป" บน UI ของผู้ใช้ จะคำนวณจาก `(nextLevelXPThreshold - currentExperiencePoints)`.
-//     - ตัวอย่าง:
-//       - Level 1: `xpRequiredForThisLevel`=0, `xpRequiredForNextLevel`=100
-//       - Level 2: `xpRequiredForThisLevel`=100, `xpRequiredForNextLevel`=300 (ต้องใช้ 200 XP จาก Level 1 ไป 2)
-//       - Level 3: `xpRequiredForThisLevel`=300, `xpRequiredForNextLevel`=600 (ต้องใช้ 300 XP จาก Level 2 ไป 3)
-//     - วิธีนี้ช่วยให้การ query Level ปัจจุบันของผู้ใช้จาก XP สะสมทำได้ง่าย (หา Level ที่ `xpRequiredForThisLevel <= userXP < xpRequiredForNextLevel`).
-// 8.  **Seeding Initial Levels**: ควรมี script สำหรับ seed ข้อมูล Level เริ่มต้น (เช่น Level 1-50) เมื่อเริ่มใช้งานระบบ.
+// 1.  **การจัดการ Level Definitions**:
+//     - Level definitions (ข้อมูลแต่ละ Level) ควรถูกสร้างและจัดการโดย Admin ผ่าน Admin Panel.
+//     - ควรมีชุดข้อมูล Level เริ่มต้น (seed data) เมื่อระบบเริ่มทำงานครั้งแรก.
+//     - การออกแบบ Level progression และ XP curve เป็นส่วนสำคัญของการออกแบบเกม.
+// 2.  **คำนวณ `xpToNextLevelFromThis`**:
+//     - Field นี้มีความสำคัญสำหรับ `User.gamification.nextLevelXPThreshold`.
+//     - ขณะนี้ `pre-save` hook พยายามคำนวณค่านี้ถ้า Level ถัดไปมีอยู่. อย่างไรก็ตาม, การคำนวณนี้อาจจะซับซ้อน
+//       ถ้ามีการแก้ไข Level กลางๆ หรือถ้า Level ถูกสร้างไม่เรียงตามลำดับ.
+//     - ทางเลือกที่ดีกว่าคือ:
+//         1. Admin กำหนดค่า `xpToNextLevelFromThis` โดยตรงเมื่อสร้าง/แก้ไข Level definition.
+//         2. มี Service/Script แยกต่างหากที่คำนวณและอัปเดต field นี้สำหรับทุก Level เมื่อมีการเปลี่ยนแปลงโครงสร้าง Level.
+// 3.  **Level Rewards**:
+//     - `rewardsOnReach` ใน `ILevel` สามารถใช้กำหนดรางวัลที่ผู้ใช้จะได้รับทันทีเมื่อถึง Level นั้น.
+//     - `achievementIdToUnlock` ใน `ILevelReward` (ถ้า type เป็น `ACHIEVEMENT_UNLOCK`) จะเป็นตัว trigger การปลดล็อก Achievement.
+//     - ถ้า Achievement นั้นมี `grantedBadgeId` ใน `rewards` ของมัน, ผู้ใช้ก็จะได้รับ Badge ด้วย (การให้ Badge จาก Level ผ่าน Achievement).
+//     - `badgeIdToAward` ใน `ILevelReward` (ถ้า type เป็น `BADGE_AWARD`) สามารถใช้ให้ Badge โดยตรงจาก Level Up ได้เลย.
+// 4.  **การเชื่อมโยงกับ `User.ts`**:
+//     - `User.gamification.currentLevelObject` จะอ้างอิง `_id` ของ Level document ปัจจุบันของผู้ใช้.
+//     - เมื่อผู้ใช้ได้ XP, Gamification Service จะตรวจสอบ `User.gamification.experiencePoints` เทียบกับ
+//       `User.gamification.nextLevelXPThreshold` (ซึ่งดึงมาจาก `xpToNextLevelFromThis` ของ Level ปัจจุบัน).
+//     - ถ้า XP ถึงเกณฑ์:
+//         1. อัปเดต `User.gamification.level` และ `User.gamification.currentLevelObject` ไปยัง Level ใหม่.
+//         2. ดึง `xpToNextLevelFromThis` จาก Level ใหม่ มาตั้งเป็น `User.gamification.nextLevelXPThreshold`.
+//         3. มอบรางวัลที่กำหนดใน `rewardsOnReach` ของ Level ใหม่.
+//         4. สร้าง Notification สำหรับ Level Up.
+// 5.  **Total XP vs. XP for Current Level**:
+//     - `Level.xpRequiredForThisLevel`: คือ XP "สะสมทั้งหมด" ที่ต้องมีเพื่อ "อยู่" ใน Level นี้.
+//     - `Level.xpToNextLevelFromThis`: คือ XP ที่ต้อง "เก็บเพิ่ม" จากจุดเริ่มต้นของ Level ปัจจุบัน เพื่อไป Level ถัดไป.
+//     - `User.gamification.experiencePoints`: คือ XP "สะสมทั้งหมด" ของผู้ใช้.
+//     - `User.gamification.nextLevelXPThreshold`: ควรจะหมายถึงจำนวน XP ที่ "ต้องการเพิ่มอีก" เพื่อไป Level ถัดไป ไม่ใช่ XP สะสมทั้งหมดที่ Level ถัดไปต้องการ.
+//       ดังนั้น `User.gamification.nextLevelXPThreshold` ควรจะดึงค่ามาจาก `xpToNextLevelFromThis` ของ Level ปัจจุบันของผู้ใช้.
+//       หรืออีกทางเลือกหนึ่งคือ `User.gamification.nextLevelXPThreshold` เก็บค่า XP สะสมที่ Level ถัดไปต้องการ (คือ `Level[current+1].xpRequiredForThisLevel`)
+//       แล้ว UI แสดง progress bar เป็น (`User.XP` - `currentLevel.XPRequired`) / (`nextLevel.XPRequired` - `currentLevel.XPRequired`).
+//       การออกแบบใน "Gamification_System_Implementation.txt" ชี้ไปทางที่ `nextLevelXPThreshold` ของ User คือ XP ที่ต้องการเพิ่ม.
+//       ดังนั้นการใช้ `xpToNextLevelFromThis` จาก Level Model จึงเหมาะสม.
+// 6.  **Extensibility**: Model นี้สามารถขยายเพื่อรองรับ:
+//     -   Perks หรือ Abilities ที่ปลดล็อกตาม Level.
+//     -   การจำกัดการเข้าถึงเนื้อหาตาม Level.
+//     -   ความแตกต่างของ XP ที่ได้รับจากกิจกรรมต่างๆ ตาม Level ของผู้ใช้.
+// 7.  **Consistency**: ต้องมั่นใจว่าข้อมูล Level ใน `Level.ts` สอดคล้องกับ logic การคำนวณ Level Up ใน Service Layer.
+//     การเปลี่ยนแปลง Level definitions (เช่น เพิ่ม/ลด XP required) อาจจะต้องมีการ re-calculate Level ของผู้ใช้ทั้งหมด (ซึ่งเป็นงานใหญ่).
 // ==================================================================================================
