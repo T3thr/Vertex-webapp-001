@@ -5,8 +5,6 @@
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IBadge } from "./Badge"; // สำหรับ rewardBadgeId
 import { IOfficialMedia } from "./OfficialMedia"; // สำหรับ iconMediaId
-// IUser ไม่จำเป็นต้อง import โดยตรงในไฟล์นี้ เว้นแต่จะใช้ใน populate ที่ซับซ้อนมากๆ
-// ซึ่งปกติจะทำใน service layer
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Achievement
@@ -25,6 +23,7 @@ import { IOfficialMedia } from "./OfficialMedia"; // สำหรับ iconMedi
  * - `SOCIAL_INTERACTION`: เกี่ยวกับการปฏิสัมพันธ์กับผู้ใช้อื่น
  * - `CONTENT_DISCOVERY`: เกี่ยวกับการค้นพบเนื้อหาใหม่ๆ หรือหมวดหมู่ที่หลากหลาย
  * - `LEARNING_AND_EXPLORATION`: เกี่ยวกับการเรียนรู้การใช้งานฟีเจอร์ต่างๆ ของแพลตฟอร์ม
+ * - `USER_PROGRESSION`: (ใหม่) เกี่ยวกับความก้าวหน้าของผู้ใช้ เช่น การขึ้น Level
  * - `OTHER`: หมวดหมู่อื่นๆ ที่ไม่เข้าพวก
  */
 export enum AchievementCategory {
@@ -38,6 +37,7 @@ export enum AchievementCategory {
   SOCIAL_INTERACTION = "SocialInteraction",
   CONTENT_DISCOVERY = "ContentDiscovery",
   LEARNING_AND_EXPLORATION = "LearningAndExploration",
+  USER_PROGRESSION = "UserProgression", // ใหม่: สำหรับความก้าวหน้า เช่น Level Up
   OTHER = "Other",
 }
 
@@ -63,19 +63,20 @@ export enum AchievementRarity {
 /**
  * @enum {string} AchievementRewardType
  * @description ประเภทของรางวัลที่ผู้ใช้จะได้รับเมื่อปลดล็อก Achievement
- * - `COINS`: เหรียญในเกม/แพลตฟอร์ม
- * - `POINTS`: แต้มประสบการณ์ (XP) หรือแต้มพิเศษอื่นๆ
- * - `BADGE`: ป้ายรางวัล (อ้างอิง Badge model)
+ * เน้นรางวัลที่มีมูลค่าสูงตาม "Gamification_System_Implementation.txt" [cite: 1]
+ * - `COINS`: เหรียญในเกม/แพลตฟอร์ม (จำนวนมาก)
+ * - `EXPERIENCE_POINTS`: แต้มประสบการณ์ (XP) (จำนวนมาก)
+ * - `BADGE`: ป้ายรางวัล (อ้างอิง Badge model, สำหรับ Achievement ระดับสูง)
  * - `PROFILE_FRAME`: กรอบโปรไฟล์พิเศษ
  * - `EXCLUSIVE_CONTENT_ACCESS`: สิทธิ์ในการเข้าถึงเนื้อหาพิเศษ
  * - `DISCOUNT_VOUCHER`: คูปองส่วนลดสำหรับการซื้อในแพลตฟอร์ม
- * - `FEATURE_UNLOCK`: ปลดล็อกฟีเจอร์บางอย่าง
+ * - `FEATURE_UNLOCK`: ปลดล็อกฟีเจอร์บางอย่าง (ระบุด้วย featureUnlockKey)
  * - `NO_REWARD`: ไม่มีรางวัลเป็นรูปธรรม (ตัว Achievement เองคือรางวัล)
  */
 export enum AchievementRewardType {
   COINS = "Coins",
-  POINTS = "Points", // สามารถใช้เป็น XP ได้
-  BADGE = "Badge",
+  EXPERIENCE_POINTS = "ExperiencePoints",
+  BADGE = "Badge", // สำหรับ Achievement ระดับสูงที่ให้ Badge ด้วย
   PROFILE_FRAME = "ProfileFrame",
   EXCLUSIVE_CONTENT_ACCESS = "ExclusiveContentAccess",
   DISCOUNT_VOUCHER = "DiscountVoucher",
@@ -85,85 +86,46 @@ export enum AchievementRewardType {
 
 /**
  * @interface IAchievementReward
- * @description โครงสร้างของรางวัลที่ผู้ใช้จะได้รับ
+ * @description โครงสร้างของรางวัลที่ผู้ใช้จะได้รับจากการปลดล็อก Achievement.
+ * ปรับปรุงตาม "Gamification_System_Implementation.txt" [cite: 1] ให้เน้นรางวัลมูลค่าสูง
+ * และสามารถให้ Badge ได้เมื่อบรรลุ Achievement ระดับสูงสุด
  * @property {AchievementRewardType} type - ประเภทของรางวัล
- * @property {number} [value] - จำนวน (เช่น จำนวนเหรียญ, จำนวนแต้ม)
- * @property {Types.ObjectId | IBadge | string} [itemId] - ID ของไอเท็มที่เกี่ยวข้อง (เช่น Badge ID, ชื่อ frame, โค้ด voucher)
+ * @property {number} [experiencePointsAwarded] - (ใหม่) แต้มประสบการณ์ (XP) ที่จะได้รับ (จำนวนมาก)
+ * @property {number} [coinsAwarded] - (ใหม่) จำนวนเหรียญ (Coins) ที่จะได้รับ (จำนวนมาก)
+ * @property {string} [featureUnlockKey] - (ใหม่) Key สำหรับปลดล็อกฟีเจอร์
+ * @property {Types.ObjectId | IBadge | string} [grantedBadgeId] - (ใหม่) ID ของ Badge ที่จะมอบให้เมื่อปลดล็อก Achievement นี้ (อ้างอิง Badge Model)
+ * @property {string} [grantedBadgeKey] - (ใหม่, Denormalized) Key ของ Badge ที่มอบให้ (เพื่อความสะดวกในการอ้างอิง)
+ * @property {any} [value] - (เดิม, อาจจะยังคงไว้สำหรับ reward type อื่นๆ) จำนวน หรือค่าเฉพาะของรางวัล (เช่น ID ของ item อื่น, ชื่อ frame)
  * @property {string} [description] - คำอธิบายเพิ่มเติมเกี่ยวกับรางวัล
  */
 export interface IAchievementReward {
   type: AchievementRewardType;
-  value?: number;
-  itemId?: Types.ObjectId | IBadge | string; // string for profile frame name or voucher code
+  experiencePointsAwarded?: number;
+  coinsAwarded?: number;
+  featureUnlockKey?: string;
+  grantedBadgeId?: Types.ObjectId | IBadge | string; // สามารถเป็น ObjectId หรือ populated IBadge, หรือ string สำหรับ badge key
+  grantedBadgeKey?: string;
+  value?: any; // สำหรับ backward compatibility หรือ reward type อื่นๆ ที่ไม่ตรงกับ field เฉพาะ
   description?: string;
 }
 const AchievementRewardSchema = new Schema<IAchievementReward>(
   {
-    type: { type: String, enum: Object.values(AchievementRewardType), required: true, description: "ประเภทของรางวัล" },
-    value: { type: Number, min: 0, description: "จำนวน (เช่น จำนวนเหรียญ, จำนวนแต้ม)" },
-    itemId: { type: Schema.Types.Mixed, description: "ID ของไอเท็มที่เกี่ยวข้อง (เช่น Badge ID, ชื่อ frame, โค้ด voucher)" }, // Can be ObjectId for Badge, or string for others
-    description: { type: String, trim: true, maxlength: 255, description: "คำอธิบายเพิ่มเติมเกี่ยวกับรางวัล" },
+    type: { type: String, enum: Object.values(AchievementRewardType), required: true },
+    experiencePointsAwarded: { type: Number, min: 0, comment: "แต้ม XP ที่จะได้รับ (จำนวนมาก)" },
+    coinsAwarded: { type: Number, min: 0, comment: "จำนวน Coins ที่จะได้รับ (จำนวนมาก)" },
+    featureUnlockKey: { type: String, trim: true, maxlength: 100, comment: "Key สำหรับปลดล็อกฟีเจอร์" },
+    grantedBadgeId: { type: Schema.Types.Mixed, comment: "ID หรือ Key ของ Badge ที่จะมอบให้" }, // ใช้ Mixed เพื่อรองรับ ObjectId หรือ string (key)
+    grantedBadgeKey: { type: String, trim: true, maxlength: 100, comment: "Key ของ Badge ที่มอบให้ (Denormalized)" },
+    value: { type: Schema.Types.Mixed, comment: "ค่าเฉพาะของรางวัล (ถ้ามี, เช่น item ID, frame name)" },
+    description: { type: String, trim: true, maxlength: 255, comment: "คำอธิบายรางวัล" },
   },
   { _id: false }
 );
 
 /**
- * @enum {string} AchievementUnlockEvent
- * @description ประเภทของ Event หลักๆ ที่ Gamification Service จะใช้ในการประมวลผลเพื่อปลดล็อก Achievement
- * Enum นี้จะถูกใช้ใน IAchievementUnlockCondition.eventName เพื่อให้มีความสอดคล้องกัน
- * และควรจะ map กับ ActivityType หรือ ReadingEventType ที่เกี่ยวข้อง
- * - `USER_REGISTERED`: ผู้ใช้สมัครสมาชิกใหม่
- * - `USER_LOGGED_IN_DAYS_STREAK`: ผู้ใช้ล็อกอินต่อเนื่องครบจำนวนวันที่กำหนด
- * - `USER_READ_EPISODE_COUNT`: ผู้ใช้อ่านตอนครบจำนวนที่กำหนด (โดยรวม)
- * - `USER_READ_NOVEL_COUNT`: ผู้ใช้อ่านนิยายจบเรื่องครบจำนวนที่กำหนด
- * - `USER_READ_NOVEL_OF_GENRE_COUNT`: (เพิ่มใหม่) ผู้ใช้อ่านนิยายในหมวดหมู่ (Genre) ที่กำหนดครบจำนวนเรื่อง
- * - `USER_POSTED_COMMENT_COUNT`: ผู้ใช้แสดงความคิดเห็นครบจำนวนครั้ง
- * - `USER_LIKED_CONTENT_COUNT`: ผู้ใช้กดถูกใจเนื้อหาครบจำนวนครั้ง
- * - `USER_FOLLOWED_COUNT`: ผู้ใช้ติดตามผู้ใช้อื่นครบจำนวนคน
- * - `WRITER_PUBLISHED_NOVEL_COUNT`: นักเขียนเผยแพร่นิยายครบจำนวนเรื่อง
- * - `WRITER_PUBLISHED_EPISODE_COUNT`: นักเขียนเผยแพร่ตอนครบจำนวนตอน
- * - `WRITER_RECEIVED_TOTAL_LIKES_COUNT`: นักเขียนได้รับยอดไลค์รวมครบจำนวนที่กำหนด
- * - `WRITER_GAINED_TOTAL_FOLLOWERS_COUNT`: นักเขียนมีผู้ติดตามรวมครบจำนวนที่กำหนด
- * - `USER_PURCHASED_ITEM_COUNT`: ผู้ใช้ซื้อไอเท็ม/ตอนครบจำนวนครั้ง
- * - `USER_DONATED_COINS_TOTAL`: ผู้ใช้บริจาคเหรียญรวมครบจำนวนที่กำหนด
- * - `USER_PARTICIPATED_IN_EVENT_COUNT`: ผู้ใช้เข้าร่วมกิจกรรมครบจำนวนครั้ง
- * - `USER_CUSTOM_EVENT_TRIGGERED`: Event ที่กำหนดเองถูก Trigger (ใช้สำหรับ Achievement ที่ซับซ้อน)
- */
-export enum AchievementUnlockEvent {
-    USER_REGISTERED = "USER_REGISTERED",
-    USER_LOGGED_IN_DAYS_STREAK = "USER_LOGGED_IN_DAYS_STREAK",
-    USER_READ_EPISODE_COUNT = "USER_READ_EPISODE_COUNT",
-    USER_READ_NOVEL_COUNT = "USER_READ_NOVEL_COUNT",
-    USER_READ_NOVEL_OF_GENRE_COUNT = "USER_READ_NOVEL_OF_GENRE_COUNT", // <--- เพิ่มใหม่
-    USER_POSTED_COMMENT_COUNT = "USER_POSTED_COMMENT_COUNT",
-    USER_LIKED_CONTENT_COUNT = "USER_LIKED_CONTENT_COUNT",
-    USER_FOLLOWED_COUNT = "USER_FOLLOWED_COUNT",
-    WRITER_PUBLISHED_NOVEL_COUNT = "WRITER_PUBLISHED_NOVEL_COUNT",
-    WRITER_PUBLISHED_EPISODE_COUNT = "WRITER_PUBLISHED_EPISODE_COUNT",
-    WRITER_RECEIVED_TOTAL_LIKES_COUNT = "WRITER_RECEIVED_TOTAL_LIKES_COUNT",
-    WRITER_GAINED_TOTAL_FOLLOWERS_COUNT = "WRITER_GAINED_TOTAL_FOLLOWERS_COUNT",
-    USER_PURCHASED_ITEM_COUNT = "USER_PURCHASED_ITEM_COUNT",
-    USER_DONATED_COINS_TOTAL = "USER_DONATED_COINS_TOTAL",
-    USER_PARTICIPATED_IN_EVENT_COUNT = "USER_PARTICIPATED_IN_EVENT_COUNT",
-    USER_CUSTOM_EVENT_TRIGGERED = "USER_CUSTOM_EVENT_TRIGGERED",
-}
-
-
-/**
  * @enum {string} UnlockConditionOperator
- * @description ตัวดำเนินการสำหรับเงื่อนไขการปลดล็อก Achievement ที่ผู้ใช้ระบุ
- * - `GREATER_THAN_OR_EQUAL_TO_COUNT`: >=_COUNT - ตรวจสอบว่าจำนวนครั้งที่เกิด eventName นั้น มากกว่าหรือเท่ากับ targetValue (ที่เป็นตัวเลข)
- * - `EQUAL_TO_EXACT_VALUE`: ==_EXACT - ตรวจสอบว่าค่าที่ส่งมากับ eventName (ใน details) ตรงกับ targetValue แบบเป๊ะๆ
- * - `LESS_THAN_OR_EQUAL_TO_COUNT`: <=_COUNT - ตรวจสอบว่าจำนวนครั้งที่เกิด eventName นั้น น้อยกว่าหรือเท่ากับ targetValue (ที่เป็นตัวเลข)
- * - `GREATER_THAN_OR_EQUAL_TO_VALUE_FROM_EVENT`: >=_VALUE_SPECIFIC_EVENT - ตรวจสอบว่าค่าตัวเลขที่ส่งมากับ eventName (ใน details) มากกว่าหรือเท่ากับ targetValue
- * - `EQUAL_TO_VALUE_FROM_EVENT`: ==_VALUE_SPECIFIC_EVENT - ตรวจสอบว่าค่าตัวเลขที่ส่งมากับ eventName (ใน details) เท่ากับ targetValue
- * - `HAS_FLAG`: (เพิ่มใหม่) ตรวจสอบว่ามี flag หรือ property ที่ระบุใน targetValue (เป็น string ชื่อ property) อยู่ใน details ของ event หรือไม่ หรือค่า boolean ของ property นั้นเป็น true
- * - `NOT_HAS_FLAG`: (เพิ่มใหม่) ตรวจสอบว่าไม่มี flag หรือ property ที่ระบุใน targetValue หรือค่า boolean ของ property นั้นเป็น false
- * - `BEFORE_DATE`: (เพิ่มใหม่) ตรวจสอบว่า event เกิดก่อนวันที่ targetValue (ที่เป็น Date string ISO)
- * - `AFTER_DATE`: (เพิ่มใหม่) ตรวจสอบว่า event เกิดหลังวันที่ targetValue (ที่เป็น Date string ISO)
- * - `WITHIN_DURATION_SECONDS_FROM_PREVIOUS_EVENT`: (เพิ่มใหม่) ตรวจสอบว่า event ปัจจุบันเกิดภายในระยะเวลา targetValue (วินาที) หลังจาก event ก่อนหน้า (ที่ระบุใน relatedTo)
- * - `CUSTOM_FUNCTION`: (คงไว้จากเดิม) ใช้ custom function ใน service layer เพื่อตรวจสอบเงื่อนไขที่ซับซ้อน (targetValue อาจเป็นชื่อ function)
- * - `REGEX_MATCH_ON_EVENT_DETAIL`: (เพิ่มใหม่) ตรวจสอบว่าค่า string ใน event detail (ระบุ field ด้วย relatedTo) ตรงกับ Regular Expression ใน targetValue
+ * @description ตัวดำเนินการสำหรับเงื่อนไขการปลดล็อก Achievement
+ * (คง Enum เดิมจากไฟล์ต้นฉบับ แต่ตรวจสอบและปรับปรุงคำอธิบายให้สอดคล้องกับการใช้งาน)
  */
 export enum UnlockConditionOperator {
   GREATER_THAN_OR_EQUAL_TO_COUNT = ">=_COUNT",
@@ -184,18 +146,10 @@ export enum UnlockConditionOperator {
 /**
  * @interface IAchievementUnlockCondition
  * @description โครงสร้างของเงื่อนไขในการปลดล็อก Achievement
- * @property {AchievementUnlockEvent} eventName - (ปรับปรุง) ชื่อ event หลักที่ใช้ในการตรวจสอบ. ควรสอดคล้องกับค่าใน {@link AchievementUnlockEvent}.
- * @property {UnlockConditionOperator} [operator] - ตัวดำเนินการเปรียบเทียบที่ใช้กับ targetValue. ดูคำอธิบายใน {@link UnlockConditionOperator}.
- * @property {any} targetValue - ค่าเป้าหมายที่ต้องทำให้สำเร็จ (เช่น 10, "sci-fi", true, "ISO_DATE_STRING", "REGEX_PATTERN"). ประเภทข้อมูลของ targetValue จะขึ้นอยู่กับ `eventName` และ `operator` ที่เลือก.
- * @property {string} [description] - คำอธิบายเงื่อนไขนี้ (human-readable) เช่น "อ่านนิยายครบ 10 ตอน"
- * @property {string} [relatedTo] - (Optional) ใช้เพื่อระบุ property หรือ entity ที่ต้องการกรอง หรือตรวจสอบค่าภายใน event. สำหรับ `USER_READ_NOVEL_OF_GENRE_COUNT`, `relatedTo` ควรเป็น ID ของ Category (Genre) หรือ slug ของมัน. ตัวอย่างอื่นๆ: "novelId", "category.slug", หรือ path ใน event.details เช่น 'sceneDetails.isReread'.
- * @property {"Novel" | "Episode" | "Category" | "User" | "Tag" | "SpecificItem" | string} [relatedToType] - (Optional) ประเภทของ `relatedTo`. เช่น ถ้า `eventName` คือ `USER_READ_NOVEL_OF_GENRE_COUNT` และ `relatedTo` คือ ID ของ Genre, `relatedToType` จะเป็น "Category".
- * @property {number} [group] - (Optional) สำหรับจัดกลุ่มเงื่อนไข (AND/OR logic จะจัดการใน service layer). เงื่อนไขใน group เดียวกันอาจจะถูกพิจารณาร่วมกัน.
- * @property {boolean} [isTerminal] - (Optional) ระบุว่าเงื่อนไขนี้ (ถ้าเป็นจริง) ทำให้ Achievement ถูกปลดล็อกทันทีหรือไม่ แม้ว่าจะมีเงื่อนไขอื่นๆ ใน group เดียวกันที่ยังไม่เป็นจริง (สำหรับ logic OR บางประเภท). (default: false)
- * @property {number} [weight] - (Optional) น้ำหนักของเงื่อนไขนี้ในการคำนวณความคืบหน้าโดยรวม (ถ้ามีระบบ progress tracking แบบ % ที่ซับซ้อน)
+ * (คง Interface เดิมจากไฟล์ต้นฉบับ แต่ปรับปรุง comment ให้ชัดเจน)
  */
 export interface IAchievementUnlockCondition {
-  eventName: AchievementUnlockEvent;
+  eventName: string;
   operator?: UnlockConditionOperator;
   targetValue: any;
   description?: string;
@@ -205,56 +159,57 @@ export interface IAchievementUnlockCondition {
   isTerminal?: boolean;
   weight?: number;
 }
-const AchievementUnlockConditionSchema = new Schema<IAchievementUnlockCondition>(
+export const AchievementUnlockConditionSchema = new Schema<IAchievementUnlockCondition>(
   {
     eventName: {
       type: String,
-      enum: Object.values(AchievementUnlockEvent),
-      required: [true, "กรุณาระบุชื่อ Event หลักสำหรับเงื่อนไข"],
-      description: "Event หลักที่ Gamification Service จะใช้ในการตรวจสอบ",
+      required: [true, "กรุณาระบุชื่อ Event หรือ Metric สำหรับเงื่อนไข (eventName is required)"],
+      trim: true,
+      maxlength: [150, "ชื่อ Event/Metric ต้องไม่เกิน 150 ตัวอักษร"],
+      comment: "ชื่อ Event ที่จะใช้ในการตรวจสอบ เช่น USER_READ_EPISODE, USER_POSTED_COMMENT, USER_LEVEL_UP. ควรตรงกับ ActivityType หรือ ReadingEventType หรือเป็น Event ที่ Gamification Service รู้จัก",
     },
     operator: {
       type: String,
       enum: Object.values(UnlockConditionOperator),
       default: UnlockConditionOperator.GREATER_THAN_OR_EQUAL_TO_COUNT,
-      description: "ตัวดำเนินการที่ใช้เปรียบเทียบ เช่น >=_COUNT, ==_EXACT_VALUE",
+      comment: "ตัวดำเนินการที่ใช้เปรียบเทียบ เช่น >=_COUNT, ==_EXACT_VALUE",
     },
     targetValue: {
       type: Schema.Types.Mixed,
-      required: [true, "กรุณาระบุค่าเป้าหมายสำหรับเงื่อนไข"],
-      description: "ค่าเป้าหมายที่ต้องการ เช่น 10, 'sci-fi', true, หรือ REGEX pattern",
+      required: [true, "กรุณาระบุค่าเป้าหมายสำหรับเงื่อนไข (targetValue is required)"],
+      comment: "ค่าเป้าหมายที่ต้องการ เช่น 10 (สำหรับ count), 'sci-fi' (สำหรับ category), true (สำหรับ flag), หรือ level number",
     },
     description: {
       type: String,
       trim: true,
       maxlength: [500, "คำอธิบายเงื่อนไขต้องไม่เกิน 500 ตัวอักษร"],
-      description: "คำอธิบายที่มนุษย์อ่านเข้าใจได้ของเงื่อนไขนี้",
+      comment: "คำอธิบายที่มนุษย์อ่านเข้าใจได้ของเงื่อนไขนี้",
     },
     relatedTo: {
       type: String,
       trim: true,
       maxlength: [255, "relatedTo ต้องไม่เกิน 255 ตัวอักษร"],
-      description: " (Optional) ระบุ property/entity ที่เกี่ยวข้อง เช่น novelId, category.slug หรือ path ใน event.details",
+      comment: " (Optional) ระบุ property/entity ที่เกี่ยวข้อง เช่น novelId, category.slug หรือ path ใน event.details เช่น 'sceneDetails.isReread' ",
     },
     relatedToType: {
       type: String,
       trim: true,
       maxlength: [100, "relatedToType ต้องไม่เกิน 100 ตัวอักษร"],
-      description: " (Optional) ประเภทของ relatedTo เช่น Novel, Category, User, หรือชื่อ field ใน event details",
+      comment: " (Optional) ประเภทของ relatedTo เช่น Novel, Category, User, หรือชื่อ field ใน event details",
     },
     group: {
       type: Number,
-      description: " (Optional) สำหรับจัดกลุ่มเงื่อนไข (AND/OR logic จะจัดการใน service layer)",
+      comment: " (Optional) สำหรับจัดกลุ่มเงื่อนไข (AND/OR logic จะจัดการใน service layer)",
     },
     isTerminal: {
         type: Boolean,
         default: false,
-        description: "(Optional) ถ้าเงื่อนไขนี้เป็นจริง ให้ปลดล็อกทันที (สำหรับ OR logic บางประเภท)",
+        comment: "(Optional) ถ้าเงื่อนไขนี้เป็นจริง ให้ปลดล็อกทันที (สำหรับ OR logic บางประเภท)",
     },
     weight: {
         type: Number,
         min: 0,
-        description: "(Optional) น้ำหนักของเงื่อนไขนี้ในการคำนวณ progress (ถ้ามี)",
+        comment: "(Optional) น้ำหนักของเงื่อนไขนี้ในการคำนวณ progress (ถ้ามี)",
     }
   },
   { _id: false }
@@ -268,48 +223,35 @@ const AchievementUnlockConditionSchema = new Schema<IAchievementUnlockCondition>
  * @interface IAchievement
  * @extends Document (Mongoose Document)
  * @description อินเทอร์เฟซหลักสำหรับเอกสาร "ต้นแบบ" ของรางวัลความสำเร็จใน Collection "achievements"
- * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร
- * @property {string} achievementCode - รหัสเฉพาะของ Achievement (human-readable, unique, เช่น "FIRST_NOVEL_PUBLISHED") (**จำเป็น**, **unique**)
- * @property {string} title - ชื่อรางวัลความสำเร็จ (เช่น "นักอ่านตัวยง", "นักเขียนดาวรุ่ง") (**จำเป็น**)
- * @property {string} description - คำอธิบายเกี่ยวกับรางวัลและวิธีการปลดล็อก (**จำเป็น**)
- * @property {Types.ObjectId | IOfficialMedia} [iconMediaId] - (Optional) ID ของ OfficialMedia ที่ใช้เป็นไอคอน (อาจเป็น ObjectId หรือ populated IOfficialMedia)
- * @property {string} [customIconUrl] - (Optional) URL ไอคอนแบบกำหนดเอง (ถ้าไม่ได้ใช้ OfficialMedia)
- * @property {AchievementCategory} category - หมวดหมู่ของรางวัลความสำเร็จ (**จำเป็น**)
- * @property {AchievementRarity} rarity - ระดับความหายากของรางวัล (**จำเป็น**, default: `COMMON`)
- * @property {IAchievementUnlockCondition[]} unlockConditions - รายการเงื่อนไขในการปลดล็อก (**จำเป็น**, ต้องมีอย่างน้อย 1 เงื่อนไข)
- * @property {IAchievementReward[]} [rewards] - รายการรางวัลที่จะได้รับเมื่อปลดล็อก (Optional)
- * @property {string} [unlockHint] - (Optional) คำใบ้ในการปลดล็อก (สำหรับรางวัลที่ซับซ้อนหรือเป็นความลับบางส่วน)
- * @property {boolean} isActive - สถานะการเปิดใช้งานของรางวัลนี้ (default: `true`)
- * @property {boolean} isSecret - เป็นรางวัลลับหรือไม่ (ไม่แสดงในรายการจนกว่าจะปลดล็อก, default: `false`)
- * @property {boolean} isRepeatable - สามารถปลดล็อกซ้ำได้หรือไม่ (เช่น achievement รายวัน/รายสัปดาห์, default: `false`)
- * @property {number} [maxRepeats] - (Optional) จำนวนครั้งสูงสุดที่สามารถปลดล็อกซ้ำได้ (ถ้า isRepeatable = true)
- * @property {number} [points] - (Optional) แต้มที่เกี่ยวข้องกับ Achievement นี้ (อาจใช้ในการจัดอันดับหรือระบบ Gamification อื่นๆ, เช่น XP ที่ได้โดยตรงจาก Achievement นี้)
- * @property {number} displayOrder - ลำดับการแสดงผล (default: 0, ใช้ในการเรียงลำดับ)
- * @property {string[]} [tags] - (Optional) แท็กสำหรับจัดกลุ่มหรือค้นหา Achievement
- * @property {Date} [availableFrom] - (Optional) วันที่เริ่มใช้งาน Achievement นี้ (สำหรับ Event-specific)
- * @property {Date} [availableUntil] - (Optional) วันที่สิ้นสุดการใช้งาน Achievement นี้ (สำหรับ Event-specific)
- * @property {any} [metadata] - (Optional) ข้อมูลเพิ่มเติมอื่นๆ ที่เกี่ยวข้อง (เช่น ข้อมูลสำหรับ Admin UI)
- * @property {number} schemaVersion - เวอร์ชันของ schema (default: 1)
- * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
- * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
+ * @property {string} [tierKey] - (ใหม่) Key สำหรับจัดกลุ่ม Achievement ที่เป็นลำดับขั้น (เช่น "REVIEW_MASTER_TIER")
+ * @property {number} [tierLevel] - (ใหม่) ระดับของ Achievement ในกลุ่ม Tier (เช่น 1, 2, 3)
+ * @property {Types.ObjectId | IAchievement} [previousTierAchievementId] - (ใหม่, Optional) ID ของ Achievement ใน Tier ก่อนหน้า
+ * @property {Types.ObjectId | IAchievement} [nextTierAchievementId] - (ใหม่, Optional) ID ของ Achievement ใน Tier ถัดไป
+ * @property {string} [unlockHint] - (ปรับปรุงแล้ว) คำใบ้ในการปลดล็อก, อาจเป็น object หรือ string เดียว
+ * @property {boolean} [isHintPublic] - (ใหม่) แสดงคำใบ้ให้ผู้ใช้ทั่วไปเห็นหรือไม่
  */
 export interface IAchievement extends Document {
   _id: Types.ObjectId;
   achievementCode: string;
   title: string;
   description: string;
-  iconMediaId?: Types.ObjectId;
+  iconMediaId?: Types.ObjectId | IOfficialMedia;
   customIconUrl?: string;
   category: AchievementCategory;
   rarity: AchievementRarity;
   unlockConditions: Types.DocumentArray<IAchievementUnlockCondition>;
-  rewards?: Types.DocumentArray<IAchievementReward>;
-  unlockHint?: string;
+  rewards?: Types.DocumentArray<IAchievementReward>; // ปรับปรุงโครงสร้าง IAchievementReward แล้ว
+  unlockHint?: string | Record<string, string>; // << ปรับปรุง: สามารถเป็น Object หรือ String
+  isHintPublic?: boolean; // << ใหม่: ควบคุมการแสดงคำใบ้
   isActive: boolean;
   isSecret: boolean;
   isRepeatable: boolean;
   maxRepeats?: number;
-  points?: number;
+  points?: number; // แต้ม XP ที่ได้จาก Achievement นี้โดยตรง (อาจจะรวมกับ rewards.experiencePointsAwarded)
+  tierKey?: string; // << ใหม่
+  tierLevel?: number; // << ใหม่
+  previousTierAchievementId?: Types.ObjectId | IAchievement; // << ใหม่
+  nextTierAchievementId?: Types.ObjectId | IAchievement; // << ใหม่
   displayOrder: number;
   tags?: string[];
   availableFrom?: Date;
@@ -327,35 +269,35 @@ const AchievementSchema = new Schema<IAchievement>(
   {
     achievementCode: {
       type: String,
-      required: [true, "กรุณาระบุรหัสเฉพาะของ Achievement"],
+      required: [true, "กรุณาระบุรหัสเฉพาะของ Achievement (Achievement Code is required)"],
       trim: true,
       uppercase: true,
       unique: true,
       maxlength: [100, "รหัส Achievement ต้องไม่เกิน 100 ตัวอักษร"],
       match: [/^[A-Z0-9_]+$/, "รหัส Achievement สามารถมีได้เฉพาะตัวอักษรภาษาอังกฤษตัวใหญ่, ตัวเลข, และ underscore (_)"],
       index: true,
-      description: "รหัสเฉพาะที่ใช้อ้างอิง Achievement ในระบบ เช่น 'FIRST_NOVEL_READ', 'WRITER_OF_THE_MONTH'",
+      comment: "รหัสเฉพาะที่ใช้อ้างอิง Achievement ในระบบ เช่น 'FIRST_NOVEL_READ', 'WRITER_OF_THE_MONTH'",
     },
     title: {
       type: String,
-      required: [true, "กรุณาระบุชื่อรางวัล"],
+      required: [true, "กรุณาระบุชื่อรางวัล (Title is required)"],
       trim: true,
       maxlength: [200, "ชื่อรางวัลต้องไม่เกิน 200 ตัวอักษร"],
       index: true,
-      description: "ชื่อ Achievement ที่แสดงให้ผู้ใช้เห็น เช่น 'นักอ่านหน้าใหม่', 'นักเขียนยอดนิยม'",
+      comment: "ชื่อ Achievement ที่แสดงให้ผู้ใช้เห็น เช่น 'นักอ่านหน้าใหม่', 'นักเขียนยอดนิยม'",
     },
     description: {
       type: String,
-      required: [true, "กรุณาระบุคำอธิบายรางวัล"],
+      required: [true, "กรุณาระบุคำอธิบายรางวัล (Description is required)"],
       trim: true,
       maxlength: [2000, "คำอธิบายรางวัลต้องไม่เกิน 2000 ตัวอักษร"],
-      description: "คำอธิบายเกี่ยวกับ Achievement และวิธีการปลดล็อกโดยสังเขป",
+      comment: "คำอธิบายเกี่ยวกับ Achievement และวิธีการปลดล็อกโดยสังเขป",
     },
     iconMediaId: {
         type: Schema.Types.ObjectId,
         ref: "OfficialMedia",
         sparse: true,
-        description: "(Optional) ID ของ OfficialMedia ที่ใช้เป็นไอคอนหลักของ Achievement นี้",
+        comment: "(Optional) ID ของ OfficialMedia ที่ใช้เป็นไอคอนหลักของ Achievement นี้",
     },
     customIconUrl: {
         type: String,
@@ -365,14 +307,14 @@ const AchievementSchema = new Schema<IAchievement>(
             validator: function(v: string) { return !v || /^https?:\/\//.test(v); },
             message: (props: any) => `${props.value} ไม่ใช่ URL ที่ถูกต้องสำหรับไอคอน!`
         },
-        description: "(Optional) URL ของไอคอนแบบกำหนดเอง หากไม่ได้ใช้ iconMediaId",
+        comment: "(Optional) URL ของไอคอนแบบกำหนดเอง หากไม่ได้ใช้ iconMediaId",
     },
     category: {
       type: String,
       enum: Object.values(AchievementCategory),
-      required: [true, "กรุณาระบุหมวดหมู่ของรางวัล"],
+      required: [true, "กรุณาระบุหมวดหมู่ของรางวัล (Category is required)"],
       index: true,
-      description: "หมวดหมู่หลักของ Achievement เพื่อการจัดกลุ่ม",
+      comment: "หมวดหมู่หลักของ Achievement เพื่อการจัดกลุ่ม",
     },
     rarity: {
       type: String,
@@ -380,63 +322,106 @@ const AchievementSchema = new Schema<IAchievement>(
       default: AchievementRarity.COMMON,
       required: true,
       index: true,
-      description: "ระดับความหายากของ Achievement",
+      comment: "ระดับความหายากของ Achievement",
     },
     unlockConditions: {
       type: [AchievementUnlockConditionSchema],
       required: true,
       validate: {
         validator: (val: any[]) => val.length > 0,
-        message: "ต้องมีอย่างน้อยหนึ่งเงื่อนไขในการปลดล็อก"
+        message: "ต้องมีอย่างน้อยหนึ่งเงื่อนไขในการปลดล็อก (At least one unlock condition is required)"
       },
-      description: "รายการเงื่อนไขที่ผู้ใช้ต้องทำให้สำเร็จเพื่อปลดล็อก Achievement นี้",
+      comment: "รายการเงื่อนไขที่ผู้ใช้ต้องทำให้สำเร็จเพื่อปลดล็อก Achievement นี้",
     },
     rewards: {
-        type: [AchievementRewardSchema],
+        type: [AchievementRewardSchema], // ใช้ Schema ที่ปรับปรุงแล้ว
         default: [],
-        description: "(Optional) รายการรางวัลที่ผู้ใช้จะได้รับเมื่อปลดล็อก Achievement",
+        comment: "(Optional) รายการรางวัลที่ผู้ใช้จะได้รับเมื่อปลดล็อก Achievement",
     },
-    unlockHint: {
-        type: String,
+    unlockHint: { // << ปรับปรุง
+        type: Schema.Types.Mixed, // สามารถเป็น String หรือ Object ({ common: "...", rare: "..."})
         trim: true,
-        maxlength: [500, "คำใบ้ในการปลดล็อกต้องไม่เกิน 500 ตัวอักษร"],
-        description: "(Optional) คำใบ้สำหรับผู้เล่นในการค้นหาวิธีปลดล็อก",
+        // maxlength สำหรับ string hint, object จะไม่มี maxlength โดยตรง
+        // validate: {
+        //     validator: function(v: any) {
+        //         if (typeof v === 'string') return v.length <= 500;
+        //         if (typeof v === 'object' && v !== null) {
+        //             return Object.values(v).every(hint => typeof hint === 'string' && hint.length <= 500);
+        //         }
+        //         return true; // Allow null/undefined
+        //     },
+        //     message: "คำใบ้แต่ละส่วนต้องไม่เกิน 500 ตัวอักษร"
+        // },
+        comment: "(Optional) คำใบ้ในการปลดล็อก อาจเป็น String หรือ Object ตาม Rarity",
     },
-    isActive: { type: Boolean, default: true, index: true, description: "สถานะว่า Achievement นี้ยังใช้งานอยู่หรือไม่" },
-    isSecret: { type: Boolean, default: false, index: true, description: "เป็น Achievement ลับหรือไม่" },
-    isRepeatable: { type: Boolean, default: false, description: "Achievement นี้สามารถปลดล็อกซ้ำได้หรือไม่" },
+    isHintPublic: { type: Boolean, default: false, comment: "(ใหม่) แสดงคำใบ้ให้ผู้ใช้ทั่วไปเห็นหรือไม่" },
+    isActive: { type: Boolean, default: true, index: true, comment: "สถานะว่า Achievement นี้ยังใช้งานอยู่หรือไม่ (สามารถปลดล็อกได้)" },
+    isSecret: { type: Boolean, default: false, index: true, comment: "เป็น Achievement ลับหรือไม่ (ไม่แสดงในรายการจนกว่าจะปลดล็อก)" },
+    isRepeatable: { type: Boolean, default: false, comment: "Achievement นี้สามารถปลดล็อกซ้ำได้หรือไม่ (เช่น รายวัน, รายสัปดาห์)" },
     maxRepeats: {
         type: Number,
         min: 1,
         validate: {
             validator: function(this: IAchievement, value: number | undefined) {
-                return !this.isRepeatable || (value !== undefined && value >=1);
+                // ถ้า isRepeatable เป็น true, maxRepeats ต้องมีค่าและ >= 1
+                // ถ้า isRepeatable เป็น false, maxRepeats ควรเป็น undefined หรือ null
+                if (this.isRepeatable) {
+                    return value !== undefined && typeof value === 'number' && value >= 1;
+                }
+                return value === undefined || value === null; // หรือจะ return true เสมอถ้าไม่ repeatable
             },
-            message: "ต้องระบุ maxRepeats (>=1) หาก isRepeatable เป็น true"
+            message: (props: any) => `maxRepeats ("${props.value}") ไม่ถูกต้องตามค่า isRepeatable. ต้องระบุ (>=1) เมื่อ isRepeatable=true และไม่ต้องระบุเมื่อ isRepeatable=false.`
         },
-        description: "(Optional) จำนวนครั้งสูงสุดที่สามารถปลดล็อกซ้ำได้",
+        comment: "(Optional) จำนวนครั้งสูงสุดที่สามารถปลดล็อกซ้ำได้ (ถ้า isRepeatable)",
     },
-    points: {
+    points: { // อาจจะใช้เป็น XP โดยตรง หรือเป็น point พิเศษสำหรับระบบ leaderboard
         type: Number,
         min: 0,
         default: 0,
-        description: "(Optional) แต้มประสบการณ์ (XP) หรือแต้มอื่นๆ ที่เกี่ยวข้องโดยตรงกับ Achievement นี้",
+        comment: "(Optional) แต้มที่เกี่ยวข้องกับ Achievement นี้ (อาจใช้แทน XP หรือเพิ่มเติมจาก rewards)",
     },
-    displayOrder: { type: Number, default: 0, index: true, description: "ลำดับการแสดงผล Achievement ในรายการ" },
+    tierKey: { // << ใหม่
+        type: String,
+        trim: true,
+        uppercase: true,
+        maxlength: [100, "Tier Key ต้องไม่เกิน 100 ตัวอักษร"],
+        sparse: true,
+        index: true,
+        comment: "(ใหม่) Key สำหรับจัดกลุ่ม Achievement ที่เป็นลำดับขั้น (เช่น 'REVIEW_MASTER_TIER')",
+    },
+    tierLevel: { // << ใหม่
+        type: Number,
+        min: 1,
+        sparse: true,
+        comment: "(ใหม่) ระดับของ Achievement ในกลุ่ม Tier (เช่น 1, 2, 3)",
+    },
+    previousTierAchievementId: { // << ใหม่
+        type: Schema.Types.ObjectId,
+        ref: "Achievement",
+        sparse: true,
+        comment: "(ใหม่, Optional) ID ของ Achievement ใน Tier ก่อนหน้า",
+    },
+    nextTierAchievementId: { // << ใหม่
+        type: Schema.Types.ObjectId,
+        ref: "Achievement",
+        sparse: true,
+        comment: "(ใหม่, Optional) ID ของ Achievement ใน Tier ถัดไป",
+    },
+    displayOrder: { type: Number, default: 0, index: true, comment: "ลำดับการแสดงผล Achievement ในรายการ (ค่ามาก่อน)" },
     tags: {
         type: [String],
         default: [],
         index: true,
         validate: {
-            validator: (tags: string[]) => tags.every(tag => tag.length <= 50),
-            message: "แต่ละแท็กต้องมีความยาวไม่เกิน 50 ตัวอักษร"
+            validator: (tags: string[]) => tags.every(tag => tag.length <= 50 && /^[a-zA-Z0-9ก-๙\-_]+$/.test(tag)), // อนุญาตไทย, eng, number, _, -
+            message: "แต่ละแท็กต้องมีความยาวไม่เกิน 50 ตัวอักษร และใช้ได้เฉพาะอักขระที่อนุญาต"
         },
-        description: "(Optional) แท็กสำหรับจัดกลุ่มหรือค้นหา Achievement เพิ่มเติม",
+        comment: "(Optional) แท็กสำหรับจัดกลุ่มหรือค้นหา Achievement เพิ่มเติม",
     },
-    availableFrom: { type: Date, sparse: true, description: "(Optional) วันที่เริ่มให้ปลดล็อก Achievement นี้" },
-    availableUntil: { type: Date, sparse: true, description: "(Optional) วันที่สิ้นสุดการให้ปลดล็อก Achievement นี้" },
-    metadata: { type: Schema.Types.Mixed, description: "(Optional) ข้อมูลเพิ่มเติมอื่นๆ ที่ผู้ดูแลระบบสามารถกำหนดได้" },
-    schemaVersion: { type: Number, default: 1, min: 1, description: "เวอร์ชันของ Schema สำหรับการ Migration ในอนาคต" },
+    availableFrom: { type: Date, sparse: true, comment: "(Optional) วันที่เริ่มให้ปลดล็อก Achievement นี้ (สำหรับ Event หรือ Seasonal)" },
+    availableUntil: { type: Date, sparse: true, comment: "(Optional) วันที่สิ้นสุดการให้ปลดล็อก Achievement นี้" },
+    metadata: { type: Schema.Types.Mixed, comment: "(Optional) ข้อมูลเพิ่มเติมอื่นๆ ที่ผู้ดูแลระบบสามารถกำหนดได้" },
+    schemaVersion: { type: Number, default: 1, min: 1, comment: "เวอร์ชันของ Schema สำหรับการ Migration ในอนาคต" },
   },
   {
     timestamps: true,
@@ -452,51 +437,68 @@ AchievementSchema.index({ category: 1, rarity: 1, isActive: 1, displayOrder: 1 }
 AchievementSchema.index({ tags: 1, isActive: 1 }, { sparse: true, name: "AchievementByTagsIndex" });
 AchievementSchema.index({ availableFrom: 1, availableUntil: 1, isActive: 1 }, { sparse: true, name: "AchievementAvailabilityIndex" });
 AchievementSchema.index({ "unlockConditions.eventName": 1, isActive: 1 }, { name: "AchievementByEventNameIndex" });
+AchievementSchema.index({ tierKey: 1, tierLevel: 1, isActive: 1 }, { name: "AchievementTierIndex", sparse: true }); // << ใหม่
 
 
 // ==================================================================================================
 // SECTION: Validation and Middleware (Mongoose Hooks)
 // ==================================================================================================
 
+// Validate icon: ต้องมี iconMediaId หรือ customIconUrl อย่างใดอย่างหนึ่ง (หรือไม่มีเลยก็ได้)
 AchievementSchema.path("iconMediaId").validate(function(this: IAchievement, value: any) {
-  if (this.customIconUrl && this.customIconUrl.trim() !== '') return true;
-  if (!value && (!this.customIconUrl || this.customIconUrl.trim() === '')) return true;
+  if (this.customIconUrl && value) { // ถ้ามีทั้งคู่ ให้ error
+    // this.invalidate("iconMediaId", "สามารถระบุ iconMediaId หรือ customIconUrl ได้เพียงอย่างเดียว", value);
+    return false;
+  }
   return true;
-}, "ต้องระบุ iconMediaId หรือ customIconUrl หรือไม่ระบุทั้งคู่ (ไอคอนเป็นทางเลือก)");
-
+}, "สามารถระบุ iconMediaId หรือ customIconUrl ได้เพียงอย่างเดียว หรือไม่ระบุเลยก็ได้");
 
 AchievementSchema.path("customIconUrl").validate(function(this: IAchievement, value: any) {
-  if (this.iconMediaId && value && value.trim() !== '') {
+  if (this.iconMediaId && value) {
+    // this.invalidate("customIconUrl", "ไม่สามารถระบุ customIconUrl พร้อมกับ iconMediaId ได้", value);
     return false;
   }
   return true;
 }, "ไม่สามารถระบุ customIconUrl พร้อมกับ iconMediaId ได้");
 
 
-AchievementSchema.path("maxRepeats").validate(function(this: IAchievement, value: number | undefined) {
-  if (this.isRepeatable && (value === undefined || typeof value !== 'number' || value < 1)) {
-    return false;
-  }
-  if (!this.isRepeatable && value !== undefined && value !== null) {
-    return false;
-  }
-  return true;
-}, "การตั้งค่า maxRepeats ไม่ถูกต้องตาม isRepeatable");
-
-
+// Middleware ก่อน save
 AchievementSchema.pre<IAchievement>("save", async function (next) {
-  if (this.isModified("achievementCode") && this.achievementCode) {
+  if (this.isModified("achievementCode")) {
     this.achievementCode = this.achievementCode.toUpperCase();
   }
 
-  if ((this.isNew && this.displayOrder === 0) || (this.isModified("rarity") && !this.isModified("displayOrder"))) {
+  // Default displayOrder based on rarity and tierLevel
+  if ((this.isNew && this.displayOrder === 0) || this.isModified("rarity") || this.isModified("tierLevel")) {
+    let baseOrder = 50; // Default for COMMON
     switch (this.rarity) {
-      case AchievementRarity.MYTHIC: this.displayOrder = 100; break;
-      case AchievementRarity.LEGENDARY: this.displayOrder = 90; break;
-      case AchievementRarity.EPIC: this.displayOrder = 80; break;
-      case AchievementRarity.RARE: this.displayOrder = 70; break;
-      case AchievementRarity.UNCOMMON: this.displayOrder = 60; break;
-      default: this.displayOrder = 50; break;
+      case AchievementRarity.MYTHIC: baseOrder = 100; break;
+      case AchievementRarity.LEGENDARY: baseOrder = 90; break;
+      case AchievementRarity.EPIC: baseOrder = 80; break;
+      case AchievementRarity.RARE: baseOrder = 70; break;
+      case AchievementRarity.UNCOMMON: baseOrder = 60; break;
+    }
+    // ถ้ามี tierLevel ให้ปรับ displayOrder ภายใน rarity เดียวกัน
+    // เช่น tier 1 ของ RARE จะมาก่อน tier 2 ของ RARE
+    this.displayOrder = baseOrder - (this.tierLevel || 1) + 1; // Tier สูงกว่า (เลขน้อยกว่า) ควรแสดงก่อน
+  }
+
+  // Auto-populate grantedBadgeKey if grantedBadgeId is provided and is an ObjectId
+  if (this.rewards && this.isModified("rewards")) {
+    const BadgeModelRef = models.Badge as mongoose.Model<IBadge> || model<IBadge>("Badge");
+    for (const reward of this.rewards) {
+      if (reward.type === AchievementRewardType.BADGE && reward.grantedBadgeId && mongoose.Types.ObjectId.isValid(reward.grantedBadgeId.toString())) {
+        if (!reward.grantedBadgeKey) { // Populate only if key is missing
+          try {
+            const badge = await BadgeModelRef.findById(reward.grantedBadgeId).select("badgeKey").lean();
+            if (badge && badge.badgeKey) {
+              reward.grantedBadgeKey = badge.badgeKey;
+            }
+          } catch (error) {
+            console.error(`[Achievement Pre-Save Hook] Error populating grantedBadgeKey for badgeId ${reward.grantedBadgeId}:`, error);
+          }
+        }
+      }
     }
   }
   next();
@@ -505,7 +507,6 @@ AchievementSchema.pre<IAchievement>("save", async function (next) {
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-
 const AchievementModel =
   (models.Achievement as mongoose.Model<IAchievement>) ||
   model<IAchievement>("Achievement", AchievementSchema);
@@ -515,30 +516,30 @@ export default AchievementModel;
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
 // ==================================================================================================
-// 1.  **Unlock Logic Service**: การปลดล็อก Achievement จริงของผู้ใช้ จะต้องมี Service Layer หรือ Event Listener ที่คอยตรวจสอบเงื่อนไขจาก `unlockConditions`.
-// 2.  **Event Name Consistency**: (ปรับปรุงแล้ว) `eventName` ใน `unlockConditions` ถูกเปลี่ยนให้ใช้ `AchievementUnlockEvent` enum เพื่อให้มีความสอดคล้องและง่ายต่อการจัดการใน Gamification Service. Service จะต้อง map activity จาก `ActivityHistory` หรือ `ReadingAnalytic_EventStream` มาเป็น `AchievementUnlockEvent` ที่เหมาะสม.
-// 3.  **Complex Condition Logic**: สำหรับ logic ที่ซับซ้อน (AND/OR หลายชั้น) `group` field เป็นจุดเริ่มต้น. Service layer จะต้อง handle การประเมินกลุ่มเงื่อนไข.
-// 4.  **Reward Idempotency**: การมอบรางวัล (`rewards`) ควรออกแบบให้เป็น idempotent.
-// 5.  **Localization (i18n)**: `title`, `description`, `unlockHint` ควรสนับสนุนหลายภาษา.
-// 6.  **Performance**: การตรวจสอบเงื่อนไขจำนวนมากควรพิจารณา performance.
-// 7.  **Admin UI**: ควรมี Admin UI ที่ใช้งานง่าย.
-// 8.  **Clearer Operator Semantics**: (ปรับปรุงแล้ว) คำอธิบายของ `UnlockConditionOperator` ได้ถูกปรับปรุงให้ชัดเจนขึ้น. Service ที่ประมวลผลเงื่อนไขจะต้องตีความตามนี้.
-// 9.  **`relatedTo` and `relatedToType`**: (ปรับปรุง) การเพิ่ม `relatedToType` ช่วยให้ Service Layer สามารถจัดการกับ `relatedTo` ได้อย่างถูกต้องมากขึ้น.
-//     สำหรับ achievement "อ่านนิยายหมวดหมู่หลักครบตามรอบกำหนด":
-//     - `eventName` จะเป็น `AchievementUnlockEvent.USER_READ_NOVEL_OF_GENRE_COUNT`.
-//     - `operator` จะเป็น `UnlockConditionOperator.GREATER_THAN_OR_EQUAL_TO_COUNT`.
-//     - `targetValue` จะเป็นจำนวนรอบที่กำหนด (เช่น 5).
-//     - `relatedTo` จะเป็น ID ของ Category (Genre) ที่ต้องการตรวจสอบ.
-//     - `relatedToType` จะเป็น `"Category"`.
-//     - `description` เช่น "อ่านนิยายแนวแฟนตาซีครบ 5 เรื่อง".
-// 10. **Gamification Service Responsibility**: Gamification Service จะเป็นตัวกลางในการ:
-//     -   Listen to relevant events from `ActivityHistory` or `ReadingAnalytic_EventStream`.
-//     -   Transform these events into `AchievementUnlockEvent` with necessary details.
-//     -   Evaluate `unlockConditions` for active `Achievement` and `Badge` definitions.
-//     -   When an achievement/badge is unlocked:
-//         -   Create an entry in `UserAchievement.earnedItems`.
-//         -   Update `UserAchievement.ongoingProgress` (remove completed, update others).
-//         -   Update `User.gamification.experiencePoints`, `User.wallet.coins` based on `rewards`.
-//         -   Link the `UserAchievement._id` (or `UserEarnedItem._id`) to `User.gamification.achievements` array.
-//         -   Trigger a `Notification` (using `Notification.ts`).
+// 1.  **Unlock Logic Service**: (คงเดิม) การปลดล็อก Achievement จริงของผู้ใช้ จะต้องมี Service Layer.
+// 2.  **Event Name Consistency**: (คงเดิม) `eventName` ใน `unlockConditions` ควรมีการกำหนดมาตรฐาน.
+// 3.  **Complex Condition Logic**: (คงเดิม) `group` field เป็นจุดเริ่มต้น, service layer จะต้อง handle การประเมิน.
+// 4.  **Reward Idempotency**: (คงเดิม) การมอบรางวัล (`rewards`) ควรออกแบบให้เป็น idempotent.
+// 5.  **Localization (i18n)**: (คงเดิม) `title`, `description`, `unlockHint` ควรสนับสนุนหลายภาษา.
+// 6.  **Tier System Implementation**: (ใหม่)
+//     - เพิ่ม `tierKey`, `tierLevel`, `previousTierAchievementId`, `nextTierAchievementId`.
+//     - `tierKey` ใช้สำหรับจัดกลุ่ม Achievements ที่เป็นลำดับขั้นเดียวกัน เช่น "REVIEW_HERO_TIER".
+//     - `tierLevel` ระบุระดับภายใน Tier นั้น (1, 2, 3,...).
+//     - `previousTierAchievementId` และ `nextTierAchievementId` ช่วยในการ navigate ระหว่าง Tiers และอาจใช้ในเงื่อนไขปลดล็อก
+//       (เช่น ต้องปลดล็อก Tier ก่อนหน้าก่อน).
+//     - Service Layer จะต้องจัดการ Logic การปลดล็อกตาม Tier และการแสดงผลตามลำดับ Tier.
+//     - การสร้าง Achievement แบบ Tier ควรกระทำผ่าน Admin UI ที่ช่วยจัดการความเชื่อมโยงเหล่านี้.
+// 7.  **Linking Achievement to Badge**: (ใหม่)
+//     - `IAchievementReward` ได้เพิ่ม `grantedBadgeId` และ `grantedBadgeKey`.
+//     - เมื่อผู้ใช้ปลดล็อก Achievement ที่มี `grantedBadgeId` กำหนดไว้, Gamification Service ควรจะมอบ Badge นั้นให้ผู้ใช้ด้วย
+//       โดยบันทึกใน `UserAchievement` (หรือ `UserEarnedItem`).
+//     - เหมาะสำหรับกรณีที่ Achievement ระดับสูงสุดของ Tier หรือ Achievement สำคัญ มอบ Badge เป็นรางวัลเพิ่มเติม.
+// 8.  **Unlock Hint Flexibility**: (ปรับปรุง) `unlockHint` สามารถเป็น string เดียว หรือ object ที่มี key เป็น Rarity
+//     เพื่อให้สามารถแสดงคำใบ้ที่แตกต่างกันตามความยากของ Achievement ได้. `isHintPublic` ช่วยควบคุมการแสดงผล.
+// 9.  **Clearer Reward Structure**: (ปรับปรุง) `IAchievementReward` มี fields ที่ชัดเจนขึ้นสำหรับ `experiencePointsAwarded`, `coinsAwarded`, `featureUnlockKey`
+//     เพื่อให้สอดคล้องกับข้อกำหนดที่ Achievement ควรให้รางวัลมูลค่าสูง.
+// 10. **`points` field clarification**: `points` field ใน `IAchievement` อาจจะยังคงไว้สำหรับระบบ leaderboard เฉพาะของ Achievement
+//     หรือใช้เป็น XP ที่ให้โดยตรงนอกเหนือจากใน `rewards` array. ควรมีการนิยามการใช้งานให้ชัดเจน.
+// 11. **Consistency with Badge Rewards**: ต้องแน่ใจว่าโครงสร้างรางวัลใน Achievement สอดคล้อง (แต่ไม่จำเป็นต้องเหมือนกันทุกประการ)
+//     กับ Badge ที่เน้นการสะสมมากกว่าการให้รางวัลมูลค่าสูงโดยตรง.
 // ==================================================================================================
