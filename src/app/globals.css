@@ -25,26 +25,27 @@
 /* กำหนดตัวแปรพื้นฐานใน :root (Light Theme by default) */
 :root {
   --background: #ffffff; /* White */
-  --foreground: #111827; /* Gray 900 */
-  --primary: #3b82f6;    /* Blue 500 */
+  --foreground: #111827; 
+  --primary: #5495ff;    
   --primary-foreground: #ffffff; /* White */
-  --secondary: #f3f4f6;  /* Gray 100 */
-  --secondary-foreground: #1f2937; /* Gray 800 */
-  --accent: #a5b4fc;     /* Indigo 300 */
-  --muted: #6b7280;      /* Gray 500 */
-  --muted-foreground: #9ca3af; /* Gray 400 */
+  --secondary: #eaeff8;  
+  --secondary-foreground: #1f2937; 
+  --accent: #a5b4fc;     
+  --muted: #707b90;      
+  --muted-foreground: #9ca3af; 
   --card: #ffffff;       /* White */
-  --card-foreground: #111827; /* Gray 900 */
-  --border: #e5e7eb;     /* Gray 200 */
-  --input: #f3f4f6;      /* Gray 100 */
-  --ring: #60a5fa;       /* Blue 400 */
+  --card-foreground: #111827; 
+  --border: #e5e7eb;    
+  --input: #f3f4f6;      
+  --ring: #60a5fa;       
+  --popover:#ffffff;
 
-  --alert-error: #fef2f2; /* Red 50 */
-  --alert-error-foreground: #b91c1c; /* Red 700 */
-  --alert-error-border: #fecaca; /* Red 300 */
-  --alert-success: #f0fdf4; /* Green 50 */
-  --alert-success-foreground: #15803d; /* Green 700 */
-  --alert-success-border: #bbf7d0; /* Green 300 */
+  --alert-error: #fef2f2; 
+  --alert-error-foreground: #b91c1c; 
+  --alert-error-border: #fecaca; 
+  --alert-success: #f0fdf4; 
+  --alert-success-foreground: #15803d; 
+  --alert-success-border: #bbf7d0; 
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -76,32 +77,33 @@
   --social-button-text: #1f2937;
 
   --modal-gradient-start: var(--primary);
-  --modal-gradient-end: #60a5fa; /* Blue 400 */
+  --modal-gradient-end: #60a5fa; 
 }
 
 /* รูปแบบสำหรับโหมดมืด */
 .dark {
-  --background: #0f172a; /* Slate 900 */
-  --foreground: #f8fafc; /* Slate 50 */
-  --primary: #60a5fa;    /* Blue 400 */
-  --primary-foreground: #0f172a; /* Slate 900 */
-  --secondary: #17202f;  /* Slate 800 */
-  --secondary-foreground: #e2e8f0; /* Slate 200 */
-  --accent: #334155;     /* Slate 700 */
-  --muted: #475569;      /* Slate 600 */
-  --muted-foreground: #94a3b8; /* Slate 400 */
-  --card: #1e293b;       /* Slate 800 */
-  --card-foreground: #f1f5f9; /* Slate 100 */
-  --border: #334155;     /* Slate 700 */
-  --input: #1e293b;      /* Slate 800 */
-  --ring: #3b82f6;       /* Blue 500 */
+  --background: #0f172a; 
+  --foreground: #f8fafc; 
+  --primary: #60a5fa;    
+  --primary-foreground: #0f172a; 
+  --secondary: #1a2841;  
+  --secondary-foreground: #e2e8f0; 
+  --accent: #334155;     
+  --muted: #475569;      
+  --muted-foreground: #94a3b8; 
+  --card: #1e293b;       
+  --card-foreground: #f1f5f9;
+  --border: #334155;     
+  --input: #1e293b;      
+  --ring: #3b82f6;       
+  --popover: rgb(51, 78, 117);
 
   --alert-error: #3f1212; /* Darker Red */
-  --alert-error-foreground: #fca5a5; /* Red 300 */
-  --alert-error-border: #7f1d1d; /* Red 800 */
+  --alert-error-foreground: #fca5a5; 
+  --alert-error-border: #7f1d1d; 
   --alert-success: #062f17; /* Darker Green */
-  --alert-success-foreground: #a7f3d0; /* Green 300 */
-  --alert-success-border: #14532d; /* Green 800 */
+  --alert-success-foreground: #a7f3d0; 
+  --alert-success-border: #14532d; 
 
   --social-button-bg: #1e293b;
   /* --social-button-google: #db4437; (คงเดิม) */
@@ -128,6 +130,7 @@
   --border: #d3c1ad;     /* Sepia border */
   --input: #e9dfcf;      /* Sepia input */
   --ring: #a0846c;       /* Sepia ring - derived from primary */
+  --popover:#ffffff;
 
   --alert-error: #f0e0e0; /* Sepia-toned error bg */
   --alert-error-foreground: #8c5353; /* Sepia-toned error text */
@@ -162,6 +165,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-popover: var(--popover);
 
   --color-alert-error: var(--alert-error);
   --color-alert-error-foreground: var(--alert-error-foreground);

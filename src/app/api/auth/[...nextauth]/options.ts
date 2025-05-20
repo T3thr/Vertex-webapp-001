@@ -1,6 +1,7 @@
 // src/app/api/auth/[...nextauth]/options.ts
 // การกำหนดค่า NextAuth สำหรับการยืนยันตัวตน
 // รองรับการล็อกอินด้วยอีเมลหรือชื่อผู้ใช้ผ่าน Credentials และ OAuth providers ต่างๆ
+// อัปเดต: ปรับ Path การเรียก API และการจัดการ User Model ที่รวมแล้ว
 
 import { NextAuthOptions, Profile, User as NextAuthUser } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -11,105 +12,41 @@ import AppleProvider from "next-auth/providers/apple";
 import LineProvider from "next-auth/providers/line";
 import { JWT } from "next-auth/jwt";
 import { Types } from "mongoose";
+import { IUser, IUserProfile, IUserTrackingStats, IUserSocialStats, IUserPreferences, IUserWallet, IUserGamification, IUserVerification, IUserDonationSettings } from "@/backend/models/User"; // Import IUser และ Sub-interfaces
 
-// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน (สอดคล้องกับ ISocialMediaUser และ IUser)
+// กำหนดประเภทสำหรับผู้ใช้ในเซสชัน (สอดคล้องกับ IUser)
+// หมายเหตุ: SessionUser จะเหมือนกับโครงสร้างข้อมูลผู้ใช้ที่เราต้องการใน session
+// และควรจะสอดคล้องกับข้อมูลที่ถูกส่งกลับจาก API endpoint ของเรา
 export type SessionUser = {
   id: string;
-  name: string;
-  email?: string; // อีเมลเป็นตัวเลือกสำหรับ SocialMediaUser
-  username: string;
-  role: "Reader" | "Writer" | "Admin";
-  profile: {
-    displayName?: string;
-    avatar?: string;
-    bio?: string;
-    coverImage?: string;
-    gender?: "male" | "female" | "other" | "preferNotToSay";
-    preferredGenres?: Types.ObjectId[];
-  };
-  trackingStats: {
-    totalLoginDays: number;
-    totalNovelsRead: number;
-    totalEpisodesRead: number;
-    totalCoinSpent: number;
-    totalRealMoneySpent: number;
-    lastNovelReadId?: Types.ObjectId;
-    lastNovelReadAt?: Date;
-    joinDate: Date;
-  };
-  socialStats: {
-    followersCount: number;
-    followingCount: number;
-    novelsCreatedCount: number;
-    commentsMadeCount: number;
-    ratingsGivenCount: number;
-    likesGivenCount: number;
-  };
-  preferences: {
-    language: string;
-    theme: "light" | "dark" | "system" | "sepia";
-    notifications: {
-      email: boolean;
-      push: boolean;
-      novelUpdates: boolean;
-      comments: boolean;
-      donations: boolean;
-      newFollowers: boolean;
-      systemAnnouncements: boolean;
-    };
-    contentFilters?: {
-      showMatureContent: boolean;
-      blockedGenres?: Types.ObjectId[];
-      blockedTags?: string[];
-    };
-    privacy: {
-      showActivityStatus: boolean;
-      profileVisibility: "public" | "followersOnly" | "private";
-      readingHistoryVisibility: "public" | "followersOnly" | "private";
-    };
-  };
-  wallet: {
-    coinBalance: number;
-    lastCoinTransactionAt?: Date;
-  };
-  gamification: {
-    level: number;
-    experiencePoints: number;
-    achievements: Types.ObjectId[];
-    badges: Types.ObjectId[];
-    streaks: {
-      currentLoginStreak: number;
-      longestLoginStreak: number;
-      lastLoginDate?: Date;
-    };
-    dailyCheckIn?: {
-      lastCheckInDate?: Date;
-      currentStreak: number;
-    };
-  };
-  writerVerification?: {
-    status: "none" | "pending" | "verified" | "rejected";
-    submittedAt?: Date;
-    verifiedAt?: Date;
-    rejectedReason?: string;
-    documents?: { type: string; url: string; uploadedAt: Date }[];
-  };
-  donationSettings?: {
-    isDonationEnabled: boolean;
-    donationApplicationId?: Types.ObjectId;
-    customMessage?: string;
-  };
-  writerApplication?: Types.ObjectId;
-  writerStats?: Types.ObjectId;
+  name: string; // จะมาจาก profile.displayName หรือ username
+  email?: string; // อีเมลเป็นตัวเลือก
+  username: string; // username ควรมีเสมอหลังจากการ authenticate สำเร็จ
+  roles: Array<"Reader" | "Writer" | "Admin" | "Moderator" | "Editor">; // ปรับตาม IUser
+  profile: IUserProfile; // ใช้ IUserProfile โดยตรง
+  trackingStats: IUserTrackingStats; // ใช้ IUserTrackingStats โดยตรง
+  socialStats: IUserSocialStats; // ใช้ IUserSocialStats โดยตรง
+  preferences: IUserPreferences; // ใช้ IUserPreferences โดยตรง
+  wallet: IUserWallet; // ใช้ IUserWallet โดยตรง
+  gamification: IUserGamification; // ใช้ IUserGamification โดยตรง
+  writerVerification?: IUserVerification; // ใช้ IUserVerification โดยตรง (ถ้ามี)
+  donationSettings?: IUserDonationSettings; // ใช้ IUserDonationSettings โดยตรง (ถ้ามี)
+  writerStats?: any; // หากมีการใช้งาน writerStats ใน session ควรระบุ Type ให้ถูกต้อง
   isActive: boolean;
   isEmailVerified: boolean;
   isBanned: boolean;
   bannedUntil?: Date;
+  // เพิ่ม field อื่นๆ ที่จำเป็นจาก IUser เข้ามาใน SessionUser ตามความเหมาะสม
+  // เช่น writerStats ถ้าต้องการใช้ใน client session
 };
 
-// ประเภทเสริมสำหรับข้อมูล Profile จากแต่ละ Provider
+// ประเภทเสริมสำหรับข้อมูล Profile จากแต่ละ Provider (คงเดิม)
 interface GoogleProfile extends Profile {
   picture?: string;
+  // เพิ่มเติม: อาจมี name, given_name, family_name จาก Google
+  name?: string;
+  given_name?: string;
+  family_name?: string;
 }
 
 interface TwitterProfile extends Profile {
@@ -118,8 +55,10 @@ interface TwitterProfile extends Profile {
     username?: string;
     profile_image_url?: string;
   };
-  username?: string;
-  profile_image_url?: string;
+  // NextAuth v4 อาจคืน profile มาในรูปแบบที่ซ้อนกันน้อยกว่า
+  name?: string; // เพิ่มเติมเผื่อกรณีที่ data ไม่มี
+  username?: string; // เพิ่มเติมเผื่อกรณีที่ data ไม่มี
+  profile_image_url?: string; // เพิ่มเติมเผื่อกรณีที่ data ไม่มี
 }
 
 interface FacebookProfile extends Profile {
@@ -128,21 +67,29 @@ interface FacebookProfile extends Profile {
       url?: string;
     };
   };
+   // Facebook อาจส่ง first_name, last_name แยกกัน
+  first_name?: string;
+  last_name?: string;
 }
 
 interface AppleProfile extends Omit<Profile, "name"> {
-  name?: {
+  name?: { // Apple อาจส่งชื่อมาในรูปแบบ object
     firstName?: string;
     lastName?: string;
   };
+  // Apple อาจไม่ได้ส่งรูปภาพมาโดยตรงใน profile object มาตรฐาน
+  picture?: string; // เพิ่ม field นี้เผื่อมีการส่งมาในอนาคตหรือผ่านการตั้งค่าพิเศษ
 }
 
 interface LineProfile extends Profile {
   displayName?: string;
   pictureUrl?: string;
+  // Line อาจมี userId ซึ่งต่างจาก providerAccountId
+  userId?: string;
 }
 
-// ตรวจสอบตัวแปรสภาพแวดล้อมสำหรับ OAuth providers
+
+// ตรวจสอบตัวแปรสภาพแวดล้อมสำหรับ OAuth providers (คงเดิม)
 const validateEnv = () => {
   const requiredEnvVars = [
     { key: "GOOGLE_CLIENT_ID", provider: "Google" },
@@ -165,89 +112,112 @@ const validateEnv = () => {
     .map((envVar) => envVar.key);
 
   if (missingVars.length > 0) {
-    console.warn(`⚠️ คำเตือน: ตัวแปรสภาพแวดล้อมต่อไปนี้ไม่ได้ถูกกำหนด: ${missingVars.join(", ")}`);
+    console.warn(
+      `⚠️ คำเตือน: ตัวแปรสภาพแวดล้อมต่อไปนี้ไม่ได้ถูกกำหนด: ${missingVars.join(
+        ", "
+      )}. Providers ที่เกี่ยวข้องอาจไม่ทำงาน`
+    );
   }
 };
 
-// เรียกใช้การตรวจสอบตัวแปรสภาพแวดล้อมเมื่อโหลดโมดูลนี้
 validateEnv();
 
-// กำหนดการตั้งค่า NextAuth
 export const authOptions: NextAuthOptions = {
   providers: [
-    // ผู้ให้บริการ Credentials
     CredentialsProvider({
       id: "credentials",
       name: "Credentials",
       credentials: {
-        // แก้ไขตรงนี้: เปลี่ยนเป็น identifier เพื่อให้สอดคล้องกับ UI และ AuthContext
         identifier: { label: "อีเมลหรือชื่อผู้ใช้", type: "text" },
         password: { label: "รหัสผ่าน", type: "password" },
       },
       async authorize(credentials) {
         try {
-          // แก้ไขการบันทึกเพื่อให้สอดคล้องกับความเปลี่ยนแปลง
-          console.log(`⏳ เริ่มการตรวจสอบข้อมูลรับรองสำหรับ identifier=${credentials?.identifier}`);
-          
+          console.log(
+            `⏳ [AuthOptions] เริ่มการตรวจสอบ CredentialsProvider สำหรับ identifier=${credentials?.identifier}`
+          );
+
           if (!credentials?.identifier || !credentials?.password) {
-            console.error('❌ ขาดข้อมูลสำคัญ: identifier หรือ password ไม่มีค่า');
+            console.error("❌ [AuthOptions] ขาดข้อมูล identifier หรือ password");
             throw new Error("กรุณาระบุอีเมล/ชื่อผู้ใช้ และรหัสผ่าน");
           }
 
-          // แก้ไขการส่งข้อมูลไปยัง API route เพื่อให้สอดคล้องกับพารามิเตอร์ที่ API คาดหวัง
-          const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              identifier: credentials.identifier,
-              password: credentials.password,
-            }),
-          });
+          // เรียก API ไปยัง Endpoint ใหม่สำหรับ Credentials
+          const response = await fetch(
+            `${process.env.NEXTAUTH_URL}/api/auth/signin/credentials`, // <--- ปรับ Path API
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                identifier: credentials.identifier,
+                password: credentials.password,
+              }),
+            }
+          );
 
-          const data = await response.json();
+          const responseData = await response.json();
 
-          if (!response.ok || !data.user) {
-            console.error(`❌ การตรวจสอบข้อมูลรับรองล้มเหลว: ${data.error || "ไม่มีข้อมูลผู้ใช้"}`);
-            throw new Error(data.error || "ข้อมูลรับรองไม่ถูกต้อง");
+          if (!response.ok || !responseData.user) {
+            console.error(
+              `❌ [AuthOptions] การตรวจสอบ Credentials ล้มเหลวจาก API: ${
+                responseData.error || "ไม่มีข้อมูลผู้ใช้"
+              }`
+            );
+            throw new Error(
+              responseData.error || "ข้อมูลรับรองไม่ถูกต้อง หรือเกิดข้อผิดพลาด"
+            );
           }
 
-          // ตรวจสอบการยืนยันอีเมล
-          if (!data.user.isEmailVerified && data.user.email) {
-            console.error(`❌ ผู้ใช้ ${data.user.email || data.user.username} ยังไม่ได้ยืนยันอีเมล`);
-            throw new Error("ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ");
+          const userFromApi: IUser & { _id: Types.ObjectId | string } = responseData.user; // IUser จาก API
+
+          // ตรวจสอบการยืนยันอีเมล (ถ้ามี email)
+          // NextAuth จะไม่ auto-throw error เรื่อง email not verified ที่นี่, เราจัดการใน API endpoint แล้ว
+          // แต่ถ้าต้องการ block ที่นี่ ก็สามารถทำได้
+          if (!userFromApi.isEmailVerified && userFromApi.email) {
+             console.warn(`⚠️ [AuthOptions] ผู้ใช้ ${userFromApi.email || userFromApi.username} ยังไม่ได้ยืนยันอีเมล แต่ API อนุญาตให้ผ่าน (อาจต้องยืนยันภายหลัง)`);
+             // throw new Error("ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ"); // หากต้องการ block ที่นี่
           }
 
-          console.log(`✅ การตรวจสอบข้อมูลรับรองสำเร็จสำหรับผู้ใช้ ${data.user.email || data.user.username}`);
+          console.log(
+            `✅ [AuthOptions] CredentialsProvider สำเร็จสำหรับผู้ใช้ ${
+              userFromApi.email || userFromApi.username
+            }`
+          );
 
+          // สร้าง NextAuthUser object ให้ตรงกับที่ NextAuth คาดหวัง และสอดคล้องกับ SessionUser และ IUser
+          // โดย map ข้อมูลจาก userFromApi (IUser)
           return {
-            id: data.user.id,
-            name: data.user.profile?.displayName || data.user.username,
-            email: data.user.email,
-            username: data.user.username,
-            role: data.user.role,
-            profile: data.user.profile,
-            trackingStats: data.user.trackingStats,
-            socialStats: data.user.socialStats,
-            preferences: data.user.preferences,
-            wallet: data.user.wallet,
-            gamification: data.user.gamification,
-            writerVerification: data.user.writerVerification,
-            donationSettings: data.user.donationSettings,
-            writerApplication: data.user.writerApplication,
-            writerStats: data.user.writerStats,
-            isActive: data.user.isActive,
-            isEmailVerified: data.user.isEmailVerified,
-            isBanned: data.user.isBanned,
-            bannedUntil: data.user.bannedUntil,
-          } as NextAuthUser;
+            id: userFromApi._id.toString(),
+            name: userFromApi.profile?.displayName || userFromApi.username || "N/A", // ต้องมีค่าเสมอ
+            email: userFromApi.email || undefined, // email อาจไม่มี
+            username: userFromApi.username || "N/A_username", // username ควรมี
+            roles: userFromApi.roles,
+            profile: userFromApi.profile,
+            trackingStats: userFromApi.trackingStats,
+            socialStats: userFromApi.socialStats,
+            preferences: userFromApi.preferences,
+            wallet: userFromApi.wallet,
+            gamification: userFromApi.gamification,
+            writerVerification: userFromApi.verification, // Map จาก IUser.verification
+            donationSettings: userFromApi.donationSettings,
+                            writerStats: userFromApi.writerStats, // เพิ่ม writerStats
+            isActive: userFromApi.isActive,
+            isEmailVerified: userFromApi.isEmailVerified,
+            isBanned: userFromApi.isBanned,
+            bannedUntil: userFromApi.bannedUntil,
+          } as NextAuthUser & SessionUser; // Cast ให้เป็น type ที่ครอบคลุม
         } catch (error: any) {
-          console.error(`❌ ข้อผิดพลาดในการ authorize ผ่าน CredentialsProvider: ${error.message}`);
-          throw new Error(error.message || "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์");
+          console.error(
+            `❌ [AuthOptions] ข้อผิดพลาดใน authorize (CredentialsProvider): ${error.message}`
+          );
+          // ส่งต่อ error message ที่ได้รับ หรือ message ทั่วไป
+          throw new Error(
+            error.message || "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์"
+          );
         }
       },
     }),
 
-    // ผู้ให้บริการ Google OAuth
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
@@ -261,55 +231,34 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-
-    // ผู้ให้บริการ Twitter OAuth
     TwitterProvider({
       clientId: process.env.TWITTER_CLIENT_ID as string,
       clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
-      version: "2.0",
+      version: "2.0", // OAuth 2.0
       allowDangerousEmailAccountLinking: true,
       authorization: {
-        params: {
-          scope: "users.read tweet.read offline.access",
-        },
+        params: { scope: "users.read tweet.read offline.access" },
       },
     }),
-
-    // ผู้ให้บริการ Facebook OAuth
     FacebookProvider({
       clientId: process.env.FACEBOOK_CLIENT_ID as string,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET as string,
       allowDangerousEmailAccountLinking: true,
-      authorization: {
-        params: {
-          scope: "public_profile,email",
-        },
-      },
+      authorization: { params: { scope: "public_profile email" } },
     }),
-
-    // ผู้ให้บริการ Apple OAuth
     AppleProvider({
       clientId: process.env.APPLE_CLIENT_ID as string,
       clientSecret: process.env.APPLE_CLIENT_SECRET as string,
       allowDangerousEmailAccountLinking: true,
       authorization: {
-        params: {
-          scope: "name email",
-          response_mode: "form_post",
-        },
+        params: { scope: "name email", response_mode: "form_post" },
       },
     }),
-
-    // ผู้ให้บริการ Line OAuth
     LineProvider({
       clientId: process.env.LINE_CLIENT_ID as string,
       clientSecret: process.env.LINE_CLIENT_SECRET as string,
       allowDangerousEmailAccountLinking: true,
-      authorization: {
-        params: {
-          scope: "profile openid email",
-        },
-      },
+      authorization: { params: { scope: "profile openid email" } },
     }),
   ],
 
@@ -320,393 +269,249 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async jwt({ token, user, account, profile }) {
-      if (user && account) {
-        console.log(`⏳ เริ่ม JWT callback สำหรับ provider=${account.provider}, user=${user.email || user.username}`);
-        token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
-        token.username = user.username;
-        token.role = user.role;
-        token.profile = user.profile;
-        token.trackingStats = user.trackingStats;
-        token.socialStats = user.socialStats;
-        token.preferences = user.preferences;
-        token.wallet = user.wallet;
-        token.gamification = user.gamification;
-        token.writerVerification = user.writerVerification;
-        token.donationSettings = user.donationSettings;
-        token.writerApplication = user.writerApplication;
-        token.writerStats = user.writerStats;
-        token.isActive = user.isActive;
-        token.isEmailVerified = user.isEmailVerified;
-        token.isBanned = user.isBanned;
-        token.bannedUntil = user.bannedUntil;
+      // `user` จะมีค่าเฉพาะตอน sign in ครั้งแรก หรือเมื่อมีการ refresh token แบบพิเศษ
+      // `account` จะมีค่าเฉพาะตอน sign in ครั้งแรก
+      // `profile` จะมีค่าเฉพาะตอน sign in ครั้งแรกด้วย OAuth provider
 
+      if (account && user) { // Sign in (Credentials หรือ OAuth)
+        console.log(`⏳ [AuthOptions JWT] เริ่ม JWT callback สำหรับ provider=${account.provider}, user_id=${user.id}`);
+        
+        token.id = user.id;
+        token.name = user.name; // จาก authorize หรือ OAuth profile
+        token.email = user.email;
+        token.username = (user as SessionUser).username; // Cast user เป็น SessionUser เพื่อเข้าถึง username
+        token.roles = (user as SessionUser).roles;
+        token.profile = (user as SessionUser).profile;
+        token.trackingStats = (user as SessionUser).trackingStats;
+        token.socialStats = (user as SessionUser).socialStats;
+        token.preferences = (user as SessionUser).preferences;
+        token.wallet = (user as SessionUser).wallet;
+        token.gamification = (user as SessionUser).gamification;
+        token.writerVerification = (user as SessionUser).writerVerification;
+        token.donationSettings = (user as SessionUser).donationSettings;
+        token.writerStats = (user as SessionUser).writerStats;
+        token.isActive = (user as SessionUser).isActive;
+        token.isEmailVerified = (user as SessionUser).isEmailVerified;
+        token.isBanned = (user as SessionUser).isBanned;
+        token.bannedUntil = (user as SessionUser).bannedUntil;
+        token.provider = account.provider; // เก็บ provider ไว้ใน token
+
+        // สำหรับ OAuth providers, เราจะเรียก API ของเราเพื่อสร้าง/อัปเดตผู้ใช้ใน DB
+        // และดึงข้อมูลล่าสุดจาก DB มาใส่ใน token
         if (account.provider !== "credentials") {
           try {
-            let displayName = "";
-            let username = "";
-            let avatar = "";
-            let email = profile?.email || undefined;
+            let apiEmail: string | undefined = profile?.email || undefined;
+            let apiDisplayName: string = "";
+            let apiUsernameSuggestion: string = ""; // ใช้เป็น suggestion สำหรับ API
+            let apiAvatar: string | undefined = undefined;
 
             switch (account.provider) {
               case "google":
                 const googleProfile = profile as GoogleProfile;
-                displayName = googleProfile?.name || "";
-                username = googleProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
-                avatar = googleProfile?.picture || "";
-                email = googleProfile?.email || undefined;
+                apiEmail = googleProfile.email || undefined;
+                apiDisplayName = googleProfile.name || googleProfile.given_name || "";
+                if (googleProfile.given_name && googleProfile.family_name) {
+                    apiDisplayName = `${googleProfile.given_name} ${googleProfile.family_name}`.trim();
+                }
+                apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                apiAvatar = googleProfile.picture || undefined;
                 break;
-
               case "twitter":
                 const twitterProfile = profile as TwitterProfile;
-                displayName = twitterProfile?.data?.name || twitterProfile?.name || "";
-                username = twitterProfile?.data?.username || twitterProfile?.username || displayName.replace(/\s+/g, "").toLowerCase();
-                avatar = twitterProfile?.data?.profile_image_url || twitterProfile?.profile_image_url || "";
-                email = twitterProfile?.email || undefined;
+                // Twitter อาจไม่ให้ email ถ้า user ไม่ได้ตั้งค่าไว้
+                apiEmail = twitterProfile.email || undefined;
+                apiDisplayName = twitterProfile.data?.name || twitterProfile.name || "";
+                apiUsernameSuggestion = twitterProfile.data?.username || twitterProfile.username || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                apiAvatar = twitterProfile.data?.profile_image_url || twitterProfile.profile_image_url || undefined;
                 break;
-
               case "facebook":
                 const facebookProfile = profile as FacebookProfile;
-                displayName = facebookProfile?.name || "";
-                username = facebookProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
-                avatar = facebookProfile?.picture?.data?.url || "";
-                email = facebookProfile?.email || undefined;
+                apiEmail = facebookProfile.email || undefined;
+                apiDisplayName = facebookProfile.name || `${facebookProfile.first_name || ""} ${facebookProfile.last_name || ""}`.trim() || "";
+                apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                apiAvatar = facebookProfile.picture?.data?.url || undefined;
                 break;
-
               case "apple":
                 const appleProfile = profile as AppleProfile;
-                displayName =
-                  appleProfile?.name?.firstName
-                    ? `${appleProfile.name.firstName} ${appleProfile.name.lastName || ""}`.trim()
-                    : "";
-                username = appleProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
-                avatar = "";
-                email = appleProfile?.email || undefined;
+                apiEmail = appleProfile.email || undefined; // Apple email อาจเป็น private relay
+                apiDisplayName = appleProfile.name ? `${appleProfile.name.firstName || ""} ${appleProfile.name.lastName || ""}`.trim() : "";
+                apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                // Apple ไม่ได้ส่ง avatar มาใน profile โดยตรง
+                apiAvatar = appleProfile.picture || undefined;
                 break;
-
               case "line":
                 const lineProfile = profile as LineProfile;
-                displayName = lineProfile?.displayName || "";
-                username = lineProfile?.email?.split("@")[0] || displayName.replace(/\s+/g, "").toLowerCase();
-                avatar = lineProfile?.pictureUrl || "";
-                email = lineProfile?.email || undefined;
+                apiEmail = lineProfile.email || undefined; // Line อาจไม่ส่ง email ถ้า user ไม่ยินยอม
+                apiDisplayName = lineProfile.displayName || "";
+                // Line ไม่มี username มาตรฐาน, อาจใช้ displayName หรือ email prefix
+                apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                apiAvatar = lineProfile.pictureUrl || undefined;
                 break;
             }
 
-            if (!email && account.provider !== "twitter") {
-              console.error(`❌ ไม่มีอีเมลจาก ${account.provider} provider สำหรับผู้ใช้ ${displayName}`);
-              throw new Error(`ไม่ได้รับอีเมลจาก ${account.provider}`);
+            // ตรวจสอบข้อมูลสำคัญ (email หรือ username ที่มีคุณภาพ)
+            if (!apiEmail && account.provider !== "twitter") { // Twitter อาจไม่มี email
+                console.error(`❌ [AuthOptions JWT] ไม่มีอีเมลจาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayName}`);
+                throw new Error(`ไม่ได้รับอีเมลจาก ${account.provider}. ไม่สามารถดำเนินการต่อได้`);
+            }
+             if (account.provider === "twitter" && !apiEmail && !apiUsernameSuggestion) {
+                console.error(`❌ [AuthOptions JWT] ไม่มีทั้งอีเมลและชื่อผู้ใช้จาก Twitter provider สำหรับผู้ใช้ ${apiDisplayName}`);
+                throw new Error("ไม่ได้รับข้อมูลที่เพียงพอจาก Twitter. ไม่สามารถดำเนินการต่อได้");
             }
 
-            if (account.provider === "twitter" && !email && !username) {
-              console.error(`❌ ไม่มีทั้งอีเมลและชื่อผู้ใช้จาก Twitter provider สำหรับผู้ใช้ ${displayName}`);
-              throw new Error("ไม่ได้รับข้อมูลที่เพียงพอจาก Twitter");
-            }
 
-            console.log(`⏳ ส่งข้อมูลไปยัง /api/auth/social สำหรับ ${account.provider}:`, {
+            console.log(`⏳ [AuthOptions JWT] ส่งข้อมูลไปยัง /api/auth/signin/oauth สำหรับ ${account.provider}:`, {
               provider: account.provider,
-              providerId: account.providerAccountId,
-              email: email || null,
-              name: displayName,
-              username,
-              picture: avatar,
+              providerAccountId: account.providerAccountId,
+              email: apiEmail || null, // ส่ง null ถ้าเป็น undefined
+              name: apiDisplayName,
+              usernameSuggestion: apiUsernameSuggestion,
+              picture: apiAvatar || null, // ส่ง null ถ้าเป็น undefined
             });
 
-            const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/social`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                provider: account.provider,
-                providerId: account.providerAccountId,
-                email: email || null,
-                name: displayName,
-                username,
-                picture: avatar,
-              }),
-            });
+            // เรียก API ไปยัง Endpoint ใหม่สำหรับ OAuth
+            const response = await fetch(
+              `${process.env.NEXTAUTH_URL}/api/auth/signin/oauth`, // <--- ปรับ Path API
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  email: apiEmail || null, // ส่ง null ถ้าเป็น undefined
+                  name: apiDisplayName, // ชื่อที่แสดงจาก provider
+                  usernameSuggestion: apiUsernameSuggestion, // ชื่อผู้ใช้ที่แนะนำจาก email/name
+                  picture: apiAvatar || null, // URL รูปภาพจาก provider
+                }),
+              }
+            );
 
-            const data = await response.json();
+            const responseData = await response.json();
 
-            if (!response.ok || !data.user) {
-              console.error(`❌ ข้อผิดพลาดในการบันทึก/ดึงข้อมูลผู้ใช้ ${account.provider}:`, data.error);
-              throw new Error(data.error || `ไม่สามารถประมวลผลผู้ใช้ ${account.provider}`);
+            if (!response.ok || !responseData.user) {
+              console.error(
+                `❌ [AuthOptions JWT] ข้อผิดพลาดในการบันทึก/ดึงข้อมูลผู้ใช้ OAuth (${account.provider}):`,
+                responseData.error
+              );
+              throw new Error(
+                responseData.error || `ไม่สามารถประมวลผลผู้ใช้ ${account.provider}`
+              );
             }
 
-            console.log(`✅ รับข้อมูลจาก /api/auth/social สำหรับ ${account.provider}:`, data.user);
+            const userFromApi: IUser & { _id: Types.ObjectId | string } = responseData.user; // IUser จาก API
 
-            token.id = data.user.id;
-            token.name = data.user.profile?.displayName || data.user.username;
-            token.email = data.user.email;
-            token.username = data.user.username;
-            token.role = data.user.role;
-            token.profile = data.user.profile;
-            token.trackingStats = data.user.trackingStats;
-            token.socialStats = data.user.socialStats;
-            token.preferences = data.user.preferences;
-            token.wallet = data.user.wallet;
-            token.gamification = data.user.gamification;
-            token.writerVerification = data.user.writerVerification;
-            token.donationSettings = data.user.donationSettings;
-            token.writerApplication = data.user.writerApplication;
-            token.writerStats = data.user.writerStats;
-            token.isActive = data.user.isActive;
-            token.isEmailVerified = data.user.isEmailVerified;
-            token.isBanned = data.user.bannedUntil ? new Date(data.user.bannedUntil) > new Date() : false;
-            token.bannedUntil = data.user.bannedUntil;
+            console.log(
+              `✅ [AuthOptions JWT] รับข้อมูลผู้ใช้จาก OAuth API (${account.provider}) สำเร็จ:`,
+              userFromApi.username
+            );
+
+            // อัปเดต Token ด้วยข้อมูลล่าสุดจาก API
+            token.id = userFromApi._id.toString();
+            token.name = userFromApi.profile?.displayName || userFromApi.username || "N/A";
+            token.email = userFromApi.email || undefined;
+            token.username = userFromApi.username || "N/A_username_oauth";
+            token.roles = userFromApi.roles;
+            token.profile = userFromApi.profile;
+            token.trackingStats = userFromApi.trackingStats;
+            token.socialStats = userFromApi.socialStats;
+            token.preferences = userFromApi.preferences;
+            token.wallet = userFromApi.wallet;
+            token.gamification = userFromApi.gamification;
+            token.writerVerification = userFromApi.verification;
+            token.donationSettings = userFromApi.donationSettings;
+            token.writerStats = userFromApi.writerStats;
+            token.isActive = userFromApi.isActive;
+            token.isEmailVerified = userFromApi.isEmailVerified; // OAuth มักจะยืนยันอีเมลแล้ว
+            token.isBanned = userFromApi.isBanned;
+            token.bannedUntil = userFromApi.bannedUntil;
+
           } catch (error: any) {
-            console.error(`❌ ข้อผิดพลาดใน JWT callback ขณะประมวลผล ${account.provider}: ${error.message}`);
+            console.error(
+              `❌ [AuthOptions JWT] ข้อผิดพลาดขณะประมวลผล OAuth (${account.provider}): ${error.message}`
+            );
+            // หากเกิดข้อผิดพลาดระหว่างการเรียก API ของเรา, เราควรส่ง error กลับไป
+            // หรือคืน token ที่ไม่มีข้อมูลผู้ใช้ เพื่อให้ redirect ไปหน้า error
+            // การ throw error ที่นี่จะทำให้ NextAuth redirect ไปหน้า error page
             throw error;
           }
         }
       }
-
+      // Token จะถูกส่งต่อไปยัง session callback หรือใช้ในการ authorize API routes
       return token;
     },
 
     async session({ session, token }) {
-      if (token) {
-        console.log(`⏳ สร้างเซสชันสำหรับผู้ใช้ ${token.email || token.username}`);
+      // token มาจาก jwt callback
+      if (token && token.id) { // ตรวจสอบว่า token.id มีค่า (แสดงว่า jwt callback ทำงานสำเร็จ)
+        console.log(
+          `⏳ [AuthOptions Session] สร้างเซสชันสำหรับผู้ใช้ ${token.email || token.username}`
+        );
+
+        // ตรวจสอบและกำหนดค่า default ให้กับ properties ที่อาจเป็น undefined ใน token
+        // เพื่อให้ SessionUser มี type ที่สมบูรณ์
+        const safeProfile: IUserProfile = token.profile || { displayName: token.username || "User" };
+        const safeTrackingStats: IUserTrackingStats = token.trackingStats || { joinDate: new Date(), totalLoginDays:0, totalNovelsRead:0, totalEpisodesRead:0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0 };
+        const safeSocialStats: IUserSocialStats = token.socialStats || { followersCount: 0, followingCount: 0, novelsCreatedCount:0, commentsMadeCount:0,ratingsGivenCount:0, likesGivenCount:0};
+        const safePreferences: IUserPreferences = token.preferences || { language: "th", display: { theme:"system", reading:{fontSize:"medium", readingModeLayout:"scrolling"}, accessibility:{} }, notifications:{masterNotificationsEnabled:true, email:{enabled:true}, push:{enabled:true}, inApp:{enabled:true}}, contentAndPrivacy:{showMatureContent:false, preferredGenres:[], profileVisibility:"public", readingHistoryVisibility:"followers_only", showActivityStatus:true, allowDirectMessagesFrom:"followers", analyticsConsent:{allowPsychologicalAnalysis:false}}};
+        const safeWallet: IUserWallet = token.wallet || { coinBalance: 0 };
+        const safeGamification: IUserGamification = token.gamification || { level: 1, experiencePoints: 0, nextLevelXPThreshold:100, achievements:[], loginStreaks:{currentStreakDays:0, longestStreakDays:0}, dailyCheckIn:{currentStreakDays:0} };
+
         session.user = {
           id: token.id as string,
-          name: token.name || token.profile?.displayName || token.username || "",
-          email: token.email,
+          name: (token.name || safeProfile.displayName || token.username) as string,
+          email: token.email || undefined,
           username: token.username as string,
-          role: token.role as "Reader" | "Writer" | "Admin",
-          profile: {
-            displayName: token.profile?.displayName,
-            avatar: token.profile?.avatar || "",
-            bio: token.profile?.bio || "",
-            coverImage: token.profile?.coverImage || "",
-            gender: token.profile?.gender,
-            preferredGenres: token.profile?.preferredGenres,
-          },
-          trackingStats: token.trackingStats as SessionUser["trackingStats"],
-          socialStats: token.socialStats as SessionUser["socialStats"],
-          preferences: token.preferences as SessionUser["preferences"],
-          wallet: token.wallet as SessionUser["wallet"],
-          gamification: token.gamification as SessionUser["gamification"],
-          writerVerification: token.writerVerification as SessionUser["writerVerification"],
-          donationSettings: token.donationSettings as SessionUser["donationSettings"],
-          writerApplication: token.writerApplication as Types.ObjectId | undefined,
-          writerStats: token.writerStats as Types.ObjectId | undefined,
+          roles: (token.roles as SessionUser["roles"]) || ["Reader"],
+          profile: safeProfile,
+          trackingStats: safeTrackingStats,
+          socialStats: safeSocialStats,
+          preferences: safePreferences,
+          wallet: safeWallet,
+          gamification: safeGamification,
+          writerVerification: token.writerVerification as SessionUser["writerVerification"] | undefined,
+          donationSettings: token.donationSettings as SessionUser["donationSettings"] | undefined,
+          writerStats: token.writerStats as SessionUser["writerStats"] | undefined,
           isActive: token.isActive as boolean,
           isEmailVerified: token.isEmailVerified as boolean,
           isBanned: token.isBanned as boolean,
           bannedUntil: token.bannedUntil as Date | undefined,
         };
-        if (token.preferences) {
-          (session.user as SessionUser).preferences = token.preferences as SessionUser["preferences"];
-        }
-        console.log(`✅ เซสชันสร้างสำเร็จสำหรับผู้ใช้ ${session.user.email || session.user.username}`);
+        console.log(
+          `✅ [AuthOptions Session] เซสชันสร้างสำเร็จสำหรับผู้ใช้ ${session.user.username}`
+        );
+      } else {
+        // ถ้า token ไม่มี id หรือข้อมูลสำคัญ, ไม่ควรสร้าง session.user
+        // หรืออาจจะ set session.user เป็น null/undefined แล้วให้ client จัดการ redirect
+        console.warn(`⚠️ [AuthOptions Session] Token ไม่มี id, ไม่สามารถสร้าง user session ได้`);
+        // session.user = null; // หรือจัดการตามความเหมาะสม
       }
       return session;
     },
   },
 
   pages: {
-    signIn: "/auth/signin",
-    signOut: "/auth/signout",
-    error: "/auth/error",
+    signIn: "/auth/signin", // หน้าสำหรับ sign in (ถ้าไม่ได้ใช้ custom UI ของ NextAuth)
+    signOut: "/auth/signout", // หน้าสำหรับ sign out
+    error: "/auth/error", // หน้าแสดงข้อผิดพลาด (เช่น OAuth account not linked)
+    // verifyRequest: '/auth/verify-request', // (Optional) หน้าสำหรับ Email provider
+    // newUser: '/auth/new-user' // (Optional) หน้าสำหรับผู้ใช้ใหม่ครั้งแรก
   },
 
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
 };
 
-// ขยายประเภทของ NextAuth เพื่อรองรับฟิลด์ที่กำหนดเอง
+// ขยายประเภทของ NextAuth เพื่อรองรับฟิลด์ที่กำหนดเองใน User, Session, และ JWT
+// ให้ตรงกับ SessionUser และข้อมูลที่มาจาก IUser
 declare module "next-auth" {
-  interface User {
-    id: string;
-    name: string;
-    email?: string; // อีเมลเป็นตัวเลือกสำหรับ SocialMediaUser
-    username: string;
-    role: "Reader" | "Writer" | "Admin";
-    profile: {
-      displayName?: string;
-      avatar?: string;
-      bio?: string;
-      coverImage?: string;
-      gender?: "male" | "female" | "other" | "preferNotToSay";
-      preferredGenres?: Types.ObjectId[];
-    };
-    trackingStats: {
-      totalLoginDays: number;
-      totalNovelsRead: number;
-      totalEpisodesRead: number;
-      totalCoinSpent: number;
-      totalRealMoneySpent: number;
-      lastNovelReadId?: Types.ObjectId;
-      lastNovelReadAt?: Date;
-      joinDate: Date;
-    };
-    socialStats: {
-      followersCount: number;
-      followingCount: number;
-      novelsCreatedCount: number;
-      commentsMadeCount: number;
-      ratingsGivenCount: number;
-      likesGivenCount: number;
-    };
-    preferences: {
-      language: string;
-      theme: "light" | "dark" | "system" | "sepia";
-      notifications: {
-        email: boolean;
-        push: boolean;
-        novelUpdates: boolean;
-        comments: boolean;
-        donations: boolean;
-        newFollowers: boolean;
-        systemAnnouncements: boolean;
-      };
-      contentFilters?: {
-        showMatureContent: boolean;
-        blockedGenres?: Types.ObjectId[];
-        blockedTags?: string[];
-      };
-      privacy: {
-        showActivityStatus: boolean;
-        profileVisibility: "public" | "followersOnly" | "private";
-        readingHistoryVisibility: "public" | "followersOnly" | "private";
-      };
-    };
-    wallet: {
-      coinBalance: number;
-      lastCoinTransactionAt?: Date;
-    };
-    gamification: {
-      level: number;
-      experiencePoints: number;
-      achievements: Types.ObjectId[];
-      badges: Types.ObjectId[];
-      streaks: {
-        currentLoginStreak: number;
-        longestLoginStreak: number;
-        lastLoginDate?: Date;
-      };
-      dailyCheckIn?: {
-        lastCheckInDate?: Date;
-        currentStreak: number;
-      };
-    };
-    writerVerification?: {
-      status: "none" | "pending" | "verified" | "rejected";
-      submittedAt?: Date;
-      verifiedAt?: Date;
-      rejectedReason?: string;
-      documents?: { type: string; url: string; uploadedAt: Date }[];
-    };
-    donationSettings?: {
-      isDonationEnabled: boolean;
-      donationApplicationId?: Types.ObjectId;
-      customMessage?: string;
-    };
-    writerApplication?: Types.ObjectId;
-    writerStats?: Types.ObjectId;
-    isActive: boolean;
-    isEmailVerified: boolean;
-    isBanned: boolean;
-    bannedUntil?: Date;
-  }
-
+  interface User extends SessionUser {} // User ใน NextAuth ควรมี field เหมือน SessionUser
   interface Session {
-    user: SessionUser;
+    user: SessionUser; // Session.user ควรเป็น SessionUser
   }
 }
 
 declare module "next-auth/jwt" {
-  interface JWT {
-    id?: string;
-    name?: string;
-    email?: string; // อีเมลเป็นตัวเลือกสำหรับ SocialMediaUser
-    username?: string;
-    role?: "Reader" | "Writer" | "Admin";
-    profile?: {
-      displayName?: string;
-      avatar?: string;
-      bio?: string;
-      coverImage?: string;
-      gender?: "male" | "female" | "other" | "preferNotToSay";
-      preferredGenres?: Types.ObjectId[];
-    };
-    trackingStats?: {
-      totalLoginDays: number;
-      totalNovelsRead: number;
-      totalEpisodesRead: number;
-      totalCoinSpent: number;
-      totalRealMoneySpent: number;
-      lastNovelReadId?: Types.ObjectId;
-      lastNovelReadAt?: Date;
-      joinDate: Date;
-    };
-    socialStats?: {
-      followersCount: number;
-      followingCount: number;
-      novelsCreatedCount: number;
-      commentsMadeCount: number;
-      ratingsGivenCount: number;
-      likesGivenCount: number;
-    };
-    preferences?: {
-      language: string;
-      theme: "light" | "dark" | "system" | "sepia";
-      notifications: {
-        email: boolean;
-        push: boolean;
-        novelUpdates: boolean;
-        comments: boolean;
-        donations: boolean;
-        newFollowers: boolean;
-        systemAnnouncements: boolean;
-      };
-      contentFilters?: {
-        showMatureContent: boolean;
-        blockedGenres?: Types.ObjectId[];
-        blockedTags?: string[];
-      };
-      privacy: {
-        showActivityStatus: boolean;
-        profileVisibility: "public" | "followersOnly" | "private";
-        readingHistoryVisibility: "public" | "followersOnly" | "private";
-      };
-    };
-    wallet?: {
-      coinBalance: number;
-      lastCoinTransactionAt?: Date;
-    };
-    gamification?: {
-      level: number;
-      experiencePoints: number;
-      achievements: Types.ObjectId[];
-      badges: Types.ObjectId[];
-      streaks: {
-        currentLoginStreak: number;
-        longestLoginStreak: number;
-        lastLoginDate?: Date;
-      };
-      dailyCheckIn?: {
-        lastCheckInDate?: Date;
-        currentStreak: number;
-      };
-    };
-    writerVerification?: {
-      status: "none" | "pending" | "verified" | "rejected";
-      submittedAt?: Date;
-      verifiedAt?: Date;
-      rejectedReason?: string;
-      documents?: { type: string; url: string; uploadedAt: Date }[];
-    };
-    donationSettings?: {
-      isDonationEnabled: boolean;
-      donationApplicationId?: Types.ObjectId;
-      customMessage?: string;
-    };
-    writerApplication?: Types.ObjectId;
-    writerStats?: Types.ObjectId;
-    isActive?: boolean;
-    isEmailVerified?: boolean;
-    isBanned?: boolean;
-    bannedUntil?: Date;
+  interface JWT extends SessionUser { // JWT ควรมี field เหมือน SessionUser เพิ่มเติม
+    provider?: string; // เพิ่ม provider เข้าไปใน JWT ด้วย
   }
 }

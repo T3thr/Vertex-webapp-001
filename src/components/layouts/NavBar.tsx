@@ -7,81 +7,60 @@ import {
   Search,
   User,
   X,
-  BookOpen as IconBookOpen, // Rename to avoid conflict with ThemeContext's BookOpen
+  BookOpen as IconBookOpen, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
   Home,
   Grid,
-  Layout,
+  Layout, // สำหรับ Dashboard
   Settings,
   Sun,
   Moon,
-  Laptop,
+  // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
   ChevronDown,
-  Bookmark, // เพิ่ม Bookmark icon
-} from "lucide-react";
+  Bookmark,
+} from "lucide-react"; // ตรวจสอบว่า Laptop icon จำเป็นหรือไม่
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useEffect, useRef, useState, useCallback, useMemo, JSX } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import AuthModal from "./AuthModal"; // สมมติว่ามี AuthModal component นี้อยู่
-import { useAuth } from "@/context/AuthContext"; // ตรวจสอบ path
-import { useTheme, Theme as AppTheme, ResolvedTheme } from "@/context/ThemeContext"; // ตรวจสอบ path และ import ResolvedTheme
+import AuthModal from "./AuthModal";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme, ResolvedTheme } from "@/context/ThemeContext";
 import Image from "next/image";
-import SearchBar from "./SearchBar"; // สมมติว่ามี SearchBar component นี้อยู่
-import { useQuery } from "@tanstack/react-query";
-import { getSession, useSession } from "next-auth/react";
+import SearchBar from "./SearchBar";
+import { SessionUser as AppSessionUser } from "@/app/api/auth/[...nextauth]/options";
 
-// อินเทอร์เฟซสำหรับข้อมูลผู้ใช้ในเซสชัน (ควรตรงกับใน AuthContext หรือ options.ts)
-interface SessionUser {
-  id: string;
-  name?: string; // อาจจะไม่มี name ถ้าใช้ username เป็นหลัก
-  email?: string;
-  username: string;
-  role: "Reader" | "Writer" | "Admin";
-  profile?: { // profile อาจจะ optional
-    avatar?: string;
-    bio?: string;
-    displayName?: string;
-  };
-  image?: string; // จาก NextAuth session โดยตรง
-  preferences?: { // เพิ่ม preferences เข้ามาใน SessionUser ถ้า NextAuth callback ส่งมา
-    theme?: AppTheme;
-    language?: string;
-  };
-}
-
-// คอมโพเนนต์ UserAvatar
+// Interface สำหรับ UserAvatarProps (คงเดิม)
 interface UserAvatarProps {
-  user: SessionUser | null; // user อาจจะเป็น null
+  user: AppSessionUser | null;
   size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 const UserAvatar = React.memo(({ user, size = "md", className = "" }: UserAvatarProps) => {
-  const avatarUrl = user?.profile?.avatar || user?.image;
+  const avatarUrl = user?.profile?.avatarUrl;
   const displayName = user?.profile?.displayName || user?.name || user?.username;
-
   const sizeClasses = { sm: "w-7 h-7", md: "w-8 h-8", lg: "w-10 h-10" };
   const fontClasses = { sm: "text-xs", md: "text-sm", lg: "text-base" };
-  const sizeInPixels = { sm: 28, md: 32, lg: 40 };
 
-  if (avatarUrl && (avatarUrl.startsWith("http") || avatarUrl.startsWith("/"))) {
+  if (avatarUrl && (avatarUrl.startsWith("http") || avatarUrl.startsWith("/") || avatarUrl.startsWith("data:image"))) {
     return (
-      <div className={`${sizeClasses[size]} ${className} rounded-full overflow-hidden shadow-sm relative`}>
+      <div className={`${sizeClasses[size]} ${className} rounded-full overflow-hidden shadow-sm relative bg-muted`}> {/* เพิ่ม bg-muted เป็น fallback */}
         <Image
           src={avatarUrl}
-          alt={displayName ? `${displayName}'s avatar` : "User avatar"}
-          fill // ใช้ fill prop เพื่อให้ Image component จัดการขนาด
-          className="object-cover" // ใช้ object-cover เพื่อให้ภาพเต็มพื้นที่โดยไม่เสียสัดส่วน
-          priority // ถ้าเป็น avatar ที่แสดงบ่อย
+          alt={displayName ? `${displayName}님의 아바타` : "사용자 아바타"}
+          fill
+          className="object-cover"
+          priority={size === "md" || size === "lg"}
           referrerPolicy="no-referrer"
+          sizes="(max-width: 768px) 28px, 32px" // ปรับ sizes ให้เหมาะสม
         />
       </div>
     );
   }
-
   return (
     <div
       className={`${sizeClasses[size]} ${className} rounded-full bg-muted flex items-center justify-center text-muted-foreground font-medium overflow-hidden shadow-sm`}
+      aria-label={displayName || "사용자 아바타"}
     >
       {displayName ? (
         <span className={fontClasses[size]}>{displayName.charAt(0).toUpperCase()}</span>
@@ -93,19 +72,18 @@ const UserAvatar = React.memo(({ user, size = "md", className = "" }: UserAvatar
 });
 UserAvatar.displayName = "UserAvatar";
 
-
 interface NavBarProps {
   logoText?: string;
 }
 
 export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
-  const { user: authUser, status: authStatus, signOut } = useAuth(); // user จาก useAuth อาจจะมีโครงสร้างที่ต่างจาก session โดยตรงเล็กน้อย
+  const { user: authContextUser, status: authStatus, signOut } = useAuth();
   const {
-    theme: currentThemeChoice, // ธีมที่ผู้ใช้เลือก (light, dark, system, sepia)
-    resolvedTheme,           // ธีมที่แสดงผลจริง (light, dark, sepia)
-    setTheme,                // ฟังก์ชันสำหรับเปลี่ยนธีม
-    themes: availableThemes, // รายการธีมทั้งหมดจาก context
-    mounted: themeMounted,   // สถานะว่า ThemeContext mounted หรือยัง
+    theme: currentThemeChoice,
+    resolvedTheme,
+    setTheme,
+    themes: availableThemes,
+    mounted: themeMounted,
   } = useTheme();
 
   const pathname = usePathname();
@@ -114,16 +92,14 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // ดึง session จาก NextAuth โดยตรงเพื่อเข้าถึง user object ที่สมบูรณ์กว่า (ถ้าจำเป็น)
-  // หรือปรับ useAuth() ให้คืน user object ที่มี preferences
-  const { data: session, status: sessionStatus } = useSession();
-  const user = session?.user as SessionUser | null; // User จาก session โดยตรง
+  // userDisplay จะเป็น AppSessionUser หรือ null (ตรงกับ user จาก AuthContext)
+  const userDisplay = authContextUser;
 
   const handleScroll = useCallback(() => setIsScrolled(window.scrollY > 20), []);
 
@@ -136,58 +112,61 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsDropdownOpen(false);
       if (searchRef.current && !searchRef.current.contains(event.target as Node) && isSearchOpen) setIsSearchOpen(false);
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node) && isMenuOpen) setIsMenuOpen(false);
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node) && isMenuOpen && !isMobileSearchOpen) {
+          setIsMenuOpen(false);
+      }
+      // ไม่ต้องจัดการการคลิกนอก AuthModal ที่นี่ เพราะ AuthModal จะจัดการเอง
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isDropdownOpen, isSearchOpen, isMenuOpen]);
+  }, [isDropdownOpen, isSearchOpen, isMenuOpen, isMobileSearchOpen]);
 
   const toggleMenu = useCallback(() => setIsMenuOpen((prev) => !prev), []);
   const toggleDropdown = useCallback(() => setIsDropdownOpen((prev) => !prev), []);
+
   const toggleSearch = useCallback(() => {
-    setIsSearchOpen((prev) => !prev);
-    if (isMenuOpen) setIsMenuOpen(false);
+    setIsSearchOpen((prev) => {
+      if (!prev && isMenuOpen) setIsMenuOpen(false);
+      return !prev;
+    });
   }, [isMenuOpen]);
+
   const toggleMobileSearch = useCallback(() => {
     setIsMobileSearchOpen((prev) => !prev);
-    if (isMenuOpen) setIsMenuOpen(false);
-  }, [isMenuOpen]);
+  }, []);
 
-  const openModal = useCallback(() => {
-    setIsModalOpen(true);
-    if (isMenuOpen) setIsMenuOpen(false);
-    if (isDropdownOpen) setIsDropdownOpen(false);
+  const openAuthModal = useCallback(() => {
+    console.log("🔵 [NavBar] openAuthModal called");
+    setIsAuthModalOpen(true);
+    if (isMenuOpen) setIsMenuOpen(false); // ปิดเมนูมือถือถ้าเปิดอยู่
+    if (isDropdownOpen) setIsDropdownOpen(false); // ปิด dropdown ผู้ใช้ถ้าเปิดอยู่
   }, [isMenuOpen, isDropdownOpen]);
-  const closeModal = useCallback(() => setIsModalOpen(false), []);
+
+  const closeAuthModal = useCallback(() => {
+    console.log("🔵 [NavBar] closeAuthModal called");
+    setIsAuthModalOpen(false);
+  }, []);
+
 
   const handleSignOut = useCallback(async () => {
-    setIsDropdownOpen(false);
+    setIsDropdownOpen(false); // ปิด dropdown ก่อน
     await signOut();
+    // ไม่ต้อง redirect ที่นี่ ปล่อยให้ AuthContext หรือ NextAuth จัดการ
   }, [signOut]);
 
-  // ฟังก์ชันเปลี่ยนธีมใน Dropdown ของ User Menu
   const cycleThemeInDropdown = useCallback(() => {
     if (!themeMounted || !availableThemes.length) return;
-
     const currentIndex = availableThemes.findIndex(t => t.name === currentThemeChoice);
-    const nextIndex = (currentIndex + 1) % availableThemes.length;
-    const nextThemeName = availableThemes[nextIndex].name;
-    
-    // ใช้ console log เพื่อดู debugging
-    console.log(`[NavBar] Cycling theme from ${currentThemeChoice} to ${nextThemeName}`);
-    
-    // ใช้ setTheme จาก ThemeContext จะจัดการ localStorage และ DB update
+    const nextThemeName = availableThemes[(currentIndex + 1) % availableThemes.length].name;
     setTheme(nextThemeName);
-    
-    // ปิด dropdown หลังเลือก
     setIsDropdownOpen(false);
   }, [currentThemeChoice, setTheme, availableThemes, themeMounted]);
 
   const navLinks = useMemo(
     () => [
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
-      { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
-      { href: "/novels", label: "งานเขียน", icon: <IconBookOpen size={18} /> },
+      { href: "/novels/categories", label: "หมวดหมู่", icon: <Grid size={18} /> },
+      { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
     ],
     []
   );
@@ -195,69 +174,68 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
   const userDropdownLinks = useMemo(
     () => [
       {
-        href: `/user/${user?.username}`,
+        href: `/u/${userDisplay?.username}`, // ใช้ username จาก AppSessionUser
         label: "โปรไฟล์ของฉัน",
         icon: <User size={16} />,
-        condition: !!user?.username,
+        condition: !!userDisplay?.username,
       },
       {
-        href: user?.role === "Writer" ? `/dashboard/writer` : `/dashboard`, // Path ที่เหมาะสม
-        label: "แดชบอร์ด", // อาจจะเป็น "แดชบอร์ดนักเขียน" หรือ "แดชบอร์ดผู้ใช้"
+        href: userDisplay?.roles?.includes("Writer") ? `/dashboard/writer` : `/dashboard/reader`,
+        label: "แดชบอร์ด",
         icon: <Layout size={16} />,
-        condition: !!user, // แสดงถ้า login
+        condition: !!userDisplay,
       },
       {
-        href: "/bookmarks",
+        href: "/me/bookmarks", // Path สำหรับ bookmarks
         label: "บุ๊คมาร์ค",
         icon: <Bookmark size={16} />,
-        condition: !!user,
+        condition: !!userDisplay,
       },
       {
-        href: `/settings/profile`, // Path ที่เหมาะสมสำหรับการตั้งค่า
+        href: `/settings/account`, // Path สำหรับ settings
         label: "การตั้งค่า",
         icon: <Settings size={16} />,
-        condition: !!user,
+        condition: !!userDisplay,
       },
     ],
-    [user]
+    [userDisplay]
   );
 
-
   const AuthSection = () => {
-    if (sessionStatus === "loading" || !themeMounted) { // รอ themeMounted ด้วย
+    if (authStatus === "loading" || !themeMounted) {
       return (
-        <div className="flex items-center space-x-2">
-          <div className="h-9 w-8 rounded-full bg-muted animate-pulse"></div> {/* Avatar placeholder */}
-          <div className="h-5 w-20 rounded bg-muted animate-pulse hidden sm:block"></div> {/* Name placeholder */}
+        <div className="flex items-center space-x-2 animate-pulse">
+          <div className="h-8 w-8 rounded-full bg-muted"></div>
+          <div className="h-5 w-20 rounded bg-muted hidden sm:block"></div>
         </div>
       );
     }
 
-    if (sessionStatus === "unauthenticated") {
+    if (authStatus === "unauthenticated") {
       return (
         <motion.button
-          onClick={openModal}
+          onClick={openAuthModal}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap"
+          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap cursor-pointer"
         >
           เข้าสู่ระบบ
         </motion.button>
       );
     }
-    // sessionStatus === "authenticated"
-    if (user) {
+
+    if (userDisplay) { // userDisplay คือ AppSessionUser | null
       return (
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={toggleDropdown}
-            className="flex items-center space-x-2 p-1 rounded-full hover:bg-secondary transition-colors"
+            className="flex items-center space-x-2 p-1 rounded-full hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors" // ใช้สีจาก theme
             aria-expanded={isDropdownOpen}
             aria-label="เมนูผู้ใช้"
           >
-            <UserAvatar user={user} size="md" />
+            <UserAvatar user={userDisplay} size="md" />
             <span className="hidden sm:inline text-sm font-medium text-foreground truncate max-w-[100px]">
-              {user.profile?.displayName || user.name || user.username}
+              {userDisplay.profile?.displayName || userDisplay.name || userDisplay.username}
             </span>
             <ChevronDown
               size={18}
@@ -272,15 +250,15 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 mt-2 w-64 rounded-lg shadow-xl bg-card border border-border z-50 overflow-hidden"
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="absolute right-0 mt-2 w-64 rounded-xl shadow-xl bg-popover border border-border text-popover-foreground z-50 overflow-hidden" // ใช้สี popover
               >
-                <div className="p-3 border-b border-border">
-                  <div className="font-semibold text-foreground truncate">
-                    {user.profile?.displayName || user.name || user.username}
+                <div className="p-3 border-b border-border"> {/* ใช้ border-border */}
+                  <div className="font-semibold truncate">
+                    {userDisplay.profile?.displayName || userDisplay.name || userDisplay.username}
                   </div>
                   <div className="text-xs text-muted-foreground truncate">
-                    {user.email || `@${user.username}`}
+                    {userDisplay.email || `@${userDisplay.username}`}
                   </div>
                 </div>
                 <div className="py-1">
@@ -290,7 +268,7 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
                         <Link
                           key={link.href}
                           href={link.href}
-                          className="flex items-center px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors w-full text-left"
+                          className="flex items-center px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors w-full text-left" // ใช้สี text-popover-foreground จาก parent และ hover:bg-muted
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           {React.cloneElement(link.icon, { className: "mr-2.5 text-muted-foreground" })}
@@ -298,22 +276,19 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
                         </Link>
                       )
                   )}
-                  {/* ปุ่มเปลี่ยนธีมใน Dropdown ของ User Menu */}
-                  {themeMounted && (
+                  {themeMounted && ( // Theme switcher section
                     <button
                       onClick={cycleThemeInDropdown}
-                      className="flex items-center w-full px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors text-left"
+                      className="flex items-center w-full px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors text-left"
+                      aria-label={`เปลี่ยนธีม, ธีมปัจจุบัน: ${availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}`}
                     >
-                      {/* แสดง Icon และ Text ตาม resolvedTheme หรือ currentThemeChoice */}
-                      {resolvedTheme === "dark" ? (
-                        <Sun size={16} className="mr-2.5 text-muted-foreground" />
-                      ) : resolvedTheme === "sepia" ? (
-                        <Moon size={16} className="mr-2.5 text-muted-foreground" />
-                      ) : ( // light
-                        <IconBookOpen size={16} className="mr-2.5 text-muted-foreground" />
-                      )}
+                      {/* Icons for theme, should use foreground/muted-foreground for consistency */}
+                      {resolvedTheme === "dark" ? ( <Sun size={16} className="mr-2.5 text-muted-foreground" /> )
+                       : resolvedTheme === "sepia" ? ( <Moon size={16} className="mr-2.5 text-muted-foreground" /> ) // สมมติว่ามีไอคอน Moon สำหรับ Sepia
+                       : ( <IconBookOpen size={16} className="mr-2.5 text-muted-foreground" /> ) // ใช้ BookOpen สำหรับ light หรือ default
+                      }
                       <span>
-                        เปลี่ยนธีม (ปัจจุบัน:{" "}
+                        เปลี่ยนธีม (
                         {availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}
                         {currentThemeChoice === "system" && ` -> ${resolvedTheme === "dark" ? "มืด" : resolvedTheme === "sepia" ? "ซีเปีย" : "สว่าง"}`}
                         )
@@ -321,10 +296,10 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
                     </button>
                   )}
                 </div>
-                <div className="border-t border-border p-1">
+                <div className="border-t border-border p-1"> {/* ใช้ border-border */}
                   <button
                     onClick={handleSignOut}
-                    className="flex items-center w-full px-3 py-2 text-sm text-red-600 dark:text-red-500 hover:bg-red-500/10 rounded-md transition-colors"
+                    className="flex items-center w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors" // ใช้สี destructive
                   >
                     <LogOut size={16} className="mr-2.5" />
                     ออกจากระบบ
@@ -336,125 +311,156 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
         </div>
       );
     }
-    return null; // กรณี user ไม่มีข้อมูล (ไม่ควรเกิดถ้า authenticated)
+    return null; // กรณี authStatus อื่นๆ หรือ userDisplay ไม่มีค่า
   };
 
+  // NavBar header styling
+  // ลบ navBarDynamicClasses ออก เพราะ AuthModal จะจัดการ backdrop ของตัวเอง
+  const navBarBaseClasses = `sticky top-0 z-30 w-full transition-all duration-300 border-b`; // ลด z-index ของ NavBar ลงเล็กน้อย
+  const navBarScrollClasses = isScrolled
+      ? "bg-background/80 shadow-md backdrop-blur-md border-border/30" // ใช้สี background และ border จาก theme
+      : "bg-background border-transparent"; // กรณีไม่ได้ scroll
 
   return (
-    <header // เปลี่ยน nav เป็น header เพื่อ semantic correctness
-      className={`sticky top-0 z-40 w-full transition-all duration-300 ${ // ใช้ sticky top-0
-        isScrolled ? "bg-background/90 shadow-md backdrop-blur-sm" : "bg-background" // เพิ่ม backdrop-blur
-      } border-b border-border/50`}
-    >
-      <div className="max-w-[96rem] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2" aria-label="หน้าหลัก NovelMaze">
-              {/* <img src="/logo.svg" alt="NovelMaze Logo" className="h-8 w-auto" /> */}
-              <span className="text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-                {logoText}
-              </span>
-            </Link>
-          </div>
-
-          <nav className="hidden md:flex items-center space-x-1 lg:space-x-2" aria-label="เมนูหลัก">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium ${
-                  pathname === link.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground hover:bg-secondary hover:text-primary"
-                } transition-colors`}
-              >
-                {link.icon}
-                <span>{link.label}</span>
+    <>
+      <header className={`${navBarBaseClasses} ${navBarScrollClasses}`}>
+        <div className="max-w-[96rem] mx-auto px-4 sm:px-6 lg:px-8"> {/* Container หลัก */}
+          <div className="flex items-center justify-between h-16"> {/* Flex container สำหรับ items ใน navbar */}
+            {/* Logo Section */}
+            <div className="flex items-center">
+              <Link href="/" className="flex items-center space-x-2" aria-label="หน้าหลัก NovelMaze">
+                {/* SVG Logo with primary color */}
+                <svg width="32" height="32" viewBox="0 0 100 100" className="text-primary" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M50 10L10 30L10 70L50 90L90 70L90 30L50 10ZM20 35L20 65L50 80L80 65L80 35L50 20L20 35Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+                  <path d="M50 45L20 60L50 75L80 60L50 45Z" fillOpacity="0.5" />
+                </svg>
+                <span className="text-xl font-bold bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  {logoText}
+                </span>
               </Link>
-            ))}
-          </nav>
-
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            <div className="hidden md:block relative" ref={searchRef}>
-              <button
-                onClick={toggleSearch}
-                className="p-2 rounded-full hover:bg-secondary transition-colors"
-                aria-label="ค้นหา"
-                aria-expanded={isSearchOpen}
-              >
-                <Search size={20} className="text-foreground" />
-              </button>
-              <AnimatePresence>
-                {isSearchOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: 300 }}
-                    exit={{ opacity: 0, width: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="absolute right-0 mt-2 z-50"
-                  >
-                    <SearchBar onClose={() => setIsSearchOpen(false)} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
-            <AuthSection />
-            <button
-              className="md:hidden p-2 rounded-full hover:bg-secondary transition-colors"
-              onClick={toggleMenu}
-              aria-label={isMenuOpen ? "ปิดเมนู" : "เปิดเมนู"}
-              aria-expanded={isMenuOpen}
-            >
-              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-        </div>
 
-        <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div
-              ref={mobileMenuRef}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="md:hidden border-t border-border/50 overflow-hidden" // เพิ่ม overflow-hidden
-            >
-              <nav className="px-2 pt-2 pb-3 space-y-1" aria-label="เมนูมือถือ">
-                {navLinks.map((link) => (
-                  <Link
-                    key={`mobile-${link.href}`}
-                    href={link.href}
-                    className={`flex items-center space-x-2 px-3 py-2.5 rounded-md text-base font-medium ${ // ปรับ padding
-                      pathname === link.href
-                        ? "bg-secondary text-primary"
-                        : "text-foreground hover:bg-secondary hover:text-primary"
-                    } transition-colors`}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {link.icon}
-                    <span>{link.label}</span>
-                  </Link>
-                ))}
-                <button
-                  onClick={toggleMobileSearch}
-                  className="flex items-center space-x-2 px-3 py-2.5 rounded-md text-base font-medium text-foreground hover:bg-secondary hover:text-primary transition-colors w-full text-left"
-                  aria-expanded={isMobileSearchOpen}
+            {/* Desktop Navigation Links */}
+            <nav className="hidden md:flex items-center space-x-1 lg:space-x-2" aria-label="เมนูหลัก">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors
+                    ${pathname === link.href
+                      ? "bg-primary/10 text-primary" // Active link: primary color
+                      : "text-foreground hover:bg-muted hover:text-primary" // Default & Hover: foreground/muted/primary color
+                    }`}
                 >
-                  <Search size={18} />
-                  <span>ค้นหา</span>
+                  {React.cloneElement(link.icon, { "aria-hidden": true })}
+                  <span>{link.label}</span>
+                </Link>
+              ))}
+            </nav>
+
+            {/* Right Section: Search, Auth, Mobile Menu Toggle */}
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              {/* Desktop Search */}
+              <div className="hidden md:block relative" ref={searchRef}>
+                <button
+                  onClick={toggleSearch}
+                  className="p-2 rounded-full hover:bg-muted transition-colors" // Hover: muted color
+                  aria-label="ค้นหา"
+                  aria-expanded={isSearchOpen}
+                >
+                  <Search size={20} className="text-foreground" />
                 </button>
-                {isMobileSearchOpen && (
-                  <div className="px-3 py-2">
-                    <SearchBar onClose={() => setIsMobileSearchOpen(false)} />
-                  </div>
-                )}
-              </nav>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      <AuthModal isOpen={isModalOpen} onClose={closeModal} />
-    </header>
+                <AnimatePresence>
+                  {isSearchOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, width: 0, x: 50 }}
+                      animate={{ opacity: 1, width: 320, x: 0 }}
+                      exit={{ opacity: 0, width: 0, x: 50 }}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                      className="absolute right-0 mt-2 origin-top-right z-50 bg-card border border-border shadow-lg rounded-md" // SearchBar container
+                    >
+                      <SearchBar onClose={() => setIsSearchOpen(false)} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Authentication Section (Login/User Menu) */}
+              <AuthSection />
+
+              {/* Mobile Menu Toggle */}
+              <div className="md:hidden">
+                  <button
+                    className="p-2 rounded-full hover:bg-muted transition-colors" // Hover: muted color
+                    onClick={toggleMenu}
+                    aria-label={isMenuOpen ? "ปิดเมนู" : "เปิดเมนู"}
+                    aria-expanded={isMenuOpen}
+                    aria-controls="mobile-menu-content"
+                  >
+                    {isMenuOpen ? <X size={24} className="text-foreground"/> : <Menu size={24} className="text-foreground"/>}
+                  </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Menu Content */}
+          <AnimatePresence>
+            {isMenuOpen && (
+              <motion.div
+                id="mobile-menu-content"
+                ref={mobileMenuRef}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                className="md:hidden border-t border-border bg-background" // Mobile menu background
+              >
+                <nav className="px-2 pt-2 pb-3 space-y-1" aria-label="เมนูมือถือ">
+                  {navLinks.map((link) => (
+                    <Link
+                      key={`mobile-${link.href}`}
+                      href={link.href}
+                      className={`flex items-center space-x-2 px-3 py-2.5 rounded-md text-base font-medium transition-colors
+                        ${pathname === link.href
+                          ? "bg-muted text-primary" // Active mobile link
+                          : "text-foreground hover:bg-muted hover:text-primary" // Default mobile link
+                        }`}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      {React.cloneElement(link.icon, { "aria-hidden": true })}
+                      <span>{link.label}</span>
+                    </Link>
+                  ))}
+                  <button // Mobile search toggle
+                    onClick={toggleMobileSearch}
+                    className="flex items-center space-x-2 px-3 py-2.5 rounded-md text-base font-medium text-foreground hover:bg-muted hover:text-primary transition-colors w-full text-left"
+                    aria-expanded={isMobileSearchOpen}
+                    aria-controls="mobile-search-bar-container"
+                  >
+                    <Search size={18} aria-hidden="true" />
+                    <span>ค้นหา</span>
+                  </button>
+                  {isMobileSearchOpen && (
+                    <motion.div
+                      id="mobile-search-bar-container"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{duration: 0.2}}
+                      className="px-3 py-2 bg-background" // Mobile search bar container background
+                    >
+                      <SearchBar onClose={() => setIsMobileSearchOpen(false)} />
+                    </motion.div>
+                  )}
+                </nav>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </header>
+      {/* AuthModal จะถูก render ที่นี่ แต่จะใช้ fixed positioning เพื่อแสดงผลเต็มจอ */}
+      {/* isOpen และ onClose จะถูกส่งมาจาก state ของ NavBar */}
+      <AuthModal isOpen={isAuthModalOpen} onClose={closeAuthModal} />
+    </>
   );
 }

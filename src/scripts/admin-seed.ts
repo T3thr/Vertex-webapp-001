@@ -1,433 +1,396 @@
 // src/scripts/admin-seed.ts
 // สคริปต์สำหรับ seed ผู้ใช้แอดมินและผู้เขียนใน MongoDB
-// Script for seeding admin and author users in MongoDB
+// อัปเดต: ปรับปรุงให้สอดคล้องกับโครงสร้าง IUser และ Sub-interfaces ล่าสุดทั้งหมด
+//         มอบหมายการ Hashing รหัสผ่านให้ UserModel pre-save hook จัดการ
 
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { config } from "dotenv";
-import bcrypt from "bcryptjs";
-import dbConnect from "@/backend/lib/mongodb";
-import { IUser } from "@/backend/models/User";
+// import bcrypt from "bcryptjs"; // ไม่จำเป็นต้องใช้ bcrypt ในไฟล์นี้โดยตรงแล้ว
+import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบ path
+import UserModelImport, { // เปลี่ยนชื่อ import เพื่อไม่ให้ชนกับตัวแปร User ด้านล่าง
+    IUser,
+    IAccount,
+    IUserProfile,
+    IUserTrackingStats,
+    IUserSocialStats,
+    IUserPreferences,
+    IUserWallet,
+    IUserGamification,
+    IUserVerification,
+    IUserDonationSettings,
+    IUserSecuritySettings,
+    IMentalWellbeingInsights,
+    IUserDisplayPreferences,
+    IUserReadingDisplayPreferences,
+    IUserAccessibilityDisplayPreferences,
+    IUserPreferencesNotifications,
+    INotificationChannelSettings,
+    IUserContentPrivacyPreferences,
+    IUserAnalyticsConsent,
+    IVisualNovelGameplayPreferences,
+    IShowcasedGamificationItem,
+    IUserDisplayBadge,
+    IWriterStats,
+    INovelPerformanceStats
+} from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
 
-// โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
-// Loading environment variables from .env file
-config({ path: ".env" });
+config({ path: ".env" }); // โหลด environment variables จาก .env
 
-// โหลดตัวแปรสภาพแวดล้อม
-// Load environment variables
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; // นี่คือรหัสผ่านแบบ Plain text
 const AUTHOR_EMAIL = process.env.AUTHOR_EMAIL;
 const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME;
-const AUTHOR_PASSWORD = process.env.AUTHOR_PASSWORD;
+const AUTHOR_PASSWORD = process.env.AUTHOR_PASSWORD; // นี่คือรหัสผ่านแบบ Plain text
 
-/**
- * สร้างหรืออัปเดตผู้ใช้แอดมิน
- * Create or update admin user
- * @param User - Mongoose model for User
- */
+// Helper function to create default notification settings (ครบถ้วนตาม IUser)
+function createDefaultNotificationChannelSettings(): INotificationChannelSettings {
+    return {
+        enabled: true,
+        newsletter: true,
+        novelUpdatesFromFollowing: true,
+        newFollowers: true,
+        commentsOnMyNovels: true,
+        repliesToMyComments: true,
+        donationAlerts: true,
+        systemAnnouncements: true,
+        securityAlerts: true,
+        promotionalOffers: false,
+        achievementUnlocks: true,
+    };
+}
+
+// Helper function to create default IUserPreferences (ครบถ้วนตาม IUser)
+function createDefaultPreferences(): IUserPreferences {
+    const defaultReadingPrefs: IUserReadingDisplayPreferences = {
+        fontSize: "medium", readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left",
+    };
+    const defaultAccessibilityPrefs: IUserAccessibilityDisplayPreferences = {
+        dyslexiaFriendlyFont: false, highContrastMode: false,
+    };
+    const defaultDisplayPrefs: IUserDisplayPreferences = {
+        theme: "system", reading: defaultReadingPrefs, accessibility: defaultAccessibilityPrefs,
+    };
+    const defaultAnalyticsConsent: IUserAnalyticsConsent = {
+        allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false, lastConsentReviewDate: new Date(),
+    };
+    const defaultContentPrivacyPrefs: IUserContentPrivacyPreferences = {
+        showMatureContent: false, preferredGenres: [], blockedGenres: [], blockedTags: [], blockedAuthors: [], blockedNovels: [],
+        profileVisibility: "public", readingHistoryVisibility: "followers_only", showActivityStatus: true,
+        allowDirectMessagesFrom: "followers", analyticsConsent: defaultAnalyticsConsent,
+    };
+    const defaultVisualNovelGameplayPrefs: IVisualNovelGameplayPreferences = {
+        textSpeed: "normal", autoPlayMode: "click", autoPlayDelayMs: 1500, skipUnreadText: false,
+        transitionsEnabled: true, screenEffectsEnabled: true, textWindowOpacity: 0.8, masterVolume: 1.0,
+        bgmVolume: 0.7, sfxVolume: 0.8, voiceVolume: 1.0, voicesEnabled: true, preferredVoiceLanguage: "original",
+        showChoiceTimer: true, blurThumbnailsOfMatureContent: true, preferredArtStyles: [], preferredGameplayMechanics: [],
+        assetPreloading: "essential", characterAnimationLevel: "full",
+    };
+    const defaultNotifications: IUserPreferencesNotifications = {
+        masterNotificationsEnabled: true,
+        email: createDefaultNotificationChannelSettings(),
+        push: createDefaultNotificationChannelSettings(),
+        inApp: createDefaultNotificationChannelSettings(),
+    };
+
+    return {
+        language: "th",
+        display: defaultDisplayPrefs,
+        notifications: defaultNotifications,
+        contentAndPrivacy: defaultContentPrivacyPrefs,
+        visualNovelGameplay: defaultVisualNovelGameplayPrefs,
+    };
+}
+
+
 async function seedAdmin(User: mongoose.Model<IUser>) {
-  try {
-    // ตรวจสอบตัวแปรสภาพแวดล้อม
-    // Check environment variables
-    if (!ADMIN_EMAIL || !ADMIN_USERNAME || !ADMIN_PASSWORD) {
-      throw new Error(
-        "ตัวแปรสภาพแวดล้อมที่จำเป็นสำหรับแอดมินขาดหายไป: ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD ใน .env"
-      );
-    }
-
-    // Hash รหัสผ่านก่อนบันทึก
-    // Hash password before saving
-    const salt = await bcrypt.genSalt(12);
-    const hashedAdminPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
-
-    // ตรวจสอบว่ามีผู้ใช้แอดมินอยู่แล้วหรือไม่
-    // Check if admin user already exists
-    const existingAdmin = await User.findOne({
-      $or: [{ email: ADMIN_EMAIL }, { username: ADMIN_USERNAME }],
-    });
-
-    if (existingAdmin) {
-      console.log(`ℹ️ ผู้ใช้แอดมินมีอยู่แล้ว: ${existingAdmin.email}`);
-
-      // อัปเดตข้อมูลผู้ใช้แอดมิน
-      // Update admin user information
-      existingAdmin.email = ADMIN_EMAIL.toLowerCase();
-      existingAdmin.username = ADMIN_USERNAME;
-      existingAdmin.password = hashedAdminPassword; // อัปเดตรหัสผ่านที่ถูก hash
-      existingAdmin.role = "Admin";
-      existingAdmin.profile = {
-        displayName: ADMIN_USERNAME,
-        bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ",
-        ...existingAdmin.profile, // รักษาค่าเดิมของฟิลด์ที่ไม่ได้ระบุ
-      };
-      existingAdmin.trackingStats = {
-        totalLoginDays: existingAdmin.trackingStats.totalLoginDays || 0,
-        totalNovelsRead: existingAdmin.trackingStats.totalNovelsRead || 0,
-        totalEpisodesRead: existingAdmin.trackingStats.totalEpisodesRead || 0,
-        totalCoinSpent: existingAdmin.trackingStats.totalCoinSpent || 0,
-        totalRealMoneySpent: existingAdmin.trackingStats.totalRealMoneySpent || 0,
-        lastNovelReadId: existingAdmin.trackingStats.lastNovelReadId,
-        lastNovelReadAt: existingAdmin.trackingStats.lastNovelReadAt,
-        joinDate: existingAdmin.trackingStats.joinDate || new Date(),
-      };
-      existingAdmin.socialStats = {
-        followersCount: existingAdmin.socialStats.followersCount || 0,
-        followingCount: existingAdmin.socialStats.followingCount || 0,
-        novelsCreatedCount: existingAdmin.socialStats.novelsCreatedCount || 0,
-        commentsMadeCount: existingAdmin.socialStats.commentsMadeCount || 0,
-        ratingsGivenCount: existingAdmin.socialStats.ratingsGivenCount || 0,
-        likesGivenCount: existingAdmin.socialStats.likesGivenCount || 0,
-      };
-      existingAdmin.preferences = {
-        language: "th",
-        theme: "system",
-        notifications: {
-          email: true,
-          push: true,
-          novelUpdates: true,
-          comments: true,
-          donations: true,
-          newFollowers: true,
-          systemAnnouncements: true,
-        },
-        privacy: {
-          showActivityStatus: existingAdmin.preferences.privacy.showActivityStatus ?? true,
-          profileVisibility: existingAdmin.preferences.privacy.profileVisibility || "public",
-          readingHistoryVisibility: existingAdmin.preferences.privacy.readingHistoryVisibility || "followersOnly",
-        },
-      };
-      existingAdmin.wallet = {
-        coinBalance: existingAdmin.wallet.coinBalance || 0,
-        lastCoinTransactionAt: existingAdmin.wallet.lastCoinTransactionAt,
-      };
-      existingAdmin.gamification = {
-        level: existingAdmin.gamification.level || 1,
-        experiencePoints: existingAdmin.gamification.experiencePoints || 0,
-        achievements: existingAdmin.gamification.achievements || [],
-        badges: existingAdmin.gamification.badges || [],
-        streaks: {
-          currentLoginStreak: existingAdmin.gamification.streaks.currentLoginStreak || 0,
-          longestLoginStreak: existingAdmin.gamification.streaks.longestLoginStreak || 0,
-          lastLoginDate: existingAdmin.gamification.streaks.lastLoginDate,
-        },
-      };
-      existingAdmin.writerVerification = {
-        status: "none",
-        submittedAt: undefined,
-        verifiedAt: undefined,
-        rejectedReason: undefined,
-        documents: existingAdmin.writerVerification?.documents || [],
-      };
-      existingAdmin.isEmailVerified = true;
-      existingAdmin.isActive = true;
-      existingAdmin.isBanned = false;
-      existingAdmin.lastLoginAt = new Date();
-
-      await existingAdmin.save();
-      console.log(`✅ อัปเดตข้อมูลแอดมินสำเร็จ: ${ADMIN_EMAIL}`);
-      return;
-    }
-
-    // สร้างผู้ใช้แอดมินใหม่ถ้ายังไม่มี
-    // Create new admin user if none exists
-    console.log("🌱 สร้างบัญชีผู้ใช้แอดมิน...");
-    const adminUser = await User.create({
-      email: ADMIN_EMAIL.toLowerCase(),
-      username: ADMIN_USERNAME,
-      password: hashedAdminPassword, // ใช้รหัสผ่านที่ถูก hash
-      role: "Admin",
-      profile: {
-        displayName: ADMIN_USERNAME,
-        bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ",
-      },
-      accounts: [], // ปล่อยให้ middleware จัดการเพิ่ม credentials account
-      trackingStats: {
-        totalLoginDays: 0,
-        totalNovelsRead: 0,
-        totalEpisodesRead: 0,
-        totalCoinSpent: 0,
-        totalRealMoneySpent: 0,
-        joinDate: new Date(),
-      },
-      socialStats: {
-        followersCount: 0,
-        followingCount: 0,
-        novelsCreatedCount: 0,
-        commentsMadeCount: 0,
-        ratingsGivenCount: 0,
-        likesGivenCount: 0,
-      },
-      preferences: {
-        language: "th",
-        theme: "system",
-        notifications: {
-          email: true,
-          push: true,
-          novelUpdates: true,
-          comments: true,
-          donations: true,
-          newFollowers: true,
-          systemAnnouncements: true,
-        },
-        privacy: {
-          showActivityStatus: true,
-          profileVisibility: "public",
-          readingHistoryVisibility: "followersOnly",
-        },
-      },
-      wallet: {
-        coinBalance: 0,
-      },
-      gamification: {
-        level: 1,
-        experiencePoints: 0,
-        achievements: [],
-        badges: [],
-        streaks: {
-          currentLoginStreak: 0,
-          longestLoginStreak: 0,
-        },
-      },
-      writerVerification: {
-        status: "none",
-        documents: [],
-      },
-      isEmailVerified: true,
-      isActive: true,
-      isBanned: false,
-      lastLoginAt: new Date(),
-    });
-
-    console.log(`✅ สร้างผู้ใช้แอดมินสำเร็จ: ${ADMIN_EMAIL}`);
-  } catch (error: any) {
-    console.error("❌ เกิดข้อผิดพลาดในการสร้าง/อัปเดตผู้ใช้แอดมิน:", error.message);
-    throw error;
-  }
-}
-
-/**
- * ตรวจสอบหรือสร้างผู้ใช้สำหรับเป็นผู้เขียนนิยาย
- * Check or create user for novel author
- * @param User - Mongoose model for User
- * @returns Author ID
- */
-async function ensureAuthorExists(User: mongoose.Model<IUser>) {
-  try {
-    // ตรวจสอบตัวแปรสภาพแวดล้อม
-    // Check environment variables
-    if (!AUTHOR_EMAIL || !AUTHOR_USERNAME || !AUTHOR_PASSWORD) {
-      throw new Error(
-        "ตัวแปรสภาพแวดล้อมที่จำเป็นสำหรับผู้เขียนขาดหายไป: AUTHOR_EMAIL, AUTHOR_USERNAME, AUTHOR_PASSWORD ใน .env"
-      );
-    }
-
-    // Hash รหัสผ่านก่อนบันทึก
-    // Hash password before saving
-    const salt = await bcrypt.genSalt(12);
-    const hashedAuthorPassword = await bcrypt.hash(AUTHOR_PASSWORD, salt);
-
-    // ตรวจสอบว่ามีผู้เขียนอยู่แล้วหรือไม่
-    // Check if author user already exists
-    let author = await User.findOne({ username: AUTHOR_USERNAME });
-
-    if (!author) {
-      console.log("🌱 สร้างบัญชีผู้ใช้สำหรับเป็นผู้เขียนนิยาย...");
-
-      author = await User.create({
-        username: AUTHOR_USERNAME,
-        email: AUTHOR_EMAIL.toLowerCase(),
-        password: hashedAuthorPassword, // ใช้รหัสผ่านที่ถูก hash
-        role: "Writer",
-        profile: {
-          displayName: "นักเขียนนิยาย",
-          bio: "ผู้เขียนนิยายหลากหลายแนว รักการเล่าเรื่องและสร้างโลกจินตนาการ",
-        },
-        accounts: [], // ปล่อยให้ middleware จัดการเพิ่ม credentials account
-        trackingStats: {
-          totalLoginDays: 0,
-          totalNovelsRead: 0,
-          totalEpisodesRead: 0,
-          totalCoinSpent: 0,
-          totalRealMoneySpent: 0,
-          joinDate: new Date(),
-        },
-        socialStats: {
-          followersCount: 0,
-          followingCount: 0,
-          novelsCreatedCount: 0,
-          commentsMadeCount: 0,
-          ratingsGivenCount: 0,
-          likesGivenCount: 0,
-        },
-        preferences: {
-          language: "th",
-          theme: "system",
-          notifications: {
-            email: true,
-            push: true,
-            novelUpdates: true,
-            comments: true,
-            donations: true,
-            newFollowers: true,
-            systemAnnouncements: true,
-          },
-          privacy: {
-            showActivityStatus: true,
-            profileVisibility: "public",
-            readingHistoryVisibility: "followersOnly",
-          },
-        },
-        wallet: {
-          coinBalance: 0,
-        },
-        gamification: {
-          level: 1,
-          experiencePoints: 0,
-          achievements: [],
-          badges: [],
-          streaks: {
-            currentLoginStreak: 0,
-            longestLoginStreak: 0,
-          },
-        },
-        writerVerification: {
-          status: "verified", // ตั้งเป็น verified โดยตรงสำหรับ seed
-          verifiedAt: new Date(),
-          documents: [],
-        },
-        isEmailVerified: true,
-        isActive: true,
-        isBanned: false,
-        lastLoginAt: new Date(),
-      });
-
-      console.log("✅ สร้างบัญชีผู้เขียนสำเร็จ");
-    } else {
-      console.log("ℹ️ มีบัญชีผู้เขียนอยู่แล้ว");
-
-      // อัปเดตข้อมูลผู้เขียนถ้ามีอยู่แล้ว
-      // Update author information if already exists
-      author.email = AUTHOR_EMAIL.toLowerCase();
-      author.username = AUTHOR_USERNAME;
-      author.password = hashedAuthorPassword; // อัปเดตรหัสผ่านที่ถูก hash
-      author.role = "Writer";
-      author.profile = {
-        displayName: "นักเขียนนิยาย",
-        bio: "ผู้เขียนนิยายหลากหลายแนว รักการเล่าเรื่องและสร้างโลกจินตนาการ",
-        ...author.profile, // รักษาค่าเดิมของฟิลด์ที่ไม่ได้ระบุ
-      };
-      author.trackingStats = {
-        totalLoginDays: author.trackingStats.totalLoginDays || 0,
-        totalNovelsRead: author.trackingStats.totalNovelsRead || 0,
-        totalEpisodesRead: author.trackingStats.totalEpisodesRead || 0,
-        totalCoinSpent: author.trackingStats.totalCoinSpent || 0,
-        totalRealMoneySpent: author.trackingStats.totalRealMoneySpent || 0,
-        lastNovelReadId: author.trackingStats.lastNovelReadId,
-        lastNovelReadAt: author.trackingStats.lastNovelReadAt,
-        joinDate: author.trackingStats.joinDate || new Date(),
-      };
-      author.socialStats = {
-        followersCount: author.socialStats.followersCount || 0,
-        followingCount: author.socialStats.followingCount || 0,
-        novelsCreatedCount: author.socialStats.novelsCreatedCount || 0,
-        commentsMadeCount: author.socialStats.commentsMadeCount || 0,
-        ratingsGivenCount: author.socialStats.ratingsGivenCount || 0,
-        likesGivenCount: author.socialStats.likesGivenCount || 0,
-      };
-      author.preferences = {
-        language: "th",
-        theme: "system",
-        notifications: {
-          email: true,
-          push: true,
-          novelUpdates: true,
-          comments: true,
-          donations: true,
-          newFollowers: true,
-          systemAnnouncements: true,
-        },
-        privacy: {
-          showActivityStatus: author.preferences.privacy.showActivityStatus ?? true,
-          profileVisibility: author.preferences.privacy.profileVisibility || "public",
-          readingHistoryVisibility: author.preferences.privacy.readingHistoryVisibility || "followersOnly",
-        },
-      };
-      author.wallet = {
-        coinBalance: author.wallet.coinBalance || 0,
-        lastCoinTransactionAt: author.wallet.lastCoinTransactionAt,
-      };
-      author.gamification = {
-        level: author.gamification.level || 1,
-        experiencePoints: author.gamification.experiencePoints || 0,
-        achievements: author.gamification.achievements || [],
-        badges: author.gamification.badges || [],
-        streaks: {
-          currentLoginStreak: author.gamification.streaks.currentLoginStreak || 0,
-          longestLoginStreak: author.gamification.streaks.longestLoginStreak || 0,
-          lastLoginDate: author.gamification.streaks.lastLoginDate,
-        },
-      };
-      author.writerVerification = {
-        status: "verified",
-        submittedAt: author.writerVerification?.submittedAt,
-        verifiedAt: author.writerVerification?.verifiedAt || new Date(),
-        rejectedReason: undefined,
-        documents: author.writerVerification?.documents || [],
-      };
-      author.isEmailVerified = true;
-      author.isActive = true;
-      author.isBanned = false;
-      author.lastLoginAt = new Date();
-
-      await author.save();
-      console.log("✅ อัปเดตบัญชีผู้เขียนสำเร็จ");
-    }
-
-    return author._id;
-  } catch (error: any) {
-    console.error("❌ เกิดข้อผิดพลาดในการสร้าง/อัปเดตบัญชีผู้เขียน:", error.message);
-    throw error;
-  }
-}
-
-/**
- * เรียกใช้งานฟังก์ชัน seed
- * Run the seed function
- */
-async function main() {
-  try {
-    // เชื่อมต่อ MongoDB
-    // Connect to MongoDB
-    console.log("🔗 กำลังเชื่อมต่อกับ MongoDB...");
-    await dbConnect();
-    console.log("✅ [MongoDB] เชื่อมต่อสำเร็จ (NovelMaze)");
-
-    // โหลด User model
-    // Load User model
-    const UserModel = (await import("@/backend/models/User")).default;
-    const User = UserModel();
-
-    // รันการ seed สำหรับแอดมินและผู้เขียน
-    // Run seeding for admin and author
-    await seedAdmin(User);
-    await ensureAuthorExists(User);
-
-    console.log("🎉 กระบวนการ seed สำเร็จ");
-  } catch (err: any) {
-    console.error("❌ กระบวนการ seed ล้มเหลว:", err.message);
-    process.exit(1);
-  } finally {
-    // ปิดการเชื่อมต่อ MongoDB
-    // Close MongoDB connection
     try {
-      await mongoose.connection.close();
-      console.log("🔌 ปิดการเชื่อมต่อ MongoDB แล้ว");
-    } catch (closeError: any) {
-      console.error("❌ เกิดข้อผิดพลาดในการปิดการเชื่อมต่อ MongoDB:", closeError.message);
+        if (!ADMIN_EMAIL || !ADMIN_USERNAME || !ADMIN_PASSWORD) {
+            throw new Error("ตัวแปรสภาพแวดล้อมสำหรับแอดมินขาดหายไป: ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD");
+        }
+
+        // ไม่ต้อง hash password ที่นี่แล้ว UserModel pre-save hook จะจัดการเอง
+        // const salt = await bcrypt.genSalt(10); // Salt rounds ควรตรงกับใน UserModel (คือ 10)
+        // const hashedAdminPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
+
+        const existingAdmin = await User.findOne({ $or: [{ email: ADMIN_EMAIL.toLowerCase() }, { username: ADMIN_USERNAME }] });
+
+        // Data objects สำหรับ default values (คงโครงสร้างเดิมไว้ส่วนใหญ่)
+        const adminProfileData: IUserProfile = {
+            displayName: ADMIN_USERNAME,
+            penName: ADMIN_USERNAME,
+            bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ NovelMaze",
+            gender: "prefer_not_to_say",
+        };
+        const adminTrackingStatsData: IUserTrackingStats = {
+            joinDate: existingAdmin?.trackingStats?.joinDate || new Date(),
+            firstLoginAt: existingAdmin?.trackingStats?.firstLoginAt || new Date(),
+            totalLoginDays: existingAdmin?.trackingStats?.totalLoginDays || 1,
+            totalNovelsRead: existingAdmin?.trackingStats?.totalNovelsRead || 0,
+            totalEpisodesRead: existingAdmin?.trackingStats?.totalEpisodesRead || 0,
+            totalTimeSpentReadingSeconds: existingAdmin?.trackingStats?.totalTimeSpentReadingSeconds || 0,
+            totalCoinSpent: existingAdmin?.trackingStats?.totalCoinSpent || 0,
+            totalRealMoneySpent: existingAdmin?.trackingStats?.totalRealMoneySpent || 0,
+        };
+        const adminSocialStatsData: IUserSocialStats = {
+            followersCount: existingAdmin?.socialStats?.followersCount || 0,
+            followingCount: existingAdmin?.socialStats?.followingCount || 0,
+            novelsCreatedCount: existingAdmin?.socialStats?.novelsCreatedCount || 0,
+            commentsMadeCount: existingAdmin?.socialStats?.commentsMadeCount || 0,
+            ratingsGivenCount: existingAdmin?.socialStats?.ratingsGivenCount || 0,
+            likesGivenCount: existingAdmin?.socialStats?.likesGivenCount || 0,
+        };
+        const adminWalletData: IUserWallet = {
+            coinBalance: existingAdmin?.wallet?.coinBalance || 0,
+        };
+        const adminGamificationData: IUserGamification = {
+            level: existingAdmin?.gamification?.level || 1,
+            currentLevelObject: existingAdmin?.gamification?.currentLevelObject || null,
+            experiencePoints: existingAdmin?.gamification?.experiencePoints || 0,
+            totalExperiencePointsEverEarned: existingAdmin?.gamification?.totalExperiencePointsEverEarned || 0,
+            nextLevelXPThreshold: existingAdmin?.gamification?.nextLevelXPThreshold || 100,
+            achievements: existingAdmin?.gamification?.achievements || [],
+            showcasedItems: existingAdmin?.gamification?.showcasedItems || [],
+            primaryDisplayBadge: existingAdmin?.gamification?.primaryDisplayBadge,
+            secondaryDisplayBadges: existingAdmin?.gamification?.secondaryDisplayBadges || [],
+            loginStreaks: {
+                currentStreakDays: existingAdmin?.gamification?.loginStreaks?.currentStreakDays || 1,
+                longestStreakDays: existingAdmin?.gamification?.loginStreaks?.longestStreakDays || 1,
+                lastLoginDate: new Date(),
+            },
+            dailyCheckIn: {
+                currentStreakDays: existingAdmin?.gamification?.dailyCheckIn?.currentStreakDays || 0,
+                lastCheckInDate: existingAdmin?.gamification?.dailyCheckIn?.lastCheckInDate,
+            },
+            lastActivityAt: new Date(),
+        };
+        const adminVerificationData: IUserVerification = {
+            kycStatus: existingAdmin?.verification?.kycStatus || "verified",
+            kycVerifiedAt: existingAdmin?.verification?.kycVerifiedAt || new Date(),
+        };
+        const adminDonationSettingsData: IUserDonationSettings = {
+            isEligibleForDonation: false,
+        };
+        const adminSecuritySettingsData: IUserSecuritySettings = {
+            twoFactorAuthentication: { isEnabled: false },
+            loginAttempts: { count: 0 },
+            activeSessions: [],
+        };
+        const adminMentalWellbeingData: IMentalWellbeingInsights = {
+            overallEmotionalTrend: "unknown",
+        };
+
+        if (existingAdmin) {
+            console.log(`ℹ️ ผู้ใช้แอดมินมีอยู่แล้ว: ${existingAdmin.email}`);
+            existingAdmin.email = ADMIN_EMAIL.toLowerCase();
+            existingAdmin.username = ADMIN_USERNAME;
+            // ส่ง password แบบ plain text, pre-save hook จะ hash ให้
+            existingAdmin.password = ADMIN_PASSWORD;
+            existingAdmin.roles = ["Admin", "Writer", "Reader"];
+            existingAdmin.profile = { ...adminProfileData, ...existingAdmin.profile }; // ให้ค่าใหม่ทับค่าเก่าใน profile
+            existingAdmin.trackingStats = { ...adminTrackingStatsData, ...existingAdmin.trackingStats };
+            existingAdmin.socialStats = { ...adminSocialStatsData, ...existingAdmin.socialStats };
+            existingAdmin.preferences = existingAdmin.preferences ? { ...createDefaultPreferences(), ...existingAdmin.preferences } : createDefaultPreferences();
+            existingAdmin.wallet = { ...adminWalletData, ...existingAdmin.wallet };
+            existingAdmin.gamification = { ...adminGamificationData, ...existingAdmin.gamification };
+            existingAdmin.verification = { ...adminVerificationData, ...existingAdmin.verification };
+            existingAdmin.donationSettings = { ...adminDonationSettingsData, ...existingAdmin.donationSettings };
+            existingAdmin.securitySettings = existingAdmin.securitySettings ? { ...adminSecuritySettingsData, ...existingAdmin.securitySettings } : adminSecuritySettingsData;
+            existingAdmin.mentalWellbeingInsights = existingAdmin.mentalWellbeingInsights ? { ...adminMentalWellbeingData, ...existingAdmin.mentalWellbeingInsights } : adminMentalWellbeingData;
+            existingAdmin.isEmailVerified = true;
+            existingAdmin.isActive = true;
+            existingAdmin.isBanned = false;
+            existingAdmin.lastLoginAt = new Date();
+
+            const credAccount = existingAdmin.accounts.find(acc => acc.provider === 'credentials');
+            if (!credAccount) {
+                existingAdmin.accounts.push({
+                    provider: "credentials",
+                    providerAccountId: existingAdmin._id.toString(),
+                    type: "credentials",
+                } as IAccount);
+            } else if (credAccount && credAccount.providerAccountId !== existingAdmin._id.toString()) {
+                // ถ้ามี credentials account อยู่แล้ว และ providerAccountId ไม่ตรงกับ _id ปัจจุบัน (อาจไม่ควรเกิด)
+                // อาจจะอัปเดต providerAccountId หรือ log warning
+                console.warn(`⚠️ ProviderAccountId ของ Admin (${credAccount.providerAccountId}) ไม่ตรงกับ _id (${existingAdmin._id.toString()}). พิจารณาอัปเดต.`);
+                // credAccount.providerAccountId = existingAdmin._id.toString();
+            }
+
+
+            await existingAdmin.save(); // การ save() จะ trigger pre-save hook
+            console.log(`✅ อัปเดตข้อมูลแอดมินสำเร็จ: ${ADMIN_EMAIL}`);
+        } else {
+            console.log("🌱 สร้างบัญชีผู้ใช้แอดมินใหม่...");
+            const newAdmin = await User.create({
+                email: ADMIN_EMAIL.toLowerCase(),
+                username: ADMIN_USERNAME,
+                password: ADMIN_PASSWORD, // ส่ง password แบบ plain text
+                roles: ["Admin", "Writer", "Reader"],
+                profile: adminProfileData,
+                accounts: [{
+                    provider: "credentials",
+                    providerAccountId: ADMIN_USERNAME, // จะถูก override โดย pre-save hook ให้เป็น _id (ถ้า logic นั้นมีอยู่) หรือใช้ค่านี้
+                    type: "credentials",
+                } as IAccount],
+                trackingStats: adminTrackingStatsData,
+                socialStats: adminSocialStatsData,
+                preferences: createDefaultPreferences(),
+                wallet: adminWalletData,
+                gamification: adminGamificationData,
+                verification: adminVerificationData,
+                donationSettings: adminDonationSettingsData,
+                securitySettings: adminSecuritySettingsData,
+                mentalWellbeingInsights: adminMentalWellbeingData,
+                isEmailVerified: true,
+                isActive: true,
+                isBanned: false,
+                lastLoginAt: new Date(),
+            });
+            console.log(`✅ สร้างผู้ใช้แอดมินสำเร็จ: ${newAdmin.email} (ID: ${newAdmin._id})`);
+        }
+    } catch (error: any) {
+        console.error("❌ เกิดข้อผิดพลาดในการสร้าง/อัปเดตผู้ใช้แอดมิน:", error.message, error.stack);
+        throw error;
     }
-    process.exit(0);
-  }
+}
+
+async function ensureAuthorExists(User: mongoose.Model<IUser>) {
+    try {
+        if (!AUTHOR_EMAIL || !AUTHOR_USERNAME || !AUTHOR_PASSWORD) {
+            throw new Error("ตัวแปรสภาพแวดล้อมสำหรับผู้เขียนขาดหายไป: AUTHOR_EMAIL, AUTHOR_USERNAME, AUTHOR_PASSWORD");
+        }
+        // ไม่ต้อง hash password ที่นี่แล้ว UserModel pre-save hook จะจัดการเอง
+        // const salt = await bcrypt.genSalt(10);
+        // const hashedAuthorPassword = await bcrypt.hash(AUTHOR_PASSWORD, salt);
+
+        let author = await User.findOne({ $or: [{ email: AUTHOR_EMAIL.toLowerCase() }, { username: AUTHOR_USERNAME }] });
+
+        // Data objects สำหรับ default values
+        const authorProfileData: IUserProfile = {
+            displayName: AUTHOR_USERNAME,
+            penName: AUTHOR_USERNAME,
+            bio: "นักเขียนนิยายภาพ มากประสบการณ์ พร้อมแบ่งปันจินตนาการผ่านตัวอักษรและภาพ",
+            gender: "prefer_not_to_say",
+        };
+        const authorTrackingStatsData: IUserTrackingStats = {
+            joinDate: author?.trackingStats?.joinDate || new Date(),
+            firstLoginAt: author?.trackingStats?.firstLoginAt || new Date(),
+            totalLoginDays: author?.trackingStats?.totalLoginDays || 1,
+            totalNovelsRead: 0, totalEpisodesRead: 0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0,
+        };
+        const authorSocialStatsData: IUserSocialStats = { followersCount: 0, followingCount: 0, novelsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0 };
+        const authorWalletData: IUserWallet = { coinBalance: 0 };
+        const authorGamificationData: IUserGamification = {
+            level: 1, currentLevelObject: null, experiencePoints: 0, totalExperiencePointsEverEarned: 0, nextLevelXPThreshold: 100,
+            achievements: [], showcasedItems: [], primaryDisplayBadge: undefined, secondaryDisplayBadges: [],
+            loginStreaks: { currentStreakDays: 1, longestStreakDays: 1, lastLoginDate: new Date() },
+            dailyCheckIn: { currentStreakDays: 0 }, lastActivityAt: new Date(),
+        };
+        const authorVerificationData: IUserVerification = {
+            kycStatus: "verified", kycVerifiedAt: new Date(), writerApplicationId: new Types.ObjectId()
+        };
+        const authorDonationSettingsData: IUserDonationSettings = { isEligibleForDonation: true, activeAuthorDirectDonationAppId: new Types.ObjectId() };
+        const authorSecuritySettingsData: IUserSecuritySettings = { twoFactorAuthentication: { isEnabled: false }, loginAttempts: { count: 0 }, activeSessions: [] };
+        const authorMentalWellbeingData: IMentalWellbeingInsights = { overallEmotionalTrend: "unknown" };
+        const authorWriterStatsData: IWriterStats = {
+            totalNovelsPublished: 0, totalEpisodesPublished: 0, totalViewsAcrossAllNovels: 0, totalReadsAcrossAllNovels: 0,
+            totalLikesReceivedOnNovels: 0, totalCommentsReceivedOnNovels: 0, totalEarningsToDate: 0, totalCoinsReceived: 0,
+            totalRealMoneyReceived: 0, totalDonationsReceived: 0, writerSince: new Date(),
+            novelPerformanceSummaries: [] as unknown as Types.DocumentArray<INovelPerformanceStats>,
+        };
+
+        if (author) {
+            console.log(`ℹ️ ผู้ใช้ผู้เขียนมีอยู่แล้ว: ${author.email}`);
+            author.email = AUTHOR_EMAIL.toLowerCase();
+            author.username = AUTHOR_USERNAME;
+            // ส่ง password แบบ plain text, pre-save hook จะ hash ให้
+            author.password = AUTHOR_PASSWORD;
+            author.roles = Array.from(new Set([...author.roles, "Writer", "Reader"]));
+            author.profile = { ...authorProfileData, ...author.profile };
+            author.trackingStats = { ...authorTrackingStatsData, ...author.trackingStats };
+            author.socialStats = { ...authorSocialStatsData, ...author.socialStats };
+            author.preferences = author.preferences ? { ...createDefaultPreferences(), ...author.preferences } : createDefaultPreferences();
+            author.wallet = { ...authorWalletData, ...author.wallet };
+            author.gamification = { ...authorGamificationData, ...author.gamification };
+            author.verification = { ...authorVerificationData, ...author.verification };
+            author.donationSettings = { ...authorDonationSettingsData, ...author.donationSettings };
+            author.securitySettings = author.securitySettings ? { ...authorSecuritySettingsData, ...author.securitySettings } : authorSecuritySettingsData;
+            author.mentalWellbeingInsights = author.mentalWellbeingInsights ? { ...authorMentalWellbeingData, ...author.mentalWellbeingInsights } : authorMentalWellbeingData;
+            author.writerStats = author.writerStats ? { ...authorWriterStatsData, ...author.writerStats } : authorWriterStatsData;
+            author.isEmailVerified = true;
+            author.isActive = true;
+            author.isBanned = false;
+            author.lastLoginAt = new Date();
+
+            const credAccount = author.accounts.find(acc => acc.provider === 'credentials');
+            if (!credAccount) {
+                author.accounts.push({
+                    provider: "credentials", providerAccountId: author._id.toString(), type: "credentials",
+                } as IAccount);
+            } else if (credAccount && credAccount.providerAccountId !== author._id.toString()){
+                 console.warn(`⚠️ ProviderAccountId ของ Author (${credAccount.providerAccountId}) ไม่ตรงกับ _id (${author._id.toString()}). พิจารณาอัปเดต.`);
+                // credAccount.providerAccountId = author._id.toString();
+            }
+
+            await author.save(); // การ save() จะ trigger pre-save hook
+            console.log(`✅ อัปเดตข้อมูลผู้เขียนสำเร็จ: ${AUTHOR_EMAIL}`);
+        } else {
+            console.log("🌱 สร้างบัญชีผู้ใช้สำหรับเป็นผู้เขียนนิยายใหม่...");
+            author = await User.create({
+                email: AUTHOR_EMAIL.toLowerCase(),
+                username: AUTHOR_USERNAME,
+                password: AUTHOR_PASSWORD, // ส่ง password แบบ plain text
+                roles: ["Writer", "Reader"],
+                profile: authorProfileData,
+                accounts: [{ provider: "credentials", providerAccountId: AUTHOR_USERNAME, type: "credentials" } as IAccount],
+                trackingStats: authorTrackingStatsData,
+                socialStats: authorSocialStatsData,
+                preferences: createDefaultPreferences(),
+                wallet: authorWalletData,
+                gamification: authorGamificationData,
+                verification: authorVerificationData,
+                donationSettings: authorDonationSettingsData,
+                securitySettings: authorSecuritySettingsData,
+                mentalWellbeingInsights: authorMentalWellbeingData,
+                writerStats: authorWriterStatsData,
+                isEmailVerified: true,
+                isActive: true,
+                isBanned: false,
+                lastLoginAt: new Date(),
+            });
+            console.log(`✅ สร้างบัญชีผู้เขียนสำเร็จ: ${author.email} (ID: ${author._id})`);
+        }
+        return author._id;
+    } catch (error: any) {
+        console.error("❌ เกิดข้อผิดพลาดในการสร้าง/อัปเดตบัญชีผู้เขียน:", error.message, error.stack);
+        throw error;
+    }
+}
+
+async function main() {
+    try {
+        console.log("🔗 กำลังเชื่อมต่อกับ MongoDB...");
+        await dbConnect();
+        console.log("✅ [MongoDB] เชื่อมต่อสำเร็จ");
+
+        const User = UserModelImport; // ใช้ Model ที่ import มา
+
+        await seedAdmin(User);
+        await ensureAuthorExists(User);
+
+        console.log("🎉 กระบวนการ seed สำเร็จ");
+    } catch (err: any) {
+        console.error("❌ กระบวนการ seed ล้มเหลว:", err.message, err.stack);
+        process.exit(1); // ออกจาก process ด้วย error code
+    } finally {
+        try {
+            await mongoose.connection.close();
+            console.log("🔌 ปิดการเชื่อมต่อ MongoDB แล้ว");
+        } catch (closeError: any) {
+            console.error("❌ เกิดข้อผิดพลาดในการปิดการเชื่อมต่อ MongoDB:", closeError.message);
+        }
+        process.exit(0); // ออกจาก process เมื่อสำเร็จ
+    }
 }
 
 main();

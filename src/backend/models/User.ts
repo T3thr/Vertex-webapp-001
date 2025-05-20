@@ -8,7 +8,7 @@
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { ILevel } from "./Level"; // << ใหม่: Import ILevel
+import LevelModel, { ILevel } from "./Level"; // << ใหม่: Import ILevel
 // UserAchievement ไม่จำเป็นต้อง import โดยตรงที่นี่ แต่ gamification.achievements จะอ้างอิงถึง _id ของ UserEarnedItem ใน UserAchievement
 // ซึ่ง UserEarnedItem เองก็มี itemId ที่ ref ไปยัง Achievement/Badge อีกที
 
@@ -243,7 +243,7 @@ export interface IAccount extends Document {
  * @property {string} [avatarUrl] - URL รูปโปรไฟล์ (อ้างอิง Media model หรือ URL ภายนอก)
  * @property {string} [coverImageUrl] - URL รูปปกโปรไฟล์ (อ้างอิง Media model หรือ URL ภายนอก)
  * @property {string} [bio] - คำอธิบายตัวตนสั้นๆ
- * @property {"male" | "female" | "other" | "prefer_not_to_say"} [gender] - เพศของผู้ใช้
+ * @property {"male" | "female" | "lgbtq+" | "other" | "prefer_not_to_say"} [gender] - เพศของผู้ใช้
  * @property {Date} [dateOfBirth] - วันเกิดของผู้ใช้ (เพื่อคำนวณอายุ, ไม่แสดงสาธารณะโดยตรง)
  * @property {string} [country] - ประเทศ (รหัส ISO 3166-1 alpha-2 เช่น "TH")
  * @property {string} [timezone] - เขตเวลา (เช่น "Asia/Bangkok")
@@ -256,7 +256,7 @@ export interface IUserProfile {
   avatarUrl?: string; // URL รูปโปรไฟล์
   coverImageUrl?: string; // URL รูปปกโปรไฟล์
   bio?: string; // คำอธิบายตัวตน
-  gender?: "male" | "female" | "other" | "prefer_not_to_say"; // เพศ
+  gender?: "male" | "female" | "lgbtq+" | "other" | "prefer_not_to_say"; // เพศ
   dateOfBirth?: Date; // วันเกิด
   country?: string; // ประเทศ
   timezone?: string; // เขตเวลา
@@ -832,7 +832,7 @@ const UserProfileSchema = new Schema<IUserProfile>(
     avatarUrl: { type: String, trim: true, maxlength: [2048, "URL รูปโปรไฟล์ยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปโปรไฟล์ไม่ถูกต้อง" }, comment: "URL รูปโปรไฟล์" },
     coverImageUrl: { type: String, trim: true, maxlength: [2048, "URL รูปปกยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปปกไม่ถูกต้อง" }, comment: "URL รูปปกโปรไฟล์" },
     bio: { type: String, trim: true, maxlength: [500, "คำอธิบายตัวตนต้องไม่เกิน 500 ตัวอักษร"], comment: "คำอธิบายตัวตน" },
-    gender: { type: String, enum: ["male", "female", "other", "prefer_not_to_say"], comment: "เพศ" },
+    gender: { type: String, enum: ["male", "female", "lgbtq+", "other", "prefer_not_to_say"], comment: "เพศ" },
     dateOfBirth: { type: Date, comment: "วันเกิด" },
     country: { type: String, trim: true, uppercase: true, match: [/^[A-Z]{2}$/, "รหัสประเทศต้องเป็น ISO 3166-1 alpha-2"], comment: "ประเทศ (ISO 3166-1 alpha-2)" },
     timezone: { type: String, trim: true, maxlength: 100, comment: "เขตเวลา" },
@@ -1271,19 +1271,22 @@ UserSchema.pre<IUser>("save", async function (next) {
 
   // << ใหม่: ตั้งค่า currentLevelObject และ nextLevelXPThreshold สำหรับผู้ใช้ใหม่ หรือเมื่อ level เปลี่ยน
   if (this.isNew || this.isModified("gamification.level")) {
-    const LevelModel = models.Level as mongoose.Model<ILevel> || model<ILevel>("Level");
-    // ค้นหา Level document ที่ตรงกับ level ปัจจุบันของผู้ใช้
-    const currentLevelDoc = await LevelModel.findOne({ levelNumber: this.gamification.level }).lean();
-    if (currentLevelDoc) {
-      this.gamification.currentLevelObject = currentLevelDoc._id;
-      this.gamification.nextLevelXPThreshold = currentLevelDoc.xpToNextLevelFromThis || this.gamification.nextLevelXPThreshold; // ใช้ค่าเดิมถ้าไม่พบ
-    } else if (this.gamification.level === 1) {
-        // กรณีพิเศษสำหรับ Level 1 หากยังไม่มี Level.ts record
-        // เราสามารถตั้งค่า default หรือรอให้ Level.ts ถูก seed
-        // หาก Level.ts มีข้อมูล Level 1, ส่วนนี้อาจจะไม่จำเป็น
-        this.gamification.nextLevelXPThreshold = 100; // Default XP for next level from level 1
-        this.gamification.currentLevelObject = null; // หรือหา Level 1
-        // console.warn(`[User Pre-Save Hook] Level 1 document not found in Levels collection for user ${this.username}. Using default nextLevelXPThreshold.`);
+    // const LevelModel = models.Level as mongoose.Model<ILevel> || model<ILevel>("Level"); // บรรทัดนี้ไม่จำเป็นแล้วถ้า import ด้านบน
+    try {
+      const currentLevelDoc = await LevelModel.findOne({ levelNumber: this.gamification.level }).lean();
+      if (currentLevelDoc) {
+        this.gamification.currentLevelObject = currentLevelDoc._id;
+        this.gamification.nextLevelXPThreshold = currentLevelDoc.xpToNextLevelFromThis || this.gamification.nextLevelXPThreshold;
+      } else if (this.gamification.level === 1 && !currentLevelDoc) {
+         console.warn(`[User Pre-Save Hook] Level ${this.gamification.level} document not found in Levels collection for user ${this.username}. Attempting to set default nextLevelXPThreshold.`);
+         // หาก Level 1 ไม่มีใน DB จริงๆ อาจจะต้องมีค่า default ที่เหมาะสมสำหรับ nextLevelXPThreshold
+         this.gamification.nextLevelXPThreshold = this.gamification.nextLevelXPThreshold || 100; // หรือค่า default อื่นๆ
+         this.gamification.currentLevelObject = null; // หรือจัดการตามความเหมาะสม
+      }
+    } catch (levelError) {
+        console.error(`❌ [User Pre-Save Hook] Error fetching Level ${this.gamification.level} for user ${this.username}:`, levelError);
+        // พิจารณาว่าจะให้ throw error หรือไม่ หรือจะให้ user สร้างต่อไปโดยไม่มีข้อมูล level
+        // หาก Level เป็นส่วนสำคัญ อาจจะต้อง next(levelError);
     }
   }
   next();
@@ -1294,10 +1297,13 @@ UserSchema.pre<IUser>("save", async function (next) {
 // ==================================================================================================
 
 UserSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
+  // console.log(`[matchPassword] Comparing: '<span class="math-inline">\{enteredPassword\}' with stored hash\: '</span>{this.password ? this.password.substring(0,10)+'...' : 'NO_PASSWORD'}'`);
   if (!this.password) {
     return false;
   }
-  return await bcrypt.compare(enteredPassword, this.password);
+  const isMatch = await bcrypt.compare(enteredPassword, this.password);
+  // console.log(`[matchPassword] Comparison result: ${isMatch}`);
+  return isMatch;
 };
 
 UserSchema.methods.generateEmailVerificationToken = function (): string {
