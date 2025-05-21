@@ -11,6 +11,18 @@ import UserModel, { IUser, IWriterStats, INovelPerformanceStats } from "./User";
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Novel
 // ==================================================================================================
 
+/**
+ * @enum {string} NovelStatus
+ * @description สถานะของนิยาย
+ * - `draft`: ฉบับร่าง, ยังไม่เผยแพร่ ผู้เขียนกำลังแก้ไข
+ * - `published`: เผยแพร่แล้ว ผู้อ่านทั่วไปสามารถเข้าถึงได้
+ * - `unpublished`: ยกเลิกการเผยแพร่ (เคยเผยแพร่แล้ว) ผู้เขียนนำออกจากสาธารณะ
+ * - `archived`: เก็บเข้าคลัง (ไม่แสดงผลในรายการหลัก แต่ข้อมูลยังอยู่สำหรับผู้เขียน)
+ * - `pending_review`: รอการตรวจสอบ (เช่น เนื้อหาที่อาจผิดกฎ หรือรอการอนุมัติจากทีมงาน)
+ * - `rejected_by_admin`: ถูกปฏิเสธโดยผู้ดูแลระบบ (เช่น เนื้อหาไม่ผ่านการตรวจสอบ)
+ * - `banned_by_admin`: ถูกระงับโดยผู้ดูแลระบบ (เช่น เนื้อหาละเมิดนโยบายร้ายแรง)
+ * - `scheduled`: ตั้งเวลาเผยแพร่ (จะเปลี่ยนเป็น published เมื่อถึงเวลาที่กำหนด)
+ */
 export enum NovelStatus {
   DRAFT = "draft",
   PUBLISHED = "published",
@@ -22,6 +34,15 @@ export enum NovelStatus {
   SCHEDULED = "scheduled",
 }
 
+/**
+ * @enum {string} NovelAccessLevel
+ * @description ระดับการเข้าถึงนิยาย
+ * - `public`: สาธารณะ ทุกคนสามารถเข้าถึงได้
+ * - `unlisted`: ไม่แสดงในรายการค้นหาหรือหน้าหลัก แต่เข้าถึงได้ผ่านลิงก์โดยตรง
+ * - `private`: ส่วนตัว ผู้เขียนและผู้ที่ได้รับเชิญเท่านั้นที่เห็น
+ * - `followers_only`: เฉพาะผู้ติดตามของผู้เขียนเท่านั้นที่สามารถเข้าถึงได้
+ * - `premium_only`: เฉพาะสมาชิกระดับพรีเมียม (ถ้ามีระบบสมาชิก)
+ */
 export enum NovelAccessLevel {
   PUBLIC = "public",
   UNLISTED = "unlisted",
@@ -30,6 +51,14 @@ export enum NovelAccessLevel {
   PREMIUM_ONLY = "premium_only",
 }
 
+/**
+ * @enum {string} NovelEndingType
+ * @description ประเภทตอนจบของนิยาย
+ * - `single_ending`: ตอนจบแบบเดียว
+ * - `multiple_endings`: หลายตอนจบ (ขึ้นอยู่กับการเลือกของผู้เล่นใน Visual Novel)
+ * - `ongoing`: ยังไม่จบ (สำหรับนิยายที่กำลังดำเนินเรื่องและอัปเดตตอนใหม่ๆ)
+ * - `open_ending`: ตอนจบแบบปลายเปิด ให้ผู้อ่านตีความเอง
+ */
 export enum NovelEndingType {
   SINGLE_ENDING = "single_ending",
   MULTIPLE_ENDINGS = "multiple_endings",
@@ -37,6 +66,15 @@ export enum NovelEndingType {
   OPEN_ENDING = "open_ending",
 }
 
+/**
+ * @enum {string} NovelContentType
+ * @description ประเภทเนื้อหาของนิยาย
+ * - `original`: งานเขียนต้นฉบับที่ผู้เขียนสร้างขึ้นเอง
+ * - `fan_fiction`: แฟนฟิคชั่น อ้างอิงจากผลงานอื่น
+ * - `translation`: งานแปลจากภาษาอื่น
+ * - `adaptation`: งานดัดแปลงจากสื่ออื่น (เช่น ภาพยนตร์, เกม)
+ * - `interactive_fiction`: นิยายเชิงโต้ตอบที่เน้นการเลือกของผู้เล่นเป็นหลัก (นอกเหนือจาก Visual Novel ทั่วไป)
+ */
 export enum NovelContentType {
   ORIGINAL = "original",
   FAN_FICTION = "fan_fiction",
@@ -49,6 +87,10 @@ export enum NovelContentType {
 // SECTION: อินเทอร์เฟซย่อย (Sub-Interfaces) สำหรับโครงสร้างข้อมูลที่ซับซ้อนภายใน Novel
 // ==================================================================================================
 
+/**
+ * @interface INarrativeFocus
+ * @description (เพิ่มใหม่) การกำหนดรายละเอียดเชิงลึกเกี่ยวกับลักษณะการเล่าเรื่องและองค์ประกอบหลักของนิยาย
+ */
 export interface INarrativeFocus {
   narrativePacingTags?: Types.ObjectId[];
   primaryConflictTypes?: Types.ObjectId[];
@@ -82,18 +124,22 @@ const NarrativeFocusSchema = new Schema<INarrativeFocus> (
   { _id: false }
 );
 
+/**
+ * @interface IThemeAssignment
+ * @description การกำหนดธีม, หมวดหมู่, และคำเตือนเนื้อหาของนิยาย
+ */
 export interface IThemeAssignment {
-  mainTheme: {
-    categoryId: Types.ObjectId;
-    customName?: string;
+  mainTheme: { // ธีมหลักของนิยาย
+    categoryId: Types.ObjectId; // ID ของหมวดหมู่หลัก (อ้างอิง Category model, type: THEME หรือ GENRE)
+    customName?: string; // ชื่อธีมหลักที่ผู้เขียนกำหนดเอง (ถ้าหมวดหมู่เป็น "อื่นๆ")
   };
-  subThemes?: Array<{
-    categoryId: Types.ObjectId;
+  subThemes?: Array<{ // ธีมรองหรือแท็กย่อย
+    categoryId: Types.ObjectId; // ID ของหมวดหมู่รอง (อ้างอิง Category model, type: THEME, SUB_GENRE, TAG)
     customName?: string;
   }>;
-  moodAndTone?: Types.ObjectId[];
-  contentWarnings?: Types.ObjectId[];
-  customTags?: string[];
+  moodAndTone?: Types.ObjectId[]; // ID ของหมวดหมู่ที่สื่อถึงอารมณ์และโทน (อ้างอิง Category model, type: MOOD_AND_TONE)
+  contentWarnings?: Types.ObjectId[]; // ID ของหมวดหมู่ที่เป็นคำเตือนเนื้อหา (อ้างอิง Category model, type: CONTENT_WARNING)
+  customTags?: string[]; // แท็กที่ผู้เขียนกำหนดเองเพิ่มเติม
 }
 
 const ThemeAssignmentSchema = new Schema<IThemeAssignment>(
@@ -116,12 +162,16 @@ const ThemeAssignmentSchema = new Schema<IThemeAssignment>(
   { _id: false }
 );
 
+/**
+ * @interface ISourceType
+ * @description ข้อมูลเกี่ยวกับแหล่งที่มาของเนื้อหานิยาย (ถ้าไม่ใช่ Original)
+ */
 export interface ISourceType {
   type: NovelContentType;
-  fandomCategoryId?: Types.ObjectId;
+  fandomCategoryId?: Types.ObjectId; // อ้างอิง Category (type: FANDOM)
   originalWorkTitle?: string;
   originalWorkAuthor?: string;
-  originalWorkLanguage?: Types.ObjectId;
+  originalWorkLanguage?: Types.ObjectId; // อ้างอิง Category (type: LANGUAGE)
   permissionDetails?: string;
 }
 
@@ -137,6 +187,10 @@ const SourceTypeSchema = new Schema<ISourceType>(
   { _id: false }
 );
 
+/**
+ * @interface INovelStats
+ * @description สถิติต่างๆ ที่เกี่ยวข้องกับนิยาย
+ */
 export interface INovelStats {
   viewsCount: number;
   uniqueViewersCount: number;
@@ -176,11 +230,15 @@ const NovelStatsSchema = new Schema<INovelStats>(
   { _id: false }
 );
 
+/**
+ * @interface IMonetizationSettings
+ * @description การตั้งค่าเกี่ยวกับการสร้างรายได้จากนิยาย
+ */
 export interface IMonetizationSettings {
   isCoinBasedUnlock: boolean;
   defaultEpisodePriceCoins?: number;
   allowDonations: boolean;
-  donationApplicationId?: Types.ObjectId;
+  donationApplicationId?: Types.ObjectId; // อ้างอิง DonationApplication model (ถ้ามี)
   isAdSupported: boolean;
   isPremiumExclusive: boolean;
 }
@@ -197,11 +255,15 @@ const MonetizationSettingsSchema = new Schema<IMonetizationSettings>(
   { _id: false }
 );
 
+/**
+ * @interface IPsychologicalAnalysisConfig
+ * @description การตั้งค่าเกี่ยวกับการวิเคราะห์ทางจิตวิทยาสำหรับนิยายเรื่องนี้
+ */
 export interface IPsychologicalAnalysisConfig {
-  allowsPsychologicalAnalysis: boolean;
-  sensitiveChoiceCategoriesBlocked?: Types.ObjectId[];
-  lastAnalysisDate?: Date;
-  analysisVersion?: string;
+  allowsPsychologicalAnalysis: boolean; // ผู้เขียนอนุญาตให้นิยายนี้ถูกนำไปวิเคราะห์หรือไม่
+  sensitiveChoiceCategoriesBlocked?: Types.ObjectId[]; // (เพิ่มใหม่) ID ของ Category (type: SENSITIVE_CHOICE_TOPIC) ที่ไม่ต้องการให้ AI วิเคราะห์
+  lastAnalysisDate?: Date; // วันที่ทำการวิเคราะห์ครั้งล่าสุด
+  analysisVersion?: string; // เวอร์ชันของโมเดลการวิเคราะห์ที่ใช้
 }
 
 const PsychologicalAnalysisConfigSchema = new Schema<IPsychologicalAnalysisConfig>(
@@ -214,13 +276,17 @@ const PsychologicalAnalysisConfigSchema = new Schema<IPsychologicalAnalysisConfi
   { _id: false }
 );
 
+/**
+ * @interface ICollaborationSettings
+ * @description การตั้งค่าสำหรับการทำงานร่วมกัน (Co-authors)
+ */
 export interface ICollaborationSettings {
   allowCoAuthorRequests: boolean;
   pendingCoAuthors?: Array<{
     userId: Types.ObjectId;
-    role: string;
-    permissions: string[];
-    versionControlResponsibility?: boolean;
+    role: string; // เช่น "editor", "proofreader", "co-writer"
+    permissions: string[]; // เช่น "edit_episodes", "manage_story_map"
+    versionControlResponsibility?: boolean; // (เพิ่มใหม่) เป็นผู้รับผิดชอบหลักในการ merge หรือไม่
   }>;
 }
 
@@ -240,11 +306,16 @@ const CollaborationSettingsSchema = new Schema<ICollaborationSettings>(
   { _id: false }
 );
 
+/**
+ * @interface IWorldBuildingDetails
+ * @description (เพิ่มใหม่) ข้อมูลสำคัญเกี่ยวกับโลกของนิยาย (สำหรับนิยายที่มีความซับซ้อนสูง)
+ */
 export interface IWorldBuildingDetails {
-    loreSummary?: string;
-    magicSystemRules?: string;
-    technologyPrinciples?: string;
-    keyLocationsAtlasId?: Types.ObjectId;
+    loreSummary?: string; // สรุป Lore สำคัญ
+    magicSystemRules?: string; // กฎของระบบเวทมนตร์ (ถ้ามี)
+    technologyPrinciples?: string; // หลักการของเทคโนโลยี (ถ้ามี)
+    keyLocationsAtlasId?: Types.ObjectId; // (Optional) ID อ้างอิงไปยังระบบ Atlas หรือแผนที่ (ถ้ามี)
+    // สามารถเพิ่ม fields อื่นๆ ที่จำเป็นสำหรับ world building ได้
 }
 
 const WorldBuildingDetailsSchema = new Schema<IWorldBuildingDetails>(
@@ -261,41 +332,46 @@ const WorldBuildingDetailsSchema = new Schema<IWorldBuildingDetails>(
 // SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Novel (INovel Document Interface)
 // ==================================================================================================
 
-export interface INovel {
+/**
+ * @interface INovel
+ * @extends Document (Mongoose Document)
+ * @description อินเทอร์เฟซหลักสำหรับเอกสารนิยายใน Collection "novels"
+ */
+export interface INovel extends Document {
   _id: Types.ObjectId;
-  title: string;
-  slug: string;
-  author: Types.ObjectId;
-  coAuthors?: Types.ObjectId[];
-  synopsis: string;
-  longDescription?: string;
-  coverImageUrl?: string;
-  bannerImageUrl?: string;
-  themeAssignment: IThemeAssignment;
-  narrativeFocus?: INarrativeFocus;
-  worldBuildingDetails?: IWorldBuildingDetails;
-  ageRatingCategoryId?: Types.ObjectId;
-  status: NovelStatus;
-  accessLevel: NovelAccessLevel;
-  isCompleted: boolean;
-  endingType: NovelEndingType;
-  sourceType: ISourceType;
-  language: Types.ObjectId;
-  firstEpisodeId?: Types.ObjectId;
-  totalEpisodesCount: number;
-  publishedEpisodesCount: number;
-  stats: INovelStats;
-  monetizationSettings: IMonetizationSettings;
-  psychologicalAnalysisConfig: IPsychologicalAnalysisConfig;
-  collaborationSettings?: ICollaborationSettings;
-  isFeatured?: boolean;
-  adminNotes?: string;
-  publishedAt?: Date;
-  scheduledPublicationDate?: Date;
-  lastContentUpdatedAt: Date;
-  relatedNovels?: Types.ObjectId[];
-  seriesId?: Types.ObjectId;
-  seriesOrder?: number;
+  title: string; // ชื่อนิยาย
+  slug: string; // Slug ที่ใช้ใน URL
+  author: Types.ObjectId; // ID ของผู้เขียนหลัก
+  coAuthors?: Types.ObjectId[]; // ID ของผู้เขียนร่วม
+  synopsis: string; // เรื่องย่อ
+  longDescription?: string; // คำโปรยหรือรายละเอียดเพิ่มเติม
+  coverImageUrl?: string; // URL รูปปกนิยาย
+  bannerImageUrl?: string; // URL รูปแบนเนอร์
+  themeAssignment: IThemeAssignment; // การกำหนดธีม, หมวดหมู่, และคำเตือน
+  narrativeFocus?: INarrativeFocus; // (เพิ่มใหม่) รายละเอียดเชิงลึกเกี่ยวกับการเล่าเรื่อง
+  worldBuildingDetails?: IWorldBuildingDetails; // (เพิ่มใหม่) รายละเอียดเกี่ยวกับโลกของนิยาย
+  ageRatingCategoryId?: Types.ObjectId; // ID ของหมวดหมู่อายุผู้อ่าน (อ้างอิง Category, type: AGE_RATING)
+  status: NovelStatus; // สถานะปัจจุบันของนิยาย
+  accessLevel: NovelAccessLevel; // ระดับการเข้าถึงนิยาย
+  isCompleted: boolean; // นิยายเรื่องนี้เขียนจบแล้วหรือยัง
+  endingType: NovelEndingType; // ประเภทตอนจบของนิยาย
+  sourceType: ISourceType; // ข้อมูลแหล่งที่มาของเนื้อหา
+  language: Types.ObjectId; // (เปลี่ยนเป็น Ref) ภาษาหลักของนิยาย (อ้างอิง Category, type: LANGUAGE)
+  firstEpisodeId?: Types.ObjectId; // ID ของตอนแรกสุด
+  totalEpisodesCount: number; // จำนวนตอนทั้งหมด
+  publishedEpisodesCount: number; // จำนวนตอนที่เผยแพร่แล้ว
+  stats: INovelStats; // สถิติต่างๆ ของนิยาย
+  monetizationSettings: IMonetizationSettings; // การตั้งค่าการสร้างรายได้
+  psychologicalAnalysisConfig: IPsychologicalAnalysisConfig; // การตั้งค่าการวิเคราะห์ทางจิตวิทยา
+  collaborationSettings?: ICollaborationSettings; // การตั้งค่าการทำงานร่วมกัน
+  isFeatured?: boolean; // นิยายเรื่องนี้ถูกเลือกให้เป็น Featured หรือไม่
+  adminNotes?: string; // หมายเหตุจาก Admin (สำหรับทีมงานภายใน)
+  publishedAt?: Date; // วันที่เผยแพร่นิยายครั้งแรก
+  scheduledPublicationDate?: Date; // วันที่ตั้งเวลาเผยแพร่
+  lastContentUpdatedAt: Date; // วันที่เนื้อหานิยายมีการอัปเดตล่าสุด
+  relatedNovels?: Types.ObjectId[]; // ID ของนิยายที่เกี่ยวข้อง
+  seriesId?: Types.ObjectId; // ID ของซีรีส์ที่นิยายนี้เป็นส่วนหนึ่ง
+  seriesOrder?: number; // ลำดับของนิยายนี้ในซีรีส์
   createdAt: Date;
   updatedAt: Date;
 }
@@ -420,7 +496,11 @@ const NovelSchema = new Schema<INovel>(
 
 NovelSchema.index(
     { title: "text", synopsis: "text", longDescription: "text", "themeAssignment.customTags": "text" },
-    { name: "NovelContentTextSearchIndex", weights: { title: 10, synopsis: 5, "themeAssignment.customTags": 3, longDescription: 1 }, default_language: "none" }
+    { 
+        name: "NovelContentTextSearchIndex", 
+        weights: { title: 10, synopsis: 5, "themeAssignment.customTags": 3, longDescription: 1 }, 
+        default_language: "thai" // This tells MongoDB to use Thai language text processing rules by default
+    }
 );
 NovelSchema.index({ author: 1, status: 1, lastContentUpdatedAt: -1}, { name: "NovelAuthorStatusUpdatedAtIndex" });
 NovelSchema.index({ status: 1, accessLevel: 1, publishedAt: -1}, { name: "NovelStatusAccessPublishedAtIndex" });
@@ -535,8 +615,9 @@ NovelSchema.pre<HydratedDocument<INovel>>("save", function (next: (err?: mongoos
  * @function updateWriterStatsAfterNovelChange
  * @description อัปเดต writerStats ของผู้แต่งหลังจากมีการเปลี่ยนแปลงข้อมูลนิยาย (สร้าง, แก้ไข, ลบ)
  */
-async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, authorId: Types.ObjectId) {
-    // console.log(`[WriterStats Update] Initiated for author ${authorId} due to changes in novel ${_novelId}`);
+// เพิ่มการอนุญาตให้ _novelId เป็น null สำหรับการ refresh ทั่วไป
+export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId | null, authorId: Types.ObjectId) {
+    // console.log(`[WriterStats Update] Initiated for author ${authorId} (Novel ID: ${_novelId || 'N/A - General Refresh'})`);
     const UserModelInstance = (models.User as mongoose.Model<IUser>) || model<IUser>("User");
     const NovelModelInstance = (models.Novel as mongoose.Model<INovel>) || model<INovel>("Novel");
 
@@ -552,13 +633,13 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
         return;
     }
 
+    // ตรวจสอบและกำหนดค่าเริ่มต้นสำหรับ writerStats และ writerStats.novelPerformanceSummaries
     if (!author.writerStats) {
-        // console.warn(`[WriterStats Update] Author ${authorId} writerStats is undefined. Initializing with defaults.`);
-        const newWriterStats: IWriterStats = {
+        author.writerStats = {
             totalNovelsPublished: 0,
             totalEpisodesPublished: 0,
             totalViewsAcrossAllNovels: 0,
-            totalReadsAcrossAllNovels: 0,
+            totalReadsAcrossAllNovels: 0, // ตรงกับ uniqueViewersCount
             totalLikesReceivedOnNovels: 0,
             totalCommentsReceivedOnNovels: 0,
             totalEarningsToDate: 0,
@@ -566,9 +647,8 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
             totalRealMoneyReceived: 0,
             totalDonationsReceived: 0,
             novelPerformanceSummaries: new mongoose.Types.DocumentArray<INovelPerformanceStats>([]),
-            writerSince: new Date(), // ค่า default หาก writerSince ไม่เคยถูกตั้ง
+            writerSince: new Date(), // กำหนด writerSince เมื่อสร้าง writerStats ใหม่
         };
-        author.writerStats = newWriterStats;
     } else {
         if (!author.writerStats.writerSince) {
             author.writerStats.writerSince = new Date();
@@ -578,15 +658,18 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
         }
     }
 
+
     const authorsNovels: HydratedDocument<INovel>[] = await NovelModelInstance.find({ author: authorId });
 
     const newSummaries: INovelPerformanceStats[] = [];
     let calculatedTotalNovelsPublished = 0;
+    let calculatedTotalEpisodesPublishedAcrossNovels = 0;
     let calculatedTotalViews = 0;
-    let calculatedTotalReads = 0;
+    let calculatedTotalReads = 0; // uniqueViewersCount
     let calculatedTotalLikes = 0;
     let calculatedTotalCommentsOnNovels = 0;
     let latestNovelPublicationDate: Date | undefined = undefined;
+    let latestEpisodePublishedDateAcrossNovels: Date | undefined = undefined;
 
     for (const novel of authorsNovels) {
         const summary: INovelPerformanceStats = {
@@ -598,7 +681,7 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
             totalComments: novel.stats.commentsCount || 0,
             totalFollowers: novel.stats.followersCount || 0,
             averageRating: novel.stats.averageRating || 0,
-            totalEarningsFromNovel: 0,
+            totalEarningsFromNovel: 0, // สมมติว่าคำนวณจากที่อื่น
         };
         newSummaries.push(summary);
 
@@ -609,6 +692,13 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
                     latestNovelPublicationDate = novel.publishedAt;
                 }
             }
+            calculatedTotalEpisodesPublishedAcrossNovels += novel.publishedEpisodesCount || 0;
+
+            if (novel.stats.lastPublishedEpisodeAt) {
+                if (!latestEpisodePublishedDateAcrossNovels || novel.stats.lastPublishedEpisodeAt > latestEpisodePublishedDateAcrossNovels) {
+                    latestEpisodePublishedDateAcrossNovels = novel.stats.lastPublishedEpisodeAt;
+                }
+            }
         }
         calculatedTotalViews += novel.stats.viewsCount || 0;
         calculatedTotalReads += novel.stats.uniqueViewersCount || 0;
@@ -616,9 +706,10 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
         calculatedTotalCommentsOnNovels += novel.stats.commentsCount || 0;
     }
 
-    if (author.writerStats) { // ตรวจสอบอีกครั้งเพื่อความปลอดภัย (TypeScript null check)
+    if (author.writerStats) { // ตรวจสอบอีกครั้งเพื่อความปลอดภัย
         author.writerStats.novelPerformanceSummaries = new mongoose.Types.DocumentArray<INovelPerformanceStats>(newSummaries);
         author.writerStats.totalNovelsPublished = calculatedTotalNovelsPublished;
+        author.writerStats.totalEpisodesPublished = calculatedTotalEpisodesPublishedAcrossNovels;
         author.writerStats.totalViewsAcrossAllNovels = calculatedTotalViews;
         author.writerStats.totalReadsAcrossAllNovels = calculatedTotalReads;
         author.writerStats.totalLikesReceivedOnNovels = calculatedTotalLikes;
@@ -628,6 +719,12 @@ async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId, autho
             author.writerStats.lastNovelPublishedAt = latestNovelPublicationDate;
         } else if (author.writerStats.hasOwnProperty('lastNovelPublishedAt')) {
             author.writerStats.lastNovelPublishedAt = undefined;
+        }
+
+        if (latestEpisodePublishedDateAcrossNovels) {
+            author.writerStats.lastEpisodePublishedAt = latestEpisodePublishedDateAcrossNovels;
+        } else if (author.writerStats.hasOwnProperty('lastEpisodePublishedAt')) {
+            author.writerStats.lastEpisodePublishedAt = undefined;
         }
     }
 

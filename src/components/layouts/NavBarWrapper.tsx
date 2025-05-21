@@ -8,7 +8,7 @@ import NavBarSkeleton from "./NavBarSkeleton";
 export default function NavBarWrapper() {
   return (
     <header className="sticky top-0 z-40 w-full transition-all">
-      <Suspense fallback={<NavBarSkeleton />}>
+      <Suspense>
         <NavBar />
       </Suspense>
     </header>
