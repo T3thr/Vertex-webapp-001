@@ -175,7 +175,7 @@ async function updateTargetReactionCounts(
   try {
     const updateValue = operation === "increment" ? 1 : -1;
     const currentReactionField = `${doc.reactionType}sCount`; // เช่น "likesCount", "lovesCount"
-    let updateQuery: any = { $inc: {} };
+    const updateQuery: any = { $inc: {} };
     updateQuery.$inc[`stats.${currentReactionField}`] = updateValue;
 
     // ถ้ามีการเปลี่ยน reaction (เช่น จาก like เป็น love)
