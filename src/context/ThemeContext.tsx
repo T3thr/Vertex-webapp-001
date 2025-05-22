@@ -1,3 +1,4 @@
+// src/components/ThemeContext.tsx หรือตำแหน่งไฟล์ของคุณ
 "use client";
 
 import React, {
@@ -53,7 +54,7 @@ export function ThemeProvider({
       try {
         const storedTheme = window.localStorage.getItem(storageKey) as Theme | null;
         if (storedTheme && ["light", "dark", "system", "sepia"].includes(storedTheme)) {
-          // console.log(`[ThemeProvider useState] กำลังเริ่มต้น theme จาก localStorage: '${storedTheme}'`);
+          // console.log(`[ThemeProvider useState] กำลังเริ่มต้น theme จาก localStorage: '${storedTheme}' (หลัง ThemeInitializerScript ควรจะถูกต้องที่สุด)`);
           return storedTheme;
         }
         // console.log(`[ThemeProvider useState] ไม่พบ theme ใน localStorage หรือค่าไม่ถูกต้อง ('${storedTheme}'). จะใช้ defaultTheme prop: '${defaultTheme}'`);
@@ -122,7 +123,6 @@ export function ThemeProvider({
     };
 
     const mediaQueryList = window.matchMedia("(prefers-color-scheme: dark)");
-    // Listener จะถูกเพิ่มเฉพาะเมื่อ theme เป็น 'system' และจะถูกลบเมื่อ component unmount หรือ theme เปลี่ยนเป็นค่าอื่น
     if (theme === "system") {
       mediaQueryList.addEventListener("change", handleSystemThemeChange);
     }
@@ -134,80 +134,93 @@ export function ThemeProvider({
 
 
   // --- ✅ [ปรับปรุง] Effect สำหรับการซิงโครไนซ์กับ NextAuth session ---
-  // Ref เพื่อติดตามสถานะ session ก่อนหน้า
   const prevSessionStatusRef = useRef<typeof sessionStatus | undefined>(undefined);
-  // Ref เพื่อป้องกันการอัปเดตธีมจาก session ในการ render ครั้งแรกหากผู้ใช้ login อยู่แล้ว
-  // (เพื่อป้องกันการเขียนทับค่าจาก ThemeInitializerScript/localStorage ด้วย JWT ที่อาจจะยัง stale)
-  const initialAuthLoadGuardRef = useRef(true);
+  const initialAuthLoadGuardRef = useRef(true); // การ์ดป้องกันการเขียนทับธีมจาก session ในการโหลดครั้งแรก
 
   useEffect(() => {
     if (!mounted) {
-      // เมื่อ component unmount หรือ remount, รีเซ็ตสถานะเพื่อให้การ์ดทำงานอีกครั้งสำหรับการโหลดครั้งแรกหาก login อยู่
-      initialAuthLoadGuardRef.current = true;
-      prevSessionStatusRef.current = sessionStatus; // จัดเก็บสถานะปัจจุบันเพื่อเปรียบเทียบในครั้งถอดไป
+      // เมื่อ component unmount หรือ remount, รีเซ็ตสถานะเพื่อให้การ์ดทำงานอีกครั้ง
+      // initialAuthLoadGuardRef.current = true; // ถูกรีเซ็ตเมื่อ unauthenticated หรือ unmount แทน
+      // prevSessionStatusRef.current = undefined; // ให้มันเริ่มจาก undefined จริงๆ เมื่อ mount ใหม่
       return;
     }
 
     const currentSessionObjectTheme = session?.user?.preferences?.display?.theme as Theme | undefined | null;
     const isValidSessionTheme = currentSessionObjectTheme && ["light", "dark", "system", "sepia"].includes(currentSessionObjectTheme);
+    const isInitialAuthLoadForThisEffectRun = initialAuthLoadGuardRef.current;
 
-    // console.log(`[ThemeProvider SessionSync] Status: ${sessionStatus}, PrevStatus: ${prevSessionStatusRef.current}, AppTheme: ${theme}, SessionTheme: ${currentSessionObjectTheme}, Guard: ${initialAuthLoadGuardRef.current}`);
+    // console.log(`[ThemeProvider SessionSync] Status: ${sessionStatus}, PrevStatus: ${prevSessionStatusRef.current}, AppTheme: ${theme}, SessionTheme: ${currentSessionObjectTheme}, GuardIsActive: ${isInitialAuthLoadForThisEffectRun}`);
 
     if (sessionStatus === "authenticated") {
       if (isValidSessionTheme) {
-        // สถานการณ์ที่ 1: ผู้ใช้เพิ่ง SIGN IN (เปลี่ยนจาก unauthenticated/loading เป็น authenticated)
-        if (
-          (prevSessionStatusRef.current === "unauthenticated" || prevSessionStatusRef.current === "loading") &&
-          currentSessionObjectTheme !== theme
-        ) {
-          // console.log(`[ThemeProvider SessionSync] SIGN-IN DETECTED: ธีมจาก session '${currentSessionObjectTheme}' (DB) จะถูกใช้แทนที่ธีมปัจจุบันของแอป '${theme}'.`);
-          setThemeState(currentSessionObjectTheme); // อัปเดต state ของแอป
-          try {
-            window.localStorage.setItem(storageKey, currentSessionObjectTheme); // อัปเดต localStorage
-          } catch (e) {
-            console.warn(`[ThemeProvider SessionSync - Sign-In] ไม่สามารถบันทึกธีม '${currentSessionObjectTheme}' จาก session ลง localStorage:`, e);
-          }
-          initialAuthLoadGuardRef.current = false; // การซิงค์เกิดขึ้นแล้ว, ปิดการ์ดสำหรับ session instance นี้
-        }
-        // สถานการณ์ที่ 2: ผู้ใช้ login อยู่แล้ว และนี่ *ไม่ใช่* การทำงานครั้งแรกของ effect หลัง mount
-        // หรือธีมใน session object มีการเปลี่ยนแปลงจากครั้งล่าสุดที่เราเห็น
-        else if (!initialAuthLoadGuardRef.current && currentSessionObjectTheme !== theme) {
-          // console.log(`[ThemeProvider SessionSync] AUTHENTICATED & POST-GUARD/CHANGED: ธีมจาก session '${currentSessionObjectTheme}' แตกต่างจากธีมแอป '${theme}'. กำลังอัปเดต.`);
+        // สถานการณ์ที่ 1: ผู้ใช้เพิ่ง SIGN IN จริงๆ (เปลี่ยนจาก unauthenticated เป็น authenticated)
+        if (prevSessionStatusRef.current === "unauthenticated" && currentSessionObjectTheme !== theme) {
+          // console.log(`[ThemeProvider SessionSync] ✅ TRUE SIGN-IN: ธีมจาก session '${currentSessionObjectTheme}' จะถูกใช้แทนที่ธีมแอป '${theme}'.`);
           setThemeState(currentSessionObjectTheme);
           try {
             window.localStorage.setItem(storageKey, currentSessionObjectTheme);
           } catch (e) {
-            console.warn(`[ThemeProvider SessionSync - Session Update] ไม่สามารถบันทึกธีม '${currentSessionObjectTheme}' จาก session ลง localStorage:`, e);
+            console.warn(`[ThemeProvider SessionSync - Sign-In] ไม่สามารถบันทึกธีม '${currentSessionObjectTheme}' จาก session ลง localStorage:`, e);
+          }
+          // หากเป็นการ sign-in จริง, การ์ด (ถ้ายังทำงานอยู่) ได้ทำหน้าที่ของมันแล้วสำหรับสถานะก่อนหน้า, ปิดการ์ดได้
+          if (isInitialAuthLoadForThisEffectRun) {
+            initialAuthLoadGuardRef.current = false;
           }
         }
-        // สถานการณ์ที่ 3: โหลดหน้าครั้งแรก, ผู้ใช้ LOGIN อยู่แล้ว, และนี่คือการทำงานครั้งแรกของ effect (การ์ดยังทำงานอยู่)
-        // เราไม่ต้องการให้ธีมจาก JWT ที่อาจจะ stale มาเขียนทับค่าที่ ThemeInitializerScript + localStorage ตั้งค่าไว้
-        // ดังนั้น ถ้าการ์ดทำงานอยู่, เราจะแค่ปิดการ์ด แต่จะไม่เปลี่ยน theme state ในตอนนี้
-        else if (initialAuthLoadGuardRef.current) {
-          // console.log(`[ThemeProvider SessionSync] INITIAL AUTHENTICATED LOAD (Guard Active): ธีมแอปคือ '${theme}'. ธีมจาก Session คือ '${currentSessionObjectTheme}'. ปิดการ์ด. ไม่มีการเปลี่ยนแปลงธีมแอปจาก session ในขั้นตอนนี้.`);
-          initialAuthLoadGuardRef.current = false;
+        // สถานการณ์ที่ 2: โหลดหน้าครั้งแรกโดยผู้ใช้ login อยู่แล้ว หรือ session มีการอัปเดตในภายหลัง
+        else {
+          // isInitialAuthLoadForThisEffectRun จะเป็น true ถ้าเป็นครั้งแรกที่ effect นี้ทำงานหลังจาก session กลายเป็น 'authenticated' ในการ mount ครั้งนี้
+          if (isInitialAuthLoadForThisEffectRun) {
+            // นี่คือการโหลดหน้าครั้งแรกที่ session เป็น 'authenticated' (อาจจะเปลี่ยนจาก 'loading')
+            // `theme` state ปัจจุบันถูกตั้งมาจาก localStorage (ซึ่ง ThemeInitializerScript ได้ทำให้ถูกต้องจาก DB แล้ว)
+            // เรา *ไม่ควร* ให้ธีมจาก JWT (ที่อาจจะยัง stale) มาเขียนทับค่านี้
+            // console.log(`[ThemeProvider SessionSync] ✅ INITIAL AUTHENTICATED LOAD (Guard Active): ธีมแอปปัจจุบันคือ '${theme}' (จาก localStorage/initializer). ธีมจาก Session (JWT) คือ '${currentSessionObjectTheme}'. การ์ดป้องกันการเปลี่ยนแปลง. ปิดการ์ด.`);
+            initialAuthLoadGuardRef.current = false; // ปิดการ์ดสำหรับการเปลี่ยนแปลง session ที่เกิดขึ้น *หลังจากนี้*
+            // *** ไม่มีการเรียก setThemeState ที่นี่ *** เพื่อให้ธีมจาก ThemeInitializerScript คงอยู่
+          }
+          // สถานการณ์ที่ 2.2: ผู้ใช้ login อยู่แล้ว, การ์ดถูกปิดไปแล้ว (ไม่ใช่การโหลดครั้งแรกแล้ว) และธีมใน session object มีการเปลี่ยนแปลง
+          else if (currentSessionObjectTheme !== theme) {
+            // console.log(`[ThemeProvider SessionSync] ✅ AUTHENTICATED & POST-GUARD / SESSION CHANGED: ธีมจาก session '${currentSessionObjectTheme}' แตกต่างจากธีมแอป '${theme}'. กำลังอัปเดต.`);
+            setThemeState(currentSessionObjectTheme);
+            try {
+              window.localStorage.setItem(storageKey, currentSessionObjectTheme);
+            } catch (e) {
+              console.warn(`[ThemeProvider SessionSync - Session Update] ไม่สามารถบันทึกธีม '${currentSessionObjectTheme}' จาก session ลง localStorage:`, e);
+            }
+          }
         }
+      } else if (isInitialAuthLoadForThisEffectRun && session?.user) {
+        // ผู้ใช้ login อยู่ แต่ไม่มี theme preference ใน session object (อาจเป็น null หรือ field ไม่มี)
+        // ยังคงต้องปิดการ์ด เพื่อให้การทำงานหลังจากนี้เป็นปกติ
+        // console.log(`[ThemeProvider SessionSync] ✅ INITIAL AUTHENTICATED LOAD (Guard Active): ผู้ใช้ login อยู่แต่ไม่มี theme ที่ถูกต้องใน session. ปิดการ์ด.`);
+        initialAuthLoadGuardRef.current = false;
       }
     } else if (sessionStatus === "unauthenticated") {
       // ผู้ใช้ sign out หรือ session ไม่ active
-      // console.log(`[ThemeProvider SessionSync] UNAUTHENTICATED: รีเซ็ต initial sync guard.`);
-      initialAuthLoadGuardRef.current = true; // รีเซ็ตการ์ดสำหรับการ sign-in ครั้งถัดไป
+      if (prevSessionStatusRef.current === "authenticated") {
+        // console.log(`[ThemeProvider SessionSync] ✅ SIGN-OUT DETECTED. ธีมแอปคือ '${theme}'. ไม่มีการเปลี่ยนแปลงธีมแอปจากเหตุการณ์ sign-out. รีเซ็ตการ์ด.`);
+        // ธีมที่ผู้ใช้ตั้งค่าไว้ (ใน localStorage) ควรจะยังคงอยู่จนกว่าจะมีการเปลี่ยนแปลงโดยผู้ใช้เอง
+        // หรือ ThemeInitializerScript จะจัดการในครั้งถัดไปที่โหลดหน้าแบบ unauthenticated
+      }
+      initialAuthLoadGuardRef.current = true; // รีเซ็ตการ์ดสำหรับการ sign-in ครั้งถัดไป หรือการโหลดหน้าใหม่แบบ unauth แล้ว login
     }
+    // else if (sessionStatus === "loading") {
+      // console.log(`[ThemeProvider SessionSync] Session กำลังโหลด... สถานะการ์ด: ${isInitialAuthLoadForThisEffectRun}`);
+      // ไม่มีการดำเนินการเกี่ยวกับธีมขณะกำลังโหลด, การ์ดจะยังคงสถานะเดิมจนกว่า session จะ resolved
+    // }
 
-    // อัปเดต prevSessionStatusRef สำหรับการทำงานของ effect ในครั้งถัดไปเสมอ
     prevSessionStatusRef.current = sessionStatus;
 
   }, [session, sessionStatus, mounted, storageKey, theme, setThemeState]);
 
 
-  // --- ฟังก์ชันสำหรับตั้งค่าธีม (ถูกเรียกโดยการกระทำของผู้ใช้) ---
   const setTheme = useCallback(
     async (newTheme: Theme) => {
       // console.log(`[ThemeProvider setTheme] ผู้ใช้ร้องขอเปลี่ยนธีมเป็น: '${newTheme}'`);
-      setThemeState(newTheme); // อัปเดต UI ทันที (Optimistic update)
+      setThemeState(newTheme);
 
       try {
-        window.localStorage.setItem(storageKey, newTheme); // บันทึกลง localStorage
+        window.localStorage.setItem(storageKey, newTheme);
       } catch (e) {
         console.warn(`[ThemeProvider setTheme] ไม่สามารถบันทึกธีมลง localStorage:`, e);
       }
@@ -225,9 +238,8 @@ export function ThemeProvider({
 
           if (response.ok) {
             // console.log("[ThemeProvider setTheme] อัปเดตธีมใน DB สำเร็จ. กำลังสั่งรีเฟรช session.");
-            await updateNextAuthSession(); // รีเฟรช JWT ด้วย preference ธีมใหม่
+            await updateNextAuthSession();
             // console.log("[ThemeProvider setTheme] การรีเฟรช NextAuth session น่าจะเสร็จสิ้นแล้ว.");
-            // เมื่อ session อัปเดต, SessionSync Effect ที่ปรับปรุงแล้วจะทำงานและจัดการ state อย่างถูกต้อง
           } else {
             let errorData = { message: `Request failed with status ${response.status}` };
             try { errorData = await response.json(); } catch { /* ignore */ }
@@ -238,10 +250,9 @@ export function ThemeProvider({
         }
       }
     },
-    [storageKey, sessionStatus, session?.user?.id, updateNextAuthSession] //นำ theme ออกจาก dependencies ของ setTheme เพราะ setTheme ไม่ควรอ้างอิงค่า theme เก่าในการตัดสินใจ
+    [storageKey, sessionStatus, session?.user?.id, updateNextAuthSession, setThemeState] // เพิ่ม setThemeState เข้า dependencies ตาม best practice หาก ESLint แจ้ง
   );
 
-  // --- Effect สำหรับการซิงโครไนซ์ธีมข้ามแท็บผ่าน localStorage event ---
   useEffect(() => {
     if (!mounted || typeof window === 'undefined') return;
 
@@ -253,6 +264,9 @@ export function ThemeProvider({
         if (["light", "dark", "system", "sepia"].includes(newThemeFromStorage)) {
           if (newThemeFromStorage !== theme) {
             // console.log(`[ThemeProvider StorageListener] ธีมจาก localStorage ('${newThemeFromStorage}') แตกต่างจากธีมปัจจุบันของ context ('${theme}'). กำลังอัปเดต context.`);
+            // การเรียก setThemeState ที่นี่จะทำให้ theme state ของ context นี้อัปเดตตาม
+            // จากนั้น useEffect ที่ซิงค์กับ session อาจจะทำงานอีกครั้งถ้า theme นี้ไม่ตรงกับ session
+            // ซึ่งเป็นพฤติกรรมที่อาจจะต้องการ คือ ให้ session เป็นตัวกำหนดสุดท้ายหาก login อยู่
             setThemeState(newThemeFromStorage);
           }
         }
@@ -266,7 +280,7 @@ export function ThemeProvider({
       window.removeEventListener('storage', handleStorageChange);
       // console.log("[ThemeProvider StorageListener] Removed storage event listener.");
     };
-  }, [storageKey, theme, mounted, setThemeState]); // เพิ่ม setThemeState เข้า dependencies
+  }, [storageKey, theme, mounted, setThemeState]);
 
 
   const themesList: ThemeDefinition[] = useMemo(
@@ -279,11 +293,23 @@ export function ThemeProvider({
     []
   );
 
-  // `setTheme` ถูก memoized ด้วย useCallback แล้ว จึงปลอดภัยที่จะใส่ใน dependency array ของ useMemo
   const value = useMemo(
     () => ({ theme, resolvedTheme, setTheme, themes: themesList, mounted }),
     [theme, resolvedTheme, setTheme, themesList, mounted]
   );
+
+  // เพิ่ม useEffect เพื่อรีเซ็ต prevSessionStatusRef และ initialAuthLoadGuardRef เมื่อ component unmount
+  // เพื่อให้การทำงานถูกต้องเมื่อ component ถูก mount ใหม่ (เช่น เปลี่ยนหน้าแล้วกลับมา)
+  useEffect(() => {
+    // Effect นี้จะทำงานเมื่อ component mount
+    // และ cleanup function จะทำงานเมื่อ component unmount
+    return () => {
+      // console.log("[ThemeProvider Unmount] รีเซ็ต prevSessionStatusRef และ initialAuthLoadGuardRef");
+      prevSessionStatusRef.current = undefined;
+      initialAuthLoadGuardRef.current = true; // รีเซ็ตการ์ดเมื่อ unmount
+    };
+  }, []); // ทำงานครั้งเดียวตอน mount และ cleanup ตอน unmount
+
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
