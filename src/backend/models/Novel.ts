@@ -841,8 +841,8 @@ NovelSchema.post("findOneAndDelete", async function (doc: HydratedDocument<INove
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-const NovelModel = (models.Novel as mongoose.Model<INovel, {}, {}, {}, HydratedDocument<INovel>>) ||
-                  model<INovel, mongoose.Model<INovel, {}, {}, {}, HydratedDocument<INovel>>>("Novel", NovelSchema);
+const NovelModel = (models.Novel as mongoose.Model<INovel>) ||
+                  model<INovel>("Novel", NovelSchema);
 
 export default NovelModel;
 

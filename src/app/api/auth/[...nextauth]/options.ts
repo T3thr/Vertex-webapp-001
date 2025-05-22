@@ -3,8 +3,9 @@
 // รองรับการล็อกอินด้วยอีเมลหรือชื่อผู้ใช้ผ่าน Credentials และ OAuth providers ต่างๆ
 // อัปเดต: ปรับ Path การเรียก API และการจัดการ User Model ที่รวมแล้ว
 // แก้ไข: จัดการ Type Mismatch สำหรับ Lean Documents และ Populated Fields ใน Session/JWT
+// แก้ไขเพิ่มเติม: ลบ/ปรับ interface User ที่ว่างเปล่าเพื่อแก้ไข @typescript-eslint/no-empty-object-type
 
-import { NextAuthOptions, Profile, User as NextAuthUserAccount } from "next-auth"; // Renamed User to NextAuthUserAccount to avoid conflict
+import { NextAuthOptions, Profile } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import TwitterProvider from "next-auth/providers/twitter";
@@ -25,8 +26,8 @@ import {
   IUserVerification,
   IUserDonationSettings,
   IWriterStats,
-  IShowcasedGamificationItem as OriginalShowcasedItem, // Renamed for clarity
-  IUserDisplayBadge as OriginalDisplayBadge, // Renamed for clarity
+  IShowcasedGamificationItem as OriginalShowcasedItem,
+  IUserDisplayBadge as OriginalDisplayBadge,
   IUserGamification as OriginalUserGamification
 } from "@/backend/models/User";
 import UserModel from "@/backend/models/User";
@@ -35,13 +36,11 @@ import dbConnect from "@/backend/lib/mongodb";
 
 // SECTION: Session-Specific Plain Object Types
 
-// Plain object version of ILevelReward for session
 export type SessionLevelReward = Omit<ILevelReward, 'achievementIdToUnlock' | 'badgeIdToAward'> & {
-  achievementIdToUnlock?: string; // Assuming string representation of ID or code
-  badgeIdToAward?: string;      // Assuming string representation of ID or key
+  achievementIdToUnlock?: string;
+  badgeIdToAward?: string;
 };
 
-// Plain object version of ILevel for session/JWT after .lean()
 export type SessionLeanLevel = {
   _id: string;
   levelNumber: number;
@@ -49,71 +48,67 @@ export type SessionLeanLevel = {
   levelGroupName?: string;
   xpRequiredForThisLevel: number;
   xpToNextLevelFromThis?: number;
-  rewardsOnReach?: SessionLevelReward[]; // Use SessionLevelReward
+  rewardsOnReach?: SessionLevelReward[];
   description?: string;
   iconUrl?: string;
   themeColor?: string;
   isActive: boolean;
   schemaVersion: number;
-  createdAt?: string; // ISO Date string
-  updatedAt?: string; // ISO Date string
+  createdAt?: string;
+  updatedAt?: string;
 };
 
-// Plain object version of IShowcasedGamificationItem
 export type SessionShowcasedItem = {
-  earnedItemId: string; // ObjectId as string
+  earnedItemId: string;
   itemType: "Achievement" | "Badge";
 };
 
-// Plain object version of IUserDisplayBadge
 export type SessionDisplayBadge = {
-  earnedBadgeId: string; // ObjectId as string
+  earnedBadgeId: string;
   displayContext?: string;
 };
 
-// Plain object version of IUserGamification for session/JWT
 export type SessionUserGamification = {
   level: number;
-  currentLevelObject?: string | SessionLeanLevel | null; // ObjectId (as string), lean level object, or null
+  currentLevelObject?: string | SessionLeanLevel | null;
   experiencePoints: number;
   totalExperiencePointsEverEarned?: number;
   nextLevelXPThreshold: number;
-  achievements: string[]; // Array of string ObjectIds
+  achievements: string[];
   showcasedItems?: SessionShowcasedItem[];
   primaryDisplayBadge?: SessionDisplayBadge;
   secondaryDisplayBadges?: SessionDisplayBadge[];
   loginStreaks: {
     currentStreakDays: number;
     longestStreakDays: number;
-    lastLoginDate?: string; // ISO Date string
+    lastLoginDate?: string;
   };
   dailyCheckIn: {
-    lastCheckInDate?: string; // ISO Date string
+    lastCheckInDate?: string;
     currentStreakDays: number;
   };
-  lastActivityAt?: string; // ISO Date string
+  lastActivityAt?: string;
 };
 
-// Master SessionUser type for NextAuth session and JWT
 export type SessionUser = {
-  id: string; // from _id
+  id: string;
   name: string;
   email?: string;
   username: string;
   roles: Array<"Reader" | "Writer" | "Admin" | "Moderator" | "Editor">;
-  profile: IUserProfile; // Assumed to be plain
-  trackingStats: IUserTrackingStats; // Assumed to be plain
-  socialStats: IUserSocialStats; // Assumed to be plain
-  preferences: IUserPreferences; // Assumed to be plain (contains nested plain interfaces)
-  wallet: IUserWallet; // Assumed to be plain
-  gamification: SessionUserGamification; // Uses the session-specific gamification type
-  writerVerification?: IUserVerification; // Assumed to be plain
-  donationSettings?: IUserDonationSettings; // Assumed to be plain
-  writerStats?: IWriterStats; // Assumed to be plain; ensure any ObjectIds within are handled if populated
+  profile: IUserProfile;
+  trackingStats: IUserTrackingStats;
+  socialStats: IUserSocialStats;
+  preferences: IUserPreferences;
+  wallet: IUserWallet;
+  gamification: SessionUserGamification;
+  writerVerification?: IUserVerification;
+  donationSettings?: IUserDonationSettings;
+  writerStats?: IWriterStats;
   isActive: boolean;
   isEmailVerified: boolean;
   isBanned: boolean;
-  bannedUntil?: string; // ISO Date string
+  bannedUntil?: string;
 };
 
 // END SECTION: Session-Specific Plain Object Types
@@ -129,11 +124,11 @@ const toISOStringOrUndefined = (date?: Date | string): string | undefined => {
 };
 
 // Helper function to convert a Mongoose document (or lean object) to SessionUser format
-function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUser or lean IUser
+function toSessionUserFormat(userDoc: any): SessionUser {
   const {
     _id,
     profile,
-    username, // Ensure username exists, provide fallback if necessary
+    username,
     email,
     roles,
     trackingStats,
@@ -141,7 +136,7 @@ function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUse
     preferences,
     wallet,
     gamification,
-    verification, // from IUser.verification
+    verification,
     donationSettings,
     writerStats,
     isActive,
@@ -155,7 +150,7 @@ function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUse
     let formattedCurrentLevelObject: string | SessionLeanLevel | null = null;
 
     if (g.currentLevelObject) {
-      if (typeof g.currentLevelObject === 'object' && g.currentLevelObject._id) { // Populated lean ILevel object
+      if (typeof g.currentLevelObject === 'object' && g.currentLevelObject._id) {
         const lvl = g.currentLevelObject;
         formattedCurrentLevelObject = {
           _id: lvl._id.toString(),
@@ -164,11 +159,11 @@ function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUse
           levelGroupName: lvl.levelGroupName,
           xpRequiredForThisLevel: lvl.xpRequiredForThisLevel,
           xpToNextLevelFromThis: lvl.xpToNextLevelFromThis,
-          rewardsOnReach: lvl.rewardsOnReach?.map((r: ILevelReward) => ({ // Ensure rewards are plain
+          rewardsOnReach: lvl.rewardsOnReach?.map((r: ILevelReward) => ({
             type: r.type,
             coinsAwarded: r.coinsAwarded,
-            achievementIdToUnlock: r.achievementIdToUnlock?.toString(), // if it can be ObjectId/string
-            badgeIdToAward: r.badgeIdToAward?.toString(), // if it can be ObjectId/string
+            achievementIdToUnlock: r.achievementIdToUnlock?.toString(),
+            badgeIdToAward: r.badgeIdToAward?.toString(),
             featureKeyToUnlock: r.featureKeyToUnlock,
             cosmeticItemKey: r.cosmeticItemKey,
             description: r.description,
@@ -181,7 +176,7 @@ function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUse
           createdAt: toISOStringOrUndefined(lvl.createdAt),
           updatedAt: toISOStringOrUndefined(lvl.updatedAt),
         };
-      } else if (g.currentLevelObject) { // ObjectId that might not have been stringified yet
+      } else if (g.currentLevelObject) {
         formattedCurrentLevelObject = g.currentLevelObject.toString();
       }
     }
@@ -210,19 +205,19 @@ function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUse
 
   return {
     id: _id.toString(),
-    name: profile?.displayName || username || "User", // Fallback for name
+    name: profile?.displayName || username || "User",
     email: email || undefined,
-    username: username || `user${_id.toString().slice(-6)}`, // Ensure username has a value
-    roles: roles || ["Reader"], // Default roles
-    profile: profile || {}, // Default profile
-    trackingStats: trackingStats || { joinDate: new Date(), totalLoginDays:0, totalNovelsRead:0, totalEpisodesRead:0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0 }, // Default trackingStats
-    socialStats: socialStats || { followersCount: 0, followingCount: 0, novelsCreatedCount:0, commentsMadeCount:0,ratingsGivenCount:0, likesGivenCount:0}, // Default socialStats
-    preferences: preferences || { language: "th", display: { theme:"system", reading:{fontSize:"medium", readingModeLayout:"scrolling", lineHeight: 1.6, textAlignment: "left"}, accessibility:{dyslexiaFriendlyFont: false, highContrastMode: false}}, notifications:{masterNotificationsEnabled:true, email:{enabled:true}, push:{enabled:true}, inApp:{enabled:true}}, contentAndPrivacy:{showMatureContent:false, preferredGenres:[], profileVisibility:"public", readingHistoryVisibility:"followers_only", showActivityStatus:true, allowDirectMessagesFrom:"followers", analyticsConsent:{allowPsychologicalAnalysis:false}}}, // Default preferences
-    wallet: wallet || { coinBalance: 0 }, // Default wallet
-    gamification: formatGamification(gamification) as SessionUserGamification, // Apply defaults if gamification itself is missing
-    writerVerification: verification, // Default verification
-    donationSettings: donationSettings, // Default donationSettings
-    writerStats: writerStats, // Default writerStats
+    username: username || `user${_id.toString().slice(-6)}`,
+    roles: roles || ["Reader"],
+    profile: profile || {},
+    trackingStats: trackingStats || { joinDate: new Date(), totalLoginDays:0, totalNovelsRead:0, totalEpisodesRead:0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0 },
+    socialStats: socialStats || { followersCount: 0, followingCount: 0, novelsCreatedCount:0, commentsMadeCount:0,ratingsGivenCount:0, likesGivenCount:0},
+    preferences: preferences || { language: "th", display: { theme:"system", reading:{fontSize:"medium", readingModeLayout:"scrolling", lineHeight: 1.6, textAlignment: "left"}, accessibility:{dyslexiaFriendlyFont: false, highContrastMode: false}}, notifications:{masterNotificationsEnabled:true, email:{enabled:true}, push:{enabled:true}, inApp:{enabled:true}}, contentAndPrivacy:{showMatureContent:false, preferredGenres:[], profileVisibility:"public", readingHistoryVisibility:"followers_only", showActivityStatus:true, allowDirectMessagesFrom:"followers", analyticsConsent:{allowPsychologicalAnalysis:false}}},
+    wallet: wallet || { coinBalance: 0 },
+    gamification: formatGamification(gamification) as SessionUserGamification,
+    writerVerification: verification,
+    donationSettings: donationSettings,
+    writerStats: writerStats,
     isActive: isActive !== undefined ? isActive : true,
     isEmailVerified: isEmailVerified !== undefined ? isEmailVerified : false,
     isBanned: isBanned !== undefined ? isBanned : false,
@@ -230,8 +225,7 @@ function toSessionUserFormat(userDoc: any): SessionUser { // userDoc can be IUse
   };
 }
 
-
-// Provider Profile Interfaces (Google, Twitter, etc. - these seem okay from your original code)
+// Provider Profile Interfaces
 interface GoogleProfile extends Profile { picture?: string; name?: string; given_name?: string; family_name?: string; }
 interface TwitterProfile extends Profile { data?: { name?: string; username?: string; profile_image_url?: string; }; name?: string; username?: string; profile_image_url?: string; }
 interface FacebookProfile extends Profile { picture?: { data?: { url?: string; }; }; first_name?: string; last_name?: string;}
@@ -286,27 +280,20 @@ export const authOptions: NextAuthOptions = {
             throw new Error(responseData.error || "ข้อมูลรับรองไม่ถูกต้อง หรือเกิดข้อผิดพลาด");
           }
 
-          // responseData.user is a plain JSON object from your API
-          // It should ideally have _id, not id, if it's coming from Mongoose .toJSON() default
           const userFromApi = responseData.user as IUser & { _id: Types.ObjectId | string };
-
 
           if (!userFromApi.isEmailVerified && userFromApi.email) {
              console.warn(`⚠️ [AuthOptions] ผู้ใช้ ${userFromApi.email || userFromApi.username} ยังไม่ได้ยืนยันอีเมล แต่ API อนุญาตให้ผ่าน`);
           }
           console.log(`✅ [AuthOptions] CredentialsProvider สำเร็จสำหรับผู้ใช้ ${userFromApi.email || userFromApi.username}`);
           
-          // Convert the plain user object from API to SessionUser format
-          return toSessionUserFormat(userFromApi) as unknown as NextAuthUserAccount; // Cast to NextAuthUserAccount
+          return toSessionUserFormat(userFromApi);
         } catch (error: any) {
           console.error(`❌ [AuthOptions] ข้อผิดพลาดใน authorize (CredentialsProvider): ${error.message}`);
           throw new Error(error.message || "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์");
         }
       },
     }),
-    // OAuth Providers (Google, Twitter, Facebook, Apple, Line)
-    // Ensure environment variables are set for these.
-    // Example for Google:
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
@@ -342,30 +329,24 @@ export const authOptions: NextAuthOptions = {
 
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 วัน
+    maxAge: 30 * 24 * 60 * 60,
   },
 
   callbacks: {
     async jwt({ token, user, account, profile, trigger }) {
-      // `user` is the object returned from `authorize` or from OAuth processing.
-      // It should be in SessionUser format if `authorize` uses `toSessionUserFormat`.
-      if (account && user) { // Sign in
+      if (account && user) {
         console.log(`⏳ [AuthOptions JWT] Sign-in JWT callback for provider=${account.provider}, user_id=${user.id}`);
         
-        // The 'user' object from authorize (already SessionUser format) or OAuth (needs transformation here)
         let sessionData: SessionUser;
 
         if (account.provider === "credentials") {
-            sessionData = user as SessionUser; // Already transformed by authorize
+            sessionData = user as SessionUser;
         } else {
-            // For OAuth, 'user' is NextAuthUserAccount, 'profile' has provider details.
-            // We need to call our API to get/create the full user document.
             let apiEmail: string | undefined = (profile as any)?.email || undefined;
             let apiDisplayName: string = "";
             let apiUsernameSuggestion: string = "";
             let apiAvatar: string | undefined = undefined;
 
-            // Extract info from OAuth profile (same logic as your original code)
             switch (account.provider) {
                 case "google":
                     const googleProfile = profile as GoogleProfile;
@@ -432,15 +413,13 @@ export const authOptions: NextAuthOptions = {
                     console.error(`❌ [AuthOptions JWT] ข้อผิดพลาดในการบันทึก/ดึงข้อมูลผู้ใช้ OAuth (${account.provider}):`, responseData.error);
                     throw new Error(responseData.error || `ไม่สามารถประมวลผลผู้ใช้ ${account.provider}`);
                 }
-                // responseData.user from API is expected to be a plain object, needs _id
                 sessionData = toSessionUserFormat(responseData.user as IUser & { _id: Types.ObjectId | string });
             } catch (error: any) {
                 console.error(`❌ [AuthOptions JWT] ข้อผิดพลาดขณะประมวลผล OAuth (${account.provider}): ${error.message}`);
-                throw error; // Propagate error
+                throw error;
             }
         }
 
-        // Populate token with SessionUser data
         token.id = sessionData.id;
         token.name = sessionData.name;
         token.email = sessionData.email;
@@ -458,7 +437,7 @@ export const authOptions: NextAuthOptions = {
         token.isActive = sessionData.isActive;
         token.isEmailVerified = sessionData.isEmailVerified;
         token.isBanned = sessionData.isBanned;
-        token.bannedUntil = sessionData.bannedUntil; // Already string | undefined from SessionUser
+        token.bannedUntil = sessionData.bannedUntil;
         token.provider = account.provider;
         console.log(`✅ [AuthOptions JWT] Token populated for ${token.username}`);
       }
@@ -467,10 +446,10 @@ export const authOptions: NextAuthOptions = {
         console.log(`⏳ [AuthOptions JWT] 'update' trigger for user ID: ${token.id}. Re-fetching...`);
         try {
           if (mongoose.connection.readyState === 0) { await dbConnect(); }
-          const userFromDbLean = await UserModel.findById(token.id).lean(); // Use .lean()
+          const userFromDbLean = await UserModel.findById(token.id).lean();
 
           if (userFromDbLean) {
-            const updatedSessionData = toSessionUserFormat(userFromDbLean); // Convert lean doc
+            const updatedSessionData = toSessionUserFormat(userFromDbLean);
             
             token.id = updatedSessionData.id;
             token.name = updatedSessionData.name;
@@ -503,7 +482,6 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (token && token.id) {
-        // Map all fields from the JWT (which is now SessionUser compatible) to session.user
         session.user = {
           id: token.id as string,
           name: token.name as string,
@@ -522,12 +500,10 @@ export const authOptions: NextAuthOptions = {
           isActive: token.isActive as boolean,
           isEmailVerified: token.isEmailVerified as boolean,
           isBanned: token.isBanned as boolean,
-          bannedUntil: token.bannedUntil as string | undefined, // Matches SessionUser.bannedUntil
+          bannedUntil: token.bannedUntil as string | undefined,
         };
-        // console.log(`✅ [AuthOptions Session] Session created/updated for ${session.user.username}`);
       } else {
         console.warn(`⚠️ [AuthOptions Session] Token missing id, cannot create user session.`);
-        // session.user = null; // Or handle as appropriate
       }
       return session;
     },
@@ -544,14 +520,14 @@ export const authOptions: NextAuthOptions = {
 
 // Augment NextAuth types
 declare module "next-auth" {
-  interface User extends SessionUser {} // User in NextAuth callbacks should align with SessionUser
+  // interface User extends SessionUser {} // Removed to fix @typescript-eslint/no-empty-object-type
   interface Session {
-    user: SessionUser; // Session.user is SessionUser
+    user: SessionUser; // Directly use SessionUser
   }
 }
 
 declare module "next-auth/jwt" {
-  interface JWT extends SessionUser { // JWT object itself also aligns with SessionUser
+  interface JWT extends SessionUser {
     provider?: string;
   }
 }
