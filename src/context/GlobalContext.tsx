@@ -1,5 +1,4 @@
 // src/context/GlobalContext.tsx
-// จัดการเซสชัน, การยืนยันตัวตน, ธีม, การแจ้งเตือน
 "use client";
 
 import { SessionProvider } from "next-auth/react";
@@ -14,8 +13,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 นาที
-      refetchOnWindowFocus: false, // สามารถเปิด true ได้ถ้าต้องการ aggressive refetching
-      retry: 1, // จำกัดการ retry เพื่อเพิ่มประสิทธิภาพ
+      refetchOnWindowFocus: false,
+      retry: 1,
     },
   },
 });
@@ -24,16 +23,12 @@ interface GlobalProviderProps {
   children: ReactNode;
 }
 
-// Component ย่อยสำหรับจัดการ ToastContainer และการ render children
-// เพื่อให้ useTheme() ถูกเรียกภายใน ThemeProvider
 const AppContent = ({ children }: { children: ReactNode }) => {
-  const { mounted: themeMounted, resolvedTheme } = useTheme(); // ดึง resolvedTheme และ mounted จาก context
+  const { mounted: themeMounted, resolvedTheme } = useTheme();
   const [isReady, setIsReady] = useState(false);
 
-  // แสดงผลเมื่อ client-side hydration เสร็จสมบูรณ์
   useEffect(() => {
     if (themeMounted) {
-      // ใช้ requestAnimationFrame เพื่อให้ browser render cycle เสร็จสมบูรณ์ก่อน
       const timer = requestAnimationFrame(() => {
         setIsReady(true);
       });
@@ -41,19 +36,14 @@ const AppContent = ({ children }: { children: ReactNode }) => {
     }
   }, [themeMounted]);
 
-  // คำนวณ theme สำหรับ ToastContainer
   const toastThemeMode = useMemo(() => {
-    if (!themeMounted) return "light"; // ค่าเริ่มต้นก่อน client-side theme พร้อม
-    
-    // สำหรับธีม sepia ใช้ light mode toast ซึ่งจะมองเห็นได้ดีกว่า
-    if (resolvedTheme === "sepia") return "light";
-    
+    if (!themeMounted) return "light";
+    if (resolvedTheme === "sepia") return "light"; // Sepia ใช้ toast สว่าง
     return resolvedTheme; // 'light' หรือ 'dark'
   }, [themeMounted, resolvedTheme]);
 
   if (!isReady) {
     // แสดง children แบบ visibility: hidden เพื่อป้องกัน layout shift
-    // โดยใช้ fade-in animation เมื่อ content พร้อม
     return (
       <div className="opacity-0 transition-opacity duration-300" aria-hidden="true">
         {children}
@@ -67,13 +57,7 @@ const AppContent = ({ children }: { children: ReactNode }) => {
       <ToastContainer
         position="bottom-right"
         autoClose={3500}
-        hideProgressBar={false}
-        newestOnTop={true}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
+        // ... (props อื่นๆ ของ ToastContainer) ...
         theme={toastThemeMode}
         toastClassName={(context) => {
           const baseClass = "font-sans text-sm rounded-lg shadow-md";
@@ -93,9 +77,9 @@ const AppContent = ({ children }: { children: ReactNode }) => {
 export function GlobalProvider({ children }: GlobalProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={true}>
-        <ThemeProvider storageKey="novelmaze-theme" defaultTheme="system">
-          <AuthProvider>
+      <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={true}> 
+        <ThemeProvider storageKey="novelmaze-theme" defaultTheme="system"> 
+          <AuthProvider> 
             <AppContent>{children}</AppContent>
           </AuthProvider>
         </ThemeProvider>

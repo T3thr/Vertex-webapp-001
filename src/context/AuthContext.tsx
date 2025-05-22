@@ -2,32 +2,54 @@
 // คอนเท็กซ์สำหรับจัดการการยืนยันตัวตนของผู้ใช้
 // อัปเดต: ปรับ Path การเรียก API ของ signInWithCredentials ให้ตรงกับโครงสร้างใหม่
 // อัปเดต: ทำให้สอดคล้องกับ SessionUser และ IUser ที่อัปเดตแล้ว และคง Logic เดิมตามที่คุณต้องการ
+// แก้ไข: เพิ่มการแปลงข้อมูล apiUser (IUser) เป็น SessionUser อย่างละเอียด และแก้ไข import
 
 import { createContext, useContext, useCallback, ReactNode, useState, useEffect } from "react";
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
-import { SessionUser } from "@/app/api/auth/[...nextauth]/options"; // ตรวจสอบ path นี้ให้ถูกต้อง
+import {
+  SessionUser,
+  SessionUserGamification,
+  SessionLeanLevel,
+  SessionLevelReward,
+  SessionShowcasedItem,
+  SessionDisplayBadge
+} from "@/app/api/auth/[...nextauth]/options"; // ตรวจสอบ path นี้ให้ถูกต้อง
 import { useQueryClient } from "@tanstack/react-query";
-import { IUser } from "@/backend/models/User"; // Import IUser เพื่อการ Type Hinting ที่แม่นยำ
 
-// อินเทอร์เฟซสำหรับ AuthContext (คงโครงสร้างเดิมจากที่คุณให้มา)
+// Import original Mongoose model interfaces for type hinting data from API
+import {
+  IUser, // IUser จาก backend/models/User
+  IUserGamification as OriginalUserGamification,
+  IShowcasedGamificationItem as OriginalShowcasedGamificationItem,
+  IUserDisplayBadge as OriginalUserDisplayBadge
+  // ILevelReward ไม่ได้ export จาก User.ts
+} from "@/backend/models/User";
+import {
+  ILevel as OriginalILevel, // ILevel จาก backend/models/Level
+  ILevelReward as OriginalLevelReward // ✅ ILevelReward ถูก import จาก Level.ts
+} from "@/backend/models/Level";
+
+// อินเทอร์เฟซสำหรับ AuthContext
 interface AuthContextType {
-  user: SessionUser | null;
-  status: "authenticated" | "loading" | "unauthenticated";
+  user: SessionUser | null; // ผู้ใช้ที่ล็อกอินอยู่ (ในรูปแบบ SessionUser)
+  status: "authenticated" | "loading" | "unauthenticated"; // สถานะการยืนยันตัวตนจาก NextAuth
+  // ฟังก์ชันสำหรับล็อกอินด้วย Credentials (อีเมล/ชื่อผู้ใช้ และรหัสผ่าน)
   signInWithCredentials: (
     identifier: string,
     password: string
   ) => Promise<{ error?: string; success?: boolean; verificationRequired?: boolean; ok?: boolean; user?: SessionUser }>;
-  signInWithSocial: (provider: string) => Promise<void>;
+  signInWithSocial: (provider: string) => Promise<void>; // ฟังก์ชันสำหรับล็อกอินด้วย Social Provider
+  // ฟังก์ชันสำหรับสมัครสมาชิก
   signUp: (
     email: string,
     username: string,
     password: string,
     recaptchaToken: string
   ) => Promise<{ error?: string; success?: boolean; message?: string; userId?: string }>;
-  signOut: () => Promise<void>;
-  loading: boolean;
-  authError: string | null;
-  setAuthError: (error: string | null) => void;
+  signOut: () => Promise<void>; // ฟังก์ชันสำหรับออกจากระบบ
+  loading: boolean; // สถานะ loading ของ AuthContext เอง (สำหรับ action เช่น signIn, signUp)
+  authError: string | null; // ข้อความ error ที่เกิดจาก AuthContext
+  setAuthError: (error: string | null) => void; // ฟังก์ชันสำหรับตั้งค่า authError
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,158 +58,281 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Helper function to convert date to ISO string or return undefined
+// ฟังก์ชันช่วยแปลงวันที่เป็น ISO string หรือคืนค่า undefined หากแปลงไม่ได้
+const toISOStringOrUndefined = (date?: Date | string): string | undefined => {
+  if (!date) return undefined;
+  try {
+    return new Date(date).toISOString(); // พยายามสร้าง Date object แล้วแปลงเป็น ISO string
+  } catch (e) {
+    // console.warn("Failed to convert date to ISO string:", date, e);
+    return undefined; // หากเกิด error ในการแปลง ให้คืนค่า undefined
+  }
+};
+
+// Client-side helper to transform IUser-like object (from API JSON) to SessionUser
+// ฟังก์ชันช่วยแปลง object ที่มีโครงสร้างคล้าย IUser (ที่ได้จาก API backend เป็น JSON)
+// ให้อยู่ในรูปแบบ SessionUser ที่ client-side context ต้องการ
+const transformApiUserToSessionUser = (apiUser: IUser): SessionUser => {
+  // ฟังก์ชันภายในสำหรับแปลงส่วน gamification ของ user
+  const transformGamification = (g?: OriginalUserGamification): SessionUserGamification => {
+    // หากไม่มีข้อมูล gamification (g is undefined) ให้คืนค่า default structure ของ SessionUserGamification
+    if (!g) {
+      return {
+        level: 1,
+        currentLevelObject: null,
+        experiencePoints: 0,
+        totalExperiencePointsEverEarned: 0,
+        nextLevelXPThreshold: 100, // ค่าเริ่มต้น, ควรพิจารณาใช้ค่า config กลาง
+        achievements: [],
+        showcasedItems: [],
+        primaryDisplayBadge: undefined,
+        secondaryDisplayBadges: [],
+        loginStreaks: { currentStreakDays: 0, longestStreakDays: 0, lastLoginDate: undefined },
+        dailyCheckIn: { currentStreakDays: 0, lastCheckInDate: undefined },
+        lastActivityAt: undefined,
+      };
+    }
+
+    let formattedCurrentLevelObject: string | SessionLeanLevel | null = null;
+    // ตรวจสอบและแปลง currentLevelObject
+    if (g.currentLevelObject) {
+      // g.currentLevelObject จาก API (JSON) จะเป็น plain object ถ้าถูก populate, หรือเป็น string ID
+      const clo = g.currentLevelObject as any;
+      if (typeof clo === 'object' && clo._id) { // กรณีเป็น populated plain object (มี _id)
+        const originalLevel = clo as OriginalILevel; // Cast เป็น OriginalILevel (เสมือนเป็น plain object ที่มีโครงสร้างตาม ILevel)
+        formattedCurrentLevelObject = {
+          _id: originalLevel._id.toString(),
+          levelNumber: originalLevel.levelNumber,
+          title: originalLevel.title,
+          levelGroupName: originalLevel.levelGroupName,
+          xpRequiredForThisLevel: originalLevel.xpRequiredForThisLevel,
+          xpToNextLevelFromThis: originalLevel.xpToNextLevelFromThis,
+          // แปลง rewardsOnReach ภายใน currentLevelObject
+          rewardsOnReach: originalLevel.rewardsOnReach?.map((r: OriginalLevelReward): SessionLevelReward => ({
+            type: r.type,
+            coinsAwarded: r.coinsAwarded,
+            // achievementIdToUnlock และ badgeIdToAward อาจเป็น ObjectId หรือ string (code/key)
+            // แปลงเป็น string เพื่อความสอดคล้องใน session
+            achievementIdToUnlock: r.achievementIdToUnlock?.toString(),
+            badgeIdToAward: r.badgeIdToAward?.toString(),
+            featureKeyToUnlock: r.featureKeyToUnlock,
+            cosmeticItemKey: r.cosmeticItemKey,
+            description: r.description,
+          })),
+          description: originalLevel.description,
+          iconUrl: originalLevel.iconUrl,
+          themeColor: originalLevel.themeColor,
+          isActive: originalLevel.isActive,
+          schemaVersion: originalLevel.schemaVersion,
+          createdAt: toISOStringOrUndefined(originalLevel.createdAt),
+          updatedAt: toISOStringOrUndefined(originalLevel.updatedAt),
+        };
+      } else if (typeof clo === 'string') { // กรณีเป็น string ID อยู่แล้ว
+        formattedCurrentLevelObject = clo;
+      } else if (clo && typeof clo.toString === 'function' && !(clo instanceof Date)) {
+        // กรณีอาจเป็น ObjectId ที่ API ไม่ได้ stringify (เช่นถ้า API ส่ง BSON ObjectId ตรงๆ)
+        formattedCurrentLevelObject = clo.toString();
+      }
+    }
+
+    // คืนค่า gamification ในรูปแบบ SessionUserGamification
+    return {
+      level: g.level,
+      currentLevelObject: formattedCurrentLevelObject,
+      experiencePoints: g.experiencePoints,
+      totalExperiencePointsEverEarned: g.totalExperiencePointsEverEarned,
+      nextLevelXPThreshold: g.nextLevelXPThreshold,
+      achievements: g.achievements?.map((id: any) => id.toString()) || [], // แปลง ID ใน achievements เป็น string
+      // แปลง showcasedItems
+      showcasedItems: g.showcasedItems?.map((item: OriginalShowcasedGamificationItem): SessionShowcasedItem => ({
+        earnedItemId: item.earnedItemId.toString(), // แปลง earnedItemId เป็น string
+        itemType: item.itemType,
+      })) || [],
+      // แปลง primaryDisplayBadge
+      primaryDisplayBadge: g.primaryDisplayBadge ? {
+        earnedBadgeId: (g.primaryDisplayBadge as OriginalUserDisplayBadge).earnedBadgeId.toString(), // แปลง earnedBadgeId เป็น string
+        displayContext: (g.primaryDisplayBadge as OriginalUserDisplayBadge).displayContext,
+      } : undefined,
+      // แปลง secondaryDisplayBadges
+      secondaryDisplayBadges: g.secondaryDisplayBadges?.map((badge: OriginalUserDisplayBadge): SessionDisplayBadge => ({
+        earnedBadgeId: badge.earnedBadgeId.toString(), // แปลง earnedBadgeId เป็น string
+        displayContext: badge.displayContext,
+      })) || [],
+      loginStreaks: {
+        currentStreakDays: g.loginStreaks?.currentStreakDays || 0,
+        longestStreakDays: g.loginStreaks?.longestStreakDays || 0,
+        lastLoginDate: toISOStringOrUndefined(g.loginStreaks?.lastLoginDate), // แปลงวันที่เป็น ISO string
+      },
+      dailyCheckIn: {
+        currentStreakDays: g.dailyCheckIn?.currentStreakDays || 0,
+        lastCheckInDate: toISOStringOrUndefined(g.dailyCheckIn?.lastCheckInDate), // แปลงวันที่เป็น ISO string
+      },
+      lastActivityAt: toISOStringOrUndefined(g.lastActivityAt), // แปลงวันที่เป็น ISO string
+    };
+  };
+
+  // แปลง object apiUser หลัก
+  return {
+    id: apiUser._id.toString(), // apiUser._id จาก API ควรเป็น string หรือ object ที่มี toString()
+    name: apiUser.profile?.displayName || apiUser.username || "User", // กำหนดค่า fallback สำหรับ name
+    email: apiUser.email || undefined,
+    username: apiUser.username || `user${apiUser._id.toString().slice(-6)}`, // กำหนดค่า fallback สำหรับ username
+    roles: apiUser.roles || ["Reader"], // กำหนดค่า default สำหรับ roles
+    // กำหนดค่า default สำหรับ object ย่อยต่างๆ หากไม่มีข้อมูลจาก apiUser
+    profile: apiUser.profile || { displayName: apiUser.username || "User" },
+    trackingStats: apiUser.trackingStats || { joinDate: new Date().toISOString(), totalLoginDays:0, totalNovelsRead:0, totalEpisodesRead:0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0 },
+    socialStats: apiUser.socialStats || { followersCount: 0, followingCount: 0, novelsCreatedCount:0, commentsMadeCount:0,ratingsGivenCount:0, likesGivenCount:0},
+    preferences: apiUser.preferences || { language: "th", display: { theme:"system", reading:{fontSize:"medium", readingModeLayout:"scrolling", lineHeight: 1.6, textAlignment: "left"}, accessibility:{dyslexiaFriendlyFont: false, highContrastMode: false}}, notifications:{masterNotificationsEnabled:true, email:{enabled:true}, push:{enabled:true}, inApp:{enabled:true}}, contentAndPrivacy:{showMatureContent:false, preferredGenres:[], profileVisibility:"public", readingHistoryVisibility:"followers_only", showActivityStatus:true, allowDirectMessagesFrom:"followers", analyticsConsent:{allowPsychologicalAnalysis:false}}},
+    wallet: apiUser.wallet || { coinBalance: 0 },
+    gamification: transformGamification(apiUser.gamification as OriginalUserGamification | undefined), // เรียกใช้ transformGamification
+    writerVerification: apiUser.verification, // สันนิษฐานว่าเป็น plain object หรือ undefined
+    donationSettings: apiUser.donationSettings, // สันนิษฐานว่าเป็น plain object หรือ undefined
+    writerStats: apiUser.writerStats, // สันนิษฐานว่าเป็น plain object หรือ undefined
+    isActive: apiUser.isActive !== undefined ? apiUser.isActive : true, // กำหนด default หาก isActive เป็น undefined
+    isEmailVerified: apiUser.isEmailVerified !== undefined ? apiUser.isEmailVerified : false, // กำหนด default
+    isBanned: apiUser.isBanned !== undefined ? apiUser.isBanned : false, // กำหนด default
+    bannedUntil: toISOStringOrUndefined(apiUser.bannedUntil), // แปลงวันที่เป็น ISO string
+  };
+};
+
+// AuthProvider component
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const { data: session, status: nextAuthStatus, update: updateNextAuthSession } = useSession();
+  // session.user จาก useSession() ควรจะมี type เป็น SessionUser อยู่แล้ว
+  // เนื่องจาก options.ts มีการแปลงข้อมูลใน callback jwt และ session
   const user = session?.user as SessionUser | null;
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false); // สถานะ loading ของ AuthContext เอง
   const [authError, setAuthError] = useState<string | null>(null);
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient(); // สำหรับจัดการ cache ของ React Query (ถ้าใช้)
 
-  // แก้ไข useEffect dependency array
+  // useEffect สำหรับจัดการ authError เมื่อสถานะ session เปลี่ยนแปลง
   useEffect(() => {
-    // เคลียร์ error ถ้าผู้ใช้ authenticate สำเร็จ หรือ session status ไม่ใช่ loading อีกต่อไป
-    // และมี error ค้างอยู่
+    // อาจพิจารณาเคลียร์ authError อัตโนมัติเมื่อผู้ใช้ authenticated หรือเมื่อ status เปลี่ยน
     if ((nextAuthStatus === 'authenticated' || (nextAuthStatus !== 'loading' && user)) && authError) {
-      console.log("ℹ️ [AuthContext] เคลียร์ authError เนื่องจาก session/status เปลี่ยนแปลง");
-      // setAuthError(null); // พิจารณาว่าต้องการเคลียร์ error อัตโนมัติหรือไม่ หรือให้ user action เป็นตัวเคลียร์
-                           // การเคลียร์อัตโนมัติอาจทำให้ user ไม่เห็น error message ที่สำคัญ
-                           // อาจจะดีกว่าถ้าเคลียร์เฉพาะตอนเริ่ม action ใหม่ (signIn, signUp)
+      // setAuthError(null); // ยกเลิกการเคลียร์ error อัตโนมัติ ให้ผู้ใช้เห็น error จนกว่าจะมีการ action ใหม่
     }
-    // Dependency array ควรมีค่า primitive หรือ object ที่ stable identity
-  }, [nextAuthStatus, user, authError]); // <--- ใช้ user object โดยตรง (ถ้า user identity stable)
-                                        // หรือใช้ user?.id ถ้าต้องการ re-run เฉพาะเมื่อ user ID เปลี่ยน
+  }, [nextAuthStatus, user, authError]);
 
+  // ฟังก์ชันสำหรับล็อกอินด้วย Credentials
   const signInWithCredentials = useCallback(
     async (
       identifier: string,
       password: string
     ): Promise<{ error?: string; success?: boolean; verificationRequired?: boolean; ok?: boolean; user?: SessionUser }> => {
+      // ป้องกันการเรียกซ้ำขณะกำลัง loading
       if (loading) {
-        console.warn("⚠️ [AuthContext] signInWithCredentials ถูกเรียกซ้ำขณะกำลังโหลด");
+        console.warn("⚠️ [AuthContext] signInWithCredentials called while already loading");
         return { error: "กำลังดำเนินการ กรุณารอสักครู่", success: false, ok: false };
       }
-      setLoading(true);
-      setAuthError(null); // เคลียร์ error เก่าก่อนเริ่ม action ใหม่
-      console.log(`🔵 [AuthContext] พยายามลงชื่อเข้าใช้ด้วย credentials (identifier: ${identifier})`);
+      setLoading(true); // เริ่ม loading
+      setAuthError(null); // เคลียร์ error เก่า
+      console.log(`🔵 [AuthContext] Attempting credentials sign-in (identifier: ${identifier})`);
 
       try {
-        console.log(`🔄 [AuthContext] ส่งคำขอไปยัง /api/auth/signin/credentials`);
+        // 1. เรียก API ของ backend (ที่ไม่ได้ผ่าน NextAuth โดยตรง) เพื่อตรวจสอบ credentials
+        console.log(`🔄 [AuthContext] Requesting /api/auth/signin/credentials`);
         const backendResponse = await fetch("/api/auth/signin/credentials", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ identifier, password }),
         });
+        const backendData = await backendResponse.json(); // { success: boolean, user?: IUser, error?: string, verificationRequired?: boolean }
+        console.log(`ℹ️ [AuthContext] Response from /api/auth/signin/credentials:`, backendData);
 
-        const backendData = await backendResponse.json();
-        console.log(`ℹ️ [AuthContext] การตอบกลับจาก /api/auth/signin/credentials:`, backendData);
-
+        // หาก backend API ตอบกลับว่า error หรือไม่สำเร็จ
         if (!backendResponse.ok || backendData.error) {
           let errorMessage = backendData.error || "การลงชื่อเข้าใช้ล้มเหลวจากเซิร์ฟเวอร์";
-          let verificationRequired = false;
-
+          let verificationRequired = backendData.verificationRequired || false;
+          // ปรับปรุง error message ให้เข้าใจง่ายขึ้น
           if (typeof backendData.error === 'string') {
             if (backendData.error.includes("ยังไม่ได้ยืนยันอีเมล")) {
               errorMessage = "บัญชีของคุณยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมาย";
-              verificationRequired = true;
             } else if (backendData.error.includes("ไม่ถูกต้อง") || backendData.error.includes("ไม่พบผู้ใช้")) {
               errorMessage = "อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง";
             } else if (backendData.error.includes("ถูกปิดใช้งาน")) {
               errorMessage = "บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแล";
             } else if (backendData.error.includes("ถูกระงับ")) {
-              errorMessage = backendData.error;
+              errorMessage = backendData.error; // แสดงข้อความ ban โดยตรง
             }
           }
-          console.warn(`⚠️ [AuthContext] ลงชื่อเข้าใช้ล้มเหลว (Backend API): ${errorMessage}`);
+          console.warn(`⚠️ [AuthContext] Sign-in failed (Backend API): ${errorMessage}`);
           setAuthError(errorMessage);
+          setLoading(false);
           return { error: errorMessage, success: false, verificationRequired, ok: false };
         }
 
-        console.log(`🔵 [AuthContext] Backend API ตรวจสอบ credentials ผ่าน, กำลังเรียก nextAuthSignIn...`);
+        // 2. หาก backend API ตรวจสอบ credentials ผ่าน, ให้ NextAuth สร้าง session
+        console.log(`🔵 [AuthContext] Backend API credentials verified, calling nextAuthSignIn for session creation...`);
         const signInResult = await nextAuthSignIn("credentials", {
-          redirect: false,
-          identifier: identifier,
+          redirect: false, // ไม่ต้องการ redirect จาก NextAuth โดยตรง, จัดการเอง
+          identifier: identifier, // ส่ง identifier และ password ไปให้ authorize callback ใน options.ts
           password,
         });
 
+        // ตรวจสอบผลลัพธ์จาก nextAuthSignIn
         if (signInResult?.error) {
-          console.warn(`⚠️ [AuthContext] การสร้าง NextAuth session ล้มเหลว: ${signInResult.error}`);
+          console.warn(`⚠️ [AuthContext] NextAuth session creation failed: ${signInResult.error}`);
+          // ถ้า backendData.error มีค่า (เช่น verification required) ให้ใช้ค่านั้น, มิฉะนั้นใช้ signInResult.error
           const finalErrorMessage = backendData.error || signInResult.error || "ข้อมูลการเข้าสู่ระบบไม่ถูกต้อง (NextAuth)";
           setAuthError(finalErrorMessage);
           return { error: finalErrorMessage, success: false, ok: false };
         }
 
-        if (signInResult?.ok) {
-          console.log(`✅ [AuthContext] ลงชื่อเข้าใช้สำเร็จ และ Session สร้างโดย NextAuth: ${identifier}`);
-          const apiUser = backendData.user as IUser;
-          // **สำคัญ:** ตรวจสอบว่าทุก field ใน apiUser (IUser) ถูก map ไปยัง SessionUser อย่างถูกต้อง
-          // โดยเฉพาะ nested objects เช่น profile, preferences, gamification etc.
-          // ต้องแน่ใจว่าโครงสร้างตรงกัน หรือมีการ map ที่เหมาะสม
-          const sessionUserPayload: SessionUser = {
-            id: apiUser._id.toString(),
-            name: apiUser.profile?.displayName || apiUser.username || "N/A",
-            email: apiUser.email || undefined,
-            username: apiUser.username || "N/A_username",
-            roles: apiUser.roles,
-            // --- ตรวจสอบการ Map Nested Objects ---
-            profile: apiUser.profile || { displayName: apiUser.username || "N/A" }, // Default ถ้า profile ไม่มี
-            trackingStats: apiUser.trackingStats, // ควรมี default ใน model หรือ ที่นี่
-            socialStats: apiUser.socialStats, // ควรมี default ใน model หรือ ที่นี่
-            preferences: apiUser.preferences, // ควรมี default ใน model หรือ ที่นี่
-            wallet: apiUser.wallet, // ควรมี default ใน model หรือ ที่นี่
-            gamification: apiUser.gamification, // ควรมี default ใน model หรือ ที่นี่
-            writerVerification: apiUser.verification, // map จาก verification
-            donationSettings: apiUser.donationSettings,
-            writerStats: apiUser.writerStats,
-            // --- End Nested Objects ---
-            isActive: apiUser.isActive,
-            isEmailVerified: apiUser.isEmailVerified,
-            isBanned: apiUser.isBanned,
-            bannedUntil: apiUser.bannedUntil,
-          };
-          await updateNextAuthSession(); // บังคับ NextAuth session update
-          await queryClient.invalidateQueries({ queryKey: ["session"] });
-          setAuthError(null); // เคลียร์ error เมื่อสำเร็จ
+        if (signInResult?.ok && backendData.user) { // ตรวจสอบ backendData.user ด้วย
+          console.log(`✅ [AuthContext] Sign-in successful, NextAuth session should be created for: ${identifier}`);
+          // backendData.user คือข้อมูลผู้ใช้ (IUser) จาก API ของคุณ
+          const apiUserFromBackend = backendData.user as IUser;
+          // แปลงข้อมูลผู้ใช้จาก API (IUser) เป็น SessionUser
+          const sessionUserPayload = transformApiUserToSessionUser(apiUserFromBackend);
+
+          await updateNextAuthSession(); // สั่งให้ NextAuth อัปเดต session ฝั่ง client
+          setAuthError(null);
+          // คืนค่า user ที่แปลงแล้ว เพื่อให้ UI สามารถนำไปใช้ได้ทันทีหากต้องการ
           return { success: true, ok: true, user: sessionUserPayload };
         } else {
-          console.warn(`⚠️ [AuthContext] NextAuth signInResult ไม่ ok แต่ไม่มี error object`);
-          setAuthError("เกิดปัญหาในการสร้างเซสชัน (NextAuth)");
-          return { error: "เกิดปัญหาในการสร้างเซสชัน (NextAuth)", success: false, ok: false };
+          console.warn(`⚠️ [AuthContext] NextAuth signInResult not ok, or backendData.user missing. Result:`, signInResult, `Backend User:`, backendData.user);
+          const errorMessage = "เกิดปัญหาในการสร้างเซสชัน (NextAuth) หรือไม่พบข้อมูลผู้ใช้";
+          setAuthError(errorMessage);
+          return { error: errorMessage, success: false, ok: false };
         }
 
       } catch (error: any) {
-        console.error("❌ [AuthContext] ข้อผิดพลาดร้ายแรงระหว่าง signInWithCredentials:", error);
+        console.error("❌ [AuthContext] Critical error during signInWithCredentials:", error);
         const message = error.message || "เกิดข้อผิดพลาดที่ไม่คาดคิดระหว่างการลงชื่อเข้าใช้";
         setAuthError(message);
         return { error: message, success: false, ok: false };
       } finally {
-        setLoading(false);
+        setLoading(false); // สิ้นสุด loading
       }
     },
-    [queryClient, loading, setLoading, setAuthError, updateNextAuthSession] // เพิ่ม updateNextAuthSession
+    [queryClient, loading, updateNextAuthSession]
   );
 
-  // ... signInWithSocial, signUp, signOut (คงเดิมตามโค้ดก่อนหน้าของคุณ ถ้า Path API ถูกต้องแล้ว) ...
-  // **ตรวจสอบให้แน่ใจว่า Path ที่ fetch ใน signUp คือ "/api/auth/signup"**
-  // **และ signInWithSocial ไม่ต้อง fetch API เอง แต่จะถูกจัดการโดย NextAuth options**
-
+  // ฟังก์ชันสำหรับล็อกอินด้วย Social Provider
   const signInWithSocial = useCallback(
     async (provider: string): Promise<void> => {
       if (loading) {
-        console.warn("⚠️ [AuthContext] signInWithSocial ถูกเรียกซ้ำขณะกำลังโหลด");
+        console.warn("⚠️ [AuthContext] signInWithSocial called while already loading");
         throw new Error("กำลังดำเนินการ กรุณารอสักครู่");
       }
       setLoading(true);
       setAuthError(null);
-      console.log(`🔵 [AuthContext] พยายามลงชื่อเข้าใช้ด้วย social provider: ${provider}`);
+      console.log(`🔵 [AuthContext] Attempting social sign-in with provider: ${provider}`);
       try {
+        // NextAuth จะจัดการ OAuth flow ทั้งหมด รวมถึงการเรียก JWT/session callbacks
+        // ซึ่งใน options.ts มีการใช้ toSessionUserFormat เพื่อแปลงข้อมูลแล้ว
         const result = await nextAuthSignIn(provider, {
-          redirect: true,
-          callbackUrl: "/",
+          redirect: true, // สำหรับ OAuth มักจะ redirect ไปหน้า provider
+          callbackUrl: "/", // URL ที่จะ redirect กลับมาหลังล็อกอินสำเร็จ
         });
 
+        // หากตั้ง redirect: true, โค้ดส่วนนี้อาจจะไม่ถูกเรียกถ้าล็อกอินสำเร็จ (เพราะ browser จะ redirect ไปแล้ว)
+        // การจัดการ error ตรงนี้สำหรับ error ที่เกิดจาก nextAuthSignIn โดยตรง
         if (result?.error) {
-          console.warn(`⚠️ [AuthContext] Social sign-in (${provider}) ล้มเหลว (NextAuth): ${result.error}`);
+          console.warn(`⚠️ [AuthContext] Social sign-in (${provider}) failed (NextAuth): ${result.error}`);
           let errorMessage = result.error;
+          // ปรับปรุง error message สำหรับ OAuth
           if (errorMessage.includes("OAuthAccountNotLinked")) {
             errorMessage = "บัญชีโซเชียลนี้ยังไม่ได้เชื่อมโยง หรืออีเมลนี้อาจถูกใช้กับบัญชีอื่นแล้ว";
           } else if (errorMessage.includes("Callback") || errorMessage.toLowerCase().includes("oauth_callback_error")) {
@@ -196,20 +341,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             errorMessage = `คุณปฏิเสธการเข้าถึงจาก ${provider}`;
           }
           setAuthError(errorMessage);
-          if (!result.url) setLoading(false);
+          if (!result.url) setLoading(false); // หยุด loading ถ้าไม่มีการ redirect
         } else {
-          console.log(`✅ [AuthContext] Social sign-in (${provider}) เริ่มต้นสำเร็จ, กำลัง redirect...`);
-          setAuthError(null); // เคลียร์ error เมื่อเริ่ม redirect สำเร็จ
+          console.log(`✅ [AuthContext] Social sign-in (${provider}) initiated, redirecting...`);
+          setAuthError(null);
+          // setLoading จะยังคงเป็น true เนื่องจากหน้าจะถูก redirect
         }
       } catch (error: any) {
-        console.error(`❌ [AuthContext] ข้อผิดพลาดระหว่าง signInWithSocial (${provider}):`, error);
+        console.error(`❌ [AuthContext] Error during signInWithSocial (${provider}):`, error);
         setAuthError(error.message || `เกิดข้อผิดพลาดในการลงชื่อเข้าใช้ด้วย ${provider}`);
-        setLoading(false);
+        setLoading(false); // หยุด loading หากเกิด exception
       }
     },
-    [loading, setLoading, setAuthError]
+    [loading]
   );
 
+  // ฟังก์ชันสำหรับสมัครสมาชิก
   const signUp = useCallback(
     async (
       email: string,
@@ -218,44 +365,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       recaptchaToken: string
     ): Promise<{ error?: string; success?: boolean; message?: string; userId?: string }> => {
       if (loading) {
-        console.warn("⚠️ [AuthContext] signUp ถูกเรียกซ้ำขณะกำลังโหลด");
+        console.warn("⚠️ [AuthContext] signUp called while already loading");
         return { error: "กำลังดำเนินการ กรุณารอสักครู่", success: false };
       }
       setLoading(true);
-      setAuthError(null); // เคลียร์ error เก่า
-      console.log(`🔵 [AuthContext] ส่งคำขอสมัครสมาชิก: ${username} (${email})`);
+      setAuthError(null);
+      console.log(`🔵 [AuthContext] Submitting sign-up request: ${username} (${email})`);
 
       try {
-        const response = await fetch("/api/auth/signup", { // PATH API สำหรับ signup
+        // เรียก API สำหรับการสมัครสมาชิก (เช่น /api/auth/signup)
+        const response = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, username, password, recaptchaToken }),
         });
+        const data = await response.json(); // { success: boolean, message?: string, error?: string, userId?: string }
+        console.log(`ℹ️ [AuthContext] Response from /api/auth/signup:`, data);
 
-        const data = await response.json();
-        console.log(`ℹ️ [AuthContext] การตอบกลับจาก /api/auth/signup:`, data);
-
+        // หาก API ตอบกลับว่า error หรือไม่สำเร็จ
         if (!response.ok || !data.success) {
           let errorMessage = data.error || "การสมัครสมาชิกล้มเหลว";
-          if (typeof data.error === 'string') {
-            if (data.error.includes("อีเมลนี้ถูกใช้งานแล้ว")) {
-              errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
-            } else if (data.error.includes("ชื่อผู้ใช้นี้ถูกใช้งานแล้ว")) {
-              errorMessage = "ชื่อผู้ใช้นี้ถูกใช้งานแล้ว";
-            } else if (data.error.includes("reCAPTCHA")) {
-              errorMessage = data.error;
-            }
-          }
-          console.warn(`⚠️ [AuthContext] การสมัครสมาชิกล้มเหลว: ${errorMessage}`);
+           // ปรับปรุง error message สำหรับกรณีทั่วไป
+           if (typeof data.error === 'string') {
+             if (data.error.includes("อีเมลนี้ถูกใช้งานแล้ว")) errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
+             else if (data.error.includes("ชื่อผู้ใช้นี้ถูกใช้งานแล้ว")) errorMessage = "ชื่อผู้ใช้นี้ถูกใช้งานแล้ว";
+             else if (data.error.includes("reCAPTCHA")) errorMessage = data.error; // แสดง error จาก reCAPTCHA โดยตรง
+           }
+          console.warn(`⚠️ [AuthContext] Sign-up failed: ${errorMessage}`);
           setAuthError(errorMessage);
           return { error: errorMessage, success: false };
         }
 
-        console.log(`✅ [AuthContext] สมัครสมาชิกสำเร็จ (จาก Backend API): ${username} (${email}), Message: ${data.message}`);
-        setAuthError(null); // เคลียร์ error เมื่อสำเร็จ
+        // หากสมัครสมาชิกสำเร็จจาก API
+        console.log(`✅ [AuthContext] Sign-up successful (from Backend API): ${username} (${email}), Message: ${data.message}`);
+        setAuthError(null);
         return { success: true, message: data.message || "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี", userId: data.userId };
       } catch (error: any) {
-        console.error("❌ [AuthContext] ข้อผิดพลาดร้ายแรงระหว่าง signUp:", error);
+        console.error("❌ [AuthContext] Critical error during signUp:", error);
         const errorMessage = error.message || "เกิดข้อผิดพลาดที่ไม่คาดคิดระหว่างการสมัครสมาชิก";
         setAuthError(errorMessage);
         return { error: errorMessage, success: false };
@@ -263,36 +409,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setLoading(false);
       }
     },
-    [loading, setLoading, setAuthError]
+    [loading]
   );
 
+  // ฟังก์ชันสำหรับออกจากระบบ
   const signOut = useCallback(async () => {
     if (loading && nextAuthStatus !== 'authenticated') {
-      console.warn("⚠️ [AuthContext] signOut ถูกเรียกซ้ำขณะกำลังโหลด หรือไม่ได้ authenticated");
-      return;
+        console.warn("⚠️ [AuthContext] signOut called while already processing or not authenticated.");
+        return;
     }
-    setAuthError(null); // เคลียร์ error ก่อน sign out
-    console.log(`🔵 [AuthContext] กำลังออกจากระบบ... Session status: ${nextAuthStatus}`);
+    setAuthError(null);
+    console.log(`🔵 [AuthContext] Signing out... Session status: ${nextAuthStatus}`);
     try {
-      await nextAuthSignOut({ redirect: true, callbackUrl: "/" });
-      console.log(`✅ [AuthContext] ออกจากระบบสำเร็จ, กำลัง redirect...`);
-      await queryClient.invalidateQueries({ queryKey: ["session"] }); // Invalidate session
-      // queryClient.clear(); // อาจจะแรงไป ลอง invalidateQueries เฉพาะ session ก่อน
+      // เรียก nextAuthSignOut เพื่อเคลียร์ session ของ NextAuth
+      await nextAuthSignOut({ redirect: true, callbackUrl: "/" }); // redirect ไปหน้าหลักหลัง sign out
+      // บรรทัดนี้อาจจะไม่ถูกเรียกหาก redirect เกิดขึ้นทันที
+      console.log(`✅ [AuthContext] Sign-out successful, redirecting...`);
+      queryClient.invalidateQueries({ queryKey: ["session"] }); // ทำให้ query "session" (ถ้ามี) ของ React Query ไม่ valid
     } catch (error: any) {
-      console.error("❌ [AuthContext] ข้อผิดพลาดระหว่าง signOut:", error);
+      console.error("❌ [AuthContext] Error during signOut:", error);
       setAuthError(error.message || "เกิดข้อผิดพลาดในการออกจากระบบ");
     }
-  }, [loading, nextAuthStatus, setAuthError, queryClient]);
+    // setLoading ไม่จำเป็นต้อง set เป็น false ที่นี่ เพราะหน้าจะ redirect
+  }, [loading, nextAuthStatus, queryClient]);
 
-
+  // ค่าที่จะส่งผ่าน Context
   const contextValue: AuthContextType = {
-    user,
-    status: nextAuthStatus,
+    user, // ข้อมูลผู้ใช้ (SessionUser | null)
+    status: nextAuthStatus, // สถานะจาก NextAuth ("authenticated", "loading", "unauthenticated")
     signInWithCredentials,
     signInWithSocial,
     signUp,
     signOut,
-    loading,
+    loading, // สถานะ loading ของ AuthContext เอง
     authError,
     setAuthError,
   };
@@ -300,10 +449,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };
 
+// Custom hook สำหรับใช้งาน AuthContext
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth ต้องถูกใช้ภายใน AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider"); // Error หากเรียกใช้นอก Provider
   }
   return context;
 };

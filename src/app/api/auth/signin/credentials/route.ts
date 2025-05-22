@@ -15,9 +15,9 @@ interface CredentialsSignInRequestBody {
 // CredentialsSignInResponseUser ควรจะเหมือนกับโครงสร้าง IUser ที่ client คาดหวัง
 // ซึ่งอาจจะ map มาจาก SessionUser ใน options.ts อีกที
 // เพื่อความง่ายใน API นี้ เราจะคืนโครงสร้าง IUser (หลังจาก toObject และแปลง _id)
-type CredentialsSignInResponseUser = Omit<IUser, '_id' | 'password' | 'accounts'> & {
+type CredentialsSignInResponseUser = Omit<IUser, '_id' | 'password' | 'accounts' | 'matchPassword' | 'generateEmailVerificationToken' | 'generatePasswordResetToken' | keyof Document> & {
     _id: string;
-    accounts: Array<Pick<IUser['accounts'][number], 'provider' | 'providerAccountId' | 'type'>>; // ส่งเฉพาะ field ที่จำเป็นและปลอดภัย
+    accounts: Array<Pick<IAccount, 'provider' | 'providerAccountId' | 'type'>>; // ส่งเฉพาะ field ที่จำเป็นและปลอดภัย
 };
 
 
@@ -99,8 +99,10 @@ export async function POST(request: Request) {
 
     if (userDocument.email && !userDocument.isEmailVerified) {
       console.warn(`⚠️ [API:CredentialsSignIn] อีเมลยังไม่ยืนยัน: ${identifier}`);
+      // ใน options.ts, CredentialProvider ไม่ได้ return error นี้ แต่จะ log warning และปล่อยให้ client (AuthContext) จัดการ
+      // เพื่อให้สอดคล้องกับ AuthContext ที่คาดหวัง error จาก API นี้หาก email ไม่ verified
       return NextResponse.json(
-        { error: "ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ" },
+        { error: "ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ", verificationRequired: true }, // เพิ่ม verificationRequired
         { status: 403 }
       );
     }
@@ -108,31 +110,36 @@ export async function POST(request: Request) {
 
     // อัปเดตเวลา login ล่าสุด
     userDocument.lastLoginAt = new Date();
-    await userDocument.save({ validateModifiedOnly: true }); // validateModifiedOnly อาจจะไม่จำเป็นถ้าไม่แก้ไข field อื่น
+    await userDocument.save({ validateModifiedOnly: true });
     console.log(`ℹ️ [API:CredentialsSignIn] อัปเดต lastLoginAt สำหรับ: ${userDocument.username}`);
 
     // เตรียมข้อมูลผู้ใช้สำหรับ response โดยใช้ toObject() และแปลง _id
-    const userObject = userDocument.toObject<IUser & { _id: Types.ObjectId }>(); // <--- ใช้ IUser
+    const userObject = userDocument.toObject<IUser & { _id: Types.ObjectId }>();
     
+    const {
+        password: _removedPassword, // ดึง password ออกเพื่อไม่ให้ถูก spread
+        accounts: originalAccounts, // ดึง accounts เดิมออก
+        _id: objectId, // ดึง _id เดิม (ObjectId) ออก
+        matchPassword, // ดึง method ออก
+        generateEmailVerificationToken, // ดึง method ออก
+        generatePasswordResetToken, // ดึง method ออก
+        ...restOfUserObject // ส่วนที่เหลือของ userObject
+    } = userObject;
+
+
     const userResponse: CredentialsSignInResponseUser = {
-        ...(userObject as Omit<IUser, '_id' | 'password' | 'accounts'>), // Cast เพื่อหลีกเลี่ยง type conflict ชั่วคราว
-        _id: userObject._id.toString(),
-        // ส่งเฉพาะข้อมูล accounts ที่ปลอดภัยและจำเป็น
-        accounts: userObject.accounts.map(acc => ({
+        ...restOfUserObject, // Spread field ที่เหลือทั้งหมดของ IUser ที่เป็น plain data
+        _id: objectId.toString(),
+        accounts: originalAccounts.map(acc => ({
             provider: acc.provider,
             providerAccountId: acc.providerAccountId,
             type: acc.type,
-        })) as IAccount[], // Cast to IAccount[]
+        })),
     };
-
-    // password จะไม่ถูกรวมอยู่แล้วถ้า schema มี select: false และ toObject() เคารพ điều đó
-    // แต่ถ้าต้องการความมั่นใจ ก็สามารถ delete property password จาก userResponse ได้
-    // delete (userResponse as any).password; // ถ้ายังกังวล
-
 
     console.log(`✅ [API:CredentialsSignIn] การลงชื่อเข้าใช้สำเร็จ: ${identifier}`);
     return NextResponse.json(
-      { success: true, user: userResponse }, // ส่ง userResponse ที่แปลงแล้ว
+      { success: true, user: userResponse },
       { status: 200 }
     );
   } catch (error: any) {

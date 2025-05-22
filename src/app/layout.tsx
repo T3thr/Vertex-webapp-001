@@ -1,18 +1,24 @@
 // src/app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css"; // globals.css ควร import ก่อน components อื่นๆ
-import { GlobalProvider } from "@/context/GlobalContext"; 
-import NavBarWrapper from "@/components/layouts/NavBarWrapper"; // ถ้า NavBarWrapper เป็น client component ที่ห่อ NavBar
-import Footer from "@/components/layouts/Footer"; 
+import "./globals.css";
+import { GlobalProvider } from "@/context/GlobalContext";
+import NavBarWrapper from "@/components/layouts/NavBarWrapper";
+import Footer from "@/components/layouts/Footer";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import dbConnect from "@/backend/lib/mongodb";
+import UserModel from "@/backend/models/User"; // ✅ Import UserModel ที่ถูกต้อง
 
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import type { Theme } from "@/context/ThemeContext";
+
+// --- การตั้งค่า Font ---
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-  display: "swap", // ใช้ swap เพื่อป้องกัน FOUT (Flash Of Unstyled Text)
+  display: "swap",
   preload: true,
   adjustFontFallback: true,
 });
@@ -25,42 +31,25 @@ const geistMono = Geist_Mono({
   adjustFontFallback: true,
 });
 
+// --- Metadata และ Viewport ---
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"),
   title: {
-    default: "NovelMaze",
-    template: "%s — NovelMaze",
+    default: "NovelMaze Platform",
+    template: "%s — NovelMaze Platform",
   },
-  description: "สวัสดีจ้า โฮะๆๆ แพลตฟอร์ม Visual Novel หลากหลายแนว",
-  applicationName: "NovelMaze",
-  authors: [{ name: "NovelMaze Team" }],
-  generator: "Next.js",
-  keywords: ["นิยาย", "อ่านนิยาย", "visual novel", "nextjs", "skibidi", "tailwind"],
-  referrer: 'origin-when-cross-origin',
-  creator: 'NovelMaze Team',
-  publisher: 'NovelMaze Publisher',
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-    },
-  },
+  description: "แพลตฟอร์ม Visual Novel ที่ทันสมัยและหลากหลายแนวสำหรับคุณ",
   openGraph: {
-    title: { default: "NovelMaze", template: "%s — NovelMaze" },
-    description: "ค้นพบและอ่านนิยาย Visual Novel บน NovelMaze",
+    title: { default: "NovelMaze Platform", template: "%s — NovelMaze Platform" },
+    description: "ค้นพบและดื่มด่ำกับ Visual Novels คุณภาพสูงบน NovelMaze Platform",
     url: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
-    siteName: "NovelMaze",
+    siteName: "NovelMaze Platform",
     images: [
       {
-        url: "/opengraph-image.png", 
+        url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "NovelMaze - ประตูสู่โลกแห่งนิยาย",
+        alt: "NovelMaze Platform - ประตูสู่โลกแห่งนิยายภาพ",
       },
     ],
     locale: 'th_TH',
@@ -68,9 +57,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: { default: "NovelMaze", template: "%s — NovelMaze" },
-    description: "ดำดิ่งสู่โลกแห่งนิยายกับ NovelMaze",
-    images: [{ url: "/twitter-image.png", alt: "NovelMaze" }],
+    title: { default: "NovelMaze Platform", template: "%s — NovelMaze Platform" },
+    description: "ดำดิ่งสู่เรื่องราวอันน่าทึ่งกับ Visual Novels บน NovelMaze Platform",
+    images: [{ url: "/twitter-image.png", alt: "NovelMaze Platform" }],
   },
   icons: {
     icon: [
@@ -86,53 +75,84 @@ export const metadata: Metadata = {
     google: process.env.GOOGLE_SITE_VERIFICATION_TOKEN,
   },
   appleWebApp: {
-    title: 'NovelMaze',
+    title: 'NovelMaze Platform',
     statusBarStyle: 'default',
     capable: true,
   },
   formatDetection: { telephone: false, email: false, address: false },
-  // Next.js 15+ เพิ่ม metadataBase เพื่อแก้ปัญหา hydration mismatch
-  other: {
-    'csrf-protection': process.env.CSRF_SECRET || 'true',
-  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 2, // เปลี่ยนเป็น 2 เพื่อให้ zoom ได้บ้างแต่ไม่มากเกินไป
+  maximumScale: 2,
   userScalable: true,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" }, // ใช้สีตรงๆ แทน CSS var
-    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
-    { media: "(prefers-color-scheme: sepia)", color: "#f5eadd" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" }, // สีสำหรับ light mode
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },  // สีสำหรับ dark mode (slate-900)
+    // พิจารณาเพิ่มสีสำหรับ sepia ถ้าต้องการให้แถบ BrowserBar เปลี่ยนสีตาม
+    // { media: "[data-theme='sepia']", color: "#f4ecd8" } // ตัวอย่างสีสำหรับ sepia
   ],
 };
 
-// Script สำหรับการตั้งค่า theme เริ่มต้นเพื่อป้องกัน FOUC (Flash Of Unstyled Content)
-// และช่วยลด Hydration Mismatch. Script นี้ควรจะ run ก่อนที่ React จะ render.
-function InitializeTheme() {
+// --- Script สำหรับการตั้งค่า Theme เริ่มต้น (คงเดิมจากที่คุณปรับปรุงล่าสุด) ---
+function ThemeInitializerScript() {
   const scriptContent = `
-// Inside the script in layout.tsx
-(function() {
+(function() { // IIFE
   try {
-    function getInitialTheme() {
-      const storedTheme = localStorage.getItem('novelmaze-theme'); // Use your storageKey
-      if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'sepia') {
-        return storedTheme;
+    const storageKey = 'novelmaze-theme';
+    const defaultCssTheme = 'light'; // Fallback CSS class สุดท้ายหากเกิดข้อผิดพลาด
+    const serverThemeAttribute = document.documentElement.getAttribute('data-server-theme');
+    const userDbThemeFromServer = serverThemeAttribute === 'null' ? null : serverThemeAttribute;
+
+    function determineEffectiveTheme() {
+      let themeToApply;
+      let themeToStoreInLocalStorage;
+
+      // 1. ตรวจสอบธีมจาก server (ผ่าน data-attribute) ถ้าผู้ใช้ login และมี preference
+      if (userDbThemeFromServer && ['light', 'dark', 'system', 'sepia'].includes(userDbThemeFromServer)) {
+        themeToStoreInLocalStorage = userDbThemeFromServer; // นี่คือ "ตัวเลือก" ของผู้ใช้
+        if (userDbThemeFromServer === 'system') {
+          themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        } else {
+          themeToApply = userDbThemeFromServer; // light, dark, sepia
+        }
+        // console.log('[ThemeScript] Using DB theme from server: ' + userDbThemeFromServer + ', applying CSS: ' + themeToApply + ', storing in localStorage: ' + themeToStoreInLocalStorage);
+        localStorage.setItem(storageKey, themeToStoreInLocalStorage);
+        return themeToApply;
       }
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
+
+      // 2. ถ้าไม่มีธีมจาก server (เช่น ผู้ใช้ guest), ตรวจสอบ localStorage
+      const storedTheme = localStorage.getItem(storageKey);
+      if (storedTheme && ['light', 'dark', 'system', 'sepia'].includes(storedTheme)) {
+        themeToStoreInLocalStorage = storedTheme; // "ตัวเลือก" ที่เคยบันทึกไว้
+        if (storedTheme === 'system') {
+          themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        } else {
+          themeToApply = storedTheme; // light, dark, sepia
+        }
+        // console.log('[ThemeScript] Using localStorage theme: ' + storedTheme + ', applying CSS: ' + themeToApply);
+        return themeToApply;
       }
-      return 'light'; // Default theme
+
+      // 3. ถ้าไม่มีทั้งจาก server และ localStorage, ใช้ system preference เป็น default
+      themeToStoreInLocalStorage = 'system';
+      localStorage.setItem(storageKey, themeToStoreInLocalStorage);
+      themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      // console.log('[ThemeScript] Using default system preference, applying CSS: ' + themeToApply + ', storing "system" in localStorage.');
+      return themeToApply;
     }
-    const theme = getInitialTheme();
-    document.documentElement.className = ''; // Clear existing classes like "invisible"
-    document.documentElement.classList.add(theme);
-    document.documentElement.setAttribute('data-theme-ready', 'true'); // Signal theme is set
+
+    const finalThemeToApply = determineEffectiveTheme() || defaultCssTheme;
+    document.documentElement.className = '';
+    document.documentElement.classList.add(finalThemeToApply);
+    document.documentElement.setAttribute('data-theme', finalThemeToApply);
+    document.documentElement.setAttribute('data-theme-ready', 'true');
   } catch (e) {
     console.warn('[Layout ThemeScript] Error setting initial theme:', e);
-    document.documentElement.classList.add('light'); // Fallback
+    document.documentElement.className = ''; // Clear classes on error
+    document.documentElement.classList.add('light'); // Fallback to light
+    document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.setAttribute('data-theme-ready', 'true');
   }
 })();`;
@@ -145,18 +165,49 @@ function InitializeTheme() {
   );
 }
 
+// --- RootLayout Component (ปรับปรุงส่วนการดึง theme) ---
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // ทำการเชื่อมต่อ MongoDB เฉพาะเมื่อจำเป็น - สามารถปิดไว้ได้ถ้าไม่ได้ query ข้อมูลในส่วนนี้โดยตรง
-  // await dbConnect();
+  await dbConnect(); // เชื่อมต่อ DB
+
+  const session = await getServerSession(authOptions);
+  // ดึง theme จาก JWT เป็นค่าเริ่มต้น (อาจจะเก่าถ้า JWT ยังไม่อัปเดต)
+  let userDbTheme: Theme | undefined | null = session?.user?.preferences?.display?.theme as Theme | undefined | null;
+
+  // ✅ ส่วนสำคัญ: ถ้าผู้ใช้ล็อกอินอยู่ ให้ดึง theme ล่าสุดจาก DB โดยตรง
+  // เพื่อให้แน่ใจว่าค่าที่ส่งให้ InitializeTheme script เป็นค่าล่าสุดเสมอสำหรับการ render หน้านี้
+  if (session?.user?.id) {
+    try {
+      const freshUser = await UserModel.findById(session.user.id)
+        .select("preferences.display.theme") // เลือกเฉพาะ field ที่ต้องการ
+        .lean() // ใช้ .lean() เพื่อ performance ที่ดีขึ้นถ้าไม่ต้องการ Mongoose document methods
+        .exec();
+
+      if (freshUser?.preferences?.display?.theme) {
+        const themeFromDbDirect = freshUser.preferences.display.theme as Theme;
+        // ใช้ค่าจาก DB โดยตรง ถ้ามันต่างจากใน JWT หรือถ้า JWT ไม่มีค่านี้
+        // นี่เป็นการันตีว่า data-server-theme จะเป็นค่าล่าสุดเสมอ
+        if (userDbTheme !== themeFromDbDirect) {
+          // console.log(`[RootLayout Server] Theme from JWT was '${userDbTheme}', but fresh DB theme is '${themeFromDbDirect}'. Using DB theme for initialization.`);
+          userDbTheme = themeFromDbDirect;
+        }
+      }
+    } catch (dbError) {
+      console.error("[RootLayout Server] Error fetching fresh theme directly from DB:", dbError);
+      // หากเกิดข้อผิดพลาด, จะใช้ theme จาก session (JWT) ตามเดิมที่ดึงไว้ก่อนหน้า
+    }
+  }
+  // console.log(`[RootLayout Server] Final User DB Theme for Initializer Script: ${userDbTheme}`);
 
   return (
-    <html lang="th" suppressHydrationWarning>
+    <html lang="th" suppressHydrationWarning data-server-theme={userDbTheme || 'null'}>
       <head>
-        <InitializeTheme />
+        <ThemeInitializerScript />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary flex flex-col`}

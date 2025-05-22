@@ -116,7 +116,7 @@
 
 /* รูปแบบสำหรับโหมดซีเปีย */
 .sepia {
-  --background: #e4d9cb; /* Sepia background - lighter */
+  --background: #f6ebdb; /* Sepia background - lighter */
   --foreground: #4a3b31; /* Sepia foreground - darker brown */
   --primary: #8c6f56;    /* Sepia primary - muted brown */
   --primary-foreground: #e9dfbf; /* Sepia primary foreground - light cream */
@@ -146,6 +146,7 @@
 
   --modal-gradient-start: var(--primary);
   --modal-gradient-end: #a98e74;
+  filter: sepia(0)
 }
 
 

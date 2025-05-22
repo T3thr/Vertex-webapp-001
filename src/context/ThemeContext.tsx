@@ -1,277 +1,297 @@
-// src/context/ThemeContext.tsx
-// Context สำหรับจัดการ Theme ของแอปพลิเคชัน
 "use client";
 
 import React, {
   createContext,
+  useContext,
   useState,
   useEffect,
-  useContext,
-  ReactNode,
   useCallback,
+  ReactNode,
   useMemo,
-  JSX
+  useRef,
 } from "react";
 import { useSession } from "next-auth/react";
-import { debounce } from "lodash";
-import { Sun, Moon, Laptop, BookOpen } from "lucide-react"; // Import icons
+import { Sun, Moon, Laptop, BookOpenText } from "lucide-react";
 
-// ประเภทของ Theme ที่รองรับ
 export type Theme = "light" | "dark" | "system" | "sepia";
-export type ResolvedTheme = "light" | "dark" | "sepia"; // Resolved theme ไม่ควรมี system
+export type ResolvedTheme = "light" | "dark" | "sepia";
 
-// Interface สำหรับ Props ของ ThemeProvider
+export interface ThemeDefinition {
+  name: Theme;
+  label: string;
+  icon: React.ReactElement;
+}
+
+interface ThemeContextProps {
+  theme: Theme;
+  resolvedTheme: ResolvedTheme;
+  setTheme: (theme: Theme) => void;
+  themes: ThemeDefinition[];
+  mounted: boolean;
+}
+
+const ThemeContext = createContext<ThemeContextProps | undefined>(undefined);
+
 interface ThemeProviderProps {
   children: ReactNode;
-  defaultTheme?: Theme;
   storageKey?: string;
+  defaultTheme?: Theme;
 }
 
-// Interface สำหรับ State ของ ThemeProvider
-interface ThemeProviderState {
-  theme: Theme; // ธีมที่ผู้ใช้เลือก (อาจเป็น 'system')
-  resolvedTheme: ResolvedTheme; // ธีมที่แสดงผลจริง (light, dark, sepia)
-  setTheme: (theme: Theme) => void;
-  themes: Array<{ name: Theme; label: string; icon: JSX.Element }>;
-  mounted: boolean; // เพิ่ม mounted state เพื่อให้ component อื่นๆ รู้ว่า context พร้อมใช้งาน
+const DEFAULT_STORAGE_KEY = "novelmaze-theme";
+const DEFAULT_THEME: Theme = "system";
+
+export function ThemeProvider({
+  children,
+  storageKey = DEFAULT_STORAGE_KEY,
+  defaultTheme = DEFAULT_THEME,
+}: ThemeProviderProps) {
+  const { data: session, status: sessionStatus, update: updateNextAuthSession } = useSession();
+
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedTheme = window.localStorage.getItem(storageKey) as Theme | null;
+        if (storedTheme && ["light", "dark", "system", "sepia"].includes(storedTheme)) {
+          // console.log(`[ThemeProvider useState] กำลังเริ่มต้น theme จาก localStorage: '${storedTheme}'`);
+          return storedTheme;
+        }
+        // console.log(`[ThemeProvider useState] ไม่พบ theme ใน localStorage หรือค่าไม่ถูกต้อง ('${storedTheme}'). จะใช้ defaultTheme prop: '${defaultTheme}'`);
+      } catch (e) {
+        console.warn(`[ThemeProvider useState] ไม่สามารถอ่าน theme จาก localStorage. จะใช้ defaultTheme prop: '${defaultTheme}'. Error:`, e);
+      }
+    }
+    return defaultTheme;
+  });
+
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
+    let initialResolved: ResolvedTheme = "light";
+    const currentInitialTheme = (() => {
+      if (typeof window !== "undefined") {
+        try {
+          const stored = window.localStorage.getItem(storageKey) as Theme | null;
+          if (stored && ["light", "dark", "system", "sepia"].includes(stored)) return stored;
+        } catch (e) { /* ignore */ }
+      }
+      return defaultTheme;
+    })();
+
+    if (currentInitialTheme === "system") {
+      initialResolved = (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    } else if (currentInitialTheme === "sepia" || currentInitialTheme === "dark" || currentInitialTheme === "light") {
+      initialResolved = currentInitialTheme;
+    }
+    // console.log(`[ThemeProvider useState resolvedTheme] กำลังเริ่มต้น resolvedTheme เป็น: '${initialResolved}' จาก initialThemeValue: '${currentInitialTheme}'`);
+    return initialResolved;
+  });
+
+  const [mounted, setMounted] = useState(false);
+
+  const applyTheme = useCallback(
+    (themeToApply: Theme) => {
+      let newResolvedTheme: ResolvedTheme;
+      if (themeToApply === "system") {
+        newResolvedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+      } else {
+        newResolvedTheme = themeToApply as ResolvedTheme;
+      }
+      // console.log(`[ThemeProvider applyTheme] กำลัง 적용 theme: '${themeToApply}', แปลงเป็น: '${newResolvedTheme}'`);
+      const docEl = document.documentElement;
+      docEl.classList.remove("light", "dark", "sepia");
+      docEl.classList.add(newResolvedTheme);
+      docEl.setAttribute("data-theme", newResolvedTheme);
+      setResolvedTheme(newResolvedTheme);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!mounted) {
+        setMounted(true);
+    }
+    // console.log(`[ThemeProvider Mount/ThemeChange Effect] Theme ปัจจุบันคือ '${theme}'. กำลัง 적용.`);
+    applyTheme(theme);
+
+    const handleSystemThemeChange = () => {
+      if (theme === "system") {
+        // console.log("[ThemeProvider SystemListener] OS theme เปลี่ยนแปลง. กำลัง re-applying 'system' theme.");
+        applyTheme("system");
+      }
+    };
+
+    const mediaQueryList = window.matchMedia("(prefers-color-scheme: dark)");
+    // Listener จะถูกเพิ่มเฉพาะเมื่อ theme เป็น 'system' และจะถูกลบเมื่อ component unmount หรือ theme เปลี่ยนเป็นค่าอื่น
+    if (theme === "system") {
+      mediaQueryList.addEventListener("change", handleSystemThemeChange);
+    }
+
+    return () => {
+      mediaQueryList.removeEventListener("change", handleSystemThemeChange);
+    };
+  }, [theme, applyTheme, mounted]);
+
+
+  // --- ✅ [ปรับปรุง] Effect สำหรับการซิงโครไนซ์กับ NextAuth session ---
+  // Ref เพื่อติดตามสถานะ session ก่อนหน้า
+  const prevSessionStatusRef = useRef<typeof sessionStatus | undefined>(undefined);
+  // Ref เพื่อป้องกันการอัปเดตธีมจาก session ในการ render ครั้งแรกหากผู้ใช้ login อยู่แล้ว
+  // (เพื่อป้องกันการเขียนทับค่าจาก ThemeInitializerScript/localStorage ด้วย JWT ที่อาจจะยัง stale)
+  const initialAuthLoadGuardRef = useRef(true);
+
+  useEffect(() => {
+    if (!mounted) {
+      // เมื่อ component unmount หรือ remount, รีเซ็ตสถานะเพื่อให้การ์ดทำงานอีกครั้งสำหรับการโหลดครั้งแรกหาก login อยู่
+      initialAuthLoadGuardRef.current = true;
+      prevSessionStatusRef.current = sessionStatus; // จัดเก็บสถานะปัจจุบันเพื่อเปรียบเทียบในครั้งถอดไป
+      return;
+    }
+
+    const currentSessionObjectTheme = session?.user?.preferences?.display?.theme as Theme | undefined | null;
+    const isValidSessionTheme = currentSessionObjectTheme && ["light", "dark", "system", "sepia"].includes(currentSessionObjectTheme);
+
+    // console.log(`[ThemeProvider SessionSync] Status: ${sessionStatus}, PrevStatus: ${prevSessionStatusRef.current}, AppTheme: ${theme}, SessionTheme: ${currentSessionObjectTheme}, Guard: ${initialAuthLoadGuardRef.current}`);
+
+    if (sessionStatus === "authenticated") {
+      if (isValidSessionTheme) {
+        // สถานการณ์ที่ 1: ผู้ใช้เพิ่ง SIGN IN (เปลี่ยนจาก unauthenticated/loading เป็น authenticated)
+        if (
+          (prevSessionStatusRef.current === "unauthenticated" || prevSessionStatusRef.current === "loading") &&
+          currentSessionObjectTheme !== theme
+        ) {
+          // console.log(`[ThemeProvider SessionSync] SIGN-IN DETECTED: ธีมจาก session '${currentSessionObjectTheme}' (DB) จะถูกใช้แทนที่ธีมปัจจุบันของแอป '${theme}'.`);
+          setThemeState(currentSessionObjectTheme); // อัปเดต state ของแอป
+          try {
+            window.localStorage.setItem(storageKey, currentSessionObjectTheme); // อัปเดต localStorage
+          } catch (e) {
+            console.warn(`[ThemeProvider SessionSync - Sign-In] ไม่สามารถบันทึกธีม '${currentSessionObjectTheme}' จาก session ลง localStorage:`, e);
+          }
+          initialAuthLoadGuardRef.current = false; // การซิงค์เกิดขึ้นแล้ว, ปิดการ์ดสำหรับ session instance นี้
+        }
+        // สถานการณ์ที่ 2: ผู้ใช้ login อยู่แล้ว และนี่ *ไม่ใช่* การทำงานครั้งแรกของ effect หลัง mount
+        // หรือธีมใน session object มีการเปลี่ยนแปลงจากครั้งล่าสุดที่เราเห็น
+        else if (!initialAuthLoadGuardRef.current && currentSessionObjectTheme !== theme) {
+          // console.log(`[ThemeProvider SessionSync] AUTHENTICATED & POST-GUARD/CHANGED: ธีมจาก session '${currentSessionObjectTheme}' แตกต่างจากธีมแอป '${theme}'. กำลังอัปเดต.`);
+          setThemeState(currentSessionObjectTheme);
+          try {
+            window.localStorage.setItem(storageKey, currentSessionObjectTheme);
+          } catch (e) {
+            console.warn(`[ThemeProvider SessionSync - Session Update] ไม่สามารถบันทึกธีม '${currentSessionObjectTheme}' จาก session ลง localStorage:`, e);
+          }
+        }
+        // สถานการณ์ที่ 3: โหลดหน้าครั้งแรก, ผู้ใช้ LOGIN อยู่แล้ว, และนี่คือการทำงานครั้งแรกของ effect (การ์ดยังทำงานอยู่)
+        // เราไม่ต้องการให้ธีมจาก JWT ที่อาจจะ stale มาเขียนทับค่าที่ ThemeInitializerScript + localStorage ตั้งค่าไว้
+        // ดังนั้น ถ้าการ์ดทำงานอยู่, เราจะแค่ปิดการ์ด แต่จะไม่เปลี่ยน theme state ในตอนนี้
+        else if (initialAuthLoadGuardRef.current) {
+          // console.log(`[ThemeProvider SessionSync] INITIAL AUTHENTICATED LOAD (Guard Active): ธีมแอปคือ '${theme}'. ธีมจาก Session คือ '${currentSessionObjectTheme}'. ปิดการ์ด. ไม่มีการเปลี่ยนแปลงธีมแอปจาก session ในขั้นตอนนี้.`);
+          initialAuthLoadGuardRef.current = false;
+        }
+      }
+    } else if (sessionStatus === "unauthenticated") {
+      // ผู้ใช้ sign out หรือ session ไม่ active
+      // console.log(`[ThemeProvider SessionSync] UNAUTHENTICATED: รีเซ็ต initial sync guard.`);
+      initialAuthLoadGuardRef.current = true; // รีเซ็ตการ์ดสำหรับการ sign-in ครั้งถัดไป
+    }
+
+    // อัปเดต prevSessionStatusRef สำหรับการทำงานของ effect ในครั้งถัดไปเสมอ
+    prevSessionStatusRef.current = sessionStatus;
+
+  }, [session, sessionStatus, mounted, storageKey, theme, setThemeState]);
+
+
+  // --- ฟังก์ชันสำหรับตั้งค่าธีม (ถูกเรียกโดยการกระทำของผู้ใช้) ---
+  const setTheme = useCallback(
+    async (newTheme: Theme) => {
+      // console.log(`[ThemeProvider setTheme] ผู้ใช้ร้องขอเปลี่ยนธีมเป็น: '${newTheme}'`);
+      setThemeState(newTheme); // อัปเดต UI ทันที (Optimistic update)
+
+      try {
+        window.localStorage.setItem(storageKey, newTheme); // บันทึกลง localStorage
+      } catch (e) {
+        console.warn(`[ThemeProvider setTheme] ไม่สามารถบันทึกธีมลง localStorage:`, e);
+      }
+
+      if (sessionStatus === "authenticated" && session?.user?.id) {
+        try {
+          // console.log(`[ThemeProvider setTheme] ผู้ใช้ยืนยันตัวตนแล้ว. กำลังอัปเดตธีมใน DB สำหรับ user: ${session.user.id}`);
+          const response = await fetch("/api/user/update-preferences", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              preferences: { display: { theme: newTheme } },
+            }),
+          });
+
+          if (response.ok) {
+            // console.log("[ThemeProvider setTheme] อัปเดตธีมใน DB สำเร็จ. กำลังสั่งรีเฟรช session.");
+            await updateNextAuthSession(); // รีเฟรช JWT ด้วย preference ธีมใหม่
+            // console.log("[ThemeProvider setTheme] การรีเฟรช NextAuth session น่าจะเสร็จสิ้นแล้ว.");
+            // เมื่อ session อัปเดต, SessionSync Effect ที่ปรับปรุงแล้วจะทำงานและจัดการ state อย่างถูกต้อง
+          } else {
+            let errorData = { message: `Request failed with status ${response.status}` };
+            try { errorData = await response.json(); } catch { /* ignore */ }
+            console.error("[ThemeProvider setTheme] ไม่สามารถอัปเดตธีมใน DB:", response.status, errorData);
+          }
+        } catch (error) {
+          console.error("[ThemeProvider setTheme] เกิดข้อผิดพลาดขณะเรียก API update-preferences:", error);
+        }
+      }
+    },
+    [storageKey, sessionStatus, session?.user?.id, updateNextAuthSession] //นำ theme ออกจาก dependencies ของ setTheme เพราะ setTheme ไม่ควรอ้างอิงค่า theme เก่าในการตัดสินใจ
+  );
+
+  // --- Effect สำหรับการซิงโครไนซ์ธีมข้ามแท็บผ่าน localStorage event ---
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return;
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === storageKey && event.newValue) {
+        // console.log(`[ThemeProvider StorageListener] localStorage เปลี่ยนแปลงจากแท็บอื่น. Key: ${event.key}, Old: ${event.oldValue}, New: ${event.newValue}`);
+        const newThemeFromStorage = event.newValue as Theme;
+
+        if (["light", "dark", "system", "sepia"].includes(newThemeFromStorage)) {
+          if (newThemeFromStorage !== theme) {
+            // console.log(`[ThemeProvider StorageListener] ธีมจาก localStorage ('${newThemeFromStorage}') แตกต่างจากธีมปัจจุบันของ context ('${theme}'). กำลังอัปเดต context.`);
+            setThemeState(newThemeFromStorage);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    // console.log("[ThemeProvider StorageListener] Attached storage event listener.");
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      // console.log("[ThemeProvider StorageListener] Removed storage event listener.");
+    };
+  }, [storageKey, theme, mounted, setThemeState]); // เพิ่ม setThemeState เข้า dependencies
+
+
+  const themesList: ThemeDefinition[] = useMemo(
+    () => [
+      { name: "light", label: "สว่าง", icon: <Sun size={16} /> },
+      { name: "dark", label: "มืด", icon: <Moon size={16} /> },
+      { name: "sepia", label: "ซีเปีย", icon: <BookOpenText size={16} /> },
+      { name: "system", label: "ระบบ", icon: <Laptop size={16} /> },
+    ],
+    []
+  );
+
+  // `setTheme` ถูก memoized ด้วย useCallback แล้ว จึงปลอดภัยที่จะใส่ใน dependency array ของ useMemo
+  const value = useMemo(
+    () => ({ theme, resolvedTheme, setTheme, themes: themesList, mounted }),
+    [theme, resolvedTheme, setTheme, themesList, mounted]
+  );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-const initialState: ThemeProviderState = {
-  theme: "system",
-  resolvedTheme: "light", // ค่าเริ่มต้นสำหรับ SSR (จะถูกอัปเดตใน client)
-  setTheme: () => null,
-  themes: [],
-  mounted: false,
-};
-
-const ThemeContext = createContext<ThemeProviderState>(initialState);
-
-export const useTheme = () => {
+export const useTheme = (): ThemeContextProps => {
   const context = useContext(ThemeContext);
   if (context === undefined) {
     throw new Error("useTheme must be used within a ThemeProvider");
   }
   return context;
-};
-
-export const ThemeProvider = ({
-  children,
-  defaultTheme = "system",
-  storageKey = "novelmaze-theme", // ชื่อ key ใน localStorage
-}: ThemeProviderProps) => {
-  const [theme, setThemeState] = useState<Theme>(initialState.theme);
-  const [resolvedTheme, setResolvedThemeState] = useState<ResolvedTheme>(
-    initialState.resolvedTheme
-  );
-  const [mounted, setMounted] = useState(false);
-  const [initialThemeLoaded, setInitialThemeLoaded] = useState(false);
-  const { data: session, status } = useSession();
-
-  // --- Helper Functions ---
-  const applyThemeToDOM = useCallback((newResolvedTheme: ResolvedTheme) => {
-    if (typeof window !== "undefined") {
-      const root = document.documentElement;
-      root.classList.remove("light", "dark", "sepia");
-      root.classList.add(newResolvedTheme);
-      // สำหรับ Tailwind 4.0 การเปลี่ยน class ที่ <html> จะ trigger การใช้ CSS variables ที่ถูกต้อง
-    }
-  }, []);
-
-  const calculateResolvedTheme = useCallback(
-    (currentThemeValue: Theme): ResolvedTheme => {
-      if (currentThemeValue === "system") {
-        if (typeof window !== "undefined") {
-          return window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light";
-        }
-        return "light"; // Fallback for server-side or no window.matchMedia
-      }
-      return currentThemeValue as ResolvedTheme; // light, dark, or sepia
-    },
-    []
-  );
-
-  // Debounced function สำหรับอัปเดต theme preference ใน DB
-  const updateUserThemePreferenceInDB = useCallback(
-    debounce(async (newThemeToSave: Theme) => {
-      if (status !== "authenticated" || !session?.user?.id) {
-        console.log("[ThemeContext] User not authenticated or session not ready, skipping DB update for theme.");
-        return;
-      }
-      console.log(
-        `[ThemeContext] Attempting to update theme to "${newThemeToSave}" in DB for user ${session.user.id}`
-      );
-      try {
-        const response = await fetch("/api/user/update-preferences", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ theme: newThemeToSave }),
-        });
-        const result = await response.json();
-        if (response.ok && result.success) {
-          console.log(
-            `[ThemeContext] Successfully updated theme to "${newThemeToSave}" in DB.`
-          );
-        } else {
-          console.error(
-            "[ThemeContext] Failed to update theme preference in DB:",
-            result.error || `Server error: ${response.status}`
-          );
-        }
-      } catch (error: any) {
-        console.error(
-          "[ThemeContext] Error updating theme preference in DB:",
-          error.message
-        );
-      }
-    }, 800), // 800ms debounce
-    [status, session?.user?.id] // Dependencies
-  );
-
-  // --- Main setTheme Function ---
-  const setTheme = useCallback(
-    (newTheme: Theme) => {
-      console.log(`[ThemeContext] Setting theme to: ${newTheme}`);
-      setThemeState(newTheme); // อัปเดต React state
-
-      // 1. คำนวณ resolved theme ใหม่
-      const newResolved = calculateResolvedTheme(newTheme);
-      setResolvedThemeState(newResolved); // อัปเดต resolved theme state
-
-      // 2. ประยุกต์ theme ไปที่ DOM
-      applyThemeToDOM(newResolved);
-
-      // 3. บันทึก theme ลง localStorage (สำหรับผู้ใช้ที่ไม่ได้ login หรือเป็นค่าเริ่มต้น)
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem(storageKey, newTheme);
-          console.log(`[ThemeContext] Theme "${newTheme}" saved to localStorage.`);
-        } catch (e) {
-          console.warn(
-            `[ThemeContext] Could not save theme to localStorage (${storageKey}):`, e
-          );
-        }
-      }
-
-      // 4. อัปเดต theme ใน DB ถ้าผู้ใช้ sign-in
-      if (status === "authenticated" && session?.user?.id) {
-        updateUserThemePreferenceInDB(newTheme);
-      }
-    },
-    [
-      storageKey,
-      status,
-      session?.user?.id,
-      calculateResolvedTheme,
-      applyThemeToDOM,
-      updateUserThemePreferenceInDB,
-    ]
-  );
-
-  // --- Effects ---
-
-  // Effect 1: Initial theme loading (Client-side only)
-  useEffect(() => {
-    if (initialThemeLoaded) return; // ป้องกันการทำงานซ้ำ
-    
-    setMounted(true);
-    let initialUserTheme: Theme = defaultTheme; // เริ่มต้นด้วย defaultTheme
-
-    // ก. ดึงค่าจาก localStorage ก่อน (สำคัญสำหรับ persist theme ของ guest)
-    try {
-      const storedTheme = localStorage.getItem(storageKey) as Theme | null;
-      if (storedTheme && ["light", "dark", "system", "sepia"].includes(storedTheme)) {
-        initialUserTheme = storedTheme;
-        console.log(`[ThemeContext] Initial theme from localStorage: "${storedTheme}"`);
-      }
-    } catch (e) {
-      console.warn("[ThemeContext] Failed to read from localStorage:", e);
-    }
-
-    // ข. ถ้าผู้ใช้ authenticated ให้ดึงค่าจาก session (ซึ่งควรจะมีค่าจาก DB)
-    //    ค่าจาก session จะ override ค่าจาก localStorage หากมี
-    if (status === "authenticated" && session?.user?.preferences?.theme) {
-        const dbTheme = session.user.preferences.theme as Theme;
-        if (["light", "dark", "system", "sepia"].includes(dbTheme)) {
-            initialUserTheme = dbTheme;
-            console.log(`[ThemeContext] Initial theme from DB session: "${dbTheme}"`);
-        }
-    }
-
-    setThemeState(initialUserTheme);
-    const initialResolved = calculateResolvedTheme(initialUserTheme);
-    setResolvedThemeState(initialResolved);
-    applyThemeToDOM(initialResolved);
-    setInitialThemeLoaded(true);
-
-    console.log(`[ThemeContext] Initial theme set to: "${initialUserTheme}", Resolved: "${initialResolved}"`);
-  }, [status, session?.user?.preferences?.theme, storageKey, defaultTheme, applyThemeToDOM, calculateResolvedTheme, initialThemeLoaded]);
-
-  // Effect 2: Listen to system theme changes (if theme is 'system')
-  useEffect(() => {
-    if (!mounted || theme !== "system" || typeof window === "undefined") {
-      return;
-    }
-    
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      console.log("[ThemeContext] System color scheme changed.");
-      const newResolved = calculateResolvedTheme("system"); // Recalculate based on "system"
-      setResolvedThemeState(newResolved);
-      applyThemeToDOM(newResolved);
-    };
-    
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [theme, applyThemeToDOM, calculateResolvedTheme, mounted]); // `theme` เป็น dependency ที่สำคัญที่นี่
-
-  // Effect 3: Listen to session changes
-  useEffect(() => {
-    if (!mounted || status !== "authenticated" || !session?.user?.preferences?.theme || initialThemeLoaded === false) {
-      return;
-    }
-    
-    const sessionTheme = session.user.preferences.theme as Theme;
-    if (sessionTheme !== theme && ["light", "dark", "system", "sepia"].includes(sessionTheme)) {
-      console.log(`[ThemeContext] Session changed, updating theme from session: ${sessionTheme}`);
-      setThemeState(sessionTheme);
-      const newResolved = calculateResolvedTheme(sessionTheme);
-      setResolvedThemeState(newResolved);
-      applyThemeToDOM(newResolved);
-      
-      // อัปเดต localStorage เพื่อให้ตรงกับค่าจาก session
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem(storageKey, sessionTheme);
-        } catch (e) {
-          console.warn(`[ThemeContext] Could not save session theme to localStorage:`, e);
-        }
-      }
-    }
-  }, [status, session?.user?.preferences?.theme, applyThemeToDOM, calculateResolvedTheme, mounted, theme, storageKey, initialThemeLoaded]);
-
-  const availableThemes = useMemo(
-    () => [
-      { name: "light" as Theme, label: "สว่าง", icon: <Sun size={16} /> },
-      { name: "dark" as Theme, label: "มืด", icon: <Moon size={16} /> },
-      { name: "sepia" as Theme, label: "ซีเปีย", icon: <BookOpen size={16} /> },
-      { name: "system" as Theme, label: "ตามระบบ", icon: <Laptop size={16} /> },
-    ],
-    []
-  );
-
-  const providerValue = useMemo(() => ({
-    theme,
-    resolvedTheme,
-    setTheme,
-    themes: availableThemes,
-    mounted,
-  }), [theme, resolvedTheme, setTheme, availableThemes, mounted]);
-
-  return (
-    <ThemeContext.Provider value={providerValue}>
-      {children}
-    </ThemeContext.Provider>
-  );
 };

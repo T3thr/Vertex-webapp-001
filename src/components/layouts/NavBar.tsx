@@ -47,7 +47,7 @@ const UserAvatar = React.memo(({ user, size = "md", className = "" }: UserAvatar
       <div className={`${sizeClasses[size]} ${className} rounded-full overflow-hidden shadow-sm relative bg-muted`}> {/* เพิ่ม bg-muted เป็น fallback */}
         <Image
           src={avatarUrl}
-          alt={displayName ? `${displayName}님의 아바타` : "사용자 아바타"}
+          alt={displayName ? `${displayName}'s avatar` : "User avatar"}
           fill
           className="object-cover"
           priority={size === "md" || size === "lg"}
@@ -60,7 +60,7 @@ const UserAvatar = React.memo(({ user, size = "md", className = "" }: UserAvatar
   return (
     <div
       className={`${sizeClasses[size]} ${className} rounded-full bg-muted flex items-center justify-center text-muted-foreground font-medium overflow-hidden shadow-sm`}
-      aria-label={displayName || "사용자 아바타"}
+      aria-label={displayName || "User avatar"}
     >
       {displayName ? (
         <span className={fontClasses[size]}>{displayName.charAt(0).toUpperCase()}</span>
