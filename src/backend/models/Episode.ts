@@ -361,7 +361,7 @@ async function updateNovelAggregates(episodeDoc: IEpisode, operation: "save" | "
   const totalEpisodes = await (models.Episode || model<IEpisode>("Episode")).countDocuments({ novelId });
   const publishedEpisodes = await (models.Episode || model<IEpisode>("Episode")).countDocuments({ novelId, status: EpisodeStatus.PUBLISHED });
 
-  let updateData: any = {
+  const updateData: any = {
     totalEpisodesCount: totalEpisodes,
     publishedEpisodesCount: publishedEpisodes,
     lastContentUpdatedAt: new Date(),

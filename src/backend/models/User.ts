@@ -9,6 +9,7 @@ import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import LevelModel, { ILevel } from "./Level"; // << ใหม่: Import ILevel
+import { IPromotionDetails as INovelPromotionDetails } from "./Novel";
 // UserAchievement ไม่จำเป็นต้อง import โดยตรงที่นี่ แต่ gamification.achievements จะอ้างอิงถึง _id ของ UserEarnedItem ใน UserAchievement
 // ซึ่ง UserEarnedItem เองก็มี itemId ที่ ref ไปยัง Achievement/Badge อีกที
 
@@ -535,6 +536,13 @@ export interface INovelPerformanceStats {
  * @property {number} totalRealMoneyReceived - เงินจริงทั้งหมดที่ได้รับ (สกุลเงินหลักของระบบ)
  * @property {number} totalDonationsReceived - จำนวนครั้งทั้งหมดที่ได้รับการสนับสนุน/บริจาค
  * @property {Types.DocumentArray<INovelPerformanceStats>} [novelPerformanceSummaries] - (Optional) สรุปผลงานรายนิยาย (อาจเก็บ Top N หรือ link ไป collection แยกถ้ามีจำนวนมาก)
+ * @property {Array<{novelId: Types.ObjectId, novelTitle: string, promotionDescription?: string, promotionalPriceCoins?: number, promotionEndDate?: Date}>} [activeNovelPromotions]
+ * รายการโปรโมชันนิยายที่กำลังใช้งานอยู่ (เช่น ลดราคา, โปรโมทพิเศษ) สำหรับนิยายแต่ละเรื่อง
+ * - `novelId`: ไอดีของนิยายที่กำลังมีโปรโมชัน
+ * - `novelTitle`: ชื่อของนิยายที่กำลังมีโปรโมชัน (สำรองไว้เพื่อการแสดงผล)
+ * - `promotionDescription`: (Optional) คำอธิบายของโปรโมชัน เช่น "ลดราคา 50%"
+ * - `promotionalPriceCoins`: (Optional) ราคาพิเศษในเหรียญ Coins
+ * - `promotionEndDate`: (Optional) วันที่สิ้นสุดโปรโมชัน
  * @property {Date} [writerSince] - วันที่ได้รับการอนุมัติเป็นนักเขียน (อาจย้ายมาจาก IUserVerification)
  * @property {Date} [lastNovelPublishedAt] - วันที่เผยแพร่นิยายเรื่องล่าสุด
  * @property {Date} [lastEpisodePublishedAt] - วันที่เผยแพร่ตอนล่าสุด
@@ -553,6 +561,13 @@ export interface IWriterStats {
   totalRealMoneyReceived: number; // เงินจริงที่ได้รับทั้งหมด
   totalDonationsReceived: number; // จำนวนครั้งที่ได้รับบริจาค
   novelPerformanceSummaries?: Types.DocumentArray<INovelPerformanceStats>; // สรุปผลงานรายนิยาย
+  activeNovelPromotions?: Array<{ // **เพิ่มใหม่**
+    novelId: Types.ObjectId;
+    novelTitle: string;
+    promotionDescription?: string;
+    promotionalPriceCoins?: number;
+    promotionEndDate?: Date;
+  }>;
   writerSince?: Date; // วันที่เริ่มเป็นนักเขียน
   lastNovelPublishedAt?: Date; // วันที่เผยแพร่นิยายล่าสุด
   lastEpisodePublishedAt?: Date; // วันที่เผยแพร่ตอนล่าสุด

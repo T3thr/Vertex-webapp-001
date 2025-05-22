@@ -333,7 +333,7 @@ FollowSchema.statics.follow = async function (
   followingId: Types.ObjectId,
   followingType: FollowingType
 ): Promise<IFollow> {
-  let follow = await this.findOne({ followerId, followingId, followingType });
+  const follow = await this.findOne({ followerId, followingId, followingType });
   if (follow) {
     if (follow.isDeleted || follow.status !== FollowStatus.ACTIVE) {
       follow.isDeleted = false;

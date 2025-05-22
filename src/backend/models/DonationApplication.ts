@@ -204,7 +204,7 @@ DonationApplicationSchema.post<IDonationApplication>("save", async function (doc
     let notificationTitle = "";
     let notificationMessage = "";
     let shouldSendNotification = true;
-    let userUpdate: any = { "writerProfile.donationApplicationStatus": doc.status };
+    const userUpdate: any = { "writerProfile.donationApplicationStatus": doc.status };
 
     switch (doc.status) {
       case DonationApplicationStatus.APPROVED:

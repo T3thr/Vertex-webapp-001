@@ -478,7 +478,7 @@ ContentReportSchema.post<IContentReport>("save", async function (doc, next) {
 
   // 2. ส่ง Notification แจ้งผู้รายงาน (Reporter) เกี่ยวกับความคืบหน้าของ Report
   if (doc.isModified("status")) {
-    let notificationTitle = "อัปเดตสถานะการรายงานเนื้อหาของคุณ";
+    const notificationTitle = "อัปเดตสถานะการรายงานเนื้อหาของคุณ";
     let notificationMessage = ``;
     let severity = NotificationSeverity.INFO;
     let sendNotification = false;
