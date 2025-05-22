@@ -1,90 +1,158 @@
 // src/app/api/search/novels/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"; // Import NextRequest
 import dbConnect from "@/backend/lib/mongodb";
-import NovelModel, { INovel } from "@/backend/models/Novel"; // Import INovel
-import UserModel from "@/backend/models/User";
-import CategoryModel from "@/backend/models/Category";
+import NovelModel, { INovel, NovelStatus, NovelAccessLevel } from "@/backend/models/Novel"; // Import INovel และ Enums
+import UserModel from "@/backend/models/User"; //
+import CategoryModel, { ICategory } from "@/backend/models/Category"; //
+import mongoose from "mongoose";
 
-export async function GET(request: Request) {
-  await dbConnect();
+
+// Interface สำหรับข้อมูลนิยายที่ส่งกลับในผลการค้นหา (ควรจะคล้ายกับ PopulatedNovelForDetailPage แต่เลือกฟิลด์น้อยกว่า)
+interface SearchedNovelResult {
+  _id: string;
+  title: string; //
+  slug: string; //
+  author?: { // จาก INovel.author (populated)
+    _id: string;
+    username?: string; //
+    profile?: {
+      displayName?: string; //
+      penName?: string; //
+      avatarUrl?: string; //
+    };
+  };
+  coverImageUrl?: string; //
+  synopsis: string; //
+  status: NovelStatus; //
+  // ageRating?: string; // ageRatingCategoryId จะถูก populate เป็น object ด้านล่าง
+  ageRatingCategory?: Pick<ICategory, "_id" | "name" | "slug"> | null; //
+  // tags?: string[]; // customTags จาก themeAssignment.customTags
+  customTags?: string[]; //
+  mainThemeCategory?: Pick<ICategory, "_id" | "name" | "slug"> | null; //
+  subThemeCategories?: Pick<ICategory, "_id" | "name" | "slug">[]; //
+  languageCategory?: Pick<ICategory, "_id" | "name" | "slug"> | null; //
+  stats: { // จาก INovel.stats
+    viewsCount: number;
+    likesCount: number;
+    averageRating: number;
+    followersCount: number;
+    lastPublishedEpisodeAt?: Date; //
+    totalWords: number; //
+  };
+  monetizationSettings?: { // จาก INovel.monetizationSettings
+    activePromotion?: {
+        isActive: boolean;
+        promotionalPriceCoins?: number;
+        promotionStartDate?: Date;
+        promotionEndDate?: Date;
+    } | null;
+    defaultEpisodePriceCoins?: number;
+  };
+  currentEpisodePriceCoins?: number; //คำนวณแล้ว
+  totalEpisodesCount: number; //
+  publishedEpisodesCount: number; //
+  lastContentUpdatedAt: Date; //
+  score?: number; // สำหรับ text search relevance
+}
+
+
+export async function GET(request: NextRequest) { // ใช้ NextRequest
+  await dbConnect(); //
 
   try {
     const { searchParams } = new URL(request.url);
 
     // ดึงพารามิเตอร์จาก URL
-    const query = searchParams.get("q") || "";
-    const categoryId = searchParams.get("category") || ""; // ID ของหมวดหมู่หลัก
-    const subCategoryId = searchParams.get("subCategory") || ""; // ID ของหมวดหมู่รอง (ใหม่)
-    const tags = searchParams.getAll("tag") || [];
-    const sort = searchParams.get("sort") || "relevance"; // relevance, latest, popular, rating, followers, lastSignificantUpdateAt (ใหม่)
-    const status = searchParams.get("status") || ""; // published, completed, onHiatus (ไม่รวม discount)
-    const explicitContent = searchParams.get("explicit") || ""; // yes, no, "" (all)
-    const ageRating = searchParams.get("age") || ""; // everyone, teen, mature17+, adult18+, "" (all)
-    const isDiscounted = searchParams.get("discounted"); // true, false, "" (all) (ใหม่)
-    const language = searchParams.get("lang") || ""; // th, en, etc. (ใหม่)
-    const limit = parseInt(searchParams.get("limit") || "20", 10); // Default to 20 for better pagination
+    const query = searchParams.get("q")?.trim() || "";
+    const mainThemeId = searchParams.get("mainTheme") || ""; // ID ของ Main Theme Category (เช่น genre)
+    const subThemeId = searchParams.get("subTheme") || "";   // ID ของ Sub-Theme Category
+    const tagQuery = searchParams.getAll("tag") || []; // เปลี่ยนเป็น tagQuery เพื่อไม่ให้ชนกับ customTags ใน model
+    const sort = searchParams.get("sort") || "relevance"; // relevance, lastContentUpdatedAt, stats.lastPublishedEpisodeAt, stats.viewsCount, stats.averageRating, stats.followersCount
+    const novelStatus = searchParams.get("status") || ""; // DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED, COMPLETED (ONGOING คือ !isCompleted)
+    // explicitContent ถูกแทนที่ด้วยการกรองจาก ageRatingCategoryId หรือ contentWarningCategories
+    const ageRatingId = searchParams.get("ageRating") || ""; // ID ของ Age Rating Category
+    const isDiscountedParam = searchParams.get("discounted"); // "true", "false", "" (all)
+    const languageId = searchParams.get("lang") || ""; // ID ของ Language Category
+    const limit = parseInt(searchParams.get("limit") || "20", 10);
     const page = parseInt(searchParams.get("page") || "1", 10);
     const skip = (page - 1) * limit;
 
-    console.log(`📡 API /api/search/novels called with query: ${query}, categoryId: ${categoryId}, subCategoryId: ${subCategoryId}, sort: ${sort}, limit: ${limit}, page: ${page}`);
+    console.log(`📡 API /api/search/novels called with query: ${query}, mainThemeId: ${mainThemeId}, subThemeId: ${subThemeId}, sort: ${sort}, limit: ${limit}, page: ${page}`);
 
     // สร้างเงื่อนไขการค้นหา
-    const searchCriteria: any = {
-      isDeleted: false,
-      visibility: "public", // โดยทั่วไปจะค้นหาเฉพาะนิยายที่เป็น public
+    const searchCriteria: mongoose.FilterQuery<INovel> = {
+      // isDeleted: false, // ไม่มี field นี้ใน NovelModel
+      accessLevel: NovelAccessLevel.PUBLIC, // โดยทั่วไปจะค้นหาเฉพาะนิยายที่เป็น public
+      status: { $in: [NovelStatus.PUBLISHED, NovelStatus.SCHEDULED] } // เริ่มต้นให้ค้นหาเฉพาะที่ published หรือ scheduled
+                                                                 // หรืออาจจะ $nin: [NovelStatus.BANNED_BY_ADMIN, NovelStatus.REJECTED_BY_ADMIN]
     };
 
-    // กรองตามสถานะ (ไม่รวม discount เพราะ isDiscounted เป็น boolean field แยก)
-    if (status && status !== "all" && ["published", "completed", "onHiatus", "archived"].includes(status)) {
-      searchCriteria.status = status;
+    // กรองตามสถานะนิยาย (published, completed, ongoing, etc.)
+    if (novelStatus && novelStatus !== "all") {
+      if (novelStatus === "completed") {
+        searchCriteria.isCompleted = true; //
+        searchCriteria.status = NovelStatus.PUBLISHED; // โดยทั่วไปนิยายที่จบแล้วควรจะ published
+      } else if (novelStatus === "ongoing") {
+        searchCriteria.isCompleted = false; //
+        searchCriteria.status = NovelStatus.PUBLISHED;
+      } else if (Object.values(NovelStatus).includes(novelStatus as NovelStatus)) {
+        searchCriteria.status = novelStatus as NovelStatus;
+      }
     }
 
-    // กรองตามการจำกัดเนื้อหาผู้ใหญ่
-    if (explicitContent === "yes") {
-      searchCriteria.isExplicitContent = true;
-    } else if (explicitContent === "no") {
-      searchCriteria.isExplicitContent = false;
+
+    // กรองตาม ageRatingCategoryId
+    if (ageRatingId && ageRatingId !== "all") {
+      searchCriteria.ageRatingCategoryId = new mongoose.Types.ObjectId(ageRatingId);
     }
 
-    // กรองตามเรตติ้งอายุ
-    if (ageRating && ageRating !== "all") {
-      searchCriteria.ageRating = ageRating;
-    }
-    
-    // กรองตามภาษา
-    if (language && language !== "all") {
-        searchCriteria.language = language;
+    // กรองตาม language ID (language category)
+    if (languageId && languageId !== "all") {
+      searchCriteria.language = new mongoose.Types.ObjectId(languageId);
     }
 
-    // กรองตามการลดราคา (ใหม่)
-    if (isDiscounted === "true") {
-      searchCriteria.isDiscounted = true;
-    } else if (isDiscounted === "false") {
-      searchCriteria.isDiscounted = false;
+    // กรองตามการลดราคา
+    if (isDiscountedParam === "true") {
+      searchCriteria["monetizationSettings.activePromotion.isActive"] = true;
+      // อาจจะต้องเพิ่มการตรวจสอบ date range ของ promotion ด้วย $and และ $lte, $gte
+      const now = new Date();
+      searchCriteria.$and = [
+        ...(searchCriteria.$and || []),
+        { "monetizationSettings.activePromotion.promotionStartDate": { $lte: now } },
+        { "monetizationSettings.activePromotion.promotionEndDate": { $gte: now } },
+      ];
+    } else if (isDiscountedParam === "false") {
+      searchCriteria.$or = [
+        { "monetizationSettings.activePromotion.isActive": false },
+        { "monetizationSettings.activePromotion.isActive": { $exists: false } },
+        // หรือเงื่อนไขที่ซับซ้อนกว่านี้เพื่อตรวจสอบวันที่
+      ];
     }
 
-    // กรองตามหมวดหมู่หลัก
-    if (categoryId) {
-      searchCriteria.categories = categoryId; // Assumes categories field in Novel model stores primary category IDs
+    // กรองตามหมวดหมู่หลัก (mainTheme)
+    if (mainThemeId) {
+      searchCriteria["themeAssignment.mainTheme.categoryId"] = new mongoose.Types.ObjectId(mainThemeId);
     }
 
-    // กรองตามหมวดหมู่รอง (ใหม่)
-    if (subCategoryId) {
-        searchCriteria.subCategories = subCategoryId; // Assumes subCategories field in Novel model
+    // กรองตามหมวดหมู่รอง (subTheme)
+    if (subThemeId) {
+      searchCriteria["themeAssignment.subThemes.categoryId"] = new mongoose.Types.ObjectId(subThemeId);
     }
 
-    // กรองตามแท็ก
-    if (tags.length > 0) {
-      searchCriteria.tags = { $all: tags }; // $all ensures all specified tags are present
+    // กรองตามแท็ก (customTags)
+    if (tagQuery.length > 0) {
+      searchCriteria["themeAssignment.customTags"] = { $all: tagQuery.map(tag => tag.toLowerCase()) };
     }
 
-    // ถ้ามีการค้นหาด้วยข้อความ ใช้ text search
+    // ถ้ามีการค้นหาด้วยข้อความ ใช้ text search (ต้องมี text index ใน Model)
     if (query) {
+      const langForSearch = languageId ? (await CategoryModel.findById(languageId).select("name").lean())?.name?.toLowerCase() || "none" : "none"; // หรือ "thai" ตาม default ใน schema
       searchCriteria.$text = {
         $search: query,
-        $language: "thai", // สามารถปรับเปลี่ยนหรือทำให้ dynamic ตาม language filter
+        // $language: langForSearch, // ถ้าต้องการ dynamic language สำหรับ text search (Mongo 5.0+)
+                                     // หรือใช้ default_language ที่ตั้งไว้ใน index
         $caseSensitive: false,
-        $diacriticSensitive: false,
+        $diacriticSensitive: false, // อาจจะไม่จำเป็นถ้า $language จัดการได้ดี
       };
     }
 
@@ -94,23 +162,23 @@ export async function GET(request: Request) {
       sortOptions.score = { $meta: "textScore" };
     } else {
       switch (sort) {
-        case "latest": // อัปเดตตอนล่าสุด
-          sortOptions.lastEpisodePublishedAt = -1;
+        case "latestUpdate": // อัปเดตเนื้อหาล่าสุดของนิยาย
+          sortOptions.lastContentUpdatedAt = -1;
+          break;
+        case "latestEpisode": // อัปเดตตอนล่าสุด
+          sortOptions["stats.lastPublishedEpisodeAt"] = -1;
           break;
         case "popular": // ยอดวิว
-          sortOptions.viewsCount = -1;
+          sortOptions["stats.viewsCount"] = -1;
           break;
         case "rating": // คะแนนเฉลี่ย
-          sortOptions.averageRating = -1;
+          sortOptions["stats.averageRating"] = -1;
           break;
         case "followers": // จำนวนผู้ติดตาม
-          sortOptions.followersCount = -1;
+          sortOptions["stats.followersCount"] = -1;
           break;
-        case "lastSignificantUpdateAt": // การอัปเดตสำคัญล่าสุด (เช่น แก้ไขข้อมูลหลัก)
-          sortOptions.lastSignificantUpdateAt = -1;
-          break;
-        default: // ถ้าไม่ระบุหรือ relevance โดยไม่มี query ก็เรียงตามอัปเดตตอนล่าสุด
-          sortOptions.lastEpisodePublishedAt = -1;
+        default: // ถ้าไม่ระบุหรือ relevance โดยไม่มี query ก็เรียงตามอัปเดตเนื้อหาล่าสุด
+          sortOptions.lastContentUpdatedAt = -1;
           break;
       }
     }
@@ -118,81 +186,126 @@ export async function GET(request: Request) {
     sortOptions._id = -1;
 
 
-    // สร้าง User Model ที่จะใช้สำหรับ populate
-    const User = UserModel();
-
-    // Fields to select
-    const selectedFields = "title slug coverImage description status isExplicitContent ageRating tags lastEpisodePublishedAt viewsCount likesCount averageRating followersCount author categories subCategories isDiscounted discountDetails language episodesCount publishedEpisodesCount";
+    // Fields to select (เลือกเฉพาะที่จำเป็นสำหรับหน้า search results)
+    const selectedFields =
+      "title slug coverImageUrl synopsis status isCompleted " +
+      "themeAssignment.mainTheme.categoryId themeAssignment.subThemes.categoryId themeAssignment.customTags " +
+      "ageRatingCategoryId language " +
+      "stats.viewsCount stats.likesCount stats.averageRating stats.followersCount stats.lastPublishedEpisodeAt stats.totalWords " +
+      "monetizationSettings.activePromotion monetizationSettings.defaultEpisodePriceCoins " +
+      "totalEpisodesCount publishedEpisodesCount author lastContentUpdatedAt";
 
     // ดึงข้อมูลนิยาย
-    const novelsQuery = NovelModel()
+    const novelsQuery = NovelModel
       .find(searchCriteria)
-      .populate({
+      .populate<{ author: SearchedNovelResult["author"] }>({
         path: "author",
-        select: "username profile.displayName profile.avatar", // ตรวจสอบว่า path นี้ถูกต้องใน UserModel
-        model: User,
+        model: UserModel,
+        select: "username profile.displayName profile.penName profile.avatarUrl", // อัปเดต fields
       })
-      .populate({ // Populate primary categories
-        path: "categories",
-        select: "name slug iconUrl themeColor", // เลือกฟิลด์ที่จำเป็นจาก Category
-        model: CategoryModel(),
+      .populate<{ mainThemeCategory: SearchedNovelResult["mainThemeCategory"] }>({
+        path: "themeAssignment.mainTheme.categoryId",
+        model: CategoryModel,
+        select: "_id name slug", // เลือกฟิลด์ที่จำเป็น
       })
-      .populate({ // Populate sub-categories (if you have them and want to display them)
-        path: "subCategories",
-        select: "name slug iconUrl themeColor",
-        model: CategoryModel(),
+      .populate<{ subThemeCategories: SearchedNovelResult["subThemeCategories"] }>({
+        path: "themeAssignment.subThemes.categoryId",
+        model: CategoryModel,
+        select: "_id name slug",
+      })
+      .populate<{ ageRatingCategory: SearchedNovelResult["ageRatingCategory"] }>({
+        path: "ageRatingCategoryId",
+        model: CategoryModel,
+        select: "_id name slug",
+      })
+      .populate<{ languageCategory: SearchedNovelResult["languageCategory"] }>({
+        path: "language",
+        model: CategoryModel,
+        select: "_id name slug",
       })
       .select(selectedFields + (query && sort === "relevance" ? " score" : "")) // เพิ่ม score ถ้ามีการ search
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
-      .lean();
-      
-    if (query && sort === "relevance") {
-        // Mongoose may require explicitly adding the $meta field in select when using it in sort
-        // For lean queries, this might behave differently, ensure `score` is available if sorting by it.
-    }
+      .lean(); // ใช้ .lean()
 
-    const novels = await novelsQuery;
+    const rawNovels = await novelsQuery;
+
+    // Map ผลลัพธ์เพื่อคำนวณ currentEpisodePriceCoins
+    const novels: SearchedNovelResult[] = rawNovels.map((novel: any) => {
+        const now = new Date();
+        const promo = novel.monetizationSettings?.activePromotion;
+        let currentPrice = novel.monetizationSettings?.defaultEpisodePriceCoins ?? 0;
+        if (
+            promo &&
+            promo.isActive &&
+            promo.promotionalPriceCoins !== undefined &&
+            (!promo.promotionStartDate || new Date(promo.promotionStartDate) <= now) &&
+            (!promo.promotionEndDate || new Date(promo.promotionEndDate) >= now)
+        ) {
+            currentPrice = promo.promotionalPriceCoins;
+        }
+        return {
+            ...novel,
+            _id: novel._id.toString(),
+            author: novel.author,
+            coverImageUrl: novel.coverImageUrl,
+            synopsis: novel.synopsis,
+            status: novel.status,
+            ageRatingCategory: novel.ageRatingCategory,
+            customTags: novel.themeAssignment?.customTags,
+            mainThemeCategory: novel.mainThemeCategory,
+            subThemeCategories: novel.subThemeCategories,
+            languageCategory: novel.languageCategory,
+            stats: novel.stats,
+            monetizationSettings: novel.monetizationSettings,
+            currentEpisodePriceCoins: currentPrice,
+            totalEpisodesCount: novel.totalEpisodesCount,
+            publishedEpisodesCount: novel.publishedEpisodesCount,
+            lastContentUpdatedAt: novel.lastContentUpdatedAt,
+            score: novel.score
+        };
+    });
+
 
     // นับจำนวนนิยายทั้งหมดที่ตรงกับเงื่อนไข
-    const total = await NovelModel().countDocuments(searchCriteria);
+    const total = await NovelModel.countDocuments(searchCriteria);
 
     console.log(`✅ Found ${novels.length} novels matching query (total: ${total})`);
 
     // ดึงข้อมูลหมวดหมู่ที่ถูกเลือก (ถ้ามี) เพื่อแสดงผลบนหน้าค้นหา
-    let categoryData = null;
-    if (categoryId) {
-      categoryData = await CategoryModel().findById(categoryId).select("name slug description coverImageUrl").lean();
+    let mainThemeCategoryData = null;
+    if (mainThemeId) {
+      mainThemeCategoryData = await CategoryModel.findById(mainThemeId).select("name slug description coverImageUrl color").lean(); //
     }
-    let subCategoryData = null;
-    if (subCategoryId) {
-        subCategoryData = await CategoryModel().findById(subCategoryId).select("name slug description").lean();
+    let subThemeCategoryData = null;
+    if (subThemeId) {
+      subThemeCategoryData = await CategoryModel.findById(subThemeId).select("name slug description color").lean(); //
     }
 
     // สรุปแท็กที่เกี่ยวข้องกับผลลัพธ์การค้นหา (สำหรับแนะนำแท็กที่เกี่ยวข้อง)
-    let relatedTags: string[] = [];
+    let relatedTagsResult: {tag: string, count: number}[] = [];
     if (novels.length > 0) {
       const tagFrequency: Record<string, number> = {};
-      novels.forEach((novel:any) => { // Cast novel to any or use INovel if lean returns typed objects
-        novel.tags?.forEach((tag: string) => {
-          if (!tags.includes(tag)) { // ข้ามแท็กที่ถูกเลือกไว้แล้ว
+      novels.forEach((novelDoc: SearchedNovelResult) => {
+        novelDoc.customTags?.forEach((tag: string) => { // ใช้ customTags
+          if (!tagQuery.includes(tag)) { // ข้ามแท็กที่ถูกเลือกไว้แล้ว
             tagFrequency[tag] = (tagFrequency[tag] || 0) + 1;
           }
         });
       });
-      relatedTags = Object.entries(tagFrequency)
+      relatedTagsResult = Object.entries(tagFrequency)
         .sort((a, b) => b[1] - a[1]) // เรียงตามความถี่
         .slice(0, 10) // เอา 10 อันดับแรก
-        .map(entry => entry[0]);
+        .map(entry => ({ tag: entry[0], count: entry[1] }));
     }
 
     return NextResponse.json(
       {
         novels,
-        category: categoryData, // หมวดหมู่หลักที่เลือก
-        subCategory: subCategoryData, // หมวดหมู่รองที่เลือก (ใหม่)
-        relatedTags,
+        mainThemeCategory: mainThemeCategoryData, // หมวดหมู่หลักที่เลือก
+        subThemeCategory: subThemeCategoryData,   // หมวดหมู่รองที่เลือก
+        relatedTags: relatedTagsResult,
         pagination: {
           total,
           page,

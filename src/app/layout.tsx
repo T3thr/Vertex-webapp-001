@@ -35,21 +35,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"),
   title: {
-    default: "NovelMaze Platform",
-    template: "%s — NovelMaze Platform",
+    default: "NovelMaze",
+    template: "%s — NovelMaze",
   },
   description: "แพลตฟอร์ม Visual Novel ที่ทันสมัยและหลากหลายแนวสำหรับคุณ",
   openGraph: {
-    title: { default: "NovelMaze Platform", template: "%s — NovelMaze Platform" },
-    description: "ค้นพบและดื่มด่ำกับ Visual Novels คุณภาพสูงบน NovelMaze Platform",
+    title: { default: "NovelMaze", template: "%s — NovelMaze" },
+    description: "ค้นพบและดื่มด่ำกับ Visual Novels คุณภาพสูงบน NovelMaze",
     url: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
-    siteName: "NovelMaze Platform",
+    siteName: "NovelMaze",
     images: [
       {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "NovelMaze Platform - ประตูสู่โลกแห่งนิยายภาพ",
+        alt: "NovelMaze - ประตูสู่โลกแห่งนิยายภาพ",
       },
     ],
     locale: 'th_TH',
@@ -57,9 +57,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: { default: "NovelMaze Platform", template: "%s — NovelMaze Platform" },
-    description: "ดำดิ่งสู่เรื่องราวอันน่าทึ่งกับ Visual Novels บน NovelMaze Platform",
-    images: [{ url: "/twitter-image.png", alt: "NovelMaze Platform" }],
+    title: { default: "NovelMaze", template: "%s — NovelMaze" },
+    description: "ดำดิ่งสู่เรื่องราวอันน่าทึ่งกับ Visual Novels บน NovelMaze",
+    images: [{ url: "/twitter-image.png", alt: "NovelMaze" }],
   },
   icons: {
     icon: [
@@ -75,7 +75,7 @@ export const metadata: Metadata = {
     google: process.env.GOOGLE_SITE_VERIFICATION_TOKEN,
   },
   appleWebApp: {
-    title: 'NovelMaze Platform',
+    title: 'NovelMaze',
     statusBarStyle: 'default',
     capable: true,
   },

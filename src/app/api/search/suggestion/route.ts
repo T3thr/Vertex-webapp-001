@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
   try {
     // เชื่อมต่อกับฐานข้อมูล
     await dbConnect();
-    const Novel = NovelModel();
-    const Category = CategoryModel();
-    const User = UserModel();
+    const Novel = NovelModel;
+    const Category = CategoryModel;
+    const User = UserModel;
 
     // ดึงพารามิเตอร์การค้นหาจาก URL
     const searchParams = request.nextUrl.searchParams;

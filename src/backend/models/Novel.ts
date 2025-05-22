@@ -32,6 +32,7 @@ export enum NovelStatus {
   REJECTED_BY_ADMIN = "rejected_by_admin",
   BANNED_BY_ADMIN = "banned_by_admin",
   SCHEDULED = "scheduled",
+  COMPLETED = "COMPLETED",
 }
 
 /**
@@ -231,16 +232,41 @@ const NovelStatsSchema = new Schema<INovelStats>(
 );
 
 /**
+ * @interface IPromotionDetails
+ * @description (เพิ่มใหม่) การตั้งค่ารายละเอียดโปรโมชันสำหรับนิยาย (เช่น ลดราคาตอนด้วยเหรียญ)
+ */
+export interface IPromotionDetails {
+  promotionalPriceCoins?: number; // ราคาโปรโมชัน (หน่วยเป็นเหรียญ) หากต่ำกว่า defaultEpisodePriceCoins จะถือว่าเป็นส่วนลด
+  promotionStartDate?: Date;    // วันที่เริ่มโปรโมชัน
+  promotionEndDate?: Date;      // วันที่สิ้นสุดโปรโมชัน
+  isActive: boolean;            // โปรโมชันนี้กำลังใช้งานอยู่หรือไม่ (อาจใช้สำหรับเปิด/ปิดด้วยตนเอง หรือโดยระบบตามวันที่)
+  promotionDescription?: string;  // (Optional) คำอธิบายโปรโมชันสั้นๆ ที่แสดงให้ผู้ใช้เห็น
+}
+
+const PromotionDetailsSchema = new Schema<IPromotionDetails>(
+  {
+    promotionalPriceCoins: { type: Number, min: 0 }, // สามารถเป็น 0 ได้สำหรับ "อ่านฟรีชั่วคราว"
+    promotionStartDate: { type: Date },
+    promotionEndDate: { type: Date },
+    isActive: { type: Boolean, default: false, required: true },
+    promotionDescription: { type: String, trim: true, maxlength: [250, "คำอธิบายโปรโมชันต้องไม่เกิน 250 ตัวอักษร"] },
+  },
+  { _id: false }
+);
+
+
+/**
  * @interface IMonetizationSettings
  * @description การตั้งค่าเกี่ยวกับการสร้างรายได้จากนิยาย
  */
 export interface IMonetizationSettings {
   isCoinBasedUnlock: boolean;
-  defaultEpisodePriceCoins?: number;
+  defaultEpisodePriceCoins?: number; // ราคาเหรียญปกติสำหรับแต่ละตอน
   allowDonations: boolean;
   donationApplicationId?: Types.ObjectId; // อ้างอิง DonationApplication model (ถ้ามี)
   isAdSupported: boolean;
   isPremiumExclusive: boolean;
+  activePromotion?: IPromotionDetails; // (เพิ่มใหม่) การตั้งค่าโปรโมชันปัจจุบัน
 }
 
 const MonetizationSettingsSchema = new Schema<IMonetizationSettings>(
@@ -251,6 +277,7 @@ const MonetizationSettingsSchema = new Schema<IMonetizationSettings>(
     donationApplicationId: { type: Schema.Types.ObjectId, ref: "DonationApplication" },
     isAdSupported: { type: Boolean, default: false },
     isPremiumExclusive: { type: Boolean, default: false },
+    activePromotion: { type: PromotionDetailsSchema, default: () => ({ isActive: false }) }, // (เพิ่มใหม่)
   },
   { _id: false }
 );
@@ -470,7 +497,7 @@ const NovelSchema = new Schema<INovel>(
     totalEpisodesCount: { type: Number, default: 0, min: 0 },
     publishedEpisodesCount: { type: Number, default: 0, min: 0 },
     stats: { type: NovelStatsSchema, default: () => ({ viewsCount: 0, uniqueViewersCount: 0, likesCount: 0, commentsCount: 0, ratingsCount: 0, averageRating: 0, followersCount: 0, sharesCount: 0, bookmarksCount: 0, totalWords: 0, estimatedReadingTimeMinutes: 0, completionRate: 0 }) },
-    monetizationSettings: { type: MonetizationSettingsSchema, default: () => ({ isCoinBasedUnlock: false, defaultEpisodePriceCoins: 0, allowDonations: true, isAdSupported: false, isPremiumExclusive: false }) },
+    monetizationSettings: { type: MonetizationSettingsSchema, default: () => ({ isCoinBasedUnlock: false, defaultEpisodePriceCoins: 0, allowDonations: true, isAdSupported: false, isPremiumExclusive: false, activePromotion: { isActive: false } }) },
     psychologicalAnalysisConfig: { type: PsychologicalAnalysisConfigSchema, default: () => ({ allowsPsychologicalAnalysis: false }) },
     collaborationSettings: { type: CollaborationSettingsSchema, default: () => ({ allowCoAuthorRequests: false }) },
     isFeatured: { type: Boolean, default: false, index: true },
@@ -533,6 +560,24 @@ NovelSchema.virtual("isNewRelease").get(function (this: HydratedDocument<INovel>
   }
   return false;
 });
+
+// (เพิ่มใหม่) Virtual field เพื่อคำนวณราคาปัจจุบันของตอน (พิจารณาทั้งราคาปกติและโปรโมชัน)
+NovelSchema.virtual("currentEpisodePriceCoins").get(function (this: HydratedDocument<INovel>) {
+    const now = new Date();
+    const promo = this.monetizationSettings?.activePromotion;
+
+    if (
+        promo &&
+        promo.isActive &&
+        promo.promotionalPriceCoins !== undefined && // ต้องมีราคาโปรโมชันกำหนดไว้
+        (!promo.promotionStartDate || new Date(promo.promotionStartDate) <= now) &&
+        (!promo.promotionEndDate || new Date(promo.promotionEndDate) >= now)
+    ) {
+        return promo.promotionalPriceCoins;
+    }
+    return this.monetizationSettings?.defaultEpisodePriceCoins ?? 0;
+});
+
 
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)
@@ -599,15 +644,36 @@ NovelSchema.pre<HydratedDocument<INovel>>("save", function (next: (err?: mongoos
     if (this.isModified("status") && this.status === NovelStatus.SCHEDULED && this.scheduledPublicationDate) {
         this.publishedAt = undefined;
     }
-    next();
+
+    // (แก้ไข) ตรวจสอบความถูกต้องของ PromotionDates
+    if (this.monetizationSettings?.activePromotion?.promotionStartDate && this.monetizationSettings?.activePromotion?.promotionEndDate) {
+        if (new Date(this.monetizationSettings.activePromotion.promotionStartDate) > new Date(this.monetizationSettings.activePromotion.promotionEndDate)) {
+            // 1. สร้าง instance ของ ValidationError
+            const validationError = new mongoose.Error.ValidationError(); 
+            // 2. เรียก addError บน instance นั้น
+            validationError.addError(
+                'monetizationSettings.activePromotion.promotionEndDate', 
+                new mongoose.Error.ValidatorError({ 
+                    message: 'วันที่สิ้นสุดโปรโมชันต้องอยู่หลังหรือตรงกับวันที่เริ่มโปรโมชัน',
+                    path: 'monetizationSettings.activePromotion.promotionEndDate', // เพิ่ม path เพื่อความชัดเจน
+                    value: this.monetizationSettings.activePromotion.promotionEndDate // เพิ่ม value ที่ทำให้เกิด error
+                })
+            );
+            // 3. เรียก next() พร้อม error object และ return เพื่อออกจาก middleware
+            next(validationError);
+            return; 
+        }
+    }
+
+    next(); // เรียก next() เมื่อทุกอย่างถูกต้อง
   } catch (error: any) {
-    next(error);
+    next(error); // ส่งต่อ error หากเกิดปัญหา
   }
 });
 
 
 // ==================================================================================================
-// SECTION: Helper Function และ Hooks สำหรับอัปเดต WriterStats
+// SECTION: Helper Function และ Hooksสำหรับอัปเดต WriterStats
 // ==================================================================================================
 
 /**
@@ -776,7 +842,7 @@ NovelSchema.post("findOneAndDelete", async function (doc: HydratedDocument<INove
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 const NovelModel = (models.Novel as mongoose.Model<INovel, {}, {}, {}, HydratedDocument<INovel>>) ||
-                   model<INovel, mongoose.Model<INovel, {}, {}, {}, HydratedDocument<INovel>>>("Novel", NovelSchema);
+                  model<INovel, mongoose.Model<INovel, {}, {}, {}, HydratedDocument<INovel>>>("Novel", NovelSchema);
 
 export default NovelModel;
 
@@ -813,4 +879,9 @@ export default NovelModel;
 //     การใช้ `findOneAndDelete` (หรือ `findByIdAndDelete`) จะง่ายกว่าสำหรับการอัปเดต writerStats เพราะมันคืน document ที่ถูกลบมาให้.
 // 13. **`post("remove")` vs Query Middleware**: Document middleware `post("remove")` จะทำงานเมื่อเรียก `doc.remove()` บน instance ของ novel เท่านั้น.
 //     การเปลี่ยนไปใช้ `post("findOneAndDelete")` จะครอบคลุมกรณีการลบผ่าน static model methods ที่ใช้บ่อยกว่า.
+// 14. **Promotion Logic**: (เพิ่มใหม่)
+//      - ควรมี Logic ใน Service Layer หรือ Backend API เพื่อจัดการกับการเปิด/ปิดโปรโมชันโดยอัตโนมัติตาม `promotionStartDate` และ `promotionEndDate` (เช่น ผ่าน cron job)
+//      - การแสดงราคาโปรโมชันบน Frontend ควรตรวจสอบ `activePromotion.isActive` และช่วงเวลาของโปรโมชัน
+//      - เมื่อตั้งค่า `promotionalPriceCoins` ควรตรวจสอบว่าไม่สูงกว่า `defaultEpisodePriceCoins` (หรืออาจจะอนุญาต แต่แสดงผลให้ชัดเจนว่าเป็น "ราคาพิเศษ" ไม่ใช่ "ส่วนลด")
+//      - Virtual field `currentEpisodePriceCoins` ถูกเพิ่มเข้ามาเพื่อช่วยคำนวณราคาที่ควรแสดงผลได้ง่ายขึ้น แต่การตัดสินใจใช้ราคานี้ในการทำธุรกรรมควรเกิดขึ้นใน backend โดยมีการตรวจสอบที่รัดกุมอีกครั้ง
 // ==================================================================================================
