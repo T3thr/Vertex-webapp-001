@@ -243,7 +243,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         // หาก backend API ตอบกลับว่า error หรือไม่สำเร็จ
         if (!backendResponse.ok || backendData.error) {
           let errorMessage = backendData.error || "การลงชื่อเข้าใช้ล้มเหลวจากเซิร์ฟเวอร์";
-          let verificationRequired = backendData.verificationRequired || false;
+          const verificationRequired = backendData.verificationRequired || false;
           // ปรับปรุง error message ให้เข้าใจง่ายขึ้น
           if (typeof backendData.error === 'string') {
             if (backendData.error.includes("ยังไม่ได้ยืนยันอีเมล")) {

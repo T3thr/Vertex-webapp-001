@@ -170,7 +170,7 @@ const initialCategoriesData: SeedCategory[] = [
   { name: "ตัวเอกมีเส้นทางชัดเจน", slug: "fixed-protagonist-path", categoryType: CategoryType.PLAYER_AGENCY_LEVEL }
 ];
 
-let seededCategoryIds: { [key in CategoryType]?: { [slug: string]: Types.ObjectId } } = {};
+const seededCategoryIds: { [key in CategoryType]?: { [slug: string]: Types.ObjectId } } = {};
 
 async function seedInitialCategories() {
   console.log("🌱 เริ่มตรวจสอบและเพิ่มข้อมูลหมวดหมู่...");
@@ -984,7 +984,7 @@ async function seedNovels() {
         continue;
       }
 
-      let existingNovel = await Novel.findOne({ title: novelData.title, author: novelData.author });
+      const existingNovel = await Novel.findOne({ title: novelData.title, author: novelData.author });
 
       if (existingNovel) {
         // อัปเดตนิยายที่มีอยู่

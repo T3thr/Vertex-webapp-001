@@ -4,16 +4,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles } from "lucide-react";
+import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, BookmarkPlus, ThumbsUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
-import { INovel } from "@/backend/models/Novel";
+import { INovel, NovelStatus } from "@/backend/models/Novel"; // INovel for base types, NovelStatus for potential direct use
 import { ICategory, CategoryType } from "@/backend/models/Category";
 import { IUser } from "@/backend/models/User";
 
 // อินเทอร์เฟซสำหรับผู้เขียนที่ถูก populate (ตรงกับที่ API ส่งมา)
-interface PopulatedAuthor {
-  _id: IUser['_id'];
+// IUser['_id'] ควรเป็น string หลัง lean() และ JSON serialization
+export interface PopulatedAuthor {
+  _id: string; // ObjectId -> string
   username?: string;
   profile?: {
     displayName?: string;
@@ -24,120 +25,128 @@ interface PopulatedAuthor {
 }
 
 // อินเทอร์เฟซสำหรับหมวดหมู่ที่ถูก populate (ตรงกับที่ API ส่งมา)
-interface PopulatedCategory {
-  _id: ICategory['_id'];
+export interface PopulatedCategory {
+  _id: string; // ObjectId -> string
   name: string;
   slug?: string;
   localizations?: ICategory['localizations'];
   iconUrl?: string;
   color?: string;
   categoryType?: CategoryType;
-  description?: string; // เพิ่ม description
+  description?: string;
 }
 
 // อินเทอร์เฟซสำหรับข้อมูลการ์ดนิยาย ที่ปรับให้ตรงกับการ populate จาก API
-export interface NovelCardData extends Omit<
-  INovel,
-  | 'author'
-  | 'themeAssignment' // themeAssignment จะถูก override ด้วย populated version
-  | 'language' // language จะถูก override
-  | 'ageRatingCategoryId' // ageRatingCategoryId จะถูก override
-  // Fields ที่ไม่ได้ใช้โดยตรงใน card หรือจะถูก override
-  | 'relatedNovels'
-  | 'coAuthors'
-  | 'seriesId'
-  | 'firstEpisodeId'
-  | 'narrativeFocus'
-  | 'worldBuildingDetails'
-  | 'sourceType' // ถ้าไม่แสดงแหล่งที่มาใน card
-  | 'monetizationSettings'
-  | 'psychologicalAnalysisConfig'
-  | 'collaborationSettings'
-  | 'adminNotes'
-> {
-  _id: INovel['_id']; // ObjectId should be string after lean() and JSON serialization
-  author: PopulatedAuthor; // ผู้เขียนที่ populate แล้ว
-  themeAssignment: { // โครงสร้าง themeAssignment ที่ populate แล้ว
+// ใช้ Pick และ Omit เพื่อสร้าง type ที่แม่นยำจาก INovel
+export type NovelCardData = Pick<INovel,
+  | '_id' // ObjectId will be string
+  | 'title'
+  | 'slug'
+  | 'synopsis'
+  | 'coverImageUrl'
+  | 'stats'
+  | 'isCompleted'
+  | 'isFeatured'
+  | 'publishedAt'
+  | 'status' // อาจใช้แสดงผลบางอย่าง
+  | 'totalEpisodesCount'
+  | 'publishedEpisodesCount'
+  // เพิ่ม currentEpisodePriceCoins (virtual) และ monetizationSettings (สำหรับแสดงข้อมูลราคาโปรโมชั่น)
+  | 'currentEpisodePriceCoins'
+> & {
+  author: PopulatedAuthor;
+  themeAssignment: {
     mainTheme: {
-      categoryId: PopulatedCategory; // categoryId ของ mainTheme ที่ populate แล้ว
+      categoryId: PopulatedCategory;
       customName?: string;
     };
-    // ถ้ามีการ populate subThemes, moodAndTone, contentWarnings ใน API ก็ต้องเพิ่ม type ที่นี่
-    subThemes?: Array<{ categoryId: PopulatedCategory; customName?: string; }>;
-    moodAndTone?: PopulatedCategory[];
-    contentWarnings?: PopulatedCategory[];
+    subThemes?: Array<{ categoryId: PopulatedCategory; customName?: string }>; // Optional, if populated
+    moodAndTone?: PopulatedCategory[]; // Optional, if populated
+    contentWarnings?: PopulatedCategory[]; // Optional, if populated
     customTags?: string[];
   };
-  language: PopulatedCategory; // ภาษาที่ populate แล้ว
-  ageRatingCategoryId?: PopulatedCategory; // เรทอายุที่ populate แล้ว (optional)
-  // stats, coverImageUrl, title, slug, synopsis, isFeatured, isCompleted, status จะมาจาก INovel โดยตรง
-}
+  language: PopulatedCategory;
+  ageRatingCategoryId?: PopulatedCategory;
+  // เพิ่ม monetizationSettings ถ้าจะแสดงข้อมูลโปรโมชั่นบนการ์ดโดยตรง
+  monetizationSettings?: INovel['monetizationSettings'];
+};
 
 
 interface NovelCardProps {
   novel: NovelCardData;
-  priority?: boolean; // สำหรับ Next/Image priority loading
-  className?: string; // คลาสเพิ่มเติมสำหรับ container ของ card
-  imageClassName?: string; // คลาสเพิ่มเติมสำหรับ Image component
+  priority?: boolean;
+  className?: string;
+  imageClassName?: string;
 }
 
 export function NovelCard({
   novel,
   priority = false,
   className = "",
-  imageClassName = "aspect-[2/3]", // Default aspect ratio
+  imageClassName = "aspect-[2/3.1]", // ปรับ aspect ratio ให้สูงขึ้นเล็กน้อยตาม Figma
 }: NovelCardProps) {
-  // การคำนวณวันที่อัปเดตล่าสุด
-  const lastUpdated = novel.stats?.lastPublishedEpisodeAt
+  const lastUpdatedText = novel.stats?.lastPublishedEpisodeAt
     ? formatDistanceToNow(new Date(novel.stats.lastPublishedEpisodeAt), { addSuffix: true, locale: th })
     : novel.publishedAt
     ? formatDistanceToNow(new Date(novel.publishedAt), { addSuffix: true, locale: th })
-    : "ยังไม่เผยแพร่";
+    : "เร็วๆ นี้";
 
-  // การแสดงชื่อผู้เขียน
   const authorDisplay =
     novel.author?.profile?.penName ||
     novel.author?.profile?.displayName ||
     novel.author?.username ||
     "นักเขียนนิรนาม";
 
-  // การแสดงชื่อหมวดหมู่หลัก
   const mainGenre = novel.themeAssignment?.mainTheme?.categoryId;
-  const mainGenreName = mainGenre?.name || novel.themeAssignment?.mainTheme?.customName || "ทั่วไป";
-  const mainGenreColor = mainGenre?.color || 'var(--primary)'; // ใช้สีจาก CSS variable ถ้าไม่มี
+  const mainGenreName = mainGenre?.name || novel.themeAssignment?.mainTheme?.customName || "เรื่องเล่า";
+  const mainGenreColor = mainGenre?.color || 'var(--primary)';
 
-  // ป้ายสถานะ (Badges)
-  const statusBadges: { label: string; colorClass: string; icon?: React.ReactNode }[] = [];
+  const statusBadges: { label: string; colorClass: string; icon?: React.ReactNode; title?: string }[] = [];
+
   if (novel.isFeatured) {
-    statusBadges.push({ label: "แนะนำ", colorClass: "bg-amber-500/90 text-white", icon: <Sparkles size={12} /> });
+    statusBadges.push({ label: "แนะนำ", colorClass: "bg-amber-500/90 text-white", icon: <Sparkles size={11} /> });
   }
   if (novel.isCompleted) {
-    statusBadges.push({ label: "จบแล้ว", colorClass: "bg-emerald-500/90 text-white", icon: <CheckCircle size={12} /> });
+    statusBadges.push({ label: "จบแล้ว", colorClass: "bg-emerald-500/90 text-white", icon: <CheckCircle size={11} /> });
+  } else if (novel.status === NovelStatus.PUBLISHED && (novel.publishedEpisodesCount || 0) > 0 && (novel.publishedEpisodesCount || 0) < (novel.totalEpisodesCount || 5)) {
+     // "ยังไม่จบ" อาจจะไม่ต้องแสดง ถ้า isCompleted ครอบคลุมแล้ว
   }
-  // ตัวอย่าง: เพิ่มป้าย "มาใหม่" หาก publishedAt ไม่นานมานี้
-  if (novel.publishedAt && new Date(novel.publishedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) {
-      // statusBadges.unshift({ label: "มาใหม่", colorClass: "bg-sky-500/90 text-white", icon: <Sparkles size={12}/>});
+
+  // Promotion Badge (ส่วนลด)
+  const promo = novel.monetizationSettings?.activePromotion;
+  const now = new Date();
+  if (
+    promo &&
+    promo.isActive &&
+    promo.promotionalPriceCoins !== undefined &&
+    (!promo.promotionStartDate || new Date(promo.promotionStartDate) <= now) &&
+    (!promo.promotionEndDate || new Date(promo.promotionEndDate) >= now)
+  ) {
+    statusBadges.push({
+      label: "ลดราคา",
+      colorClass: "bg-rose-500/90 text-white", // สีสำหรับโปรโมชั่น
+      icon: <ThumbsUp size={11} />, // หรือ Tag icon
+      title: promo.promotionDescription || `พิเศษ ${promo.promotionalPriceCoins} เหรียญ`,
+    });
   }
 
 
-  // เรทอายุ
   const ageRating = novel.ageRatingCategoryId;
   const ageRatingText = ageRating?.name;
-  // ใช้สีจาก category ถ้ามี, หรือสี fallback, หรือสีที่สื่อถึงคำเตือน
-  const ageRatingColor = ageRating?.color || 'var(--alert-error-foreground)';
-  const ageRatingDesc = ageRating?.description;
+  const ageRatingColor = ageRating?.color || 'var(--color-alert-error-foreground)';
+  const ageRatingDesc = ageRating?.description || ageRatingText;
 
   const cardVariants = {
-    initial: { opacity: 0, y: 15 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 1, 0.5, 1] } }, // Smoother ease
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 1, 0.5, 1] } },
     hover: {
-      y: -6,
-      boxShadow: "var(--shadow-xl)", // ใช้ shadow จาก globals.css
-      transition: { duration: 0.25, ease: "circOut" },
+      y: -5,
+      boxShadow: "var(--shadow-lg)", // ใช้ shadow จาก globals.css
+      transition: { duration: 0.2, ease: "circOut" },
     },
   };
 
-  const placeholderCover = "/images/placeholder-cover.webp"; // ตรวจสอบว่ามีไฟล์นี้ใน public/images
+  const placeholderCover = "/images/placeholder-cover.webp";
 
   return (
     <motion.div
@@ -146,7 +155,6 @@ export function NovelCard({
       animate="animate"
       whileHover="hover"
       className={`bg-card rounded-lg md:rounded-xl shadow-md overflow-hidden flex flex-col transition-all duration-300 ease-in-out group ${className}`}
-      // style={{ height: '100%' }} // ทำให้การ์ดสูงเท่ากันถ้าอยู่ใน flex container
     >
       <Link href={`/novels/${novel.slug}`} className="block h-full flex flex-col" title={novel.title}>
         <div className={`relative w-full overflow-hidden rounded-t-lg md:rounded-t-xl ${imageClassName}`}>
@@ -154,65 +162,63 @@ export function NovelCard({
             src={novel.coverImageUrl || placeholderCover}
             alt={`ปกนิยายเรื่อง ${novel.title}`}
             fill
-            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
-            className="object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
+            sizes="(max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1024px) 22vw, 18vw"
+            className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
             priority={priority}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              if (target.src !== placeholderCover) { // ป้องกัน loop ถ้า placeholder ก็ error
+              if (target.src !== placeholderCover) {
                 target.srcset = placeholderCover;
                 target.src = placeholderCover;
               }
             }}
           />
-          {/* Badges Area */}
-          <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5 z-10">
+          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1 z-10">
             {statusBadges.map((badge) => (
               <span
                 key={badge.label}
-                className={`text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full flex items-center gap-1 ${badge.colorClass} shadow-sm backdrop-blur-sm bg-opacity-80`}
+                title={badge.title || badge.label}
+                className={`text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${badge.colorClass} shadow-sm backdrop-blur-sm bg-opacity-85 leading-tight`}
               >
                 {badge.icon} {badge.label}
               </span>
             ))}
             {ageRatingText && (
               <span
-                style={{ backgroundColor: ageRatingColor, color: 'white' }} // กำหนดสีตัวอักษรเป็นขาวเพื่อความชัดเจน
-                className="text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full flex items-center gap-1 shadow-sm backdrop-blur-sm bg-opacity-80"
-                title={ageRatingDesc || ageRatingText}
+                style={{ backgroundColor: ageRatingColor, color: 'var(--card-foreground)' }}
+                className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm backdrop-blur-sm bg-opacity-85 leading-tight"
+                title={ageRatingDesc}
               >
-                <ShieldCheck size={12} /> {ageRatingText}
+                <ShieldCheck size={11} /> {ageRatingText}
               </span>
             )}
           </div>
 
-          {/* Gradient & Title on Image */}
-          <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/80 via-black/60 to-transparent pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-2.5 md:p-3 text-primary-foreground">
+          <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/85 via-black/50 to-transparent pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 right-0 p-2 md:p-2.5 text-primary-foreground">
             <h3
-              className="font-bold text-sm sm:text-base md:text-lg line-clamp-2 leading-tight"
+              className="font-bold text-xs sm:text-sm md:text-base line-clamp-2 leading-tight"
               title={novel.title}
-              style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.7)' }}
+              style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}
             >
               {novel.title}
             </h3>
             <p
-              className="text-xs sm:text-sm text-gray-200 line-clamp-1"
+              className="text-[10px] sm:text-xs text-gray-300 line-clamp-1"
               title={authorDisplay}
-              style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}
+              style={{ textShadow: '1px 1px 1px rgba(0,0,0,0.7)' }}
             >
               {authorDisplay}
             </p>
           </div>
         </div>
 
-        {/* Content Area below image */}
-        <div className="p-2.5 md:p-3 flex flex-col flex-grow">
+        <div className="p-2 md:p-2.5 flex flex-col flex-grow text-xs">
           {mainGenreName && (
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Tag size={14} style={{ color: mainGenreColor }} className="flex-shrink-0" />
+            <div className="flex items-center gap-1 mb-1">
+              <Tag size={12} style={{ color: mainGenreColor }} className="flex-shrink-0" />
               <p
-                className="text-xs font-medium line-clamp-1"
+                className="font-medium line-clamp-1"
                 title={mainGenreName}
                 style={{ color: mainGenreColor }}
               >
@@ -221,29 +227,28 @@ export function NovelCard({
             </div>
           )}
 
-          <p className="text-xs text-muted-foreground line-clamp-2 mb-2 flex-grow min-h-[2.5em]" title={novel.synopsis}>
-            {novel.synopsis || "ไม่มีเรื่องย่อ"}
+          <p className="text-muted-foreground line-clamp-2 mb-1.5 flex-grow min-h-[2.2em] text-[11px] sm:text-xs" title={novel.synopsis}>
+            {novel.synopsis || "ยังไม่มีเรื่องย่อ"}
           </p>
 
-          {/* Stats and Footer */}
-          <div className="mt-auto pt-2 border-t border-border/60">
-            <div className="grid grid-cols-3 gap-x-1 gap-y-0.5 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1 truncate" title={`ยอดเข้าชม: ${novel.stats?.viewsCount?.toLocaleString() || 0}`}>
-                <Eye size={13} className="text-sky-500 flex-shrink-0" />
+          <div className="mt-auto pt-1.5 border-t border-border/50 text-[10px] sm:text-xs">
+            <div className="grid grid-cols-3 gap-x-0.5 text-muted-foreground/90">
+              <div className="flex items-center gap-0.5 truncate" title={`ยอดเข้าชม: ${novel.stats?.viewsCount?.toLocaleString() || 0}`}>
+                <Eye size={11} className="text-sky-500 flex-shrink-0" />
                 <span className="truncate">{novel.stats?.viewsCount?.toLocaleString() || "0"}</span>
               </div>
-              <div className="flex items-center gap-1 truncate" title={`ถูกใจ: ${novel.stats?.likesCount?.toLocaleString() || 0}`}>
-                <Heart size={13} className="text-rose-500 flex-shrink-0" />
+              <div className="flex items-center gap-0.5 truncate" title={`ถูกใจ: ${novel.stats?.likesCount?.toLocaleString() || 0}`}>
+                <Heart size={11} className="text-rose-500 flex-shrink-0" />
                 <span className="truncate">{novel.stats?.likesCount?.toLocaleString() || "0"}</span>
               </div>
-              <div className="flex items-center gap-1 truncate" title={`คะแนนเฉลี่ย: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
-                <Star size={13} className="text-amber-400 flex-shrink-0" />
+              <div className="flex items-center gap-0.5 truncate" title={`คะแนน: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
+                <Star size={11} className="text-amber-400 flex-shrink-0" />
                 <span className="truncate">{novel.stats?.averageRating?.toFixed(1) || "-"}</span>
               </div>
             </div>
-            <div className="mt-1.5 flex items-center text-[10px] text-muted-foreground/80">
-              <Clock className="mr-1 flex-shrink-0" size={10} />
-              <span className="truncate">อัปเดต: {lastUpdated}</span>
+            <div className="mt-1 flex items-center text-muted-foreground/70 text-[9px] sm:text-[10px]">
+              <Clock className="mr-0.5 flex-shrink-0" size={9} />
+              <span className="truncate">อัปเดต: {lastUpdatedText}</span>
             </div>
           </div>
         </div>

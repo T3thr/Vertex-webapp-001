@@ -523,6 +523,31 @@ export interface INovelPerformanceStats {
 }
 
 /**
+ * @interface IActiveNovelPromotionSummary
+ * @description (ใหม่) ข้อมูลสรุปสำหรับนิยายที่กำลังจัดโปรโมชันของนักเขียน
+ */
+export interface IActiveNovelPromotionSummary {
+  novelId: Types.ObjectId;
+  novelTitle: string;
+  promotionDescription?: string;
+  promotionalPriceCoins?: number; // ราคาโปรโมชันปัจจุบัน
+  promotionEndDate?: Date; // วันสิ้นสุดโปรโมชัน (สำคัญสำหรับการแสดงผล)
+}
+
+/**
+ * @interface ITrendingNovelSummary
+ * @description (ใหม่) ข้อมูลสรุปสำหรับนิยายที่กำลังเป็นที่นิยมของนักเขียน
+ */
+export interface ITrendingNovelSummary {
+  novelId: Types.ObjectId;
+  novelTitle: string;
+  trendingScore?: number; // คะแนนความนิยมล่าสุด
+  coverImageUrl?: string; // URL รูปปก (Denormalized เพื่อการแสดงผลที่เร็วขึ้น)
+  viewsLast24h?: number; // (Optional) ยอดชมใน 24 ชม. ล่าสุด (Denormalized)
+  likesLast24h?: number; // (Optional) ยอดไลค์ใน 24 ชม. ล่าสุด (Denormalized)
+}
+
+/**
  * @interface IWriterStats
  * @description สถิติโดยรวมของนักเขียน (สำหรับ Embed ใน User model)
  * @property {number} totalNovelsPublished - จำนวนนิยายทั้งหมดที่เผยแพร่
@@ -552,7 +577,7 @@ export interface INovelPerformanceStats {
 export interface IWriterStats {
   totalNovelsPublished: number; // จำนวนนิยายที่เผยแพร่
   totalEpisodesPublished: number; // จำนวนตอนที่เผยแพร่
-  totalViewsAcrossAllNovels: number; // ยอดเข้าชมรวมทุกนิยาย
+  totalViewsAcrossAllNovels: number; // ยอดเข้าชมรวมทุกนิยาย // ตรงกับ uniqueViewersCount ใน Novel.stats
   totalReadsAcrossAllNovels: number; // ยอดอ่านรวมทุกนิยาย
   totalLikesReceivedOnNovels: number; // ยอดไลค์รวมทุกนิยาย
   totalCommentsReceivedOnNovels: number; // ยอดคอมเมนต์รวมทุกนิยาย
@@ -561,18 +586,13 @@ export interface IWriterStats {
   totalRealMoneyReceived: number; // เงินจริงที่ได้รับทั้งหมด
   totalDonationsReceived: number; // จำนวนครั้งที่ได้รับบริจาค
   novelPerformanceSummaries?: Types.DocumentArray<INovelPerformanceStats>; // สรุปผลงานรายนิยาย
-  activeNovelPromotions?: Array<{ // **เพิ่มใหม่**
-    novelId: Types.ObjectId;
-    novelTitle: string;
-    promotionDescription?: string;
-    promotionalPriceCoins?: number;
-    promotionEndDate?: Date;
-  }>;
   writerSince?: Date; // วันที่เริ่มเป็นนักเขียน
   lastNovelPublishedAt?: Date; // วันที่เผยแพร่นิยายล่าสุด
   lastEpisodePublishedAt?: Date; // วันที่เผยแพร่ตอนล่าสุด
   writerTier?: string; // ระดับนักเขียน
   writerRank?: number; // อันดับนักเขียน
+  activeNovelPromotions?: Types.DocumentArray<IActiveNovelPromotionSummary>; // **เพิ่มใหม่**
+  trendingNovels?: Types.DocumentArray<ITrendingNovelSummary>; // **เพิ่มใหม่**
 }
 
 // ==================================================================================================
@@ -674,7 +694,7 @@ const NovelPerformanceStatsSchema = new Schema<INovelPerformanceStats>(
     novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true, comment: "ID ของนิยาย" },
     novelTitle: { type: String, required: true, trim: true, maxlength: 255, comment: "ชื่อนิยาย (Denormalized)" },
     totalViews: { type: Number, default: 0, min: 0, comment: "ยอดเข้าชมทั้งหมด" },
-    totalReads: { type: Number, default: 0, min: 0, comment: "ยอดอ่านจบ" },
+    totalReads: { type: Number, default: 0, min: 0, comment: "ยอดอ่านจบ" }, // ควรตรงกับ uniqueViewersCount ใน Novel.stats
     totalLikes: { type: Number, default: 0, min: 0, comment: "ยอดไลค์ทั้งหมด" },
     totalComments: { type: Number, default: 0, min: 0, comment: "ยอดคอมเมนต์ทั้งหมด" },
     totalFollowers: { type: Number, default: 0, min: 0, comment: "ผู้ติดตามนิยายนี้" },
@@ -682,6 +702,37 @@ const NovelPerformanceStatsSchema = new Schema<INovelPerformanceStats>(
     totalEarningsFromNovel: { type: Number, default: 0, min: 0, comment: "รายได้จากนิยายนี้" },
   },
   { _id: false }
+);
+
+/**
+ * @Schema IActiveNovelPromotionSummarySchema
+ * @description (ใหม่) Schema สำหรับข้อมูลสรุปนิยายที่กำลังจัดโปรโมชัน
+ */
+const ActiveNovelPromotionSummarySchema = new Schema<IActiveNovelPromotionSummary>(
+    {
+        novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true },
+        novelTitle: { type: String, required: true, trim: true, maxlength: 255 },
+        promotionDescription: { type: String, trim: true, maxlength: 250 },
+        promotionalPriceCoins: { type: Number, min: 0 },
+        promotionEndDate: { type: Date },
+    },
+    { _id: false }
+);
+
+/**
+ * @Schema ITrendingNovelSummarySchema
+ * @description (ใหม่) Schema สำหรับข้อมูลสรุปนิยายที่กำลังเป็นที่นิยม
+ */
+const TrendingNovelSummarySchema = new Schema<ITrendingNovelSummary>(
+    {
+        novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: true },
+        novelTitle: { type: String, required: true, trim: true, maxlength: 255 },
+        trendingScore: { type: Number, default: 0 },
+        coverImageUrl: { type: String, trim: true, maxlength: 2048 },
+        viewsLast24h: { type: Number, default: 0 },
+        likesLast24h: { type: Number, default: 0 },
+    },
+    { _id: false }
 );
 
 const WriterStatsSchema = new Schema<IWriterStats>(
@@ -702,9 +753,20 @@ const WriterStatsSchema = new Schema<IWriterStats>(
     lastEpisodePublishedAt: { type: Date, comment: "วันที่เผยแพร่ตอนล่าสุด" },
     writerTier: { type: String, trim: true, maxlength: 50, comment: "ระดับนักเขียน" },
     writerRank: { type: Number, min: 0, comment: "อันดับนักเขียน" },
+    activeNovelPromotions: { // **เพิ่มใหม่**
+        type: [ActiveNovelPromotionSummarySchema],
+        default: [],
+        comment: "รายการสรุปโปรโมชันนิยายที่กำลังใช้งานอยู่ของนักเขียน (Denormalized, สำหรับ Writer Dashboard)"
+    },
+    trendingNovels: { // **เพิ่มใหม่**
+        type: [TrendingNovelSummarySchema],
+        default: [],
+        comment: "รายการสรุปนิยายที่กำลังเป็นที่นิยมของนักเขียน (Denormalized, สำหรับ Writer Dashboard, จำกัดจำนวน เช่น Top 5)"
+    },
   },
   { _id: false }
 );
+
 
 const UserReadingDisplayPreferencesSchema = new Schema<IUserReadingDisplayPreferences>(
   {
@@ -1196,6 +1258,14 @@ UserSchema.index(
     { "profile.penName": 1 },
     { unique: true, sparse: true, name: "UserProfilePenNameIndex" }
 );
+UserSchema.index(
+    { "writerStats.activeNovelPromotions.novelId": 1 }, // **เพิ่มใหม่** (ถ้าต้องการ query user จาก novel ที่มี promotion)
+    { sparse: true, name: "UserWriterActivePromotionsIndex" }
+);
+UserSchema.index(
+    { "writerStats.trendingNovels.novelId": 1 }, // **เพิ่มใหม่** (ถ้าต้องการ query user จาก novel ที่ trending)
+    { sparse: true, name: "UserWriterTrendingNovelsIndex" }
+);
 
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)
@@ -1249,11 +1319,12 @@ UserSchema.pre<IUser>("save", async function (next) {
     this.emailVerifiedAt = new Date();
   }
   
+  // ตรวจสอบและสร้าง writerStats เมื่อ role "Writer" ถูกเพิ่ม หรือเป็น User ใหม่ที่เป็น Writer
   const isNowWriter = this.roles.includes("Writer");
   const wasPreviouslyWriter = this.$__.priorValid ? this.$__.priorValid.roles.includes("Writer") : false;
 
-  if (isNowWriter && !wasPreviouslyWriter) {
-    if (!this.writerStats) {
+  if (isNowWriter && (!this.writerStats || !wasPreviouslyWriter)) {
+    if (!this.writerStats) { // ถ้า writerStats ยังไม่มี ให้สร้างใหม่ทั้งหมด
       this.writerStats = {
         totalNovelsPublished: 0,
         totalEpisodesPublished: 0,
@@ -1265,23 +1336,46 @@ UserSchema.pre<IUser>("save", async function (next) {
         totalCoinsReceived: 0,
         totalRealMoneyReceived: 0,
         totalDonationsReceived: 0,
+        novelPerformanceSummaries: new mongoose.Types.DocumentArray<INovelPerformanceStats>([]),
         writerSince: new Date(),
+        activeNovelPromotions: new mongoose.Types.DocumentArray<IActiveNovelPromotionSummary>([]), // **เพิ่มใหม่**
+        trendingNovels: new mongoose.Types.DocumentArray<ITrendingNovelSummary>([]), // **เพิ่มใหม่**
       };
-    } else if (!this.writerStats.writerSince) {
-      this.writerStats.writerSince = new Date();
+    } else { // ถ้า writerStats มีอยู่แล้ว (เช่นถูกเพิ่ม role Writer ทีหลัง)
+      if (!this.writerStats.writerSince) {
+        this.writerStats.writerSince = new Date();
+      }
+      if (!this.writerStats.novelPerformanceSummaries) {
+        this.writerStats.novelPerformanceSummaries = new mongoose.Types.DocumentArray<INovelPerformanceStats>([]);
+      }
+      // ตรวจสอบและเพิ่ม field ใหม่ถ้ายังไม่มี (สำคัญสำหรับการ migrate schema เก่า)
+      if (!this.writerStats.activeNovelPromotions) {
+        this.writerStats.activeNovelPromotions = new mongoose.Types.DocumentArray<IActiveNovelPromotionSummary>([]);
+      }
+      if (!this.writerStats.trendingNovels) {
+        this.writerStats.trendingNovels = new mongoose.Types.DocumentArray<ITrendingNovelSummary>([]);
+      }
     }
+
+    // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง ยังคงเดิม)
     if (this.profile?.displayName && !this.profile.penName) {
         const UserModelInstance = models.User || model<IUser>("User");
-        const existingUserWithPenName = await UserModelInstance.findOne({
-            "profile.penName": this.profile.displayName,
-             _id: { $ne: this._id }
-        });
-        if (!existingUserWithPenName) {
-            this.profile.penName = this.profile.displayName;
+        try {
+            const existingUserWithPenName = await UserModelInstance.findOne({
+                "profile.penName": this.profile.displayName,
+                 _id: { $ne: this._id } // ตรวจสอบว่าไม่ใช่ user คนปัจจุบัน
+            });
+            if (!existingUserWithPenName) {
+                this.profile.penName = this.profile.displayName;
+            }
+        } catch(penNameError) {
+            console.error(`[User Pre-Save Hook] Error checking existing penName for user ${this.username}:`, penNameError);
+            // ไม่ควร block การ save หลัก แค่ log error
         }
     }
   } else if (!isNowWriter && wasPreviouslyWriter) {
-    this.writerStats = undefined;
+    // ถ้าถูกถอด role Writer อาจจะล้าง writerStats หรือเก็บไว้เป็นประวัติ (ขึ้นอยู่กับนโยบาย)
+    // this.writerStats = undefined; // ตัวอย่างการล้าง
   }
 
   // << ใหม่: ตั้งค่า currentLevelObject และ nextLevelXPThreshold สำหรับผู้ใช้ใหม่ หรือเมื่อ level เปลี่ยน
@@ -1412,7 +1506,22 @@ export default UserModel;
 //     การจัดการผ่าน Service Layer ตอนที่ผู้ใช้ได้รับ XP และมีการ Level up จะเหมาะสมกว่า.
 //     แต่ใน pre-save hook ปัจจุบัน ได้มีการเพิ่ม logic เบื้องต้นในการพยายามตั้งค่า `currentLevelObject` และ `nextLevelXPThreshold`
 //     เมื่อ `level` เปลี่ยน หรือเมื่อสร้าง user ใหม่ (ซึ่ง `level` คือ 1).
-// 9.  **UserAchievement Document**: ไม่จำเป็นต้องมี `User.gamification.badges` แยกอีกต่อไป เพราะ `UserAchievement`
-//     จะเก็บทั้ง Achievements และ Badges ที่ผู้ใช้ได้รับผ่าน `earnedItems` array และ `itemType`.
-//     `gamification.showcasedItems` และ `displayBadges` จะอ้างอิง `UserEarnedItem._id` จาก `UserAchievement` นั้นๆ.
+// 9.  **Writer Dashboard Enhancements**:
+//     -   **`activeNovelPromotions`**: (เพิ่มใหม่) field นี้ใน `writerStats` จะเก็บข้อมูลสรุปของนิยายที่กำลังจัดโปรโมชัน
+//         การอัปเดต field นี้:
+//         -   **วิธีที่ 1 (Trigger จาก NovelModel)**: เมื่อ `NovelModel.monetizationSettings.activePromotion` มีการเปลี่ยนแปลง (เปิด/ปิด, แก้ไข)
+//             `NovelModel` post-save hook สามารถ trigger การอัปเดต `UserModel.writerStats.activeNovelPromotions` ของผู้เขียนได้
+//             โดยการ query นิยายทั้งหมดของผู้เขียนที่มีโปรโมชัน active แล้วสร้าง array ใหม่ใส่เข้าไป.
+//         -   **วิธีที่ 2 (Background Job)**: มี Background Job ที่ทำงานเป็นระยะ (เช่น ทุกชั่วโมง) เพื่อ query นิยายที่มีโปรโมชัน active
+//             แล้วอัปเดต `UserModel.writerStats.activeNovelPromotions` ให้กับนักเขียนทุกคน. วิธีนี้ลดภาระของ hook แต่ข้อมูลอาจจะไม่ Realtime.
+//     -   **`trendingNovels`**: (เพิ่มใหม่) field นี้ใน `writerStats` จะเก็บข้อมูลสรุปของนิยายที่กำลังเป็นที่นิยม
+//         การอัปเดต field นี้:
+//         -   ควรทำผ่าน Background Job ที่คำนวณ `trendingScore` ใน `NovelModel.stats.trendingStats` เป็นระยะ
+//         -   หลังจาก `trendingScore` ใน `NovelModel` ถูกอัปเดต, Job เดียวกันหรือ Job อีกตัวสามารถ query นิยาย Top N ของนักเขียนแต่ละคน
+//             ตาม `trendingScore` แล้วนำมา denormalize เก็บไว้ใน `UserModel.writerStats.trendingNovels`.
+//             การเก็บ `coverImageUrl` และสถิติบางส่วน (viewsLast24h, likesLast24h) จะช่วยลดการ populate เมื่อแสดงผลใน Dashboard.
+// 10. **Denormalization Strategy**: การเพิ่ม `activeNovelPromotions` และ `trendingNovels` เป็นการ denormalize ข้อมูล
+//     เพื่อเพิ่มประสิทธิภาพในการ query สำหรับ Writer Dashboard. ต้องแน่ใจว่ามีกลไกการอัปเดตที่สอดคล้องกัน.
+// 11. **Performance**: การมี array ย่อยใน `writerStats` ควรพิจารณาถึงขนาดของ array ด้วย. หากมีจำนวนมาก (เช่น นักเขียนมีนิยายเป็นร้อยเรื่องที่มีโปรโมชัน)
+//     อาจจะต้องพิจารณาการ query แบบ on-demand สำหรับบางกรณี หรือจำกัดจำนวนรายการที่ denormalize.
 // ==================================================================================================

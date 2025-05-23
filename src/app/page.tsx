@@ -2,15 +2,16 @@
 import { Suspense } from "react";
 import { NovelCard, NovelCardData } from "@/components/NovelCard";
 import Link from "next/link";
-import { ImageSlider } from "@/components/ImageSlider";
+import { ImageSlider, Slide as SliderSlideData } from "@/components/ImageSlider"; // Updated import for Slide type
 import {
   ArrowRight,
   TrendingUp,
-  Sparkles,
-  CheckCircle,
-  Clock,
+  Sparkles, // สำหรับเรื่องเด่น/โปรโมชั่น
+  CheckCircle, // สำหรับจบแล้ว
+  Clock, // สำหรับอัปเดตล่าสุด
   BookHeart, // ไอคอนสำหรับ Visual Novel
   BookOpen, // สำหรับ fallback
+  BadgePercent, // ไอคอนสำหรับส่วนลดโดยเฉพาะ
 } from "lucide-react";
 import { Metadata } from 'next';
 
@@ -46,7 +47,7 @@ async function getNovels(
     });
 
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ message: "Unknown error" }));
+      const errorData = await res.json().catch(() => ({ message: "Unknown error", details: "Response not JSON" }));
       console.error(`❌ [HomePage] Failed to fetch novels for filter: ${filter}, novelType: ${novelType} (HTTP ${res.status})`, errorData);
       return { novels: [], total: 0 };
     }
@@ -69,10 +70,10 @@ async function getNovels(
 function SectionTitle({ icon, title, description }: { icon: React.ReactNode; title: string; description?: string }) {
   return (
     <div className="flex items-center gap-2.5 md:gap-3">
-      <div className="text-primary p-1.5 md:p-2 bg-primary/10 rounded-md md:rounded-lg shadow-sm">{icon}</div>
+      <div className="text-primary p-1.5 bg-primary/10 rounded-md shadow-sm">{icon}</div>
       <div>
-        <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground">{title}</h2> 
-        {description && <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{description}</p>} 
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground">{title}</h2>
+        {description && <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{description}</p>}
       </div>
     </div>
   );
@@ -81,21 +82,27 @@ function SectionTitle({ icon, title, description }: { icon: React.ReactNode; tit
 /**
  * คอมโพเนนต์ Skeleton สำหรับโหลดการ์ดในแนวนอน
  */
-function NovelRowSkeleton({ count = 5 }: { count?: number }) {
+function NovelRowSkeleton({ count = 6 }: { count?: number }) { // Default to 6 to match displayLimit
+  const cardWidths = "w-[164px] sm:w-[175px] md:w-[190px] lg:w-[210px]";
   return (
-    <div className="flex space-x-3 sm:space-x-4 overflow-hidden py-1">
+    <div className={`flex space-x-3 sm:space-x-3.5 overflow-hidden py-1`}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="animate-pulse flex-shrink-0 w-[170px] sm:w-[180px] md:w-[200px] lg:w-[220px]">
-          <div className="bg-card rounded-lg md:rounded-xl shadow-sm overflow-hidden h-full"> 
-            <div className="aspect-[2/3.05] w-full bg-secondary rounded-t-lg md:rounded-t-xl"></div> 
-            <div className="p-2 md:p-2.5">
-              <div className="h-3.5 bg-secondary rounded w-3/4 mb-1.5"></div> 
-              <div className="h-2.5 bg-secondary rounded w-full mb-1"></div> 
-              <div className="h-2.5 bg-secondary rounded w-5/6 mb-2"></div> 
-              <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-border/30"> 
-                <div className="h-3 bg-secondary rounded w-1/4"></div> 
-                <div className="h-3 bg-secondary rounded w-1/4"></div> 
-                <div className="h-3 bg-secondary rounded w-1/4"></div> 
+        <div key={i} className={`animate-pulse flex-shrink-0 ${cardWidths}`}>
+          <div className="bg-card rounded-lg md:rounded-xl shadow-sm overflow-hidden h-full">
+            <div className="aspect-[2/3.1] w-full bg-secondary rounded-t-lg md:rounded-t-xl"></div>
+            <div className="p-2 md:p-2.5 text-xs">
+              <div className="h-3 bg-secondary rounded w-3/4 mb-1"></div> {/* Genre Tag */}
+              <div className="h-5 bg-secondary rounded w-full mb-1.5"></div> {/* Title Line 1 */}
+              <div className="h-5 bg-secondary rounded w-5/6 mb-1.5"></div> {/* Title Line 2 */}
+              <div className="h-3 bg-secondary rounded w-full mb-1"></div>   {/* Synopsis Line 1 */}
+              <div className="h-3 bg-secondary rounded w-5/6 mb-2"></div>   {/* Synopsis Line 2 */}
+              <div className="mt-auto pt-1.5 border-t border-border/30">
+                <div className="grid grid-cols-3 gap-x-1 mb-1">
+                    <div className="h-2.5 bg-secondary rounded w-full"></div>
+                    <div className="h-2.5 bg-secondary rounded w-full"></div>
+                    <div className="h-2.5 bg-secondary rounded w-full"></div>
+                </div>
+                <div className="h-2 bg-secondary rounded w-1/2"></div> {/* Updated at */}
               </div>
             </div>
           </div>
@@ -110,43 +117,47 @@ function NovelRowSkeleton({ count = 5 }: { count?: number }) {
  */
 function NovelRow({ novelsData, filterKey, cardDisplayLimit = 6 }: { novelsData: { novels: NovelCardData[], total: number }; filterKey: string; cardDisplayLimit?: number }) {
   const { novels, total } = novelsData;
+  const cardWidths = "w-[164px] sm:w-[175px] md:w-[190px] lg:w-[210px]"; // Consistent widths
+  const imageAspectRatio = "aspect-[2/3.1]"; // Consistent aspect ratio
 
-  if (novels.length === 0 && total === 0) {
+  if (!novels || novels.length === 0) { // Check total later for "View All"
     return (
-      <div className="text-center text-muted-foreground py-8 md:py-10 col-span-full flex flex-col items-center justify-center min-h-[250px] bg-secondary/20 rounded-lg"> 
-        <BookOpen size={40} className="mx-auto mb-2.5 text-primary/40 h-10 w-10" />
-        <p className="font-semibold text-sm">ยังไม่พบนิยายในหมวดนี้</p>
-        <p className="text-xs">ลองค้นหาจากหมวดหมู่อื่น หรือกลับมาใหม่ภายหลังนะ</p>
+      <div className="text-center text-muted-foreground py-8 md:py-10 col-span-full flex flex-col items-center justify-center min-h-[300px] bg-secondary/30 rounded-lg my-2">
+        <BookOpen size={36} className="mx-auto mb-2 text-primary/50" />
+        <p className="font-semibold text-base">ยังไม่พบนิยายในหมวดนี้</p>
+        <p className="text-sm">ลองค้นหาจากหมวดหมู่อื่น หรือกลับมาใหม่ภายหลังนะ</p>
       </div>
     );
   }
 
-  // แสดงการ์ดตาม cardDisplayLimit
   const novelsToShow = novels.slice(0, cardDisplayLimit);
   // "ดูทั้งหมด" จะแสดงเมื่อ total (จาก API สำหรับ filter นี้) > จำนวนที่แสดงในแถว
   const showViewAll = total > novelsToShow.length && novelsToShow.length > 0;
-  const viewAllUrl = `/novels?filter=${filterKey.split('-')[0]}${filterKey.includes('visual-novel') ? '&novelType=visual-novel' : '' }`;
+
+  const filterParam = filterKey.split('-')[0];
+  const novelTypeParam = filterKey.includes('visual-novel') ? '&novelType=visual-novel' : '';
+  const viewAllUrl = `/novels?filter=${filterParam}${novelTypeParam}`;
 
 
   return (
-    <div className="flex overflow-x-auto space-x-3 sm:space-x-3.5 pb-3.5 -mb-3.5 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-secondary/20 hover:scrollbar-thumb-primary/50 active:scrollbar-thumb-primary/70 rounded-md py-1"> 
+    <div className="flex overflow-x-auto space-x-3 sm:space-x-3.5 pb-3.5 -mb-3.5 scrollbar-thin scrollbar-thumb-primary/40 scrollbar-track-secondary/30 hover:scrollbar-thumb-primary/60 active:scrollbar-thumb-primary/80 rounded-md py-1.5 -mx-1 px-1">
       {novelsToShow.map((novel, index) => (
         <NovelCard
-          key={`${filterKey}-${novel.slug}-${index}`}
+          key={`${filterKey}-${novel._id}-${index}`} // Use novel._id for a more stable key
           novel={novel}
-          priority={index < 2} // ให้ priority กับ 2 การ์ดแรก
-          className="flex-shrink-0 w-[164px] sm:w-[175px] md:w-[190px] lg:w-[210px] h-full" // ปรับขนาดเล็กน้อย
-          imageClassName="aspect-[2/3.05] sm:aspect-[2/3.1] md:aspect-[2/3.15]"
+          priority={index < 3} // Priority load first 2-3 cards
+          className={`${cardWidths} h-full`}
+          imageClassName={imageAspectRatio}
         />
       ))}
       {showViewAll && (
         <Link
           href={viewAllUrl}
-          className="flex-shrink-0 w-[164px] sm:w-[175px] md:w-[190px] lg:w-[210px] h-full bg-card/60 hover:bg-card/90 rounded-lg md:rounded-xl shadow-md hover:shadow-lg flex flex-col items-center justify-center text-center group transition-all duration-200 ease-in-out aspect-[2/3.05] sm:aspect-[2/3.1] md:aspect-[2/3.15] border-2 border-dashed border-primary/30 hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" //
+          className={`${cardWidths} ${imageAspectRatio} flex-shrink-0 h-full bg-card/70 hover:bg-card rounded-lg md:rounded-xl shadow-md hover:shadow-lg flex flex-col items-center justify-center text-center group transition-all duration-200 ease-in-out border-2 border-dashed border-primary/40 hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
         >
-          <ArrowRight size={24} className="text-primary mb-1 transition-transform duration-200 group-hover:translate-x-0.5 h-6 w-6" />
-          <span className="font-semibold text-xs text-primary">ดูทั้งหมด</span>
-          <span className="text-[10px] text-muted-foreground">({total.toLocaleString()} เรื่อง)</span> 
+          <ArrowRight size={28} className="text-primary mb-1.5 transition-transform duration-200 group-hover:translate-x-1 h-7 w-7" />
+          <span className="font-semibold text-sm text-primary">ดูทั้งหมด</span>
+          <span className="text-xs text-muted-foreground">({total.toLocaleString()} เรื่อง)</span>
         </Link>
       )}
     </div>
@@ -162,8 +173,8 @@ async function SectionRenderer({
   icon,
   filter,
   novelType,
-  displayLimit = 6, // จำนวนการ์ดที่แสดงในแถว
-  fetchLimit = 7,   // จำนวนที่ fetch (displayLimit + 1)
+  displayLimit = 6,
+  fetchLimit = 7,
   sectionKey
 }: {
   title: string;
@@ -176,21 +187,21 @@ async function SectionRenderer({
   sectionKey: string;
 }) {
   const novelsData = await getNovels(filter, fetchLimit, novelType);
-  const viewAllUrlPath = novelType
-    ? `/novels?novelType=${novelType}&filter=${filter}`
-    : `/novels?filter=${filter}`;
+  const filterParam = filter.split('-')[0];
+  const novelTypeParam = novelType ? `&novelType=${novelType}` : '';
+  const viewAllUrlPath = `/novels?filter=${filterParam}${novelTypeParam}`;
 
   return (
-    <section className="mb-6 md:mb-10">
-      <div className="flex justify-between items-center mb-2.5 md:mb-3.5">
+    <section className="mb-8 md:mb-12">
+      <div className="flex justify-between items-center mb-3 md:mb-4">
         <SectionTitle icon={icon} title={title} description={description} />
         {(novelsData.total > 0 && novelsData.novels.length > 0 && novelsData.total > displayLimit) && (
             <Link
                 href={viewAllUrlPath}
-                className="flex items-center gap-1 text-xs sm:text-sm text-primary font-semibold hover:text-primary/80 transition-colors whitespace-nowrap group" //
+                className="flex items-center gap-1 text-sm sm:text-base text-primary font-semibold hover:text-primary/80 transition-colors whitespace-nowrap group"
             >
                 <span>ดูทั้งหมด</span>
-                <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-0.5 h-3.5 w-3.5" />
+                <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-0.5 h-4 w-4" />
             </Link>
         )}
       </div>
@@ -203,55 +214,57 @@ async function SectionRenderer({
  * หน้าแรกของเว็บไซต์
  */
 export default async function HomePage() {
-  const ImageSlideData = [
+  // ข้อมูลสำหรับ ImageSlider (Banner)
+  const imageSlideData: SliderSlideData[] = [
     {
-      id: "vn-promo-slide",
-      title: "ดื่มด่ำโลก Visual Novel",
-      description: "ทุกการเลือกคือเส้นทางใหม่ ค้นพบตอนจบหลากหลายในเรื่องราวที่คุณควบคุม",
-      imageUrl: "/images/featured/slide-vn-main-promo.webp", // รูปภาพควรสื่อถึง Visual Novel
-      link: "/novels?novelType=visual-novel",
+      id: "vn-discovery-slide",
+      title: "โลกใบใหม่ใน Visual Novel",
+      description: "ทุกการตัดสินใจของคุณ กำหนดเรื่องราวและปลายทางที่แตกต่าง ค้นหามหากาพย์ที่คุณเป็นผู้ลิขิต",
+      imageUrl: "/images/featured/banner-vn-world.webp", // รูปภาพควรแสดงโลกกว้างใหญ่และองค์ประกอบ Visual Novel
+      link: "/novels?novelType=visual-novel&filter=trending",
       category: "Visual Novels",
-      highlightColor: "bg-purple-500", //
-      primaryAction: { label: "สำรวจวิชวลโนเวล", href: "/novels?novelType=visual-novel" },
+      highlightColor: "bg-purple-600",
+      primaryAction: { label: "สำรวจวิชวลโนเวล", href: "/novels?novelType=visual-novel&filter=trending" },
     },
     {
-      id: "new-epic-fantasy",
-      title: "มหากาพย์ใหม่ 'อัสนีพลิกสวรรค์'",
-      description: "การผจญภัยสุดจินตนาการในดินแดนแห่งเวทมนตร์และพลังลึกลับ",
-      imageUrl: "/images/featured/slide-new-fantasy.webp",
-      link: "/novels/asani-flips-heaven", // สมมติ slug
-      category: "แฟนตาซีผจญภัย",
-      highlightColor: "bg-sky-600", //
-      primaryAction: { label: "อ่านเลย", href: "/novels/asani-flips-heaven" },
+      id: "epic-adventure-awaits",
+      title: "ตำนานรักข้ามภพ",
+      description: "โชคชะตา ความรัก และการผจญภัยครั้งยิ่งใหญ่ในดินแดนที่ไม่เคยหลับใหล",
+      imageUrl: "/images/featured/banner-fantasy-romance.webp", // รูปภาพควรสวยงาม สื่อถึงแฟนตาซีและความรัก
+      link: "/novels/love-across-dimensions", // สมมติ slug ของนิยายเด่น
+      category: "โรแมนติกแฟนตาซี",
+      highlightColor: "bg-rose-600",
+      primaryAction: { label: "อ่านตำนานรัก", href: "/novels/love-across-dimensions" },
     },
-     {
-      id: "top-authors-monthly",
-      title: "นักเขียนดาวเด่นประจำเดือน",
-      description: "ค้นพบผลงานชั้นเยี่ยมจากนักเขียนมากความสามารถที่เราภูมิใจนำเสนอ",
-      imageUrl: "/images/featured/slide-top-authors.webp",
-      link: "/authors/top-picks", // สมมติ path
-      category: "นักเขียนแนะนำ",
-      highlightColor: "bg-amber-500", //
-      primaryAction: { label: "ดูนักเขียน", href: "/authors/top-picks" },
+    {
+      id: "author-spotlight-promo",
+      title: "นักเขียนไฟแรง สร้างสรรค์ไม่หยุด",
+      description: "พบกับผลงานล่าสุดจากนักเขียนดาวรุ่งที่กำลังมาแรงที่สุดใน NovelMaze",
+      imageUrl: "/images/featured/banner-new-authors.webp", // รูปภาพควรแสดงความหลากหลายของนักเขียนหรือผลงาน
+      link: "/authors", // ไปยังหน้ารวมนักเขียน
+      category: "นักเขียนยอดนิยม",
+      highlightColor: "bg-teal-600",
+      primaryAction: { label: "ค้นหานักเขียน", href: "/authors" },
     },
   ];
 
+  // การตั้งค่าสำหรับแต่ละส่วนของหน้าแรก
   const sectionsConfig = [
     {
       key: "trending-vn",
-      title: "Visual Novel มาแรง",
-      description: "วิชวลโนเวลที่กำลังอินเทรนด์และถูกพูดถึงมากที่สุด",
-      icon: <BookHeart className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />,
+      title: "Visual Novel ยอดฮิต",
+      description: "วิชวลโนเวลอินเทอร์แอคทีฟที่กำลังมาแรงและถูกใจนักอ่าน",
+      icon: <BookHeart className="h-6 w-6 text-primary" />, // ใช้ lucide icon
       filter: "trending",
-      novelType: "visual-novel",
+      novelType: "visual-novel", // กรองเฉพาะ Visual Novel
       displayLimit: 6,
       fetchLimit: 7,
     },
     {
       key: "trending-all",
       title: "ผลงานยอดนิยม",
-      description: "เรื่องราวสุดฮิตที่ครองใจนักอ่านทั่วทั้งแพลตฟอร์ม",
-      icon: <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />,
+      description: "เรื่องราวที่กำลังฮิตติดลมบน ครองใจนักอ่านทั่วทั้งแพลตฟอร์ม",
+      icon: <TrendingUp className="h-6 w-6 text-primary" />,
       filter: "trending",
       displayLimit: 6,
       fetchLimit: 7,
@@ -259,26 +272,26 @@ export default async function HomePage() {
     {
       key: "new-releases",
       title: "อัปเดตล่าสุด",
-      description: "ตอนใหม่ นิยายใหม่ สดใหม่ทุกวัน",
-      icon: <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />, 
-      filter: "published",
+      description: "พบกับตอนใหม่และนิยายเปิดตัวสดใหม่ทุกวัน ห้ามพลาด!",
+      icon: <Clock className="h-6 w-6 text-primary" />,
+      filter: "published", // "published" คือนิยายที่เพิ่งออกใหม่หรือตอนใหม่ล่าสุด
       displayLimit: 6,
       fetchLimit: 7,
     },
     {
-      key: "featured-novels",
-      title: "เรื่องเด่นแนะนำ",
-      description: "นิยายคุณภาพที่เราคัดสรรมาเป็นพิเศษเพื่อคุณ",
-      icon: <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />,
-      filter: "promoted",
+      key: "promoted-deals", // เปลี่ยน key ให้สื่อถึงส่วนลด
+      title: "เรื่องเด่น & โปรโมชั่น", // ชื่อหัวข้อใหม่
+      description: "นิยายคุณภาพที่เราคัดสรร พร้อมข้อเสนอสุดพิเศษที่คุณต้องรีบคว้า",
+      icon: <BadgePercent className="h-6 w-6 text-primary" />, // ไอคอนสำหรับส่วนลด/โปรโมชั่น
+      filter: "promoted", // filter "promoted" ใน API จะดึงทั้ง isFeatured และ activePromotion
       displayLimit: 6,
       fetchLimit: 7,
     },
     {
       key: "completed-stories",
-      title: "จบครบทุกตอน",
-      description: "อ่านสนุกต่อเนื่องไม่มีสะดุด พร้อมบทสรุปที่เข้มข้น",
-      icon: <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />,
+      title: "อ่านรวดเดียวจบ",
+      description: "นิยายจบครบบริบูรณ์ อ่านสนุกต่อเนื่องไม่มีสะดุด มันส์ครบรส",
+      icon: <CheckCircle className="h-6 w-6 text-primary" />,
       filter: "completed",
       displayLimit: 6,
       fetchLimit: 7,
@@ -286,17 +299,17 @@ export default async function HomePage() {
   ];
 
   return (
-    <div className="bg-background text-foreground min-h-screen"> 
-      <main className="pb-10 md:pb-14">
-        <section className="w-full mb-6 md:mb-10 xl:mb-12 relative">
-          <ImageSlider slides={ImageSlideData} />
+    <div className="bg-background text-foreground min-h-screen">
+      <main className="pb-10 md:pb-16">
+        <section className="w-full mb-8 md:mb-12 xl:mb-16 relative"> {/* เพิ่ม margin bottom ให้ ImageSlider */}
+          <ImageSlider slides={imageSlideData} />
         </section>
 
-        <div className="container-custom space-y-6 md:space-y-10"> 
+        <div className="container-custom space-y-8 md:space-y-12">
           {sectionsConfig.map((section) => (
             <Suspense key={section.key} fallback={<NovelRowSkeleton count={section.displayLimit}/>}>
               <SectionRenderer
-                sectionKey={section.key} // ส่ง key ที่ไม่ซ้ำกันสำหรับ Suspense และ NovelRow
+                sectionKey={section.key}
                 title={section.title}
                 description={section.description}
                 icon={section.icon}
