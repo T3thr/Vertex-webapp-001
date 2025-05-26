@@ -1,4 +1,6 @@
 // src/components/novels/TagBadge.tsx
+"use client"
+
 import Link from 'next/link';
 import { PopulatedCategoryForDetailPage } from '@/app/api/novels/[slug]/route'; // Assuming this is the final structure for category data
 import { Palette, Tag as LucideTag, Languages, ShieldAlert, Users, Tv, Puzzle, Eye, ThumbsDown, CalendarDays, BarChart3, Flame, AlertCircle } from 'lucide-react';

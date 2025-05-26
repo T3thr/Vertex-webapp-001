@@ -1,11 +1,13 @@
 // src/components/novels/NovelHeader.tsx
+"use client";
+
 import Image from 'next/image';
 import Link from 'next/link';
 import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import { TagBadge } from './TagBadge';
 import { BookOpen, User, Users, Eye, ThumbsUp, MessageSquare, ShieldCheck, Languages, CalendarCheck2, Edit3, Clock, CheckCircle2 } from 'lucide-react';
 import { NovelStatus, NovelAccessLevel, NovelEndingType } from '@/backend/models/Novel'; //
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
 
 interface NovelHeaderProps {
   novel: PopulatedNovelForDetailPage;
