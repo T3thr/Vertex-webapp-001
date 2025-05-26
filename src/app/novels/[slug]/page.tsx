@@ -134,8 +134,8 @@ export async function generateMetadata(
   const keywordsSet = new Set<string>();
   novel.customTags?.forEach((tag: string) => keywordsSet.add(tag));
   if (novel.mainThemeCategory?.name) keywordsSet.add(novel.mainThemeCategory.name);
-  novel.subThemeCategories?.forEach(st => { if (st.name) keywordsSet.add(st.name); });
-  novel.moodAndToneCategories?.forEach(mt => { if (mt.name) keywordsSet.add(mt.name); });
+  novel.subThemeCategories?.forEach((st: { name: string; }) => { if (st.name) keywordsSet.add(st.name); });
+  novel.moodAndToneCategories?.forEach((mt: { name: string; }) => { if (mt.name) keywordsSet.add(mt.name); });
 
 
   return {
