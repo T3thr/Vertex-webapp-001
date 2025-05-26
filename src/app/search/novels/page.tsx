@@ -1,572 +1,273 @@
-// app/search/novels/page.tsx
-'use server' // ระบุว่าเป็น Server Component
+// src/app/search/novels/page.tsx
+'use server'; // ระบุว่าเป็น Server Component
 
 import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
-import { Types } from 'mongoose';
+import { Types } from 'mongoose'; // สำหรับ type hinting ถ้าจำเป็น
 
-// การใช้ dynamic import เพื่อแยกและลดภาระในการโหลด
-const SearchResults = dynamic(() => import('@/components/search/SearchResults'), {
-  loading: () => <SearchResultsSkeleton /> // แสดง Skeleton ขณะโหลด
-});
-
-// Models
-import dbConnect from '@/backend/lib/mongodb';
-import CategoryModel, { ICategory, CategoryType, CategoryVisibility } from '@/backend/models/Category';
-import NovelModel, { INovel, NovelStatus, NovelAccessLevel, INovelStats, IMonetizationSettings } from '@/backend/models/Novel';
-import UserModel, { IUser } from '@/backend/models/User';
+// Models (สำหรับ Type Imports เท่านั้น)
+import { CategoryType } from '@/backend/models/Category';
 
 // Components
 import { NoResultsFound } from '@/components/search/ErrorStates';
 import SearchResultsSkeleton from '@/components/search/SearchResultsSkeleton';
+// SearchFilters จะถูก import แบบ dynamic
 
-// Interface จาก SearchNovelCard เพื่อให้สอดคล้อง
-import { Novel } from '@/components/search/SearchNovelCard';
+// Interface จาก SearchNovelCard (เพื่อให้สอดคล้อง)
+import { Novel as SearchNovelCardData } from '@/components/search/SearchNovelCard';
 
-// ค่าคงที่สำหรับการแบ่งหน้าและตัวเลือกการเรียงลำดับ
-const ITEMS_PER_PAGE = 20;
+// ค่าคงที่
+const ITEMS_PER_PAGE = 20; // ควรตรงกับ API default หรือส่งเป็น parameter
 
-// ตัวเลือกการเรียงลำดับ (ปรับ value ให้ตรงกับ field ใน NovelModel.stats หรือ INovel)
-const sortOptions = [
-  { id: '1', name: 'อัปเดตล่าสุด', value: 'lastContentUpdatedAt' },
-  { id: '2', name: 'ออกใหม่ล่าสุด', value: 'publishedAt' },
-  { id: '3', name: 'ยอดนิยม (วิว)', value: 'stats.viewsCount' },
-  { id: '4', name: 'คะแนนสูงสุด', value: 'stats.averageRating' },
-  { id: '5', name: 'ถูกใจมากที่สุด', value: 'stats.likesCount' },
-  { id: '6', name: 'จำนวนตอนมากที่สุด', value: 'publishedEpisodesCount' },
-];
+// Dynamic Imports
+const SearchResults = dynamic(() => import('@/components/search/SearchResults'), {
+  loading: () => <SearchResultsSkeleton />,
+});
+const SearchFilters = dynamic(() => import('@/components/search/SearchFilters'), {
+  loading: () => <div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm min-h-[200px]">กำลังโหลดตัวกรอง...</div>,
+});
 
-// ตัวเลือกสถานะนิยาย (ปรับ value ให้ตรงกับ NovelStatus enum)
-const statusOptions = [
-  { id: '1', name: 'ทั้งหมด', value: '' },
-  { id: '2', name: 'กำลังเผยแพร่', value: NovelStatus.PUBLISHED },
-  { id: '3', name: 'จบแล้ว', value: 'completed' },
-  { id: '4', name: 'หยุดพัก', value: NovelStatus.UNPUBLISHED },
-];
 
-// --- Interfaces สำหรับข้อมูลที่ Populate และ Lean ---
+// --- Helper Function to Fetch Data from API ---
+// (ควรย้ายไปไว้ในไฟล์ utility/helper หากใช้ซ้ำในหลายที่)
+async function fetchApiData(endpoint: string, params: Record<string, string | number | undefined | null>) {
+  const SITEDOMAIN = process.env.NEXT_PUBLIC_SITEDOMAIN || 'http://localhost:3000';
+  const apiUrl = new URL(`${SITEDOMAIN}/api/search${endpoint}`);
 
-interface PopulatedAuthor {
-  _id: Types.ObjectId;
-  username?: string;
-  profile?: {
-    displayName?: string;
-    penName?: string;
-    avatarUrl?: string;
-  };
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      apiUrl.searchParams.append(key, String(value));
+    }
+  });
+
+  // console.log(`[Page Fetch] Calling API: ${apiUrl.toString()}`);
+  try {
+    const response = await fetch(apiUrl.toString(), { cache: 'no-store' }); // no-store สำหรับข้อมูลที่เปลี่ยนแปลงบ่อย
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+      console.error(`[Page Fetch] API Error for ${endpoint}: ${response.status}`, errorBody);
+      // สำหรับการค้นหานิยาย หาก error ให้ return โครงสร้างข้อมูลเปล่าเพื่อไม่ให้หน้าพัง
+      if (endpoint === '/novels') {
+        return {
+          novels: [],
+          mainThemeCategory: null,
+          subThemeCategory: null,
+          relatedTags: [],
+          pagination: { total: 0, page: 1, limit: ITEMS_PER_PAGE, totalPages: 0 }
+        };
+      }
+      if (endpoint === '/categories') {
+        return { data: [], pagination: { totalItems: 0 } }; // ปรับตามโครงสร้าง response ของ categories
+      }
+      return null; // หรือ throw error ตามความเหมาะสม
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`[Page Fetch] Network or processing error for ${endpoint}:`, error);
+    if (endpoint === '/novels') {
+      return {
+        novels: [],
+        mainThemeCategory: null,
+        subThemeCategory: null,
+        relatedTags: [],
+        pagination: { total: 0, page: 1, limit: ITEMS_PER_PAGE, totalPages: 0 }
+      };
+    }
+    if (endpoint === '/categories') {
+        return { data: [], pagination: { totalItems: 0 } };
+    }
+    return null;
+  }
 }
 
-interface PopulatedCategory {
-  _id: Types.ObjectId;
+// --- Interfaces for API data structures ---
+// (ควรย้ายไปไฟล์ types กลาง)
+export interface PopulatedCategory { // สำหรับ mainCategories ที่ส่งให้ Filters
+  _id: string;
   name: string;
   slug: string;
   iconUrl?: string;
   color?: string;
+  description?: string; // เพิ่มตามการใช้งาน
+  novelCount?: number;  // เพิ่มตามการใช้งาน
 }
 
-// Interface สำหรับ Novel แต่ละรายการ (ใช้เพื่อแปลงเป็น Novel ก่อนส่งไป SearchResults)
-interface SearchResultNovelCompat {
+interface ApiNovelData { // โครงสร้างข้อมูลนิยายที่ได้รับจาก API
   _id: string;
   title: string;
   slug: string;
-  description: string;         // Map จาก synopsis
-  coverImage?: string;        // Map จาก coverImageUrl
-  author?: PopulatedAuthor;
-  categories: PopulatedCategory[];
-  mainThemeCategory_original?: PopulatedCategory;
-  status: NovelStatus;
-  isPremium: boolean;
-  isDiscounted: boolean;
-  monetizationSettingsOriginal?: IMonetizationSettings;
-  currentEpisodePriceCoins?: number;
+  author?: {
+    _id: string;
+    username?: string;
+    profile?: {
+      displayName?: string;
+      penName?: string;
+      avatarUrl?: string;
+    };
+  };
+  coverImageUrl?: string;
+  synopsis: string;
+  status: string; // NovelStatus enum as string
+  mainThemeCategory?: PopulatedCategory | null;
+  // ... (เพิ่ม fields อื่นๆ ที่ API ส่งมาและจำเป็นต้องใช้)
   stats: {
-    averageRating: number;
     viewsCount: number;
     likesCount: number;
-    followersCount: number;
-    commentsCount: number;
+    averageRating: number;
+    // ...
   };
+  monetizationSettings?: {
+    activePromotion?: { isActive: boolean; promotionalPriceCoins?: number; } | null;
+    defaultEpisodePriceCoins?: number;
+  };
+  currentEpisodePriceCoins?: number;
   publishedEpisodesCount: number;
-  isCompleted: boolean;
-  updatedAt?: Date;
-  publishedAt?: Date;
 }
 
-// --- Data Fetching Functions ---
-
-/**
- * ดึงข้อมูลหมวดหมู่หลักทั้งหมด
- * @returns Promise<PopulatedCategory[]> รายการหมวดหมู่หลัก
- */
-async function getMainCategories(): Promise<PopulatedCategory[]> {
-  try {
-    await dbConnect();
-    const categories = await CategoryModel.find({
-      categoryType: CategoryType.GENRE,
-      parentCategoryId: null,
-      visibility: CategoryVisibility.PUBLIC,
-      isActive: true,
-    })
-      .sort({ isPromoted: -1, displayOrder: 1, name: 1 })
-      .select('_id name slug iconUrl color')
-      .lean();
-
-    return categories.map(cat => ({ ...cat, _id: cat._id }));
-  } catch (error) {
-    console.error('Error fetching main categories:', error);
-    return [];
-  }
+interface ApiCategoryData { // โครงสร้างข้อมูลหมวดหมู่ที่ได้รับจาก API
+    _id: string;
+    name: string;
+    slug: string;
+    iconUrl?: string;
+    color?: string;
+    description?: string;
+    novelCount?: number;
+    // ... (เพิ่ม fields อื่นๆ)
 }
 
-/**
- * ค้นหานิยายตามเงื่อนไขต่างๆ
- * @param q คำค้นหา
- * @param categorySlugParam slug ของหมวดหมู่
- * @param statusParam สถานะของนิยาย
- * @param sortBy การเรียงลำดับ
- * @param page หน้าที่ต้องการ
- * @returns Promise<{novels: SearchResultNovelCompat[]; pagination: any}> ผลการค้นหาและข้อมูล pagination
- */
-async function searchNovels(
-  q: string = '',
-  categorySlugParam: string = '',
-  statusParam: string = '',
-  sortBy: string = 'lastContentUpdatedAt',
-  page: number = 1
-): Promise<{ novels: SearchResultNovelCompat[]; pagination: any }> {
-  try {
-    await dbConnect();
 
-    // สร้าง query object สำหรับการค้นหา
-    const query: any = {
-      accessLevel: NovelAccessLevel.PUBLIC,
-    };
-
-    // กำหนดเงื่อนไขสถานะ
-    if (!statusParam) {
-      query.status = { $in: [NovelStatus.PUBLISHED] };
-      query.isCompleted = { $in: [true, false] };
-    } else if (statusParam === 'completed') {
-      query.isCompleted = true;
-      query.status = NovelStatus.PUBLISHED;
-    } else if (Object.values(NovelStatus).includes(statusParam as NovelStatus)) {
-      query.status = statusParam as NovelStatus;
-    }
-
-    // กำหนดเงื่อนไขการค้นหาคำสำคัญ
-    if (q) {
-      const searchRegex = { $regex: q, $options: 'i' };
-      query.$or = [
-        { title: searchRegex },
-        { synopsis: searchRegex },
-        { longDescription: searchRegex },
-        { "themeAssignment.customTags": { $in: [new RegExp(q, 'i')] } }
-      ];
-    }
-
-    // กำหนดเงื่อนไขหมวดหมู่
-    if (categorySlugParam) {
-      const categoryDoc = await CategoryModel.findOne({ slug: categorySlugParam, isActive: true }).select('_id').lean();
-      if (categoryDoc) {
-        const categoryCondition = {
-          $or: [
-            { "themeAssignment.mainTheme.categoryId": categoryDoc._id },
-            { "themeAssignment.subThemes.categoryId": categoryDoc._id }
-          ]
-        };
-        if (query.$or) {
-          query.$and = [{ $or: query.$or }, categoryCondition];
-          delete query.$or;
-        } else {
-          query.$or = categoryCondition.$or;
-        }
-      } else {
-        return { novels: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0, hasNextPage: false, hasPrevPage: false } };
-      }
-    }
-
-    // กำหนดการเรียงลำดับ
-    let sort: Record<string, 1 | -1> = {};
-    switch (sortBy) {
-      case 'publishedAt':
-        sort = { publishedAt: -1 };
-        break;
-      case 'stats.viewsCount':
-        sort = { "stats.viewsCount": -1 };
-        break;
-      case 'stats.averageRating':
-        sort = { "stats.averageRating": -1 };
-        break;
-      case 'stats.likesCount':
-        sort = { "stats.likesCount": -1 };
-        break;
-      case 'publishedEpisodesCount':
-        sort = { publishedEpisodesCount: -1 };
-        break;
-      case 'lastContentUpdatedAt':
-      default:
-        sort = { lastContentUpdatedAt: -1 };
-        break;
-    }
-    sort._id = -1;
-
-    // นับจำนวนรายการทั้งหมด
-    const totalNovels = await NovelModel.countDocuments(query);
-
-    // กำหนด fields ที่ต้องการดึง
-    const selectedFields = [
-      '_id', 'title', 'slug', 'synopsis', 'coverImageUrl', 'author',
-      'themeAssignment.mainTheme.categoryId',
-      'themeAssignment.subThemes.categoryId',
-      'status', 'monetizationSettings', 'stats', 'publishedEpisodesCount',
-      'isCompleted', 'updatedAt', 'publishedAt', 'lastContentUpdatedAt'
-    ].join(' ');
-
-    // ดึงข้อมูลนิยายพร้อม populate
-    const rawNovels = await NovelModel.find(query)
-      .select(selectedFields)
-      .sort(sort)
-      .skip((page - 1) * ITEMS_PER_PAGE)
-      .limit(ITEMS_PER_PAGE)
-      .populate<{ author: PopulatedAuthor }>({
-        path: 'author',
-        select: '_id username profile.displayName profile.penName profile.avatarUrl',
-        model: UserModel
-      })
-      .populate<{ mainThemeCategoryPopulated: PopulatedCategory }>({
-        path: 'themeAssignment.mainTheme.categoryId',
-        select: '_id name slug iconUrl color',
-        model: CategoryModel
-      })
-      .lean();
-
-    // แปลงข้อมูลให้เข้ากับ SearchResultNovelCompat
-    const formattedNovels: SearchResultNovelCompat[] = rawNovels.map((novel: any) => {
-      let currentPrice = novel.monetizationSettings?.defaultEpisodePriceCoins ?? 0;
-      const promo = novel.monetizationSettings?.activePromotion;
-      const now = new Date();
-
-      if (
-        promo &&
-        promo.isActive &&
-        promo.promotionalPriceCoins !== undefined &&
-        (!promo.promotionStartDate || new Date(promo.promotionStartDate) <= now) &&
-        (!promo.promotionEndDate || new Date(promo.promotionEndDate) >= now)
-      ) {
-        currentPrice = promo.promotionalPriceCoins;
-      }
-
-      const isDiscountedNow = promo?.isActive &&
-        (!promo.promotionStartDate || new Date(promo.promotionStartDate) <= now) &&
-        (!promo.promotionEndDate || new Date(promo.promotionEndDate) >= now);
-
-      const mainThemeCat = novel.mainThemeCategoryPopulated ? {
-        _id: novel.mainThemeCategoryPopulated._id,
-        name: novel.mainThemeCategoryPopulated.name,
-        slug: novel.mainThemeCategoryPopulated.slug,
-        iconUrl: novel.mainThemeCategoryPopulated.iconUrl,
-        color: novel.mainThemeCategoryPopulated.color,
-      } : undefined;
-
-      const categoriesArray: PopulatedCategory[] = [];
-      if (mainThemeCat) {
-        categoriesArray.push(mainThemeCat);
-      }
-
-      return {
-        _id: novel._id.toString(),
-        title: novel.title,
-        slug: novel.slug,
-        description: novel.synopsis || '',
-        coverImage: novel.coverImageUrl,
-        author: novel.author ? {
-          _id: novel.author._id,
-          username: novel.author.username,
-          profile: novel.author.profile,
-        } : undefined,
-        categories: categoriesArray,
-        mainThemeCategory_original: mainThemeCat,
-        status: novel.status,
-        isPremium: novel.monetizationSettings?.isPremiumExclusive || false,
-        isDiscounted: isDiscountedNow || false,
-        monetizationSettingsOriginal: novel.monetizationSettings,
-        currentEpisodePriceCoins: currentPrice,
-        stats: {
-          averageRating: novel.stats?.averageRating || 0,
-          viewsCount: novel.stats?.viewsCount || 0,
-          likesCount: novel.stats?.likesCount || 0,
-          followersCount: novel.stats?.followersCount || 0,
-          commentsCount: novel.stats?.commentsCount || 0,
-        },
-        publishedEpisodesCount: novel.publishedEpisodesCount || 0,
-        isCompleted: novel.isCompleted,
-        updatedAt: novel.updatedAt ? new Date(novel.updatedAt) : undefined,
-        publishedAt: novel.publishedAt ? new Date(novel.publishedAt) : undefined,
-      };
-    });
-
-    return {
-      novels: formattedNovels,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(totalNovels / ITEMS_PER_PAGE),
-        totalItems: totalNovels,
-        hasNextPage: page < Math.ceil(totalNovels / ITEMS_PER_PAGE),
-        hasPrevPage: page > 1
-      }
-    };
-  } catch (error) {
-    console.error('Error searching novels:', error);
-    return {
-      novels: [],
-      pagination: { currentPage: 1, totalPages: 0, totalItems: 0, hasNextPage: false, hasPrevPage: false }
-    };
-  }
-}
-
-/**
- * ดึงแท็กยอดนิยมจากการ aggregate
- * @returns Promise<{tag: string; count: number}[]> รายการแท็กยอดนิยม
- */
-async function getPopularCustomTags() {
-  try {
-    await dbConnect();
-    const popularTags = await NovelModel.aggregate([
-      { $match: { status: { $in: [NovelStatus.PUBLISHED, NovelStatus.COMPLETED] }, accessLevel: NovelAccessLevel.PUBLIC } },
-      { $unwind: '$themeAssignment.customTags' },
-      {
-        $group: {
-          _id: { $toLower: '$themeAssignment.customTags' },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } },
-      { $limit: 15 },
-      {
-        $project: {
-          _id: 0,
-          tag: '$_id',
-          count: 1
-        }
-      }
-    ]);
-    return popularTags;
-  } catch (error) {
-    console.error('Error fetching popular custom tags:', error);
-    return [];
-  }
-}
-
-// Interface สำหรับ props ของหน้า
 interface SearchPageProps {
-  searchParams: Promise<{
+  searchParams: {
     q?: string;
-    category?: string;
+    category?: string; // category slug
     status?: string;
     sortBy?: string;
     page?: string;
-  }>;
+  };
 }
 
-/**
- * หน้าหลักสำหรับการค้นหานิยาย
- * @param props SearchPageProps ที่มี searchParams เป็น Promise
- * @returns JSX.Element หน้าค้นหานิยาย
- */
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const resolvedSearchParams = await searchParams;
+  const query = searchParams.q || '';
+  const categorySlug = searchParams.category || '';
+  const status = searchParams.status || '';
+  const sortBy = searchParams.sortBy || 'lastContentUpdatedAt'; // ค่า default สำหรับการเรียงลำดับ
+  const page = parseInt(searchParams.page || '1', 10);
 
-  // ดึงค่าพารามิเตอร์จาก URL
-  const query = resolvedSearchParams.q || '';
-  const categorySlug = resolvedSearchParams.category || '';
-  const status = resolvedSearchParams.status || '';
-  const sortBy = resolvedSearchParams.sortBy || 'lastContentUpdatedAt';
-  const page = parseInt(resolvedSearchParams.page || '1', 10);
-
-  // ตรวจสอบความถูกต้องของหมายเลขหน้า
   if (isNaN(page) || page < 1) {
-    notFound();
+    notFound(); // ถ้า page ไม่ถูกต้อง ให้แสดง 404
   }
 
-  // ดึงข้อมูลทั้งหมดแบบ parallel
-  const [mainCategoriesData, searchResults, popularCustomTags] = await Promise.all([
-    getMainCategories(),
-    searchNovels(query, categorySlug, status, sortBy, page),
-    getPopularCustomTags()
-  ]);
+  // --- ดึงข้อมูลจาก API ---
+  // 1. ดึงหมวดหมู่หลักสำหรับ Filter
+  const mainCategoriesResponse = await fetchApiData('/categories', {
+    type: CategoryType.GENRE, // ดึงเฉพาะหมวดหมู่หลัก (Genre)
+    parentId: "null",         // หมวดหมู่ที่ไม่มีแม่
+    limit: 50,                // จำนวนหมวดหมู่สูงสุดที่ดึงมาแสดง
+    forNovelCreation: "false" // ไม่ใช่สำหรับหน้าสร้างนิยาย
+  });
+  const mainCategories: PopulatedCategory[] = mainCategoriesResponse?.data?.map((cat: ApiCategoryData) => ({
+    _id: cat._id.toString(),
+    name: cat.name,
+    slug: cat.slug,
+    iconUrl: cat.iconUrl,
+    color: cat.color,
+  })) || [];
 
-  const mainCategories = mainCategoriesData.map(cat => ({ ...cat, _id: cat._id.toString() }));
 
-  const { novels, pagination } = searchResults;
-  const hasNoResults = novels.length === 0 && !!query;
+  // 2. ค้นหานิยาย
+  // แปลง sortBy ของ frontend เป็น sortBy ของ API
+  let apiSortParam = 'latestUpdate'; // default ของ API ถ้าไม่ตรง
+  if (sortBy === 'publishedAt') apiSortParam = 'latestEpisode';
+  else if (sortBy === 'stats.viewsCount') apiSortParam = 'popular';
+  else if (sortBy === 'stats.averageRating') apiSortParam = 'rating';
+  else if (sortBy === 'stats.likesCount') apiSortParam = 'followers'; // หรือ API อาจมี sort by likes โดยตรง
+  else if (sortBy === 'publishedEpisodesCount') apiSortParam = 'latestUpdate'; // หรือ API อาจมี sort by episode count
+  else if (query && sortBy === 'lastContentUpdatedAt') apiSortParam = 'relevance'; // ถ้ามี query ให้ default เป็น relevance
+  else if (sortBy === 'lastContentUpdatedAt') apiSortParam = 'latestUpdate';
 
-  // แปลง SearchResultNovelCompat เป็น Novel เพื่อให้เข้ากับ SearchResults
-  const novelsForSearchResults: Novel[] = novels.map(novel => ({
-    _id: novel._id,
+
+  // หากมี categorySlug, ต้องหา ID ของ category นั้นก่อนเพื่อส่งให้ API /novels
+  let mainThemeIdForApi = '';
+  if (categorySlug) {
+    // API /categories สามารถค้นหาด้วย slug ได้ ถ้ามีการ implement
+    // สมมติว่า API /categories สามารถ query ด้วย slug ได้ (หรือปรับ API ให้ทำได้)
+    const categoryDetailResponse = await fetchApiData('/categories', { slug: categorySlug, limit: 1 });
+    if (categoryDetailResponse?.data && categoryDetailResponse.data.length > 0) {
+      mainThemeIdForApi = categoryDetailResponse.data[0]._id;
+    } else if (categorySlug) {
+      // ถ้า slug ระบุมาแต่หาไม่เจอ, อาจจะแสดงว่าไม่พบหมวดหมู่ หรือไม่ค้นหานิยายเลย
+      console.warn(`Category slug "${categorySlug}" not found via API.`);
+    }
+  }
+
+  const novelSearchResponse = await fetchApiData('/novels', {
+    q: query,
+    mainTheme: mainThemeIdForApi, // ส่ง ID ของ mainTheme ถ้ามี
+    status: status,
+    sort: apiSortParam,
+    limit: ITEMS_PER_PAGE,
+    page: page,
+  });
+
+  const novelsFromApi: ApiNovelData[] = novelSearchResponse?.novels || [];
+  const pagination = novelSearchResponse?.pagination || { total: 0, page: page, limit: ITEMS_PER_PAGE, totalPages: 0 };
+  const apiSelectedMainTheme: PopulatedCategory | null = novelSearchResponse?.mainThemeCategory || null;
+  const popularCustomTags: { tag: string; count: number }[] = novelSearchResponse?.relatedTags || [];
+
+
+  // --- เตรียมข้อมูลสำหรับ Components ---
+  const hasNoResults = novelsFromApi.length === 0 && (!!query || !!categorySlug);
+
+  const novelsForSearchResults: SearchNovelCardData[] = novelsFromApi.map((novel) => ({
+    _id: novel._id.toString(),
     title: novel.title,
     slug: novel.slug,
-    description: novel.description,
-    coverImage: novel.coverImage || '/placeholder-cover.jpg', // จัดการกรณี coverImage เป็น undefined
-    author: novel.author ? {
-      _id: novel.author._id.toString(),
-      username: novel.author.username || 'Unknown Author',
-      profile: novel.author.profile || { displayName: novel.author.username || 'Unknown Author' }
-    } : {
-      _id: 'unknown',
-      username: 'Unknown Author',
-      profile: { displayName: 'Unknown Author' }
-    },
-    status: novel.status as Novel['status'],
-    categories: novel.categories.map(cat => ({
-      _id: cat._id.toString(),
-      name: cat.name,
-      slug: cat.slug
-    })),
-    isPremium: novel.isPremium,
-    isDiscounted: novel.isDiscounted,
-    averageRating: novel.stats.averageRating,
-    viewsCount: novel.stats.viewsCount,
-    likesCount: novel.stats.likesCount,
-    publishedEpisodesCount: novel.publishedEpisodesCount
+    description: novel.synopsis,
+    coverImage: novel.coverImageUrl || '/placeholder-cover.jpg',
+    author: novel.author
+      ? {
+          _id: novel.author._id.toString(),
+          username: novel.author.username || 'ผู้เขียนไม่ระบุชื่อ',
+          profile: novel.author.profile || { displayName: novel.author.username || 'ผู้เขียนไม่ระบุชื่อ' },
+        }
+      : { _id: 'unknown', username: 'ผู้เขียนไม่ระบุชื่อ', profile: { displayName: 'ผู้เขียนไม่ระบุชื่อ' } },
+    status: novel.status as SearchNovelCardData['status'], // Cast type, ควรมีการ validate
+    categories: novel.mainThemeCategory ? [{ _id: novel.mainThemeCategory._id.toString(), name: novel.mainThemeCategory.name, slug: novel.mainThemeCategory.slug }] : [],
+    isPremium: !!novel.monetizationSettings?.defaultEpisodePriceCoins && novel.monetizationSettings.defaultEpisodePriceCoins > 0 && !(novel.monetizationSettings?.activePromotion?.isActive),
+    isDiscounted: novel.monetizationSettings?.activePromotion?.isActive || false,
+    averageRating: novel.stats?.averageRating || 0,
+    viewsCount: novel.stats?.viewsCount || 0,
+    likesCount: novel.stats?.likesCount || 0,
+    publishedEpisodesCount: novel.publishedEpisodesCount || 0,
+    // currentEpisodePriceCoins: novel.currentEpisodePriceCoins // ถ้ามีใน SearchNovelCardData
   }));
 
-  const selectedCategoryName = categorySlug
-    ? mainCategories.find(c => c.slug === categorySlug)?.name || categorySlug
-    : '';
+  const selectedCategoryName = apiSelectedMainTheme?.name || (mainCategories.find(c => c.slug === categorySlug)?.name || '');
+
 
   return (
     <div className="space-y-6 container mx-auto px-4 py-8">
-      {/* ส่วนการค้นหาและตัวกรอง */}
-      <div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm">
-        <div className="grid gap-6">
-          {query && (
-            <div className="text-sm text-muted-foreground">
-              ผลการค้นหาสำหรับ <span className="font-medium text-foreground">&quot;{query}&quot;</span> - พบทั้งหมด {pagination.totalItems} รายการ
-            </div>
-          )}
+      {/* ส่วนการค้นหาและตัวกรอง (Client Component) */}
+      <Suspense fallback={<div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm min-h-[200px]">กำลังโหลดตัวกรอง...</div>}>
+        <SearchFilters
+          query={query}
+          categorySlug={categorySlug}
+          status={status}
+          sortBy={sortBy}
+          mainCategories={mainCategories}
+          selectedCategoryName={selectedCategoryName}
+          totalItems={pagination.total || 0}
+        />
+      </Suspense>
 
-          <div className="mb-2">
-            <form method="GET" action="/search/novels" className="flex items-center gap-2">
-              <input
-                type="text"
-                name="q"
-                defaultValue={query}
-                placeholder="ค้นหาชื่อนิยาย, เรื่องย่อ, หรือแท็ก..."
-                className="w-full px-3 py-2 bg-input text-foreground rounded-md border border-border focus:border-primary focus:ring-0 transition-colors"
-              />
-              <input type="hidden" name="category" value={categorySlug} />
-              <input type="hidden" name="status" value={status} />
-              <input type="hidden" name="sortBy" value={sortBy} />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                ค้นหา
-              </button>
-            </form>
-          </div>
-
-          {selectedCategoryName && (
-            <div className="flex items-center text-sm text-muted-foreground">
-              <Link href="/search/novels" className="hover:text-foreground">
-                หมวดหมู่ทั้งหมด
-              </Link>
-              <ChevronRight className="w-4 h-4 mx-1" />
-              <span className="font-medium text-foreground">
-                {selectedCategoryName}
-              </span>
-            </div>
-          )}
-
-          {mainCategories.length > 0 && (
-            <div className="overflow-x-auto pb-2">
-              <p className="text-sm font-medium text-muted-foreground mb-2">เลือกประเภท:</p>
-              <div className="flex items-center gap-2 md:gap-3 min-w-max">
-                <Link
-                  href={`/search/novels?q=${encodeURIComponent(query)}&status=${status}&sortBy=${sortBy}`}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap
-                    ${!categorySlug ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
-                >
-                  ทั้งหมด
-                </Link>
-                {mainCategories.map((cat) => (
-                  <Link
-                    key={cat._id}
-                    href={`/search/novels?category=${cat.slug}&q=${encodeURIComponent(query)}&status=${status}&sortBy=${sortBy}`}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5
-                      ${categorySlug === cat.slug ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
-                  >
-                    {cat.iconUrl && (
-                      <img
-                        src={cat.iconUrl}
-                        alt={cat.name}
-                        className="w-4 h-4"
-                        style={cat.color ? { backgroundColor: cat.color, borderRadius: '50%' } : {}}
-                      />
-                    )}
-                    {cat.name}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-border">
-            <div>
-              <label htmlFor="sortBySelect" className="block text-sm font-medium text-muted-foreground mb-1">เรียงตาม</label>
-              <form method="GET" action="/search/novels" className="flex items-center gap-2">
-                <input type="hidden" name="q" value={query} />
-                <input type="hidden" name="category" value={categorySlug} />
-                <input type="hidden" name="status" value={status} />
-                <select
-                  id="sortBySelect"
-                  name="sortBy"
-                  defaultValue={sortBy}
-                  className="w-full px-3 py-2 bg-input text-foreground rounded-md border border-border focus:border-primary focus:ring-0 transition-colors"
-                  onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                >
-                  {sortOptions.map(option => (
-                    <option key={option.id} value={option.value}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </form>
-            </div>
-
-            <div>
-              <label htmlFor="statusSelect" className="block text-sm font-medium text-muted-foreground mb-1">สถานะ</label>
-              <form method="GET" action="/search/novels" className="flex items-center gap-2">
-                <input type="hidden" name="q" value={query} />
-                <input type="hidden" name="category" value={categorySlug} />
-                <input type="hidden" name="sortBy" value={sortBy} />
-                <select
-                  id="statusSelect"
-                  name="status"
-                  defaultValue={status}
-                  className="w-full px-3 py-2 bg-input text-foreground rounded-md border border-border focus:border-primary focus:ring-0 transition-colors"
-                  onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                >
-                  {statusOptions.map(option => (
-                    <option key={option.id} value={option.value}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* แท็กยอดนิยม/ที่เกี่ยวข้อง */}
       {popularCustomTags.length > 0 && (
         <div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm">
-          <h2 className="text-lg font-semibold mb-3 text-foreground">แท็กยอดนิยม</h2>
+          <h2 className="text-lg font-semibold mb-3 text-foreground">แท็กที่เกี่ยวข้อง</h2>
           <div className="flex flex-wrap gap-2">
-            {popularCustomTags.map((tagItem: { tag: string; count: number }) => (
+            {popularCustomTags.map((tagItem) => (
               <Link
                 key={tagItem.tag}
                 href={`/search/novels?q=${encodeURIComponent(tagItem.tag)}`}
@@ -579,33 +280,33 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       )}
 
+      {/* ผลการค้นหา */}
       <div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm">
         <h2 className="text-xl font-semibold mb-6 text-foreground">
           {query
             ? `ผลการค้นหา "${query}"`
             : selectedCategoryName
-              ? `นิยายในหมวดหมู่ ${selectedCategoryName}`
-              : 'นิยายทั้งหมด'
-          }
+            ? `นิยายในหมวดหมู่ ${selectedCategoryName}`
+            : 'นิยายทั้งหมด'}
           {status && status !== '' && (
             <span className="text-base text-muted-foreground ml-2">
-              ({statusOptions.find(s => s.value === status)?.name || status})
+              ({status === 'completed' ? 'จบแล้ว' : status === 'PUBLISHED' ? 'กำลังเผยแพร่' : status === 'UNPUBLISHED' ? 'หยุดพัก' : status})
             </span>
           )}
         </h2>
 
         <Suspense fallback={<SearchResultsSkeleton />}>
           {hasNoResults ? (
-            <NoResultsFound searchTerm={query} />
+            <NoResultsFound searchTerm={query || selectedCategoryName} />
           ) : (
             <SearchResults
-              novels={novelsForSearchResults} // ใช้ novels ที่แปลงแล้ว
-              pagination={pagination}
-              searchParams={{
+              novels={novelsForSearchResults}
+              pagination={pagination} // ส่ง pagination ที่ได้จาก API
+              searchParams={{ // ส่ง searchParams ปัจจุบันสำหรับสร้าง link ใน pagination
                 q: query,
                 category: categorySlug,
                 status,
-                sortBy
+                sortBy,
               }}
             />
           )}
