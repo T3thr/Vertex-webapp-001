@@ -177,7 +177,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
-  const { slug } = params;
+  const { slug } = await params;
 
   // 1. ตรวจสอบ Slug
   if (!slug || typeof slug !== "string" || !slug.trim()) {

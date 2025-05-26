@@ -93,7 +93,7 @@ export async function generateMetadata(
   { params }: NovelPageProps,
   parent: ResolvingMetadata
 ): Promise<Metadata> {
-  const { slug } = params; // เข้าถึง slug โดยตรง
+  const { slug } = await params; // เข้าถึง slug โดยตรง
   if (typeof slug !== 'string' || !slug.trim()) {
     console.warn(`⚠️ [generateMetadata] Invalid slug for metadata: "${slug}"`);
     return {
@@ -179,7 +179,7 @@ export async function generateMetadata(
 
 // --- Server Component หลักของหน้า ---
 export default async function NovelPage({ params }: NovelPageProps) {
-  const { slug } = params;
+  const { slug } = await params;
   const novel = await getNovelData(slug);
 
   if (!novel) {
