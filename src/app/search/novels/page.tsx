@@ -5,16 +5,15 @@ import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { Metadata } from 'next'; 
+import type { Metadata } from 'next';
 
 // Models (สำหรับ Type Imports เท่านั้น)
 import { CategoryType, ICategory as CategoryModelInterface } from '@/backend/models/Category';
-import { NovelStatus as NovelModelStatus, NovelAccessLevel as NovelModelAccessLevel } from '@/backend/models/Novel';
+import { NovelStatus as NovelModelStatus } from '@/backend/models/Novel';
 
 // Components
 import { NoResultsFound } from '@/components/search/ErrorStates';
 import SearchResultsSkeleton from '@/components/search/SearchResultsSkeleton';
-// SearchFilters จะถูก import แบบ dynamic ใน page
 
 // Interface จาก SearchNovelCard (เพื่อให้สอดคล้อง)
 import { Novel as SearchNovelCardData } from '@/components/search/SearchNovelCard';
@@ -30,8 +29,13 @@ const SearchFilters = dynamic(() => import('@/components/search/SearchFilters'),
   loading: () => <div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm min-h-[300px] md:min-h-[200px] flex justify-center items-center">กำลังโหลดตัวกรอง...</div>,
 });
 
-
 // --- Helper Function to Fetch Data from API ---
+/**
+ * ดึงข้อมูลจาก API ด้วย endpoint และ parameters
+ * @param endpoint เส้นทาง API เช่น /novels, /categories
+ * @param params พารามิเตอร์สำหรับ query string
+ * @returns ข้อมูลจาก API หรือ fallback หากเกิดข้อผิดพลาด
+ */
 async function fetchApiData(endpoint: string, params: Record<string, string | number | undefined | null | string[]>) {
   const SITEDOMAIN = process.env.NEXT_PUBLIC_SITEDOMAIN || 'http://localhost:3000';
   const apiUrl = new URL(`${SITEDOMAIN}/api/search${endpoint}`);
@@ -82,7 +86,7 @@ async function fetchApiData(endpoint: string, params: Record<string, string | nu
       };
     }
     if (endpoint === '/categories') {
-        return { data: [], pagination: { totalItems: 0, currentPage: 1, totalPages: 0 } };
+      return { data: [], pagination: { totalItems: 0, currentPage: 1, totalPages: 0 } };
     }
     return null;
   }
@@ -127,10 +131,10 @@ interface ApiNovelData {
   };
   monetizationSettings?: {
     activePromotion?: {
-        isActive: boolean;
-        promotionalPriceCoins?: number;
-        promotionStartDate?: string;
-        promotionEndDate?: string;
+      isActive: boolean;
+      promotionalPriceCoins?: number;
+      promotionStartDate?: string;
+      promotionEndDate?: string;
     } | null;
     defaultEpisodePriceCoins?: number;
   };
@@ -166,49 +170,34 @@ interface ApiNovelsSearchResponse {
   };
 }
 
-// Props สำหรับ Page component (Next.js จัดการ searchParams เป็น object string)
+// Props สำหรับ Page component
 interface SearchPageProps {
-  searchParams: {
-    q?: string;
-    category?: string; // category slug
-    status?: string;
-    sortBy?: string;
-    page?: string;
-    // เพิ่มพารามิเตอร์อื่นๆ ที่ใช้ในการ filter ถ้ามี เช่น lang, ageRating
-  };
+  searchParams: Promise<Record<string, string | string[] | undefined>>; // ปรับให้ searchParams เป็น Promise
 }
 
 // ======== FUNCTION TO GENERATE DYNAMIC METADATA BASED ON SEARCH PARAMS ========
-// ย้าย generateMetadata มาที่ page.tsx เพื่อให้เข้าถึง searchParams ได้อย่างถูกต้องสำหรับ dynamic metadata
-// ฟังก์ชันนี้จะถูกเรียกโดย Next.js เพื่อสร้าง metadata สำหรับหน้านี้
+/**
+ * สร้าง metadata แบบ dynamic สำหรับหน้าค้นหานิยาย
+ * @param props SearchPageProps
+ * @returns Promise<Metadata> ข้อมูล metadata สำหรับ SEO
+ */
 export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
-  const query = searchParams.q;
-  const categorySlug = searchParams.category; // นี่คือ slug ของหมวดหมู่
+  const params = await searchParams; // Resolve Promise
+  const query = typeof params.q === 'string' ? params.q : '';
+  const categorySlug = typeof params.category === 'string' ? params.category : '';
 
   // ค่าเริ่มต้นสำหรับ title และ description
   let title = 'ค้นหานิยายทั้งหมด | NovelMaze';
   let description = 'ค้นหานิยายและการ์ตูนออนไลน์จากทั่วทุกมุมโลก แบ่งตามหมวดหมู่ สถานะ และอื่นๆ บน NovelMaze';
 
-  // ปรับ title และ description ตาม query และ category ที่ระบุ
-  // หมายเหตุ: หากต้องการแสดง "ชื่อหมวดหมู่" แทน "slug หมวดหมู่" ใน title/description
-  // อาจจะต้องมีการ fetch ข้อมูลหมวดหมู่จาก slug ที่นี่ (เช่นเดียวกับที่ทำใน Page component)
-  // แต่เพื่อความเรียบง่ายและลดการ fetch ซ้ำซ้อนในตัวอย่างนี้ จะใช้ slug โดยตรง หรือค่าที่พอหาได้
-  // (ใน Page component มีการดึง mainCategories ซึ่งอาจนำมาใช้หาชื่อ category ได้ถ้าโครงสร้างตรงกัน)
-
+  // ปรับ title และ description ตาม query และ category
   if (query && categorySlug) {
-    // หากมีทั้งคำค้นหาและหมวดหมู่
-    // ตัวอย่างการใช้ slug: title = `ผลการค้นหา "${query}" ในหมวดหมู่ ${categorySlug} | NovelMaze`;
-    // ถ้าต้องการชื่อหมวดหมู่จริงๆ: อาจจะต้องมี logic คล้ายๆ `selectedCategoryName` ใน Page component
-    // หรือ fetch category name จาก API โดยใช้ slug (อาจ cache ผลลัพธ์เพื่อ performance)
     title = `ผลการค้นหา "${query}" ในหมวดหมู่ '${categorySlug}' | NovelMaze`;
     description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" ในหมวดหมู่ '${categorySlug}' บน NovelMaze`;
   } else if (query) {
-    // หากมีเฉพาะคำค้นหา
     title = `ผลการค้นหา "${query}" | NovelMaze`;
     description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" บน NovelMaze`;
   } else if (categorySlug) {
-    // หากมีเฉพาะหมวดหมู่
-    // ตัวอย่างการใช้ slug: title = `นิยายในหมวดหมู่ ${categorySlug} | NovelMaze`;
     title = `นิยายในหมวดหมู่ '${categorySlug}' | NovelMaze`;
     description = `สำรวจนิยายและการ์ตูนในหมวดหมู่ '${categorySlug}' บน NovelMaze`;
   }
@@ -216,25 +205,27 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   return {
     title,
     description,
-    // Keywords สามารถปรับให้ dynamic ได้เช่นกันตาม query หรือ category
     keywords: `ค้นหานิยาย, นิยายออนไลน์, ${query ? query + ',' : ''} ${categorySlug ? categorySlug + ',' : ''} NovelMaze, การ์ตูน`,
-    // OpenGraph และ metadata tags อื่นๆ สามารถ dynamic ได้เช่นกัน
     openGraph: {
-        title,
-        description,
-        // สามารถเพิ่ม images, url, type ฯลฯ ได้ที่นี่
+      title,
+      description,
     }
   };
 }
 // ======== END FUNCTION TO GENERATE DYNAMIC METADATA ========
 
-
+/**
+ * หน้าค้นหานิยาย
+ * @param props SearchPageProps
+ * @returns JSX.Element หน้าสำหรับแสดงผลการค้นหานิยาย
+ */
 export default async function SearchNovelsPage({ searchParams }: SearchPageProps) {
-  const query = searchParams.q || '';
-  const categorySlug = searchParams.category || '';
-  const status = searchParams.status || '';
-  const sortBy = searchParams.sortBy || (query ? 'relevance' : 'lastContentUpdatedAt');
-  const page = parseInt(searchParams.page || '1', 10);
+  const params = await searchParams; // Resolve Promise
+  const query = typeof params.q === 'string' ? params.q : '';
+  const categorySlug = typeof params.category === 'string' ? params.category : '';
+  const status = typeof params.status === 'string' ? params.status : '';
+  const sortBy = typeof params.sortBy === 'string' ? params.sortBy : (query ? 'relevance' : 'lastContentUpdatedAt');
+  const page = parseInt(typeof params.page === 'string' ? params.page : '1', 10);
 
   if (isNaN(page) || page < 1) {
     notFound();
@@ -257,17 +248,13 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
     if (foundCat) {
       mainThemeIdForApi = foundCat._id;
     } else {
-      console.warn(`[Page Search] Category slug "${categorySlug}" not found in fetched main categories. API call for novels might not filter by this category unless API handles slug directly.`);
-      // หาก API /novels สามารถรับ category slug ได้โดยตรง ก็ไม่จำเป็นต้องแปลงเป็น ID ที่นี่
-      // หรือถ้าจำเป็นต้องใช้ ID และไม่เจอ อาจจะต้อง fetch category โดย slug เพื่อเอา ID มา (แต่จะเพิ่ม API call)
-      // ปัจจุบันโค้ดส่ง mainThemeIdForApi ซึ่งอาจเป็นค่าว่างถ้าหาไม่เจอ
+      console.warn(`[Page Search] ไม่พบหมวดหมู่ slug "${categorySlug}" ใน main categories`);
     }
   }
-  
+
   const novelSearchResponse: ApiNovelsSearchResponse | null = await fetchApiData('/novels', {
     q: query,
-    mainTheme: mainThemeIdForApi, // API ปัจจุบันคาดหวัง ID, ถ้า API รับ slug ได้ จะดีกว่า
-    // categorySlug: categorySlug, // หาก API รองรับการส่ง slug โดยตรง
+    mainTheme: mainThemeIdForApi,
     status: status,
     sort: sortBy,
     limit: ITEMS_PER_PAGE,
@@ -280,7 +267,7 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
   const popularCustomTags: { tag: string; count: number }[] = novelSearchResponse?.relatedTags || [];
 
   // --- เตรียมข้อมูลสำหรับ Components ---
-  const hasNoResults = novelsFromApi.length === 0 && (!!query || !!categorySlug || !!status );
+  const hasNoResults = novelsFromApi.length === 0 && (!!query || !!categorySlug || !!status);
 
   const novelsForSearchResults: SearchNovelCardData[] = novelsFromApi.map((novel) => ({
     _id: novel._id.toString(),
@@ -301,9 +288,9 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
       : { _id: 'unknown', username: 'ผู้เขียนไม่ระบุชื่อ', profile: { displayName: 'ผู้เขียนไม่ระบุชื่อ' } },
     status: novel.status as SearchNovelCardData['status'],
     categories: novel.mainThemeCategory ? [{
-        _id: novel.mainThemeCategory._id.toString(),
-        name: novel.mainThemeCategory.name,
-        slug: novel.mainThemeCategory.slug
+      _id: novel.mainThemeCategory._id.toString(),
+      name: novel.mainThemeCategory.name,
+      slug: novel.mainThemeCategory.slug
     }] : [],
     isPremium: (novel.currentEpisodePriceCoins ?? novel.monetizationSettings?.defaultEpisodePriceCoins ?? 0) > 0 && !(novel.monetizationSettings?.activePromotion?.isActive),
     isDiscounted: novel.monetizationSettings?.activePromotion?.isActive || false,
@@ -312,7 +299,7 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
     likesCount: novel.stats?.likesCount || 0,
     publishedEpisodesCount: novel.publishedEpisodesCount || 0,
   }));
-  
+
   const paginationForComponent = {
     currentPage: paginationFromApi.page,
     totalPages: paginationFromApi.totalPages,
@@ -321,12 +308,11 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
     hasPrevPage: paginationFromApi.page > 1,
   };
 
-  // หาก API คืน mainThemeCategory มา (ซึ่งควรจะตรงกับ categorySlug ถ้ามีการ filter) ก็ใช้ชื่อนั้น
-  // หรือถ้าไม่มี (เช่น API ไม่ได้คืนมา หรือไม่ได้ filter ด้วย category) แต่มี categorySlug ให้ลองหาจาก mainCategories
+  // หาชื่อหมวดหมู่ที่เลือก
   const selectedCategoryName = apiSelectedMainTheme?.name || (categorySlug && mainCategories.find(c => c.slug === categorySlug)?.name) || '';
 
   return (
-    <div className="space-y-6"> {/* Container หลักอยู่ใน layout.tsx แล้ว */}
+    <div className="space-y-6">
       <Suspense fallback={<div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm min-h-[300px] md:min-h-[200px] flex justify-center items-center">กำลังโหลดตัวกรอง...</div>}>
         <SearchFilters
           initialQuery={query}
@@ -334,7 +320,7 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
           initialStatus={status}
           initialSortBy={sortBy}
           mainCategories={mainCategories}
-          selectedCategoryName={selectedCategoryName} // ส่งชื่อหมวดหมู่ที่เลือก (ถ้ามี)
+          selectedCategoryName={selectedCategoryName}
           totalItems={paginationFromApi.total}
         />
       </Suspense>
@@ -346,8 +332,6 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
             {popularCustomTags.map((tagItem) => (
               <Link
                 key={tagItem.tag}
-                // เมื่อคลิกแท็ก จะเป็นการค้นหาใหม่ด้วย q=tag และลบ filter category/status/sortBy เดิม
-                // เพื่อให้ user เริ่มต้นการค้นหาด้วยแท็กนั้นๆ อย่างเดียว
                 href={`/search/novels?q=${encodeURIComponent(tagItem.tag)}`}
                 className="px-3 py-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-full text-sm transition-colors"
                 prefetch={false}
@@ -367,7 +351,7 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
             ? `นิยายในหมวดหมู่ "${selectedCategoryName}"`
             : 'นิยายทั้งหมด'}
           {selectedCategoryName && query && (
-            <span className="text-base text-muted-foreground ml-2">(ในหมวดหมู่ &quot;{selectedCategoryName}&quot;)</span>
+            <span className="text-base text-muted-foreground ml-2">(ในหมวดหมู่ "{selectedCategoryName}")</span>
           )}
           {status && status !== '' && (
             <span className="text-base text-muted-foreground ml-2">
