@@ -1,205 +1,226 @@
 // src/components/search/SearchFilters.tsx
-'use client'; // นี่คือ Client Component
+'use client'; // ระบุว่าเป็น Client Component
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
-
-// สมมติว่า PopulatedCategory ถูก export จาก page.tsx หรือไฟล์ types กลาง
-// หากไม่ ให้ย้าย interface นี้ไปไว้ในไฟล์ types ที่สามารถแชร์ได้
-interface PopulatedCategoryForFilter {
-  _id: string;
-  name: string;
-  slug: string;
-  iconUrl?: string;
-  color?: string;
-}
-
-// ค่าคงที่สำหรับตัวเลือกการเรียงลำดับและสถานะ (ควรตรงกับใน page.tsx)
-const sortOptions = [
-  { id: '1', name: 'อัปเดตล่าสุด', value: 'lastContentUpdatedAt' },
-  { id: '2', name: 'ออกใหม่ล่าสุด', value: 'publishedAt' },
-  { id: '3', name: 'ยอดนิยม (วิว)', value: 'stats.viewsCount' },
-  { id: '4', name: 'คะแนนสูงสุด', value: 'stats.averageRating' },
-  { id: '5', name: 'ถูกใจมากที่สุด', value: 'stats.likesCount' },
-  { id: '6', name: 'จำนวนตอนมากที่สุด', value: 'publishedEpisodesCount' },
-];
-
-const statusOptions = [
-  { id: '1', name: 'ทั้งหมด', value: '' },
-  { id: '2', name: 'กำลังเผยแพร่', value: 'PUBLISHED' }, // ควรตรงกับค่าใน NovelStatus enum
-  { id: '3', name: 'จบแล้ว', value: 'completed' }, // 'completed' เป็นค่าพิเศษที่ API จัดการ
-  { id: '4', name: 'หยุดพัก', value: 'UNPUBLISHED' }, // ควรตรงกับค่าใน NovelStatus enum
-];
+import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { PopulatedCategory } from '@/app/search/novels/page'; // Import interface from page
 
 interface SearchFiltersProps {
-  query: string;
-  categorySlug: string;
-  status: string;
-  sortBy: string;
-  mainCategories: PopulatedCategoryForFilter[];
-  selectedCategoryName: string;
-  totalItems: number;
+  initialQuery?: string;
+  initialCategorySlug?: string;
+  initialStatus?: string;
+  initialSortBy?: string;
+  mainCategories: PopulatedCategory[];
+  selectedCategoryName?: string; // ชื่อหมวดหมู่ที่ถูกเลือก (ถ้ามี)
+  totalItems?: number; // จำนวนผลลัพธ์ทั้งหมดที่ตรงกับการค้นหาปัจจุบัน
 }
 
 export default function SearchFilters({
-  query,
-  categorySlug,
-  status,
-  sortBy,
+  initialQuery = '',
+  initialCategorySlug = '',
+  initialStatus = '',
+  initialSortBy = 'lastContentUpdatedAt',
   mainCategories,
-  selectedCategoryName,
-  totalItems,
+  selectedCategoryName = '',
+  totalItems = 0,
 }: SearchFiltersProps) {
   const router = useRouter();
-  const currentSearchParams = useSearchParams();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(initialQuery);
+  const [selectedCategory, setSelectedCategory] = useState(initialCategorySlug);
+  const [selectedStatus, setSelectedStatus] = useState(initialStatus);
+  const [sortBy, setSortBy] = useState(initialSortBy);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
-  // ฟังก์ชันสำหรับอัปเดต URL เมื่อมีการเปลี่ยนแปลง filter
-  const handleFilterChange = (newParams: Record<string, string>) => {
-    const updatedParams = new URLSearchParams(currentSearchParams.toString());
-    for (const key in newParams) {
-      if (newParams[key]) {
-        updatedParams.set(key, newParams[key]);
-      } else {
-        updatedParams.delete(key);
-      }
-    }
-    updatedParams.set('page', '1'); // กลับไปหน้า 1 เสมอเมื่อเปลี่ยน filter
-    router.push(`/search/novels?${updatedParams.toString()}`);
+  // Update state if initial props change (e.g., from URL directly)
+  useEffect(() => {
+    setQuery(searchParams.get('q') || initialQuery);
+    setSelectedCategory(searchParams.get('category') || initialCategorySlug);
+    setSelectedStatus(searchParams.get('status') || initialStatus);
+    setSortBy(searchParams.get('sortBy') || initialSortBy);
+  }, [searchParams, initialQuery, initialCategorySlug, initialStatus, initialSortBy]);
+
+  const handleSearch = (
+    e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>
+  ) => {
+    e.preventDefault();
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', '1'); // Reset to page 1 on new search/filter
+
+    if (query) params.set('q', query);
+    else params.delete('q');
+
+    if (selectedCategory) params.set('category', selectedCategory);
+    else params.delete('category');
+
+    if (selectedStatus) params.set('status', selectedStatus);
+    else params.delete('status');
+
+    if (sortBy) params.set('sortBy', sortBy);
+    else params.delete('sortBy');
+
+    router.push(`/search/novels?${params.toString()}`);
+    if (isMobileFiltersOpen) setIsMobileFiltersOpen(false);
+  };
+  
+  const handleClearFilters = () => {
+    setQuery('');
+    setSelectedCategory('');
+    setSelectedStatus('');
+    // setSortBy('lastContentUpdatedAt'); // Optional: reset sort by or keep current
+    const params = new URLSearchParams();
+    if (sortBy && sortBy !== 'lastContentUpdatedAt') params.set('sortBy', sortBy); // Keep sortBy if not default
+    params.set('page', '1');
+    router.push(`/search/novels?${params.toString()}`);
+    if (isMobileFiltersOpen) setIsMobileFiltersOpen(false);
   };
 
-  // ฟังก์ชันสำหรับจัดการการ submit ของ search form
-  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const newQuery = formData.get('q') as string;
-    // ส่งค่า q ไปพร้อมกับ filter อื่นๆ ที่อาจมีอยู่
-    const updatedParams = new URLSearchParams(currentSearchParams.toString());
-    updatedParams.set('q', newQuery);
-    updatedParams.set('page', '1'); // กลับไปหน้า 1
-    router.push(`/search/novels?${updatedParams.toString()}`);
-  };
+  const hasActiveFilters = query || selectedCategory || selectedStatus;
 
-  return (
-    <div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm">
-      <div className="grid gap-6">
-        {/* แสดงผลการค้นหา */}
-        {(query || categorySlug) && ( // แสดงเมื่อมี query หรือ categorySlug
-          <div className="text-sm text-muted-foreground">
-            {query && <>ผลการค้นหาสำหรับ <span className="font-medium text-foreground">&quot;{query}&quot;</span> - </>}
-            พบทั้งหมด {totalItems} รายการ
-          </div>
-        )}
-
-        {/* Search Input Form */}
-        <div className="mb-2">
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
-            <input
-              type="text"
-              name="q" // ชื่อ input สำหรับ form data
-              defaultValue={query}
-              placeholder="ค้นหาชื่อนิยาย, เรื่องย่อ, หรือแท็ก..."
-              className="w-full px-3 py-2 bg-input text-foreground rounded-md border border-border focus:border-primary focus:ring-0 transition-colors"
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-            >
-              ค้นหา
-            </button>
-          </form>
-        </div>
-
-        {/* Breadcrumb สำหรับ Category */}
-        {selectedCategoryName && (
-          <div className="flex items-center text-sm text-muted-foreground">
-            <Link
-              href={`/search/novels?${new URLSearchParams({ q: query, status, sortBy }).toString()}`}
-              className="hover:text-foreground"
-            >
-              หมวดหมู่ทั้งหมด
-            </Link>
-            <ChevronRight className="w-4 h-4 mx-1" />
-            <span className="font-medium text-foreground">{selectedCategoryName}</span>
-          </div>
-        )}
-
-        {/* Main Categories Filter */}
-        {mainCategories.length > 0 && (
-          <div className="overflow-x-auto pb-2">
-            <p className="text-sm font-medium text-muted-foreground mb-2">เลือกประเภท:</p>
-            <div className="flex items-center gap-2 md:gap-3 min-w-max">
-              <Link
-                href={`/search/novels?${new URLSearchParams({ q: query, status, sortBy }).toString()}`}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                  !categorySlug ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
-              >
-                ทั้งหมด
-              </Link>
-              {mainCategories.map((cat) => (
-                <Link
-                  key={cat._id}
-                  href={`/search/novels?${new URLSearchParams({ category: cat.slug, q: query, status, sortBy }).toString()}`}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                    categorySlug === cat.slug ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                  }`}
-                >
-                  {cat.iconUrl && (
-                    <img
-                      src={cat.iconUrl}
-                      alt={cat.name}
-                      className="w-4 h-4"
-                      style={cat.color ? { backgroundColor: cat.color, borderRadius: '4px' } : {}}
-                    />
-                  )}
-                  {cat.name}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sort and Status Dropdowns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-border">
-          <div>
-            <label htmlFor="sortBySelect" className="block text-sm font-medium text-muted-foreground mb-1">
-              เรียงตาม
-            </label>
-            <select
-              id="sortBySelect"
-              name="sortBy"
-              value={sortBy} // Controlled component
-              className="w-full px-3 py-2 bg-input text-foreground rounded-md border border-border focus:border-primary focus:ring-0 transition-colors"
-              onChange={(e) => handleFilterChange({ sortBy: e.target.value })}
-            >
-              {sortOptions.map((option) => (
-                <option key={option.id} value={option.value}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="statusSelect" className="block text-sm font-medium text-muted-foreground mb-1">
-              สถานะ
-            </label>
-            <select
-              id="statusSelect"
-              name="status"
-              value={status} // Controlled component
-              className="w-full px-3 py-2 bg-input text-foreground rounded-md border border-border focus:border-primary focus:ring-0 transition-colors"
-              onChange={(e) => handleFilterChange({ status: e.target.value })}
-            >
-              {statusOptions.map((option) => (
-                <option key={option.id} value={option.value}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </div>
+  const filterContent = (
+    <form onSubmit={handleSearch} className="space-y-4">
+      {/* Search Input */}
+      <div>
+        <label htmlFor="searchQuery" className="block text-sm font-medium text-muted-foreground mb-1">
+          ค้นหานิยาย
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            id="searchQuery"
+            name="searchQuery"
+            className="w-full pl-10 pr-4 py-2 border border-border rounded-md focus:ring-primary focus:border-primary shadow-sm bg-input text-foreground placeholder-muted-foreground"
+            placeholder="ชื่อนิยาย, ผู้แต่ง, แท็ก..."
+            value={query}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+          />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         </div>
       </div>
-    </div>
+
+      {/* Category Filter */}
+      <div>
+        <label htmlFor="category" className="block text-sm font-medium text-muted-foreground mb-1">
+          หมวดหมู่หลัก
+        </label>
+        <select
+          id="category"
+          name="category"
+          className="w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary shadow-sm bg-input text-foreground"
+          value={selectedCategory}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedCategory(e.target.value)}
+        >
+          <option value="">ทั้งหมด</option>
+          {mainCategories.map((cat) => (
+            <option key={cat._id} value={cat.slug}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Status Filter */}
+      <div>
+        <label htmlFor="status" className="block text-sm font-medium text-muted-foreground mb-1">
+          สถานะ
+        </label>
+        <select
+          id="status"
+          name="status"
+          className="w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary shadow-sm bg-input text-foreground"
+          value={selectedStatus}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedStatus(e.target.value)}
+        >
+          <option value="">ทั้งหมด</option>
+          <option value="PUBLISHED">กำลังเผยแพร่</option>
+          <option value="ONGOING">กำลังดำเนินเรื่อง (เผยแพร่)</option>
+          <option value="COMPLETED">จบแล้ว (เผยแพร่)</option>
+          {/* <option value="SCHEDULED">ตั้งเวลาเผยแพร่</option> */}
+          {/* <option value="UNPUBLISHED">หยุดพัก/ยกเลิกเผยแพร่</option> */}
+        </select>
+      </div>
+
+      {/* Sort By Filter */}
+      <div>
+        <label htmlFor="sortBy" className="block text-sm font-medium text-muted-foreground mb-1">
+          เรียงตาม
+        </label>
+        <select
+          id="sortBy"
+          name="sortBy"
+          className="w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary shadow-sm bg-input text-foreground"
+          value={sortBy}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => setSortBy(e.target.value)}
+        >
+          <option value="lastContentUpdatedAt">อัปเดตล่าสุด</option>
+          <option value="publishedAt">ตอนใหม่ล่าสุด</option>
+          <option value="stats.viewsCount">ยอดนิยม</option>
+          <option value="stats.averageRating">คะแนนสูงสุด</option>
+          <option value="stats.likesCount">ถูกใจสูงสุด</option>
+          {/* <option value="publishedEpisodesCount">จำนวนตอน</option> */}
+        </select>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-col sm:flex-row gap-2 pt-2">
+        <button
+          type="submit"
+          onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleSearch(e)}
+          className="w-full flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        >
+          <Search className="w-4 h-4 mr-2" />
+          ค้นหา
+        </button>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleClearFilters}
+            className="w-full flex items-center justify-center px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
+          >
+            <X className="w-4 h-4 mr-2" />
+            ล้างตัวกรอง
+          </button>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground text-center pt-2">
+        {totalItems > 0 ? `พบ ${totalItems} เรื่อง` : 'ไม่พบผลลัพธ์ที่ตรงกัน'}
+      </p>
+    </form>
+  );
+
+  return (
+    <>
+      {/* Desktop Filters */}
+      <div className="hidden md:block bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm">
+        {filterContent}
+      </div>
+
+      {/* Mobile Filters Button & Drawer */}
+      <div className="md:hidden">
+        <button
+          onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+          className="w-full flex items-center justify-center p-3 bg-primary text-primary-foreground rounded-md shadow-sm hover:bg-primary/90 transition-colors mb-4"
+        >
+          <Filter className="w-5 h-5 mr-2" />
+          <span>ตัวกรองและค้นหา</span>
+          {isMobileFiltersOpen ? <ChevronUp className="w-5 h-5 ml-auto" /> : <ChevronDown className="w-5 h-5 ml-auto" />}
+        </button>
+        <AnimatePresence>
+          {isMobileFiltersOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-card rounded-lg border border-border p-4 shadow-sm overflow-hidden"
+            >
+              {filterContent}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </>
   );
 }
