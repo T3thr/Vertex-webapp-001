@@ -132,7 +132,7 @@ export async function generateMetadata(
   const modifiedTime = novel.lastContentUpdatedAt ? new Date(novel.lastContentUpdatedAt).toISOString() : (novel.updatedAt ? new Date(novel.updatedAt).toISOString() : undefined);
 
   const keywordsSet = new Set<string>();
-  novel.customTags?.forEach(tag => keywordsSet.add(tag));
+  novel.customTags?.forEach((tag: string) => keywordsSet.add(tag));
   if (novel.mainThemeCategory?.name) keywordsSet.add(novel.mainThemeCategory.name);
   novel.subThemeCategories?.forEach(st => { if (st.name) keywordsSet.add(st.name); });
   novel.moodAndToneCategories?.forEach(mt => { if (mt.name) keywordsSet.add(mt.name); });

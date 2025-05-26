@@ -100,6 +100,7 @@ export interface PopulatedNovelForDetailPage extends Omit<INovel,
   'ageRatingCategoryId' | 'sourceType' | 'language' | 'firstEpisodeId' |
   'relatedNovels' | 'seriesId' | 'deletedByUserId' | 'adminNotes'
 > {
+  customTags: any;
   // Fields ที่ populate หรือปรับโครงสร้าง
   author: PopulatedAuthorForDetailPage | null;
   coAuthors?: PopulatedAuthorForDetailPage[];
@@ -222,6 +223,7 @@ export async function GET(
       ...(novelDoc.toObject() as Omit<INovel, 'author' | 'coAuthors' | 'themeAssignment' | 'narrativeFocus' | 'ageRatingCategoryId' | 'sourceType' | 'language' | 'firstEpisodeId'>), // ใช้ Omit เพื่อความแม่นยำของ type
       _id: novelDoc._id, // Ensure _id is preserved
 
+
       // Populate Mongoose Document fields correctly to avoid runtime errors
       author: novelDoc.author ? (novelDoc.author as unknown as PopulatedAuthorForDetailPage) : null,
       coAuthors: novelDoc.coAuthors ? (novelDoc.coAuthors as unknown as PopulatedAuthorForDetailPage[]) : undefined,
@@ -229,9 +231,9 @@ export async function GET(
       themeAssignment: {
         mainTheme: novelDoc.themeAssignment?.mainTheme?.categoryId
           ? {
-              categoryId: novelDoc.themeAssignment.mainTheme.categoryId as unknown as PopulatedCategoryForDetailPage,
-              customName: novelDoc.themeAssignment.mainTheme.customName,
-            }
+            categoryId: novelDoc.themeAssignment.mainTheme.categoryId as unknown as PopulatedCategoryForDetailPage,
+            customName: novelDoc.themeAssignment.mainTheme.customName,
+          }
           : undefined,
         subThemes: novelDoc.themeAssignment?.subThemes?.map(st => ({
           categoryId: st.categoryId as unknown as PopulatedCategoryForDetailPage,
@@ -279,6 +281,7 @@ export async function GET(
       languageCategory: novelDoc.language as PopulatedCategoryForDetailPage || null, // สำหรับ page.tsx metadata
 
       charactersList: charactersListFromDB.map(char => char.toObject() as PopulatedCharacterForDetailPage),
+      customTags: undefined
     };
     
     // ตรวจสอบเพื่อให้แน่ใจว่า field ที่สำคัญสำหรับ frontend ไม่ใช่ undefined โดยไม่จำเป็น
