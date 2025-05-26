@@ -100,7 +100,7 @@ export async function GET(request: Request) {
     }
 
     // สร้าง User Model ที่จะใช้สำหรับ populate
-    const User = UserModel();
+    const User = UserModel;
     
     // ดึงข้อมูลนิยายพร้อม populate author
     let results: any;
@@ -109,7 +109,7 @@ export async function GET(request: Request) {
     switch (type) {
       case "category":
         // ค้นหาหมวดหมู่
-        const Category = CategoryModel();
+        const Category = CategoryModel;
         const categoryQuery: any = {
           isDeleted: false,
           isVisible: true,
@@ -142,12 +142,12 @@ export async function GET(request: Request) {
       case "novel":
       default:
         // ค้นหานิยาย
-        total = await NovelModel().countDocuments(searchQuery);
+        total = await NovelModel.countDocuments(searchQuery);
         
         // เตรียม projection ให้เลือกเฉพาะฟิลด์ที่จำเป็น เพื่อเพิ่มประสิทธิภาพ
         const projection = query ? { score: { $meta: "textScore" } } : {};
         
-        results = await NovelModel()
+        results = await NovelModel
           .find(searchQuery, projection)
           .populate({
             path: "author",

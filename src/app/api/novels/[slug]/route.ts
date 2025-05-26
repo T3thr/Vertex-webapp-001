@@ -4,82 +4,85 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
-import NovelModel, { INovel, IThemeAssignment, ISourceType, INarrativeFocus, IWorldBuildingDetails, INovelStats, IMonetizationSettings, IPsychologicalAnalysisConfig, ICollaborationSettings } from "@/backend/models/Novel";
-import UserModel, { IUser, IUserProfile, IWriterStats } from "@/backend/models/User";
+import NovelModel, { INovel, IThemeAssignment, ISourceType, INarrativeFocus, IWorldBuildingDetails, INovelStats, IMonetizationSettings, IPsychologicalAnalysisConfig, ICollaborationSettings, NovelStatus as NovelStatusEnum } from "@/backend/models/Novel";
+import UserModel, { IUser, IUserProfile } from "@/backend/models/User";
 import CategoryModel, { ICategory } from "@/backend/models/Category";
-import CharacterModel, { ICharacter, CharacterRoleInStory, ICharacterExpression } from "@/backend/models/Character"; // ICharacterExpression อาจไม่จำเป็นสำหรับ detail page แต่ import ไว้เผื่อ
-import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
-import { Types } from "mongoose";
+import CharacterModel, { ICharacter, CharacterRoleInStory } from "@/backend/models/Character";
+import EpisodeModel, { IEpisode, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
+// import { Types } from "mongoose"; // Types ถูกใช้อย่างไรในไฟล์นี้? ถ้าไม่ใช้โดยตรง ลบออกได้
 
 // ===================================================================
-// SECTION: TypeScript Interfaces สำหรับ API Response
+// SECTION: TypeScript Interfaces สำหรับ API Response (ส่วนแสดงผลข้อมูลนิยาย)
 // ===================================================================
 
 /**
  * @interface PopulatedAuthorForDetailPage
- * @description Interface สำหรับข้อมูลผู้เขียนที่ถูก populate
+ * @description Interface สำหรับข้อมูลผู้เขียนที่ถูก populate (เลือกเฉพาะ field ที่จำเป็นสำหรับหน้ารายละเอียด)
  */
 interface PopulatedAuthorForDetailPage {
   _id: string;
   username?: string;
-  profile: {
+  profile: { // จาก IUserProfile
     displayName?: string;
     penName?: string;
     avatarUrl?: string;
     bio?: string;
   };
-  writerStats?: { // แสดงสถิติบางส่วนของนักเขียน
+  writerStats?: { // จาก IWriterStats (เลือก field ที่ต้องการ)
     totalNovelsPublished: number;
     totalViewsAcrossAllNovels: number;
     totalLikesReceivedOnNovels: number;
+    // เพิ่ม field อื่นๆ จาก IWriterStats ได้ตามต้องการ เช่น totalFollowers (ถ้ามีใน writerStats)
   };
 }
 
 /**
  * @interface PopulatedCategoryInfo
- * @description Interface สำหรับข้อมูล Category ที่ถูก populate บางส่วน
+ * @description Interface สำหรับข้อมูล Category ที่ถูก populate บางส่วน (ชื่อ, slug, สี)
  */
 interface PopulatedCategoryInfo {
   _id: string;
   name: string;
   slug: string;
   color?: string;
+  // description?: string; // เพิ่มได้หากต้องการแสดงคำอธิบายหมวดหมู่
 }
 
 /**
- * @interface PopulatedThemeAssignment
- * @description Interface สำหรับ themeAssignment ที่ถูก populate
+ * @interface PopulatedThemeAssignmentForDetailPage
+ * @description Interface สำหรับ themeAssignment ที่มี CategoryId ถูก populate แล้ว
  */
-interface PopulatedThemeAssignment {
+interface PopulatedThemeAssignmentForDetailPage {
   mainTheme: {
-    categoryId: PopulatedCategoryInfo; // คาดหวังว่า mainTheme category จะมีเสมอ
+    categoryId: PopulatedCategoryInfo; // Populated
     customName?: string;
   };
   subThemes?: Array<{
-    categoryId: PopulatedCategoryInfo; // คาดหวังว่า subTheme category จะมีเสมอ
+    categoryId: PopulatedCategoryInfo; // Populated
     customName?: string;
   }>;
-  moodAndTone?: PopulatedCategoryInfo[];
-  contentWarnings?: PopulatedCategoryInfo[];
+  moodAndTone?: PopulatedCategoryInfo[]; // Populated array
+  contentWarnings?: PopulatedCategoryInfo[]; // Populated array
   customTags?: string[];
 }
 
 /**
  * @interface PopulatedCharacterForDetailPage
- * @description Interface สำหรับข้อมูลตัวละครที่แสดงในหน้ารายละเอียดนิยาย
+ * @description Interface สำหรับข้อมูลตัวละครที่แสดงในหน้ารายละเอียดนิยาย (เลือก field ที่จำเป็น)
  */
 interface PopulatedCharacterForDetailPage {
   _id: string;
   name: string;
-  profileImageUrl?: string; // Virtual field from Character model
+  profileImageUrl?: string; // Virtual field จาก Character model
   description?: string;
   roleInStory?: CharacterRoleInStory;
   colorTheme?: string;
+  // เพิ่ม field อื่นๆ ได้ตามต้องการ เช่น characterCode
 }
 
 /**
  * @interface PopulatedEpisodeForDetailPage
- * @description Interface สำหรับข้อมูลตอนที่แสดงในหน้ารายละเอียดนิยาย
+ * @description Interface สำหรับข้อมูลตอนที่แสดงในหน้ารายละเอียดนิยาย (เลือก field ที่จำเป็น)
  */
 interface PopulatedEpisodeForDetailPage {
   _id: string;
@@ -88,63 +91,69 @@ interface PopulatedEpisodeForDetailPage {
   status: EpisodeStatus;
   accessType: EpisodeAccessType;
   priceCoins?: number;
-  publishedAt?: string; // ISOString
+  publishedAt?: string; // ISOString (ควรแปลง Date เป็น string ก่อนส่ง response)
   teaserText?: string;
-  stats: {
+  stats: { // จาก IEpisodeStats (เลือก field ที่ต้องการ)
     viewsCount: number;
     likesCount: number;
     commentsCount: number;
     totalWords: number;
     estimatedReadingTimeMinutes: number;
+    // purchasesCount?: number; // เพิ่มได้หากต้องการแสดง
   };
+  // episodeUrl?: string; // เพิ่ม virtual field ถ้าต้องการ
 }
 
 
 /**
  * @interface PopulatedNovelForDetailPage
  * @description Interface สำหรับข้อมูลนิยายที่ถูก populate แล้วสำหรับหน้ารายละเอียด
+ * Interface นี้ควรสะท้อนโครงสร้างข้อมูลที่ Frontend (page.tsx) คาดหวัง
  */
 export interface PopulatedNovelForDetailPage {
   _id: string;
   title: string;
   slug: string;
-  author: PopulatedAuthorForDetailPage;
+  author: PopulatedAuthorForDetailPage; // Populated
   synopsis: string;
   longDescription?: string;
   coverImageUrl?: string;
   bannerImageUrl?: string;
-  themeAssignment: PopulatedThemeAssignment;
-  narrativeFocus?: INarrativeFocus; // คงไว้ตาม schema ของ INovel, ObjectId จะถูก stringify
-  worldBuildingDetails?: IWorldBuildingDetails; // คงไว้ตาม schema ของ INovel
-  ageRatingCategoryId?: PopulatedCategoryInfo;
-  status: INovel["status"];
+  themeAssignment: PopulatedThemeAssignmentForDetailPage; // Populated ภายใน
+  narrativeFocus?: INarrativeFocus; // Schema เดิม, ObjectId ภายในยังไม่ populate
+  worldBuildingDetails?: IWorldBuildingDetails; // Schema เดิม
+  ageRatingCategoryId?: PopulatedCategoryInfo; // Populated
+  status: NovelStatusEnum; // ใช้ Enum จาก Novel model โดยตรง
   accessLevel: INovel["accessLevel"];
   isCompleted: boolean;
   endingType: INovel["endingType"];
-  sourceType: ISourceType; // คงไว้ตาม schema ของ INovel
-  language: PopulatedCategoryInfo; // คาดหวังว่า language category จะมีเสมอ
-  firstEpisodeId?: string;
+  sourceType: ISourceType; // Schema เดิม
+  language: PopulatedCategoryInfo; // Populated
+  firstEpisodeId?: string; // ObjectId as string
   totalEpisodesCount: number;
   publishedEpisodesCount: number;
-  stats: INovelStats; // คงไว้ตาม schema ของ INovel
-  monetizationSettings: IMonetizationSettings; // คงไว้ตาม schema ของ INovel
-  psychologicalAnalysisConfig: IPsychologicalAnalysisConfig; // คงไว้ตาม schema ของ INovel
-  collaborationSettings?: ICollaborationSettings; // คงไว้ตาม schema ของ INovel
+  stats: INovelStats; // Schema เดิม
+  monetizationSettings: IMonetizationSettings; // Schema เดิม
+  psychologicalAnalysisConfig: IPsychologicalAnalysisConfig; // Schema เดิม
+  collaborationSettings?: ICollaborationSettings; // Schema เดิม
   isFeatured?: boolean;
   publishedAt?: string; // ISOString
   scheduledPublicationDate?: string; // ISOString
   lastContentUpdatedAt: string; // ISOString
   relatedNovels?: string[]; // Array of ObjectIds as strings
-  seriesId?: string;
+  seriesId?: string; // ObjectId as string
   seriesOrder?: number;
   createdAt: string; // ISOString
   updatedAt: string; // ISOString
 
-  // ข้อมูลตัวละครหลัก (แสดง 6 ตัวแรก)
+  // ข้อมูลตัวละครหลัก (แสดงตามจำนวนที่ query มา, เช่น 6 ตัวแรก)
   characters?: PopulatedCharacterForDetailPage[];
 
-  // ข้อมูลตอนล่าสุด (แสดง 10 ตอนแรก)
+  // ข้อมูลตอน (แสดงตามจำนวนที่ query มา, เช่น 10 ตอนแรก)
   episodes?: PopulatedEpisodeForDetailPage[];
+
+  // เพิ่ม field อื่นๆ ที่จำเป็นสำหรับ UI เช่น novelUrl (virtual)
+  novelUrl?: string;
 }
 
 // ===================================================================
@@ -154,222 +163,221 @@ export interface PopulatedNovelForDetailPage {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object - อ็อบเจกต์คำขอ HTTP ขาเข้า
- * @param context Context object containing route parameters - อ็อบเจกต์ context ที่มี params ซึ่งในที่นี้คือ slug
- * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
+ * @param context Context object ที่มี params - อ็อบเจกต์ context ที่ Next.js ส่งมา ซึ่งมี property `params`
+ * @param context.params พารามิเตอร์ของ Route แบบ động (dynamic route parameters)
+ * @param context.params.slug slug ของนิยายที่ต้องการดึงข้อมูล
+ * @returns NextResponse ที่มีข้อมูลนิยายหรือ error object
  */
 export async function GET(
-  request: NextRequest,
-  context: { params: { slug: string } } // <--- FIX: แก้ไข type ของ argument ที่สองตรงนี้
+  request: NextRequest, // อาร์กิวเมนต์แรกคือ NextRequest เสมอ
+  { params }: { params: { slug: string } } // อาร์กิวเมนต์ที่สองคือ object ที่มี property `params`
 ) {
   try {
-    // เชื่อมต่อฐานข้อมูล
+    // 1. เชื่อมต่อฐานข้อมูล
+    // การเรียก dbConnect() ทุกครั้งที่มีการ request เป็น pattern ที่ใช้ได้กับ serverless functions
+    // Mongoose จะจัดการ connection pooling
     await dbConnect();
 
-    const slug = context.params.slug; // <--- FIX: เข้าถึง slug จาก context.params
-
-    // ตรวจสอบ slug
-    if (!slug || typeof slug !== 'string') {
-      console.warn(`⚠️ [API /novels/[slug]] Invalid slug: "${slug}"`);
+    // 2. ดึงและตรวจสอบ slug จาก params
+    const slug = params.slug;
+    if (!slug || typeof slug !== 'string' || !slug.trim()) {
+      console.warn(`⚠️ [API GET /novels/${slug}] Slug ไม่ถูกต้อง: "${slug}"`);
       return NextResponse.json(
         {
+          success: false,
           error: "Invalid slug parameter",
-          message: "กรุณาระบุ slug ของนิยายที่ถูกต้อง"
+          message: "กรุณาระบุ slug ของนิยายที่ถูกต้องใน URL"
         },
         { status: 400 }
       );
     }
+    const cleanedSlug = slug.trim().toLowerCase();
+    console.log(`📄 [API GET /novels/${cleanedSlug}] กำลังดึงข้อมูลนิยายสำหรับ slug: "${cleanedSlug}"`);
 
-    console.log(`📄 [API /novels/[slug]] Fetching novel data for slug: "${slug.trim().toLowerCase()}"`);
-
-    // ค้นหานิยายตาม slug พร้อม populate ข้อมูลที่เกี่ยวข้อง
-    // การใช้ Mongoose generic type arguments กับ populate ช่วยให้ type safety ดีขึ้น
+    // 3. ค้นหานิยายในฐานข้อมูลด้วย slug ที่ผ่านการทำความสะอาดแล้ว
+    //    พร้อมทั้ง populate ข้อมูลที่เกี่ยวข้องเพื่อลดจำนวน query ในภายหลัง
+    //    ใช้ .lean() เพื่อให้ได้ Plain Old JavaScript Object (POJO) ซึ่งเร็วกว่า Mongoose Document เต็มรูปแบบ
+    //    และลด memory footprint โดยเฉพาะเมื่อข้อมูลมีขนาดใหญ่หรือมีการ populate เยอะ
     const novelFromDb = await NovelModel.findOne({
-      slug: slug.trim().toLowerCase(),
-      isDeleted: { $ne: true } // ไม่แสดงนิยายที่ถูกลบ (อ้างอิง field isDeleted จาก Novel.ts)
+      slug: cleanedSlug,
+      isDeleted: { $ne: true }, // ไม่แสดงนิยายที่ถูก soft delete
+      // status: NovelStatusEnum.PUBLISHED, // พิจารณา: อาจจะแสดงเฉพาะนิยายที่ PUBLISHED หรือ COMPLETED ในหน้านี้
+                                         // หรืออาจจะมี logic การแสดงผลที่ต่างกันสำหรับสถานะ DRAFT ให้กับผู้เขียน
     })
-    .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'writerStats'> }>({ // ระบุ type ของ author ที่ populate มา
+    .populate<{ author: IUser }>({
       path: 'author',
-      select: 'username profile.displayName profile.penName profile.avatarUrl profile.bio writerStats.totalNovelsPublished writerStats.totalViewsAcrossAllNovels writerStats.totalLikesReceivedOnNovels', // เลือก field ที่ต้องการจาก profile และ writerStats
-      model: UserModel
+      select: 'username profile writerStats.totalNovelsPublished writerStats.totalViewsAcrossAllNovels writerStats.totalLikesReceivedOnNovels', // เลือกเฉพาะ field ที่จำเป็นจาก User และ WriterStats
+      model: UserModel // ระบุ Model เพื่อความชัดเจน แม้ Mongoose อาจ infer ได้
     })
-    .populate<{ 'themeAssignment.mainTheme.categoryId': Pick<ICategory, '_id' | 'name' | 'slug' | 'color'> }>({
+    .populate<{ themeAssignment_mainTheme_categoryId: ICategory }>({ // ตัวอย่างการ type สำหรับ populated field
       path: 'themeAssignment.mainTheme.categoryId',
-      select: '_id name slug color',
+      select: 'name slug color description', // เลือก field ที่ต้องการจาก Category
       model: CategoryModel
     })
-    .populate<{ 'themeAssignment.subThemes.categoryId': Pick<ICategory, '_id' | 'name' | 'slug' | 'color'>[] }>({ // สำหรับ array ของ sub-objects
+    .populate<{ themeAssignment_subThemes_categoryId: ICategory[] }>({
       path: 'themeAssignment.subThemes.categoryId',
-      select: '_id name slug color',
+      select: 'name slug color description',
       model: CategoryModel
     })
-    .populate<{ 'themeAssignment.moodAndTone': Pick<ICategory, '_id' | 'name' | 'slug' | 'color'>[] }>({
+    .populate<{ themeAssignment_moodAndTone: ICategory[] }>({
       path: 'themeAssignment.moodAndTone',
-      select: '_id name slug color',
+      select: 'name slug color description',
       model: CategoryModel
     })
-    .populate<{ 'themeAssignment.contentWarnings': Pick<ICategory, '_id' | 'name' | 'slug' | 'color'>[] }>({
+    .populate<{ themeAssignment_contentWarnings: ICategory[] }>({
       path: 'themeAssignment.contentWarnings',
-      select: '_id name slug color',
+      select: 'name slug color description',
       model: CategoryModel
     })
-    .populate<{ ageRatingCategoryId: Pick<ICategory, '_id' | 'name' | 'slug' | 'color'> }>({
+    .populate<{ ageRatingCategoryId: ICategory }>({
       path: 'ageRatingCategoryId',
-      select: '_id name slug color',
+      select: 'name slug color description',
       model: CategoryModel
     })
-    .populate<{ language: Pick<ICategory, '_id' | 'name' | 'slug'> }>({
+    .populate<{ language: ICategory }>({
       path: 'language',
-      select: '_id name slug', // ภาษาอาจไม่จำเป็นต้องมี color
+      select: 'name slug', // ภาษาอาจไม่ต้องการสี
       model: CategoryModel
     })
-    .lean({ virtuals: true }); // ใช้ lean() เพื่อประสิทธิภาพ และ virtuals: true หากต้องการ virtual fields จาก NovelModel (ถ้ามี)
+    // พิจารณา populate เพิ่มเติมสำหรับ INarrativeFocus fields ถ้าต้องการแสดงชื่อ Category แทน ObjectId
+    // .populate({ path: 'narrativeFocus.narrativePacingTags', select: 'name slug', model: CategoryModel })
+    // .populate({ path: 'narrativeFocus.primaryConflictTypes', select: 'name slug', model: CategoryModel })
+    // ... อื่นๆ ใน narrativeFocus และ worldBuildingDetails ถ้ามี ObjectId และต้องการ populate
+    .lean({ virtuals: true }); // เพิ่ม { virtuals: true } เพื่อให้ virtual fields (เช่น novelUrl) ถูกคำนวณและรวมอยู่ในผลลัพธ์ของ .lean()
 
-    // ตรวจสอบว่าพบนิยายหรือไม่
+    // 4. ตรวจสอบว่าพบนิยายหรือไม่
     if (!novelFromDb) {
-      console.warn(`⚠️ [API /novels/[slug]] Novel not found for slug: "${slug}"`);
+      console.warn(`⚠️ [API GET /novels/${cleanedSlug}] ไม่พบนิยายสำหรับ slug: "${cleanedSlug}"`);
       return NextResponse.json(
         {
+          success: false,
           error: "Novel not found",
-          message: `ไม่พบนิยายที่มี slug "${slug}"`
+          message: `ขออภัย ไม่พบนิยายที่คุณกำลังค้นหา (slug: ${cleanedSlug})`
         },
         { status: 404 }
       );
     }
-    
-    // --- Helper function to safely convert populated category to PopulatedCategoryInfo ---
-    // ฟังก์ชันตัวช่วยในการแปลง category ที่ populate มาเป็น PopulatedCategoryInfo อย่างปลอดภัย
+
+    // 5. Helper functions สำหรับแปลงข้อมูล Category ที่ populate มาแล้ว (ถ้าจำเป็น)
+    //    ฟังก์ชันเหล่านี้ช่วยให้มั่นใจว่าโครงสร้างข้อมูลที่ส่งกลับไปให้ client ตรงกับที่คาดหวัง
     const toPopulatedCategoryInfo = (cat: any): PopulatedCategoryInfo | undefined => {
-        // ตรวจสอบว่า cat เป็น object ที่มี properties ที่จำเป็น (_id, name, slug)
-        if (!cat || typeof cat !== 'object' || !('_id' in cat) || !('name' in cat) || !('slug' in cat)) return undefined;
-        return {
-            _id: cat._id.toString(),
-            name: cat.name,
-            slug: cat.slug,
-            color: cat.color, // color เป็น optional
-        };
+      if (!cat || typeof cat !== 'object' || !cat._id) return undefined; // ตรวจสอบให้แน่ใจว่า cat เป็น object ที่มี _id
+      return {
+        _id: cat._id.toString(),
+        name: cat.name,
+        slug: cat.slug,
+        color: cat.color,
+        // description: cat.description, // เพิ่มตามต้องการ
+      };
     };
-    // ฟังก์ชันตัวช่วยสำหรับแปลง array ของ categories
+
     const toPopulatedCategoryInfoArray = (cats: any[]): PopulatedCategoryInfo[] => {
-        if (!Array.isArray(cats)) return [];
-        // map และ filter(Boolean) เพื่อกรองค่า undefined ออก หากบาง category populate ไม่สำเร็จ
-        return cats.map(toPopulatedCategoryInfo).filter(Boolean) as PopulatedCategoryInfo[];
+      if (!Array.isArray(cats)) return [];
+      return cats.map(toPopulatedCategoryInfo).filter(Boolean) as PopulatedCategoryInfo[];
     };
 
-
-    // --- ดึงข้อมูลตัวละครของนิยาย (แสดง 6 ตัวแรก) ---
-    // CharacterModel มี virtual "profileImageUrl" ซึ่ง .lean({ virtuals: true }) อาจจะช่วยได้
-    // หรือสร้างเองตาม logic เดิมถ้า virtuals ไม่ได้ถูก populate โดย lean โดยตรง
+    // 6. ดึงข้อมูลตัวละครของนิยาย (จำกัดจำนวนเพื่อ performance)
+    //    ควรเลือกเฉพาะ field ที่จำเป็นสำหรับการแสดงผลในหน้ารายละเอียดนิยาย
     const charactersFromDb = await CharacterModel.find({
-      novelId: novelFromDb._id, // novelFromDb._id ตอนนี้เป็น ObjectId จาก .lean()
-      isArchived: false // อ้างอิง field isArchived จาก Character.ts
+      novelId: novelFromDb._id, // ใช้ _id จาก novel ที่ดึงมาได้
+      isArchived: false
     })
     .select('name description roleInStory colorTheme profileImageMediaId profileImageSourceType') // profileImageUrl เป็น virtual
-    .sort({ createdAt: 1 }) // เรียงตามวันที่สร้าง
-    .limit(6)
-    .lean({ virtuals: true }); // ลองใช้ virtuals: true กับ lean ที่นี่ด้วยสำหรับ Character
+    .sort({ createdAt: 1 }) // หรือเรียงตาม 'orderInNovel' ถ้ามี field นั้น
+    .limit(6) // แสดง 6 ตัวละครแรก
+    .lean({ virtuals: true }); // ให้ virtual 'profileImageUrl' ทำงาน
 
-    const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map(char => {
-        // หาก CharacterModel.profileImageUrl (virtual) ถูก populate โดย lean({ virtuals: true })
-        // สามารถใช้ char.profileImageUrl ได้โดยตรง (ต้องตรวจสอบว่ามีค่าหรือไม่)
-        // หากไม่, ใช้ logic เดิมในการสร้าง URL
-        let imageUrl = (char as any).profileImageUrl; // ลองเข้าถึง virtual field ที่อาจถูก populate
-        if (!imageUrl) { // Fallback logic ถ้า virtual field ไม่มีค่า
-            if (char.profileImageMediaId && char.profileImageSourceType) {
-                imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
-            } else {
-                imageUrl = `/images/default-avatar.png`; // Default avatar
-            }
-        }
-
-        return {
-            _id: char._id.toString(),
-            name: char.name,
-            profileImageUrl: imageUrl,
-            description: char.description,
-            roleInStory: char.roleInStory as CharacterRoleInStory,
-            colorTheme: char.colorTheme
-        };
+    const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map(charDB => {
+      const char = charDB as any; // Cast to any to access potential virtuals not in ICharacter initially
+      return {
+        _id: char._id.toString(),
+        name: char.name,
+        // หาก .lean({ virtuals: true }) ทำให้ profileImageUrl อยู่ใน char แล้ว ให้ใช้ char.profileImageUrl
+        // มิฉะนั้น สร้าง URL เองตาม logic เดิม หรือปรับปรุง CharacterModel virtual ให้ทำงานกับ lean ได้ดีขึ้น
+        profileImageUrl: char.profileImageUrl || (char.profileImageMediaId && char.profileImageSourceType ? `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}` : '/images/default-avatar.png'),
+        description: char.description,
+        roleInStory: char.roleInStory as CharacterRoleInStory,
+        colorTheme: char.colorTheme,
+      };
     });
 
-
-    // --- ดึงข้อมูลตอนของนิยาย (แสดง 10 ตอนแรก) ---
+    // 7. ดึงข้อมูลตอนของนิยาย (จำกัดจำนวนตอนที่แสดงในหน้าแรก)
+    //    แสดงเฉพาะตอนที่เผยแพร่แล้วหรือตั้งเวลาเผยแพร่ และเลือก field ที่จำเป็น
     const episodesFromDb = await EpisodeModel.find({
       novelId: novelFromDb._id,
-      status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] } // แสดงเฉพาะตอนที่เผยแพร่และตั้งเวลา
+      status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] }
     })
     .select('title episodeOrder status accessType priceCoins publishedAt teaserText stats')
-    .sort({ episodeOrder: 1 }) // เรียงตามลำดับตอน
-    .limit(10)
-    .lean(); // EpisodeModel ไม่มี virtual ที่ซับซ้อนใน select list นี้
+    .sort({ episodeOrder: -1 }) // เรียงตามลำดับตอนล่าสุดขึ้นก่อน
+    .limit(10) // แสดง 10 ตอนล่าสุด
+    .lean({ virtuals: true }); // ให้ virtual 'episodeUrl', 'isTrulyFree' ทำงาน (ถ้ามีและต้องการ)
 
-    const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map(ep => ({
+    const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map(epDB => {
+      const ep = epDB as any;
+      return {
       _id: ep._id.toString(),
       title: ep.title,
       episodeOrder: ep.episodeOrder,
       status: ep.status as EpisodeStatus,
       accessType: ep.accessType as EpisodeAccessType,
       priceCoins: ep.priceCoins,
-      publishedAt: ep.publishedAt?.toISOString(),
+      publishedAt: ep.publishedAt instanceof Date ? ep.publishedAt.toISOString() : ep.publishedAt,
       teaserText: ep.teaserText,
-      stats: { // ตรวจสอบให้แน่ใจว่า ep.stats ไม่ใช่ null/undefined ก่อนเข้าถึง property ย่อย
+      stats: { // ตรวจสอบว่า ep.stats มีค่าก่อน access
         viewsCount: ep.stats?.viewsCount || 0,
         likesCount: ep.stats?.likesCount || 0,
         commentsCount: ep.stats?.commentsCount || 0,
         totalWords: ep.stats?.totalWords || 0,
         estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 0
-      }
-    }));
+      },
+      // episodeUrl: ep.episodeUrl // ถ้ามี virtual นี้และ lean({ virtuals: true }) ทำงาน
+    }});
 
-    // --- Explicitly map novel data to PopulatedNovelForDetailPage ---
-    // สร้าง responseData อย่างระมัดระวัง
-    // ตรวจสอบว่า author ถูก populate และไม่ใช่ ObjectId
-    // Type `Pick<IUser, ...>` จาก populate ช่วยให้เข้าถึง field ได้อย่างปลอดภัย
-    const populatedAuthor = novelFromDb.author as Pick<IUser, '_id' | 'username' | 'profile' | 'writerStats'>;
+    // 8. เตรียมข้อมูล Response: ทำการ map ข้อมูลจาก novelFromDb (ที่เป็น POJO) ไปยัง PopulatedNovelForDetailPage
+    //    ส่วนนี้สำคัญมากในการแปลงข้อมูลให้ตรงกับ Interface ที่ Frontend คาดหวัง
 
-    if (!populatedAuthor || typeof populatedAuthor !== 'object' || !populatedAuthor._id || !populatedAuthor.profile) {
-        console.error(`❌ [API /novels/[slug]] Author object is not correctly populated for novel: "${novelFromDb.title}"`);
+    // ตรวจสอบ Author ที่ populate มา
+    const populatedAuthor = novelFromDb.author as unknown as IUser; // Cast to IUser after population
+    if (!populatedAuthor || typeof populatedAuthor !== 'object' || !populatedAuthor._id) {
+        console.error(`❌ [API GET /novels/${cleanedSlug}] ข้อมูลผู้เขียน (author) ไม่ได้ถูก populate อย่างถูกต้องสำหรับนิยาย: "${novelFromDb.title}"`);
         return NextResponse.json(
-            { error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย" },
+            { success: false, error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย" },
             { status: 500 }
         );
     }
     
-    // การแปลง category ที่ populate มาสำหรับ themeAssignment
-    const mainThemeCategoryPopulated = novelFromDb.themeAssignment?.mainTheme?.categoryId;
-    const mainThemeCategoryInfo = toPopulatedCategoryInfo(mainThemeCategoryPopulated);
-    if (!mainThemeCategoryInfo) { // Main theme category is required
-        console.error(`❌ [API /novels/[slug]] Main theme category is not correctly populated or missing for novel: "${novelFromDb.title}"`);
-        return NextResponse.json(
-            { error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลหมวดหมู่หลักของนิยาย" },
-            { status: 500 }
-        );
-    }
-
-    const languageCategoryPopulated = novelFromDb.language;
-    const languageCategoryInfo = toPopulatedCategoryInfo(languageCategoryPopulated);
-    if (!languageCategoryInfo) { // Language category is required
-        console.error(`❌ [API /novels/[slug]] Language category is not correctly populated or missing for novel: "${novelFromDb.title}"`);
-        return NextResponse.json(
-            { error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลภาษาของนิยาย" },
-            { status: 500 }
-        );
-    }
+    // เตรียม themeAssignment ที่ populate แล้ว
+    const themeAssignmentForDetail: PopulatedThemeAssignmentForDetailPage = {
+        mainTheme: {
+            // ตรวจสอบว่า mainTheme.categoryId ถูก populate มาจริง ๆ
+            categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.mainTheme?.categoryId as any)!, // ใช้ ! หากมั่นใจว่า populated
+            customName: novelFromDb.themeAssignment?.mainTheme?.customName,
+        },
+        subThemes: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.subThemes?.map(st => st.categoryId as any) || [])
+                     .map((catInfo, index) => ({
+                         categoryId: catInfo,
+                         customName: novelFromDb.themeAssignment?.subThemes?.[index]?.customName
+                     })),
+        moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone as any[] || []),
+        contentWarnings: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.contentWarnings as any[] || []),
+        customTags: novelFromDb.themeAssignment?.customTags || [],
+    };
 
 
     const responseData: PopulatedNovelForDetailPage = {
       _id: novelFromDb._id.toString(),
       title: novelFromDb.title,
-      slug: novelFromDb.slug,
+      slug: novelFromDb.slug, // slug จาก DB (ควรจะตรงกับ cleanedSlug)
       author: {
         _id: populatedAuthor._id.toString(),
         username: populatedAuthor.username,
-        profile: { // populatedAuthor.profile ควรจะมี fields ที่ select ไว้
-          displayName: populatedAuthor.profile.displayName,
-          penName: populatedAuthor.profile.penName,
-          avatarUrl: populatedAuthor.profile.avatarUrl,
-          bio: populatedAuthor.profile.bio,
+        profile: {
+          displayName: populatedAuthor.profile?.displayName,
+          penName: populatedAuthor.profile?.penName,
+          avatarUrl: populatedAuthor.profile?.avatarUrl,
+          bio: populatedAuthor.profile?.bio,
         },
-        writerStats: populatedAuthor.writerStats ? { // ตรวจสอบว่า writerStats มีค่า (เพราะเป็น optional)
+        writerStats: populatedAuthor.writerStats ? { // ตรวจสอบว่า writerStats มีค่าหรือไม่
           totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
           totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
           totalLikesReceivedOnNovels: populatedAuthor.writerStats.totalLikesReceivedOnNovels,
@@ -379,74 +387,72 @@ export async function GET(
       longDescription: novelFromDb.longDescription,
       coverImageUrl: novelFromDb.coverImageUrl,
       bannerImageUrl: novelFromDb.bannerImageUrl,
-      themeAssignment: {
-        mainTheme: {
-          categoryId: mainThemeCategoryInfo, // ใช้ที่แปลงแล้วและตรวจสอบแล้ว
-          customName: novelFromDb.themeAssignment?.mainTheme?.customName,
-        },
-        subThemes: novelFromDb.themeAssignment?.subThemes?.map(st => ({
-          // ตรวจสอบ st.categoryId ก่อนเรียก toPopulatedCategoryInfo
-          categoryId: toPopulatedCategoryInfo(st.categoryId)!, // ใช้ ! ถ้ามั่นใจว่า subtheme category ที่ populate มาจะ valid เสมอ หรือจัดการ undefined
-          customName: st.customName,
-        })).filter(st => st.categoryId) || [], // กรองอันที่ categoryId เป็น undefined ออก
-        moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone || []),
-        contentWarnings: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.contentWarnings || []),
-        customTags: novelFromDb.themeAssignment?.customTags || [],
-      },
-      narrativeFocus: novelFromDb.narrativeFocus as INarrativeFocus, // Cast เพราะเราคาดหวังโครงสร้างจาก schema
+      themeAssignment: themeAssignmentForDetail,
+      narrativeFocus: novelFromDb.narrativeFocus as INarrativeFocus, // Cast ถ้ามั่นใจในโครงสร้าง
       worldBuildingDetails: novelFromDb.worldBuildingDetails as IWorldBuildingDetails,
-      ageRatingCategoryId: toPopulatedCategoryInfo(novelFromDb.ageRatingCategoryId), // อาจเป็น undefined ถ้าไม่ได้ตั้งค่า
-      status: novelFromDb.status as INovel["status"],
+      ageRatingCategoryId: toPopulatedCategoryInfo(novelFromDb.ageRatingCategoryId as any),
+      status: novelFromDb.status as NovelStatusEnum,
       accessLevel: novelFromDb.accessLevel as INovel["accessLevel"],
       isCompleted: novelFromDb.isCompleted,
       endingType: novelFromDb.endingType as INovel["endingType"],
       sourceType: novelFromDb.sourceType as ISourceType,
-      language: languageCategoryInfo, // ใช้ที่แปลงแล้วและตรวจสอบแล้ว
+      language: toPopulatedCategoryInfo(novelFromDb.language as any)!, // ภาษาเป็น required field
       firstEpisodeId: novelFromDb.firstEpisodeId?.toString(),
       totalEpisodesCount: novelFromDb.totalEpisodesCount,
       publishedEpisodesCount: novelFromDb.publishedEpisodesCount,
       stats: novelFromDb.stats as INovelStats,
       monetizationSettings: novelFromDb.monetizationSettings as IMonetizationSettings,
       psychologicalAnalysisConfig: novelFromDb.psychologicalAnalysisConfig as IPsychologicalAnalysisConfig,
-      collaborationSettings: novelFromDb.collaborationSettings,
+      collaborationSettings: novelFromDb.collaborationSettings as ICollaborationSettings,
       isFeatured: novelFromDb.isFeatured,
-      publishedAt: novelFromDb.publishedAt?.toISOString(),
-      scheduledPublicationDate: novelFromDb.scheduledPublicationDate?.toISOString(),
-      lastContentUpdatedAt: novelFromDb.lastContentUpdatedAt.toISOString(), // lastContentUpdatedAt เป็น required ใน schema
-      relatedNovels: novelFromDb.relatedNovels?.map(id => id.toString()), // relatedNovels เป็น array ของ ObjectId
+      publishedAt: novelFromDb.publishedAt instanceof Date ? novelFromDb.publishedAt.toISOString() : novelFromDb.publishedAt,
+      scheduledPublicationDate: novelFromDb.scheduledPublicationDate instanceof Date ? novelFromDb.scheduledPublicationDate.toISOString() : novelFromDb.scheduledPublicationDate,
+      lastContentUpdatedAt: novelFromDb.lastContentUpdatedAt instanceof Date ? novelFromDb.lastContentUpdatedAt.toISOString() : novelFromDb.lastContentUpdatedAt,
+      relatedNovels: novelFromDb.relatedNovels?.map((id: any) => id.toString()), // ตรวจสอบ type ของ id
       seriesId: novelFromDb.seriesId?.toString(),
       seriesOrder: novelFromDb.seriesOrder,
-      createdAt: novelFromDb.createdAt.toISOString(), // createdAt เป็น Mongoose timestamp
-      updatedAt: novelFromDb.updatedAt.toISOString(), // updatedAt เป็น Mongoose timestamp
+      createdAt: novelFromDb.createdAt instanceof Date ? novelFromDb.createdAt.toISOString() : novelFromDb.createdAt,
+      updatedAt: novelFromDb.updatedAt instanceof Date ? novelFromDb.updatedAt.toISOString() : novelFromDb.updatedAt,
       characters: characters,
       episodes: episodes,
+      novelUrl: (novelFromDb as any).novelUrl, // เข้าถึง virtual field ที่ถูก .lean({ virtuals: true }) เตรียมไว้
     };
 
-    console.log(`✅ [API /novels/[slug]] Successfully fetched novel: "${novelFromDb.title}" (${characters.length} characters, ${episodes.length} episodes)`);
+    console.log(`✅ [API GET /novels/${cleanedSlug}] ดึงข้อมูลนิยายสำเร็จ: "${novelFromDb.title}" (ID: ${novelFromDb._id.toString()})`);
+    console.log(`   [API GET /novels/${cleanedSlug}] Characters fetched: ${characters.length}, Episodes fetched: ${episodes.length}`);
+    console.log(`   [API GET /novels/${cleanedSlug}] Main theme: ${responseData.themeAssignment.mainTheme.categoryId.name}`);
 
-    // ส่งข้อมูลกลับ
+
+    // 9. ส่งข้อมูลกลับไปยัง Client
+    //    กำหนด Cache-Control header เพื่อให้ CDN และ Browser cache ข้อมูลได้
+    //    s-maxage สำหรับ shared caches (เช่น CDN), stale-while-revalidate ช่วยให้แสดงข้อมูลเก่าขณะ revalidate ได้
     return NextResponse.json({
       success: true,
       novel: responseData
     }, {
       headers: {
-        // ตั้งค่า Cache-Control header เพื่อ caching strategy
-        // public: อนุญาตให้ caches (เช่น CDN, browser) เก็บ response
-        // s-maxage=60: CDN cache response นี้เป็นเวลา 60 วินาที
-        // stale-while-revalidate=300: หาก cache หมดอายุ (เกิน 60 วิ) แต่ไม่เกิน 300 วิ,
-        // CDN สามารถส่ง stale response ให้ client ก่อน แล้ว revalidate ใน background
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', // Cache 1 นาที, revalidate ใน background ทุก 5 นาที
       }
     });
 
   } catch (error: any) {
-    console.error(`❌ [API /novels/[slug]] Error fetching novel for slug "${context?.params?.slug}":`, error);
+    // 10. จัดการข้อผิดพลาดทั่วไป
+    //     ควร log error ที่เกิดขึ้นฝั่ง server เพื่อการตรวจสอบและแก้ไข
+    //     ไม่ควรส่ง error details ทั้งหมดไปให้ client ใน production mode
+    const slugParam = params ? params.slug : "undefined_slug";
+    console.error(`❌ [API GET /novels/${slugParam}] เกิดข้อผิดพลาดร้ายแรง:`, error.message);
+    if (error.stack) {
+        console.error("Stacktrace:", error.stack.substring(0, 1000)); // Log ส่วนหนึ่งของ stacktrace
+    }
+    // console.error(error); // Log error object ทั้งหมด (อาจมีข้อมูลเยอะ)
 
     return NextResponse.json(
       {
+        success: false,
         error: "Internal server error",
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลนิยาย กรุณาลองใหม่อีกครั้ง",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined // แสดง details เฉพาะใน development mode
+        message: "เกิดข้อผิดพลาดบางอย่างในระบบขณะดึงข้อมูลนิยาย กรุณาลองใหม่อีกครั้งในภายหลัง",
+        // ส่งรายละเอียด error เฉพาะใน development mode เพื่อช่วย debug
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
       { status: 500 }
     );
