@@ -291,7 +291,7 @@ export interface ICharacter extends Document {
   colorTheme?: string;
   expressions: Types.DocumentArray<ICharacterExpression>;
   defaultExpressionId?: string;
-  profileImageUrl?: string;
+  profileImageUrl?: string; // This will be the virtual field
   donationSettings?: ICharacterDonationSettings;
   relationships: Types.DocumentArray<ICharacterRelationship>;
   tags?: string[];
@@ -384,7 +384,7 @@ const CharacterSchema = new Schema<ICharacter>(
     timestamps: true,
     toObject: { virtuals: true },
     toJSON: { virtuals: true },
-    collection: "characters", 
+    collection: "characters",
   }
 );
 
@@ -410,12 +410,19 @@ CharacterSchema.index({ novelId: 1, "donationSettings.isEnabled": 1 }, { name: "
 // ==================================================================================================
 // SECTION: Virtuals (ฟิลด์เสมือน)
 // ==================================================================================================
-CharacterSchema.virtual("profileImageUrlFull").get(function (this: ICharacter) {
+// เปลี่ยนชื่อ virtual จาก profileImageUrlFull เป็น profileImageUrl เพื่อให้ตรงกับการใช้งานใน API
+CharacterSchema.virtual("profileImageUrl").get(function (this: ICharacter) {
   if (this.profileImageMediaId && this.profileImageSourceType) {
     // TODO: Implement actual URL generation logic based on Media/OfficialMedia structure and CDN
     // For now, returning a placeholder or assuming direct URL stored in Media.
-    // Example: return (this.profileImageMediaId as IMedia)?.accessUrl;
-    return `placeholder_image_url_for_${this.profileImageMediaId}`;
+    // Example:
+    // const media = this.profileImageMediaId as unknown as IMedia; // Might need to query Media model if not populated
+    // return media?.accessUrl || `placeholder_image_url_for_${this.profileImageMediaId}`;
+
+    // Placeholder for now, as IMedia or how to get accessUrl is not fully defined here
+    // This logic should ideally query the Media/OfficialMedia model or use a helper service.
+    return `/api/media_placeholder/${this.profileImageSourceType}/${(this.profileImageMediaId as Types.ObjectId).toString()}`;
+
   }
   return `/images/default-avatar.png`; // Default avatar
 });
@@ -507,4 +514,5 @@ export default CharacterModel;
 // 11. **Gamification - Stats**: `ICharacterStat` ถูกออกแบบให้ยืดหยุ่น, `statId` ควรจะ map กับ stat ที่กำหนดใน `StoryMap.gameMechanicsConfig.definedStats`
 //     เพื่อให้ Game Engine สามารถจัดการค่าเหล่านี้ได้อย่างถูกต้อง.
 // 12. **Comments and Thai Language**: คอมเมนต์ภาษาไทยถูกคงไว้และเพิ่มเติมตามมาตรฐานเดิม.
+// 13. **Profile Image URL Virtual**: เปลี่ยนชื่อ virtual field เป็น `profileImageUrl` เพื่อความสอดคล้อง
 // ==================================================================================================
