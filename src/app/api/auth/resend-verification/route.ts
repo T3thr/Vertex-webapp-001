@@ -12,7 +12,9 @@ interface ResendVerificationRequest {
 
 export async function POST(request: NextRequest) {
   console.log("🔵 [ResendVerification API] ได้รับคำขอส่งอีเมลยืนยันใหม่...");
+  
   try {
+    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
     console.log("✅ [ResendVerification API] เชื่อมต่อ MongoDB สำเร็จ");
 
@@ -30,6 +32,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { email } = body;
+
+    // ตรวจสอบว่ามีการส่งอีเมลมาหรือไม่
     if (!email) {
       console.error("❌ [ResendVerification API] ไม่ระบุอีเมล");
       return NextResponse.json(
@@ -38,6 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // แปลงอีเมลเป็นตัวพิมพ์เล็กและตรวจสอบรูปแบบ
     const lowerCaseEmail = email.toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(lowerCaseEmail)) {
       console.error(`❌ [ResendVerification API] รูปแบบอีเมลไม่ถูกต้อง: ${lowerCaseEmail}`);
@@ -48,9 +53,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. ค้นหาผู้ใช้ในฐานข้อมูล
-    const UserModelInstance = UserModel();
-    const user = await UserModelInstance.findOne({ email: lowerCaseEmail });
-
+    // แก้ไข: เอาวงเล็บออก เพราะ UserModel เป็น Mongoose model ไม่ใช่ function
+    const user = await UserModel.findOne({ email: lowerCaseEmail });
+    
     if (!user) {
       console.log(`⚠️ [ResendVerification API] ไม่พบบัญชีผู้ใช้สำหรับอีเมล: ${lowerCaseEmail}`);
       // ส่งข้อความทั่วไปเพื่อความปลอดภัย (ไม่เปิดเผยว่าอีเมลมีหรือไม่มีในระบบ)

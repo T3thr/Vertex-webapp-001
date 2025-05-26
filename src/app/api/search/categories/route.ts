@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     // ดึงข้อมูลหมวดหมู่จากฐานข้อมูล
     const totalCategories = await CategoryModel.countDocuments(query);
 
-    let categoriesQuery = CategoryModel.find(query)
+    const categoriesQuery = CategoryModel.find(query)
       .sort({ isPromoted: -1, displayOrder: 1, "usageStats.novelCount": -1, name: 1 }) // เรียงตามโปรโมท, ลำดับ, จำนวนนิยาย, ชื่อ
       .skip((page - 1) * limit)
       .limit(limit)

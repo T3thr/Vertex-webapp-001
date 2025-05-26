@@ -607,8 +607,11 @@ export interface IMoveCharacterEventParams extends ITimelineEventParametersBase 
 export interface ICharacterAnimationEventParams extends ITimelineEventParametersBase {
     animationName: string; loop?: boolean; iterations?: number;
 }
+
+// แก้ไข: เปลี่ยน IShowHideTextBlockEventParams จาก interface เป็น type alias
 /** @description Parameters for SHOW_TEXT_BLOCK / HIDE_TEXT_BLOCK events */
-export interface IShowHideTextBlockEventParams extends ITimelineEventParametersBase {}
+export type IShowHideTextBlockEventParams = ITimelineEventParametersBase;
+
 /** @description Parameters for UPDATE_TEXT_BLOCK event */
 export interface IUpdateTextBlockEventParams extends ITimelineEventParametersBase {
     newContent?: string; newSpeakerDisplayName?: string; newColor?: string; typewriterEffectSpeed?: number;
@@ -653,29 +656,43 @@ export interface ISetAudioPanParams extends ITimelineEventParametersBase {
 export interface IChangeBackgroundEventParams extends ITimelineEventParametersBase {
     newBackground: IBackgroundSetting;
 }
+
+// แก้ไข: เปลี่ยน IShowHideVisualElementParams จาก interface เป็น type alias
 /** @description Parameters for SHOW_VISUAL_ELEMENT / HIDE_VISUAL_ELEMENT events */
-export interface IShowHideVisualElementParams extends ITimelineEventParametersBase {}
+export type IShowHideVisualElementParams = ITimelineEventParametersBase;
+
 /** @description Parameters for ANIMATE_VISUAL_ELEMENT event */
 export interface IAnimateVisualElementEventParams extends ITimelineEventParametersBase {
     animationName?: string; targetTransform?: ITransform; loop?: boolean; iterations?: number;
 }
+
+// แก้ไข: เปลี่ยน IShowHideVideoElementParams จาก interface เป็น type alias
 /** @description Parameters for SHOW_VIDEO_ELEMENT / HIDE_VIDEO_ELEMENT events */
-export interface IShowHideVideoElementParams extends ITimelineEventParametersBase {}
+export type IShowHideVideoElementParams = ITimelineEventParametersBase;
+
 /** @description Parameters for CONTROL_VIDEO event */
 export interface IControlVideoParams extends ITimelineEventParametersBase {
     controlType: "play" | "pause" | "stop" | "seek" | "set_volume" | "mute" | "unmute";
     seekTimeMs?: number; volumeLevel?: number;
 }
+
+// แก้ไข: เปลี่ยน IShowHideStatusUIElementParams จาก interface เป็น type alias
 /** @description Parameters for SHOW_STATUS_UI_ELEMENT / HIDE_STATUS_UI_ELEMENT events */
-export interface IShowHideStatusUIElementParams extends ITimelineEventParametersBase {}
+export type IShowHideStatusUIElementParams = ITimelineEventParametersBase;
+
 /** @description Parameters for UPDATE_STATUS_UI_ELEMENT event */
 export interface IUpdateStatusUIElementParams extends ITimelineEventParametersBase {
     newValue?: any; overrideText?: string;
 }
+
+// แก้ไข: เปลี่ยน IShowHideChoiceGroupParams จาก interface เป็น type alias
 /** @description Parameters for SHOW_CHOICE_GROUP / HIDE_CHOICE_GROUP events */
-export interface IShowHideChoiceGroupParams extends ITimelineEventParametersBase {}
+export type IShowHideChoiceGroupParams = ITimelineEventParametersBase;
+
+// แก้ไข: เปลี่ยน IWaitEventParams จาก interface เป็น type alias
 /** @description Parameters for WAIT event */
-export interface IWaitEventParams extends ITimelineEventParametersBase {}
+export type IWaitEventParams = ITimelineEventParametersBase;
+
 /** @description Parameters for SET_VARIABLE event */
 export interface ISetVariableParams extends ITimelineEventParametersBase {
   variableName: string; value: any; scope: VariableScope; characterInstanceId?: string;
@@ -732,10 +749,15 @@ const SceneEffectInstanceSchema = new Schema<ISceneEffectInstance>({
 export interface IApplySceneEffectEventParams extends ITimelineEventParametersBase {
     effectInstance: ISceneEffectInstance;
 }
+
+// แก้ไข: เปลี่ยน IRemoveSceneEffectEventParams จาก interface เป็น type alias
 /** @description Parameters for REMOVE_SCENE_EFFECT event */
-export interface IRemoveSceneEffectEventParams extends ITimelineEventParametersBase {}
+export type IRemoveSceneEffectEventParams = ITimelineEventParametersBase;
+
+// แก้ไข: เปลี่ยน ITriggerHotspotEventParams จาก interface เป็น type alias
 /** @description Parameters for TRIGGER_HOTSPOT event */
-export interface ITriggerHotspotEventParams extends ITimelineEventParametersBase {}
+export type ITriggerHotspotEventParams = ITimelineEventParametersBase;
+
 /** @description Parameters for ENABLE_HOTSPOT event */
 export interface IEnableHotspotEventParams extends ITimelineEventParametersBase {
     shouldBeEnabled: boolean;
@@ -767,8 +789,10 @@ export interface ICameraFocusOnTargetEventParams extends ITimelineEventParameter
     targetInstanceId: string; // characterInstanceId หรือ elementInstanceId
     zoomLevel?: number; // Optional: zoom level when focusing
 }
+
+// แก้ไข: เปลี่ยน ICameraResetEventParams จาก interface เป็น type alias
 /** @description Parameters for CAMERA_RESET event */
-export interface ICameraResetEventParams extends ITimelineEventParametersBase {}
+export type ICameraResetEventParams = ITimelineEventParametersBase;
 
 
 /**
@@ -1244,4 +1268,5 @@ export default SceneModel;
 //     Timeline Events ใหม่ (`ADJUST_AUDIO_VOLUME`, `FADE_AUDIO_VOLUME`, `SET_AUDIO_PITCH`, `SET_AUDIO_PAN`) และ Parameter Interfaces ที่เกี่ยวข้องได้ถูกเพิ่มเข้าไปใน `TimelineEventType` และ `ITimelineEvent.parameters`.
 // 20. **หมายเหตุการอัปเดตโค้ด**: โค้ดนี้ได้รับการอัปเดตให้สอดคล้องกับคำแนะนำของผู้ใช้ โดยยังคงรักษาโครงสร้างและความสามารถเดิมของ `Scene.ts` ไว้ให้มากที่สุด
 //     พร้อมทั้งเพิ่มความคิดเห็นภาษาไทยตามสไตล์เดิมของโค้ดใน repo. การปรับปรุง "SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม" จะรวมถึงการเปลี่ยนแปลงเหล่านี้ด้วย.
+// 21. **@typescript-eslint/no-empty-object-type**: แก้ไข error โดยเปลี่ยน empty interfaces ที่ extend `ITimelineEventParametersBase` ให้เป็น type aliases เพื่อความถูกต้องและสะอาดของโค้ด.
 // ==================================================================================================

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     await dbConnect();
     console.log("✅ [VerifyEmail API] เชื่อมต่อ MongoDB สำเร็จ");
 
-    const UserModelInstance = UserModel();
+    const UserModelInstance = UserModel;
 
     // 2. แปลง plain token เป็น hashed token เพื่อเปรียบเทียบกับ DB
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");

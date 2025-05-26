@@ -5,7 +5,7 @@
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { INovel } from "./Novel"; // สำหรับ novelId
 import { IUser } from "./User"; // สำหรับ authorId และ voiceActorInfo.sampleMediaId (ถ้าผู้พากย์เป็น User ในระบบ)
-import { IMedia, } from "./Media"; // สำหรับ profileImageMediaId และ expressions.mediaId
+import { IMedia } from "./Media"; // สำหรับ profileImageMediaId และ expressions.mediaId
 import { OfficialMediaType } from "./OfficialMedia";
 // import { IScene } from "./Scene"; // ไม่จำเป็นต้อง import โดยตรง เว้นแต่จะมีการอ้างอิง scene context ใน character stats
 // import { IChoice } from "./Choice"; // ไม่จำเป็นต้อง import โดยตรง เว้นแต่จะมีการอ้างอิง choice context ใน character stats
@@ -291,6 +291,7 @@ export interface ICharacter extends Document {
   colorTheme?: string;
   expressions: Types.DocumentArray<ICharacterExpression>;
   defaultExpressionId?: string;
+  profileImageUrl?: string;
   donationSettings?: ICharacterDonationSettings;
   relationships: Types.DocumentArray<ICharacterRelationship>;
   tags?: string[];

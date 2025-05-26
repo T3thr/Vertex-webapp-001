@@ -3,6 +3,7 @@
 // บันทึกความสำเร็จและเหรียญตราที่ผู้ใช้แต่ละคนได้รับ รวมถึงความคืบหน้าและรางวัลที่เกี่ยวข้อง
 // ทำงานร่วมกับ Achievement.ts, Badge.ts, Level.ts และ User.ts เพื่อสร้างระบบ Gamification ที่สมบูรณ์
 // อัปเดตล่าสุด: ปรับปรุงโครงสร้าง IUserEarnedItem, rewardsGranted และการเชื่อมโยงกับ User model
+// แก้ไข: ลบ IUserAchievementModel ที่ว่างเปล่าตามข้อผิดพลาด @typescript-eslint/no-empty-object-type
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IUser } from "./User";
@@ -79,18 +80,17 @@ export interface IEarnedItemRewardSnapshot {
   value?: any;
 }
 const EarnedItemRewardSnapshotSchema = new Schema<IEarnedItemRewardSnapshot>(
-    {
-        type: { type: String, required: true },
-        experiencePointsAwarded: { type: Number, min: 0 },
-        coinsAwarded: { type: Number, min: 0 },
-        featureUnlockKey: { type: String, trim: true },
-        grantedBadgeKeySnapshot: { type: String, trim: true },
-        description: { type: String, trim: true },
-        value: { type: Schema.Types.Mixed },
-    },
-    { _id: false }
+  {
+    type: { type: String, required: true },
+    experiencePointsAwarded: { type: Number, min: 0 },
+    coinsAwarded: { type: Number, min: 0 },
+    featureUnlockKey: { type: String, trim: true },
+    grantedBadgeKeySnapshot: { type: String, trim: true },
+    description: { type: String, trim: true },
+    value: { type: Schema.Types.Mixed },
+  },
+  { _id: false }
 );
-
 
 /**
  * @interface IUserEarnedItem
@@ -158,10 +158,10 @@ const UserEarnedItemSchema = new Schema<IUserEarnedItem>(
       maxlength: [2048, "URL ไอคอนยาวเกินไป (สูงสุด 2048 ตัวอักษร)"]
     },
     itemRaritySnapshot: { // ใหม่
-        type: String,
-        required: [true, "กรุณาระบุ Rarity ของไอเทม ณ ตอนที่ได้รับ"],
-        trim: true,
-        maxlength: 50,
+      type: String,
+      required: [true, "กรุณาระบุ Rarity ของไอเทม ณ ตอนที่ได้รับ"],
+      trim: true,
+      maxlength: 50,
     },
     unlockedAt: {
       type: Date,
@@ -209,14 +209,10 @@ export interface IUserAchievement extends Document {
   updatedAt: Date;
 }
 
-export interface IUserAchievementModel extends mongoose.Model<IUserAchievement> {
-  // Static methods can be defined here if needed
-}
-
 // ==================================================================================================
 // SECTION: Schema หลักสำหรับ UserAchievement (UserAchievementSchema)
 // ==================================================================================================
-const UserAchievementSchema = new Schema<IUserAchievement, IUserAchievementModel>(
+const UserAchievementSchema = new Schema<IUserAchievement>(
   {
     user: {
       type: Schema.Types.ObjectId,
@@ -295,17 +291,17 @@ UserAchievementSchema.post<IUserAchievement>("save", async function (doc, next) 
         };
       }
       if (doc.isModified("earnedItems")) {
-         // This logic might be too simplistic if earnedItems can be removed.
-         // It assumes `gamification.achievements` should always reflect the current state of `earnedItems` of type ACHIEVEMENT.
+        // This logic might be too simplistic if earnedItems can be removed.
+        // It assumes `gamification.achievements` should always reflect the current state of `earnedItems` of type ACHIEVEMENT.
         updatePayload.$set = {
-            ...updatePayload.$set,
-            "gamification.achievements": achievementDocIds,
+          ...updatePayload.$set,
+          "gamification.achievements": achievementDocIds,
         };
       }
 
       if (Object.keys(updatePayload.$set || {}).length > 0) {
-          await UserModel.findByIdAndUpdate(doc.user, updatePayload);
-          // console.log(`[UserAchievement Post-Save] Updated User ${doc.user} gamification stats.`);
+        await UserModel.findByIdAndUpdate(doc.user, updatePayload);
+        // console.log(`[UserAchievement Post-Save] Updated User ${doc.user} gamification stats.`);
       }
 
     } catch (error) {
@@ -316,21 +312,19 @@ UserAchievementSchema.post<IUserAchievement>("save", async function (doc, next) 
   next();
 });
 
-
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
 UserAchievementSchema.index({ user: 1, "earnedItems.itemType": 1, "earnedItems.unlockedAt": -1 }, { name: "UserGamificationData_EarnedItems_TypeDate_Idx" });
-UserAchievementSchema.index({ user: 1, showcasedItemIds: 1 }, { name: "UserGamificationData_ShowcasedItems_Idx", sparse:true });
+UserAchievementSchema.index({ user: 1, showcasedItemIds: 1 }, { name: "UserGamificationData_ShowcasedItems_Idx", sparse: true });
 UserAchievementSchema.index({ user: 1, "ongoingProgress.itemKey": 1 }, { name: "UserGamificationData_OngoingProgress_ItemKey_Idx", sparse: true });
-
 
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 const UserAchievementModel =
-    (models.UserGamificationData as IUserAchievementModel) || // Use the new collection name
-    model<IUserAchievement, IUserAchievementModel>("UserGamificationData", UserAchievementSchema); // Use the new collection name
+  (models.UserGamificationData as mongoose.Model<IUserAchievement>) || // Use the new collection name
+  model<IUserAchievement>("UserGamificationData", UserAchievementSchema); // Use the new collection name
 
 export default UserAchievementModel;
 
@@ -361,4 +355,6 @@ export default UserAchievementModel;
 //     แม้ว่า Badge จะเน้นรางวัลน้อยกว่า.
 // 11. **Future `Title` System**: `EarnedItemType.TITLE` และ `featuredTitleKey` เป็น placeholders.
 //     หากมีการ implement ระบบ Title, จะต้องสร้าง `Title.ts` model และปรับปรุง logic ที่เกี่ยวข้อง.
+// 12. **แก้ไขข้อผิดพลาด ESLint**: ลบ `IUserAchievementModel` ที่ว่างเปล่าออก เนื่องจากไม่มี static methods และไม่จำเป็นต้องกำหนด
+//     ทำให้โค้ดสะอาดขึ้นและแก้ไขข้อผิดพลาด `@typescript-eslint/no-empty-object-type`.
 // ==================================================================================================

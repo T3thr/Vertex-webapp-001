@@ -4,71 +4,69 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, BookmarkPlus, ThumbsUp } from "lucide-react";
+import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, ThumbsUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
-import { INovel, NovelStatus } from "@/backend/models/Novel"; // INovel for base types, NovelStatus for potential direct use
+// ตรวจสอบ path ของ INovel และอื่นๆ ให้ถูกต้อง
+import { INovel, NovelStatus, IMonetizationSettings } from "@/backend/models/Novel";
 import { ICategory, CategoryType } from "@/backend/models/Category";
 import { IUser } from "@/backend/models/User";
 
-// อินเทอร์เฟซสำหรับผู้เขียนที่ถูก populate (ตรงกับที่ API ส่งมา)
-// IUser['_id'] ควรเป็น string หลัง lean() และ JSON serialization
+// อินเทอร์เฟซสำหรับผู้เขียนที่ถูก populate (ควรตรงกับที่ API `/api/novels` ส่งมาสำหรับ NovelCard)
 export interface PopulatedAuthor {
-  _id: string; // ObjectId -> string
+  _id: string;
   username?: string;
   profile?: {
     displayName?: string;
     penName?: string;
-    avatarUrl?: string;
+    avatarUrl?: string; // User model ควรมี field นี้โดยตรง
   };
   roles?: IUser['roles'];
 }
 
-// อินเทอร์เฟซสำหรับหมวดหมู่ที่ถูก populate (ตรงกับที่ API ส่งมา)
+// อินเทอร์เฟซสำหรับหมวดหมู่ที่ถูก populate (ควรตรงกับที่ API `/api/novels` ส่งมาสำหรับ NovelCard)
 export interface PopulatedCategory {
-  _id: string; // ObjectId -> string
+  _id: string;
   name: string;
   slug?: string;
   localizations?: ICategory['localizations'];
-  iconUrl?: string;
+  iconUrl?: string; // Category model ควรมี field นี้โดยตรง
   color?: string;
   categoryType?: CategoryType;
   description?: string;
 }
 
-// อินเทอร์เฟซสำหรับข้อมูลการ์ดนิยาย ที่ปรับให้ตรงกับการ populate จาก API
-// ใช้ Pick และ Omit เพื่อสร้าง type ที่แม่นยำจาก INovel
+// อินเทอร์เฟซสำหรับข้อมูลการ์ดนิยาย ที่ปรับให้ตรงกับการ populate จาก API ที่ใช้แสดงรายการ
 export type NovelCardData = Pick<INovel,
-  | '_id' // ObjectId will be string
+  | '_id'
   | 'title'
   | 'slug'
   | 'synopsis'
-  | 'coverImageUrl'
+  | 'coverImageUrl' // Novel model ควรมี field นี้โดยตรง
   | 'stats'
   | 'isCompleted'
   | 'isFeatured'
   | 'publishedAt'
-  | 'status' // อาจใช้แสดงผลบางอย่าง
+  | 'status'
   | 'totalEpisodesCount'
   | 'publishedEpisodesCount'
-  // เพิ่ม currentEpisodePriceCoins (virtual) และ monetizationSettings (สำหรับแสดงข้อมูลราคาโปรโมชั่น)
-  | 'currentEpisodePriceCoins'
+  | 'currentEpisodePriceCoins' // Virtual getter จาก Novel model
 > & {
-  author: PopulatedAuthor;
+  author: PopulatedAuthor; // ควรเป็น object ที่ populate มาแล้ว
   themeAssignment: {
-    mainTheme: {
-      categoryId: PopulatedCategory;
+    mainTheme?: { // ทำให้ mainTheme optional ถ้า API อาจจะไม่ได้ส่งมาทุกครั้งสำหรับ card
+      categoryId: PopulatedCategory; // ควรเป็น object ที่ populate มาแล้ว
       customName?: string;
     };
-    subThemes?: Array<{ categoryId: PopulatedCategory; customName?: string }>; // Optional, if populated
-    moodAndTone?: PopulatedCategory[]; // Optional, if populated
-    contentWarnings?: PopulatedCategory[]; // Optional, if populated
+    // ถ้า API ส่ง subThemes, moodAndTone ฯลฯ สำหรับ card ก็เพิ่ม type ที่นี่
+    subThemes?: Array<{ categoryId: PopulatedCategory; customName?: string; }>;
+    moodAndTone?: PopulatedCategory[];
+    contentWarnings?: PopulatedCategory[];
     customTags?: string[];
   };
-  language: PopulatedCategory;
-  ageRatingCategoryId?: PopulatedCategory;
-  // เพิ่ม monetizationSettings ถ้าจะแสดงข้อมูลโปรโมชั่นบนการ์ดโดยตรง
-  monetizationSettings?: INovel['monetizationSettings'];
+  language: PopulatedCategory; // ควรเป็น object ที่ populate มาแล้ว
+  ageRatingCategoryId?: PopulatedCategory; // ควรเป็น object ที่ populate มาแล้ว (optional)
+  monetizationSettings?: IMonetizationSettings;
 };
 
 
@@ -83,7 +81,7 @@ export function NovelCard({
   novel,
   priority = false,
   className = "",
-  imageClassName = "aspect-[2/3.1]", // ปรับ aspect ratio ให้สูงขึ้นเล็กน้อยตาม Figma
+  imageClassName = "aspect-[2/3.1]",
 }: NovelCardProps) {
   const lastUpdatedText = novel.stats?.lastPublishedEpisodeAt
     ? formatDistanceToNow(new Date(novel.stats.lastPublishedEpisodeAt), { addSuffix: true, locale: th })
@@ -108,11 +106,8 @@ export function NovelCard({
   }
   if (novel.isCompleted) {
     statusBadges.push({ label: "จบแล้ว", colorClass: "bg-emerald-500/90 text-white", icon: <CheckCircle size={11} /> });
-  } else if (novel.status === NovelStatus.PUBLISHED && (novel.publishedEpisodesCount || 0) > 0 && (novel.publishedEpisodesCount || 0) < (novel.totalEpisodesCount || 5)) {
-     // "ยังไม่จบ" อาจจะไม่ต้องแสดง ถ้า isCompleted ครอบคลุมแล้ว
   }
 
-  // Promotion Badge (ส่วนลด)
   const promo = novel.monetizationSettings?.activePromotion;
   const now = new Date();
   if (
@@ -124,12 +119,11 @@ export function NovelCard({
   ) {
     statusBadges.push({
       label: "ลดราคา",
-      colorClass: "bg-rose-500/90 text-white", // สีสำหรับโปรโมชั่น
-      icon: <ThumbsUp size={11} />, // หรือ Tag icon
-      title: promo.promotionDescription || `พิเศษ ${promo.promotionalPriceCoins} เหรียญ`,
+      colorClass: "bg-rose-500/90 text-white",
+      icon: <ThumbsUp size={11} />,
+      title: promo.promotionDescription || `พิเศษ ${promo.promotionalPriceCoins} เหรียญ/ตอน`,
     });
   }
-
 
   const ageRating = novel.ageRatingCategoryId;
   const ageRatingText = ageRating?.name;
@@ -141,7 +135,7 @@ export function NovelCard({
     animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 1, 0.5, 1] } },
     hover: {
       y: -5,
-      boxShadow: "var(--shadow-lg)", // ใช้ shadow จาก globals.css
+      boxShadow: "var(--shadow-lg)",
       transition: { duration: 0.2, ease: "circOut" },
     },
   };
@@ -157,6 +151,7 @@ export function NovelCard({
       className={`bg-card rounded-lg md:rounded-xl shadow-md overflow-hidden flex flex-col transition-all duration-300 ease-in-out group ${className}`}
     >
       <Link href={`/novels/${novel.slug}`} className="block h-full flex flex-col" title={novel.title}>
+        {/* Image Container */}
         <div className={`relative w-full overflow-hidden rounded-t-lg md:rounded-t-xl ${imageClassName}`}>
           <Image
             src={novel.coverImageUrl || placeholderCover}
@@ -173,10 +168,11 @@ export function NovelCard({
               }
             }}
           />
+          {/* Badges Area */}
           <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1 z-10">
             {statusBadges.map((badge) => (
               <span
-                key={badge.label}
+                key={`${badge.label}-${badge.colorClass}`} // ใช้ key ที่ unique มากขึ้น
                 title={badge.title || badge.label}
                 className={`text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${badge.colorClass} shadow-sm backdrop-blur-sm bg-opacity-85 leading-tight`}
               >
@@ -187,13 +183,14 @@ export function NovelCard({
               <span
                 style={{ backgroundColor: ageRatingColor, color: 'var(--card-foreground)' }}
                 className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm backdrop-blur-sm bg-opacity-85 leading-tight"
-                title={ageRatingDesc}
+                title={ageRatingDesc || ageRatingText}
               >
                 <ShieldCheck size={11} /> {ageRatingText}
               </span>
             )}
           </div>
 
+          {/* Gradient Overlay & Title on Image */}
           <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/85 via-black/50 to-transparent pointer-events-none"></div>
           <div className="absolute bottom-0 left-0 right-0 p-2 md:p-2.5 text-primary-foreground">
             <h3
@@ -213,7 +210,9 @@ export function NovelCard({
           </div>
         </div>
 
+        {/* Content Area below image */}
         <div className="p-2 md:p-2.5 flex flex-col flex-grow text-xs">
+          {/* Main Genre Tag */}
           {mainGenreName && (
             <div className="flex items-center gap-1 mb-1">
               <Tag size={12} style={{ color: mainGenreColor }} className="flex-shrink-0" />
@@ -227,11 +226,13 @@ export function NovelCard({
             </div>
           )}
 
-          <p className="text-muted-foreground line-clamp-2 mb-1.5 flex-grow min-h-[2.2em] text-[11px] sm:text-xs" title={novel.synopsis}>
+          {/* Synopsis */}
+          <p className="text-muted-foreground line-clamp-2 mb-1.5 flex-grow min-h-[2.2em] text-[11px] sm:text-xs" title={novel.synopsis || ""}>
             {novel.synopsis || "ยังไม่มีเรื่องย่อ"}
           </p>
 
-          <div className="mt-auto pt-1.5 border-t border-border/50 text-[10px] sm:text-xs">
+          {/* Stats and Footer */}
+          <div className="mt-auto pt-1.5 border-t border-border/50">
             <div className="grid grid-cols-3 gap-x-0.5 text-muted-foreground/90">
               <div className="flex items-center gap-0.5 truncate" title={`ยอดเข้าชม: ${novel.stats?.viewsCount?.toLocaleString() || 0}`}>
                 <Eye size={11} className="text-sky-500 flex-shrink-0" />
@@ -241,7 +242,7 @@ export function NovelCard({
                 <Heart size={11} className="text-rose-500 flex-shrink-0" />
                 <span className="truncate">{novel.stats?.likesCount?.toLocaleString() || "0"}</span>
               </div>
-              <div className="flex items-center gap-0.5 truncate" title={`คะแนน: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
+              <div className="flex items-center gap-0.5 truncate" title={`คะแนนเฉลี่ย: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
                 <Star size={11} className="text-amber-400 flex-shrink-0" />
                 <span className="truncate">{novel.stats?.averageRating?.toFixed(1) || "-"}</span>
               </div>

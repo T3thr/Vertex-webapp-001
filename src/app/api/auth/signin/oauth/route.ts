@@ -1,7 +1,7 @@
 // src/app/api/auth/signin/oauth/route.ts
 // API สำหรับการจัดการการเข้าสู่ระบบ/ลงทะเบียนผ่าน OAuth providers (Google, Twitter, etc.)
 // อัปเดต: ทำงานกับ UserModel ที่รวมแล้ว และสร้าง/อัปเดตผู้ใช้ใน User collection เดียว
-// แก้ไข: ปรับปรุงการจัดการ Type ของ Subdocument และ Default values สำหรับ Nested Objects
+// ปรับปรุงการจัดการ Type ของ Subdocument และ Default values สำหรับ Nested Objects
 
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
@@ -41,9 +41,9 @@ interface OAuthSignInRequestBody {
 
 type PlainUserObjectData = Omit<
   IUser,
-  keyof Document |
-  '_id' |
-  'matchPassword' |
+  keyof Document | // Omit Mongoose Document specific keys if IUser itself doesn't directly extend it for this purpose
+  '_id' | // We'll handle _id separately as string
+  'matchPassword' | // Exclude methods
   'generateEmailVerificationToken' |
   'generatePasswordResetToken'
 >;
@@ -63,7 +63,11 @@ async function generateUniqueUsername(baseUsername: string): Promise<string> {
   let counter = 0;
   let uniqueUsername = currentUsername;
 
-  // eslint-disable-next-line no-constant-condition
+  // The eslint-disable directive for no-constant-condition was removed as per the warning.
+  // If 'no-constant-condition' is an active error rule in your project for 'while(true)',
+  // and you intend for this loop to be infinite until broken, you might need to re-evaluate
+  // your ESLint setup or the loop's condition if the warning was misleading.
+  // For now, assuming removal is correct based on "no problems were reported".
   while (true) {
     const existingUser = await UserModel.findOne({ username: uniqueUsername }).lean();
     if (!existingUser) {
@@ -121,7 +125,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         );
     }
 
-    let userDocument: (IUser & Document<unknown, {}, IUser> & { _id: Types.ObjectId }) | null = await UserModel.findOne({
+    // แก้ไข Type ของ userDocument: เนื่องจาก IUser extends Document, เราสามารถใช้ IUser | null ได้เลย
+    let userDocument: IUser | null = await UserModel.findOne({
       "accounts.provider": provider,
       "accounts.providerAccountId": providerAccountId,
     });
@@ -176,6 +181,10 @@ export async function POST(request: Request): Promise<NextResponse> {
             updated = true;
           }
       } else {
+          // Mongoose subdocuments (like profile) are automatically initialized
+          // if their schema has defaults or they are assigned an object.
+          // If profile can be undefined in IUser and the schema doesn't auto-create it,
+          // this direct assignment is correct.
           userDocument.profile = {
               displayName: name || undefined,
               avatarUrl: picture || undefined,
@@ -192,7 +201,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (email) {
         const existingUserWithEmail = await UserModel.findOne({ email: email.toLowerCase() });
         if (existingUserWithEmail) {
-          userDocument = existingUserWithEmail;
+          userDocument = existingUserWithEmail; // existingUserWithEmail is IUser | null
           console.log(`🔗 [API:OAuthSignIn] พบผู้ใช้ด้วยอีเมล ${email} (Username: ${userDocument.username}), กำลังเชื่อมบัญชี ${provider}`);
 
           if (!userDocument.isActive) return NextResponse.json({ error: "บัญชีที่เชื่อมโยงด้วยอีเมลนี้ถูกปิดใช้งาน" }, { status: 403 });
@@ -302,7 +311,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             overallEmotionalTrend: "unknown", consultationRecommended: false,
         };
 
-        const newUserInput = {
+        const newUserInput = { // This structure should match the schema for UserModel
           username: finalUsername,
           email: email ? email.toLowerCase() : undefined,
           isEmailVerified: !!email, // True if email exists
@@ -318,7 +327,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           isActive: true,
           isBanned: false,
           lastLoginAt: new Date(),
-          writerStats: undefined,
+          // writerStats: undefined, // Schema default will handle this
           verifiedBadges: [],
           verification: defaultVerification,
           donationSettings: defaultDonationSettings,
@@ -334,7 +343,10 @@ export async function POST(request: Request): Promise<NextResponse> {
                 return NextResponse.json({ error: `อีเมล ${newUserInput.email} นี้ถูกใช้งานแล้วโดยบัญชีอื่น.` }, { status: 409 });
             }
         }
-        
+
+        // UserModel constructor expects a type compatible with IUser's schema definition.
+        // The 'as IUser' cast might be needed if newUserInput isn't perfectly matching or if strict type checking is very high.
+        // However, Mongoose is generally flexible.
         userDocument = new UserModel(newUserInput);
         await userDocument.save();
         console.log(`✅ [API:OAuthSignIn] สร้างผู้ใช้ใหม่ ${userDocument.username} จาก ${provider} สำเร็จ`);
@@ -346,24 +358,40 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: "ไม่สามารถประมวลผลการเข้าสู่ระบบ OAuth ได้" }, { status: 500 });
     }
 
-    const plainUserObject = userDocument.toObject<IUser>();
-    
+    // userDocument is of type IUser (which extends Mongoose.Document)
+    const plainUserObject = userDocument.toObject<IUser>(); // Convert Mongoose document to plain object
+
+    // Destructure to remove Mongoose-specific or method fields for the response
     const {
-        // ดึง properties ที่เป็น Mongoose specific หรือ methods ออก
-        // IUser ไม่ได้ extend Document โดยตรง แต่ fields ที่เป็น DocumentArray จะมี methods
-        // password จะไม่มีใน OAuth user อยู่แล้ว
-        _id: objectId,
-        // accounts เป็น DocumentArray, toObject() ควรจัดการแล้ว แต่เราจะ map อีกทีเพื่อความแน่ใจ
-        accounts: originalAccounts,
-        ...restOfUserObject // ส่วนที่เหลือของ plainUserObject
+        _id: objectId, // Mongoose _id is Types.ObjectId
+        accounts: originalAccounts, // This will be an array of plain objects after toObject()
+        // Exclude methods defined in IUser that are not part of PlainUserObjectData
+        matchPassword, // Example method from IUser that should be excluded
+        generateEmailVerificationToken, // Example method
+        generatePasswordResetToken, // Example method
+        // Exclude fields from mongoose.Document that are not in PlainUserObjectData
+        // (Many are handled by Omit<IUser, keyof Document ...> in PlainUserObjectData type)
+        __v, // Example version key
+        $isNew, // Example Mongoose internal
+        // ... any other Mongoose document specific fields or methods not wanted in response
+        ...restOfUserObject
     } = plainUserObject;
 
 
     const userResponse: OAuthSignInResponseUser = {
-      ...(restOfUserObject as PlainUserObjectData), // Cast restOfUserObject ให้เป็น PlainUserObjectData
-      _id: objectId.toString(),
-      accounts: originalAccounts.map(acc => (acc.toObject ? acc.toObject() : acc) as IAccount),
+      ...(restOfUserObject as PlainUserObjectData), // Cast the rest to ensure it matches
+      _id: objectId.toString(), // Convert ObjectId to string for JSON response
+      // Ensure accounts are plain objects if they weren't fully converted by toObject() for subdocuments
+      accounts: originalAccounts.map(acc => {
+          // If IAccount subdocuments have their own toObject, it would have been called.
+          // This is a safeguard or explicit conversion if needed.
+          const plainAcc = { ...acc };
+          // If IAccount has methods or Mongoose specifics, omit them here too.
+          // For this example, assume IAccount from toObject() is already plain enough.
+          return plainAcc as unknown as IAccount; // Cast to IAccount (plain object version)
+      }),
     };
+
      // ลบ password field เผื่อกรณีที่อาจจะมี (ซึ่งไม่ควรมีใน OAuth user)
     if ('password' in (userResponse as any)) {
         delete (userResponse as any).password;
@@ -375,7 +403,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   } catch (error: any) {
     console.error("❌ [API:OAuthSignIn] ข้อผิดพลาด:", error.message, error.stack);
-    if (error.code === 11000) {
+    if (error.code === 11000) { // MongoDB duplicate key error
         const field = Object.keys(error.keyValue)[0];
         const message = `${field === 'email' ? 'อีเมล' : (field === 'username' ? 'ชื่อผู้ใช้' : `ฟิลด์ '${field}'`)} นี้ถูกใช้งานแล้ว`;
         return NextResponse.json({ error: message }, { status: 409 });

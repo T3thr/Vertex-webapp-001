@@ -5,42 +5,30 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { PopulatedNovelForDetailPage } from "@/app/api/novels/[slug]/route"; // Import type จาก API
+// อ้างอิง PopulatedNovelForDetailPage จากตำแหน่งที่ถูกต้อง (API Route)
+import { PopulatedNovelForDetailPage } from "@/app/api/novels/[slug]/route";
 import {
-  Star,
-  Eye,
-  Heart,
-  Users,
-  BookOpen,
-  Play,
-  Bookmark,
-  Share2,
-  Info,
-  BadgeCheck,
-  Clock,
+  Star, Eye, Heart, Users, BookOpen, Play, Bookmark, Share2, Clock, UsersRound, // เพิ่ม UsersRound
 } from "lucide-react";
-import { TagBadge } from "./TagBadge"; // Component สำหรับแสดง Tag/Category
-import { formatDistanceToNowStrict } from "date-fns";
+import { TagBadge } from "./TagBadge"; // ตรวจสอบว่า path ถูกต้อง
+import { formatDistanceToNowStrict, format } from "date-fns"; // เพิ่ม format
 import { th } from "date-fns/locale";
 
 interface NovelHeaderProps {
   novel: PopulatedNovelForDetailPage;
 }
 
-// ฟังก์ชัน format วันที่ให้อ่านง่าย
-const formatDate = (dateInput: Date | string | undefined): string => {
+// ฟังก์ชัน format วันที่ให้อ่านง่าย (ปรับปรุง)
+const formatDate = (dateInput?: Date | string | null): string => {
   if (!dateInput) return "ไม่มีข้อมูล";
   try {
-    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
-    // แสดงแบบ relative ถ้าน้อยกว่า 1 ปี, มิฉะนั้นแสดงวันที่เต็ม
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return "วันที่ไม่ถูกต้อง";
+
     if (new Date().getFullYear() === date.getFullYear()) {
       return formatDistanceToNowStrict(date, { addSuffix: true, locale: th });
     }
-    return date.toLocaleDateString("th-TH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return format(date, "d MMM yy", { locale: th }); // ปรับ format เป็น d MMM yy
   } catch (e) {
     console.error("Error formatting date:", e);
     return "วันที่ไม่ถูกต้อง";
@@ -48,17 +36,16 @@ const formatDate = (dateInput: Date | string | undefined): string => {
 };
 
 export function NovelHeader({ novel }: NovelHeaderProps) {
-  const authorDisplayName = novel.author?.profile?.displayName || novel.author?.username || "ไม่ระบุชื่อ";
-  const authorAvatar = novel.author?.profile?.avatar || "/images/default-avatar.png"; // ใส่ path รูป default
+  const authorDisplayName = novel.author?.profile?.penName || novel.author?.profile?.displayName || novel.author?.username || "ไม่ระบุชื่อผู้แต่ง";
+  const authorAvatar = novel.author?.profile?.avatarUrl || "/images/default-avatar.png";
+  const coverImageSrc = novel.coverImageUrl || "/images/placeholder-cover.webp";
+  const bannerImageSrc = novel.bannerImageUrl;
 
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.1, // หน่วงเวลาการแสดงผลของ children
-        delayChildren: 0.2,
-      },
+      transition: { staggerChildren: 0.1, delayChildren: 0.2 },
     },
   };
 
@@ -71,6 +58,9 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
     },
   };
 
+  const firstEpisodePath = novel.firstEpisodeSlug ? `/play/${novel.slug}/${novel.firstEpisodeSlug}` : undefined;
+  const lastUpdateTime = novel.lastContentUpdatedAt || novel.updatedAt;
+
   return (
     <motion.div
       className="relative pt-16 pb-8 md:pt-24 md:pb-12 overflow-hidden bg-gradient-to-b from-background via-background to-secondary/30 dark:to-secondary/10"
@@ -78,8 +68,8 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
       initial="hidden"
       animate="visible"
     >
-      {/* Background Gradient Overlay */}
-      {novel.coverImage && (
+      {/* Background Image */}
+      {(bannerImageSrc || coverImageSrc) && (
         <motion.div
           className="absolute inset-0 z-0"
           initial={{ opacity: 0 }}
@@ -87,12 +77,13 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
           transition={{ duration: 0.8 }}
         >
           <Image
-            src={novel.coverImage}
+            src={bannerImageSrc || coverImageSrc}
             alt={`ภาพพื้นหลังเบลอของ ${novel.title}`}
             fill
             quality={50}
             className="object-cover opacity-10 dark:opacity-5 blur-xl scale-110"
-            priority // โหลดภาพนี้ก่อน
+            priority
+            onError={(e) => { (e.target as HTMLImageElement).src = "/images/placeholder-banner.webp"; }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent"></div>
         </motion.div>
@@ -106,25 +97,30 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
             className="md:col-span-1 lg:col-span-1 flex justify-center md:justify-start"
             variants={itemVariants}
           >
-            <div className="relative w-48 h-72 md:w-full md:h-auto md:aspect-[2/3] rounded-lg overflow-hidden shadow-lg border-2 border-border/50">
+            <div className="relative w-48 h-72 md:w-full md:h-auto md:aspect-[2/3.1] rounded-lg overflow-hidden shadow-lg border-2 border-border/50">
               <Image
-                src={novel.coverImage}
+                src={coverImageSrc}
                 alt={`ปกนิยาย ${novel.title}`}
                 fill
                 quality={85}
                 className="object-cover"
-                sizes="(max-width: 768px) 192px, 100vw" // ปรับ sizes ตาม layout
+                sizes="(max-width: 768px) 192px, (max-width: 1024px) 20vw, 25vw"
                 priority
+                onError={(e) => { (e.target as HTMLImageElement).src = "/images/placeholder-cover.webp"; }}
               />
               {/* Discount Badge */}
-              {novel.isDiscounted && (
+              {novel.monetizationSettings?.activePromotion?.isActive &&
+                new Date(novel.monetizationSettings.activePromotion.promotionEndDate || 0) >= new Date() &&
+                (novel.monetizationSettings.activePromotion.promotionStartDate ? new Date(novel.monetizationSettings.activePromotion.promotionStartDate) <= new Date() : true) &&
+                novel.monetizationSettings.activePromotion.promotionalPriceCoins !== undefined &&
+                (
                  <motion.div
-                    className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-md"
+                    className="absolute top-2 right-2 bg-rose-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-md"
                     initial={{ scale: 0, rotate: -15 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.5 }}
                  >
-                    ลด {novel.discountDetails?.percentage}%
+                    ลดราคา!
                  </motion.div>
               )}
             </div>
@@ -133,7 +129,7 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
           {/* Novel Details */}
           <motion.div
             className="md:col-span-2 lg:col-span-3 flex flex-col justify-between"
-            variants={containerVariants} // ใช้ containerVariants เพื่อ stagger children ภายในส่วนนี้
+            variants={containerVariants}
           >
             <div>
               {/* Title */}
@@ -146,26 +142,39 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
 
               {/* Author */}
               <motion.div className="flex items-center gap-2 mb-4 text-muted-foreground" variants={itemVariants}>
-                <Link href={`/profile/${novel.author?.username}`} className="flex items-center gap-2 hover:text-primary transition-colors">
-                  <Image
-                    src={authorAvatar}
-                    alt={`รูปโปรไฟล์ ${authorDisplayName}`}
-                    width={24}
-                    height={24}
-                    className="rounded-full border border-border"
-                  />
-                  <span className="text-sm font-medium">{authorDisplayName}</span>
-                  {/* อาจเพิ่ม Badge ยืนยันตัวตนนักเขียน */}
-                  {/* {novel.author?.writerVerification?.status === 'verified' && <BadgeCheck className="w-4 h-4 text-blue-500" />} */}
-                </Link>
-                <span className="text-xs">• อัปเดตล่าสุด {formatDate(novel.lastEpisodePublishedAt || novel.updatedAt)}</span>
+                {novel.author?.username ? (
+                    <Link href={`/u/${novel.author.username}`} className="flex items-center gap-2 hover:text-primary transition-colors"> {/* แก้ไข path เป็น /u/username */}
+                    <Image
+                        src={authorAvatar}
+                        alt={`รูปโปรไฟล์ ${authorDisplayName}`}
+                        width={24}
+                        height={24}
+                        className="rounded-full border border-border"
+                        onError={(e) => { (e.target as HTMLImageElement).src = "/images/default-avatar.png"; }}
+                    />
+                    <span className="text-sm font-medium">{authorDisplayName}</span>
+                    </Link>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <Image
+                            src={authorAvatar}
+                            alt={`รูปโปรไฟล์ ${authorDisplayName}`}
+                            width={24}
+                            height={24}
+                            className="rounded-full border border-border"
+                            onError={(e) => { (e.target as HTMLImageElement).src = "/images/default-avatar.png"; }}
+                        />
+                        <span className="text-sm font-medium">{authorDisplayName}</span>
+                    </div>
+                )}
+                <span className="text-xs">• อัปเดตล่าสุด {formatDate(lastUpdateTime)}</span>
               </motion.div>
 
               {/* Stats */}
               <motion.div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm text-muted-foreground" variants={itemVariants}>
-                <span className="flex items-center gap-1" title={`${novel.averageRating?.toFixed(1)} ดาว (${novel.ratingsCount} รีวิว)`}>
+                <span className="flex items-center gap-1" title={`${novel.formattedAverageRating} ดาว (${novel.rawStats?.ratingsCount || 0} รีวิว)`}>
                   <Star className="w-4 h-4 text-yellow-400" />
-                  <span>{novel.averageRating?.toFixed(1) ?? 'N/A'}</span>
+                  <span>{novel.formattedAverageRating ?? 'N/A'}</span>
                 </span>
                 <span className="flex items-center gap-1" title={`${novel.formattedViewsCount} ยอดเข้าชม`}>
                   <Eye className="w-4 h-4" />
@@ -179,22 +188,38 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
                   <Users className="w-4 h-4" />
                   <span>{novel.formattedFollowersCount}</span>
                 </span>
-                <span className="flex items-center gap-1" title={`${novel.publishedEpisodesCount} / ${novel.episodesCount} ตอน`}>
+                <span className="flex items-center gap-1" title={`${novel.publishedEpisodesCount} / ${novel.totalEpisodesCount} ตอน`}>
                   <BookOpen className="w-4 h-4" />
-                  <span>{novel.publishedEpisodesCount ?? 0}/{novel.episodesCount ?? 0} ตอน</span>
+                  <span>{novel.publishedEpisodesCount ?? 0}/{novel.totalEpisodesCount ?? 0} ตอน</span>
                 </span>
-                 <span className="flex items-center gap-1" title={`อัปเดตล่าสุด`}>
+                {/* แสดงจำนวนตัวละคร */}
+                {novel.charactersList && novel.charactersList.length > 0 && (
+                    <span className="flex items-center gap-1" title={`มีตัวละคร ${novel.charactersList.length} ตัว`}>
+                      <UsersRound className="w-4 h-4" />
+                      <span>{novel.charactersList.length} ตัวละคร</span>
+                    </span>
+                )}
+                 <span className="flex items-center gap-1" title={`อัปเดตล่าสุด ${formatDate(lastUpdateTime)}`}>
                   <Clock className="w-4 h-4" />
-                  <span>{formatDate(novel.lastEpisodePublishedAt || novel.updatedAt)}</span>
+                  <span>{formatDate(lastUpdateTime)}</span>
                  </span>
               </motion.div>
 
-              {/* Tags & Categories */}
+              {/* Categories & Tags */}
               <motion.div className="flex flex-wrap gap-2 mb-5" variants={itemVariants}>
-                {novel.categories?.map((cat) => (
-                  <TagBadge key={cat._id.toString()} text={cat.name} type="category" slug={cat.slug} />
+                {novel.mainThemeCategory && (
+                  <TagBadge key={novel.mainThemeCategory._id.toString()} text={novel.mainThemeCategory.name} type="category" slug={novel.mainThemeCategory.slug} />
+                )}
+                {/* แสดง Sub-genres ไม่เกิน 2 */}
+                {novel.subThemeCategories?.slice(0, 2).map((cat) => (
+                  <TagBadge key={cat._id.toString()} text={cat.name} type="category" slug={cat.slug} variant="secondary" />
                 ))}
-                {novel.tags?.slice(0, 5).map((tag) => ( // แสดงแค่ 5 tags แรก
+                 {/* แสดง Mood & Tone ไม่เกิน 1 */}
+                 {novel.moodAndToneCategories?.slice(0,1).map((cat) => (
+                  <TagBadge key={cat._id.toString()} text={cat.name} type="category" slug={cat.slug} variant="secondary" />
+                ))}
+                {/* แสดง Custom Tags ไม่เกิน 3 */}
+                {novel.customTags?.slice(0, 3).map((tag) => (
                   <TagBadge key={tag} text={tag} type="tag" />
                 ))}
               </motion.div>
@@ -202,34 +227,32 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
 
              {/* Action Buttons */}
              <motion.div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0" variants={itemVariants}>
-              {/* ปุ่ม "อ่านตอนแรก" หรือ "อ่านต่อ" */}
-              <Link
-                href={`/play/${novel.slug}/${novel.firstEpisodeSlug || ''}`} // ต้องมี slug ตอนแรก
-                className={`
-                  inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-semibold transition-all duration-300 ease-in-out
-                  bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 hover:shadow-primary/30 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  ${!novel.firstEpisodeSlug ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-                aria-disabled={!novel.firstEpisodeSlug}
-                onClick={(e) => !novel.firstEpisodeSlug && e.preventDefault()} // ป้องกันการคลิกถ้าไม่มีตอนแรก
-              >
-                <Play className="w-5 h-5" />
-                {/* เพิ่ม logic แสดง "อ่านต่อ" ถ้ามี session/progress */}
-                <span>{novel.firstEpisodeSlug ? "เริ่มอ่าน" : "ยังไม่มีตอน"}</span>
-              </Link>
-
-              {/* ปุ่ม "ติดตาม" / "เลิกติดตาม" */}
+              {firstEpisodePath ? (
+                <Link
+                    href={firstEpisodePath}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-semibold transition-all duration-300 ease-in-out bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 hover:shadow-primary/30 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                >
+                    <Play className="w-5 h-5" />
+                    <span>{novel.firstEpisodeSlug ? "เริ่มอ่าน" : "ยังไม่มีตอน"}</span>
+                </Link>
+              ) : (
+                <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-semibold transition-all duration-300 ease-in-out bg-muted text-muted-foreground shadow-none opacity-50 cursor-not-allowed"
+                >
+                    <Play className="w-5 h-5" />
+                    <span>ยังไม่มีตอน</span>
+                </button>
+              )}
               <button
                 type="button"
                 className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full font-medium transition-colors bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-                title="ติดตาม" // เพิ่ม logic แสดง "เลิกติดตาม"
+                title="ติดตาม"
               >
                 <Bookmark className="w-5 h-5" />
                 <span className="hidden sm:inline">ติดตาม</span>
               </button>
-
-              {/* ปุ่ม "แชร์" */}
               <button
                 type="button"
                 className="inline-flex items-center justify-center gap-2 px-3 py-3 rounded-full font-medium transition-colors text-muted-foreground hover:text-primary hover:bg-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
@@ -237,11 +260,6 @@ export function NovelHeader({ novel }: NovelHeaderProps) {
               >
                 <Share2 className="w-5 h-5" />
               </button>
-
-               {/* ปุ่ม "เพิ่มเติม" (ถ้าต้องการ) */}
-               {/* <button type="button" className="inline-flex items-center justify-center p-3 rounded-full font-medium transition-colors text-muted-foreground hover:text-primary hover:bg-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background" title="เพิ่มเติม">
-                <MoreHorizontal className="w-5 h-5" />
-               </button> */}
             </motion.div>
           </motion.div>
         </div>

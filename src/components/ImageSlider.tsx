@@ -3,34 +3,29 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "next/link"; // Keep Next.js Link for navigation
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, PlayCircle } from "lucide-react"; // Use Lucide icons
+import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react"; // Using Lucide icons
 
-// Interface for individual slide data, exported for use in page.tsx
-export interface Slide {
+export interface SlideData { // Renamed to avoid conflict if Slide is a common name
   id: string;
   title: string;
   description?: string;
   imageUrl: string;
   link: string;
-  category?: string; // Optional category badge
-  highlightColor?: string; // Optional color for category badge or accents
+  category?: string;
+  highlightColor?: string; // e.g., 'bg-purple-500'
   primaryAction?: { label: string; href: string };
 }
 
 interface ImageSliderProps {
-  slides: Slide[];
+  slides: SlideData[];
   autoPlayInterval?: number;
 }
 
 export function ImageSlider({ slides, autoPlayInterval = 6000 }: ImageSliderProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-
-  const minSwipeDistance = 50;
 
   const goToNext = useCallback(() => {
     setCurrentIndex((prevIndex) => (prevIndex === slides.length - 1 ? 0 : prevIndex + 1));
@@ -45,189 +40,135 @@ export function ImageSlider({ slides, autoPlayInterval = 6000 }: ImageSliderProp
   }, []);
 
   useEffect(() => {
-    if (isHovering || !slides.length || autoPlayInterval === 0) return;
-    const interval = setInterval(goToNext, autoPlayInterval);
-    return () => clearInterval(interval);
-  }, [goToNext, slides.length, autoPlayInterval, isHovering]);
+    if (isHovering || slides.length <= 1) return;
+    const timer = setTimeout(goToNext, autoPlayInterval);
+    return () => clearTimeout(timer);
+  }, [currentIndex, goToNext, slides.length, autoPlayInterval, isHovering]);
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    if (distance > minSwipeDistance) goToNext();
-    else if (distance < -minSwipeDistance) goToPrevious();
-  };
-
-  if (!slides || slides.length === 0) return null;
+  if (!slides || slides.length === 0) {
+    return (
+        <div className="relative w-full h-[300px] sm:h-[380px] md:h-[450px] lg:h-[500px] bg-secondary rounded-lg md:rounded-xl flex items-center justify-center">
+            <p className="text-muted-foreground">ไม่มีสไลด์ให้แสดง</p>
+        </div>
+    );
+  }
 
   const currentSlide = slides[currentIndex];
 
   const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? "100%" : "-100%",
-      opacity: 0,
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
-      opacity: 1,
-    },
-    exit: (direction: number) => ({
-      zIndex: 0,
-      x: direction < 0 ? "100%" : "-100%",
-      opacity: 0,
-    }),
+    initial: { opacity: 0.8, scale: 1.02 },
+    animate: { opacity: 1, scale: 1, transition: { duration: 0.7, ease: [0.4, 0, 0.2, 1] } },
+    exit: { opacity: 0.8, scale: 0.98, transition: { duration: 0.5, ease: [0.4, 0, 0.2, 1] } },
   };
-  const [direction, setDirection] = useState(0);
 
-  const paginate = (newDirection: number) => {
-    setDirection(newDirection);
-    if (newDirection > 0) goToNext(); else goToPrevious();
+  const contentVariants = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.6, delay: 0.2, ease: "easeOut" } },
   };
+  
+  const buttonVariants = {
+    initial: { opacity: 0, y:10 },
+    animate: { opacity: 1, y:0, transition: { duration: 0.5, delay: 0.5, ease: "easeOut" } },
+    hover: { scale: 1.05, backgroundColor: 'var(--color-primary-hover, var(--color-primary))' }, // Use CSS var or default
+    tap: { scale: 0.95 }
+  }
 
 
   return (
     <div
-      className="relative w-full h-[320px] sm:h-[420px] md:h-[500px] lg:h-[580px] xl:h-[620px] overflow-hidden group"
+      className="relative w-full h-[300px] sm:h-[380px] md:h-[450px] lg:h-[500px] xl:h-[580px] select-none group" // Increased height slightly
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
     >
-      <AnimatePresence initial={false} custom={direction} mode="popLayout">
-        <motion.div
-          key={currentIndex}
-          custom={direction}
-          variants={slideVariants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={{
-            x: { type: "spring", stiffness: 300, damping: 30 },
-            opacity: { duration: 0.3 },
-          }}
-          className="absolute w-full h-full"
-        >
-          <Link href={currentSlide.link} className="block w-full h-full">
+      <div className="w-full h-full overflow-hidden rounded-lg md:rounded-xl shadow-lg">
+        <AnimatePresence initial={false} mode="wait">
+          <motion.div
+            key={currentIndex}
+            variants={slideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="absolute inset-0 w-full h-full"
+          >
+            {/* Link component should wrap interactive content, not the entire motion.div if motion.div has its own handlers */}
             <Image
               src={currentSlide.imageUrl}
               alt={currentSlide.title}
               fill
-              priority={currentIndex === 0} // Priority load the first slide
-              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 80vw, 1920px"
+              priority={currentIndex === 0} // Priority for the first slide
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 100vw, 1280px"
               className="object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/10 md:bg-gradient-to-r md:from-black/70 md:to-transparent md:w-3/4 lg:w-2/3" />
             
-            <div className="absolute bottom-0 left-0 p-4 sm:p-6 md:p-8 lg:p-12 w-full md:w-3/4 lg:w-2/3">
-              {currentSlide.category && (
-                <motion.span
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.2 }}
-                  className={`text-xs sm:text-sm font-semibold px-3 py-1 rounded-full mb-2 sm:mb-3 inline-block text-white ${currentSlide.highlightColor || 'bg-primary'}`}
-                >
-                  {currentSlide.category}
-                </motion.span>
-              )}
-              <motion.h2
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3, type: "spring", stiffness:100 }}
-                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2 sm:mb-3 md:mb-4 leading-tight"
-                style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}
-              >
-                {currentSlide.title}
-              </motion.h2>
-              {currentSlide.description && (
-                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.4, type: "spring", stiffness:90 }}
-                  className="text-white/80 text-sm sm:text-base md:text-lg max-w-xl mb-4 sm:mb-6 line-clamp-2 sm:line-clamp-3"
-                  style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.4)'}}
-                >
-                  {currentSlide.description}
-                </motion.p>
-              )}
-              {currentSlide.primaryAction && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.5, type: "spring", stiffness:80 }}
-                >
-                  <Link
-                    href={currentSlide.primaryAction.href}
-                    className="bg-primary hover:bg-primary/80 text-primary-foreground py-2.5 px-6 sm:py-3 sm:px-8 rounded-lg inline-flex items-center gap-2 font-semibold transition-colors duration-200 text-sm sm:text-base"
+            <div className="absolute inset-0 flex flex-col justify-end md:justify-center p-4 sm:p-6 md:p-8 lg:p-12 text-white w-full md:w-3/4 lg:w-2/3 xl:w-1/2">
+              <motion.div variants={contentVariants} initial="initial" animate="animate">
+                {currentSlide.category && (
+                  <span 
+                    className={`text-xs sm:text-sm font-semibold px-3 py-1 rounded-full mb-2 sm:mb-3 inline-block ${currentSlide.highlightColor || 'bg-primary'} text-primary-foreground shadow`}
                   >
-                    <PlayCircle className="h-5 w-5" /> {currentSlide.primaryAction.label}
+                    {currentSlide.category}
+                  </span>
+                )}
+                <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 sm:mb-3 leading-tight shadow-text-md">
+                  {/* Wrap title in Link if it's the primary clickable element for the slide's content */}
+                  <Link href={currentSlide.link} className="hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded-sm">
+                     {currentSlide.title}
                   </Link>
-                </motion.div>
-              )}
+                </h2>
+                {currentSlide.description && (
+                  <p className="text-sm sm:text-base md:text-lg text-slate-200 mb-4 sm:mb-6 line-clamp-2 sm:line-clamp-3 shadow-text-sm">
+                    {currentSlide.description}
+                  </p>
+                )}
+                {currentSlide.primaryAction && (
+                  <motion.div variants={buttonVariants} initial="initial" animate="animate" whileHover="hover" whileTap="tap">
+                    <Link
+                      href={currentSlide.primaryAction.href}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold bg-primary text-primary-foreground rounded-md hover:bg-opacity-90 transition-colors duration-200 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    >
+                      {currentSlide.primaryAction.label}
+                      <ExternalLink size={18} className="ml-1" />
+                    </Link>
+                  </motion.div>
+                )}
+              </motion.div>
             </div>
-          </Link>
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Navigation Buttons */}
-      <button
-        onClick={() => paginate(-1)}
-        className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 p-2 sm:p-3 rounded-full text-white transition-all z-10 opacity-0 group-hover:opacity-100 focus:opacity-100"
-        aria-label="Previous Slide"
-      >
-        <ChevronLeft size={20} className="h-5 w-5 sm:h-6 sm:w-6" />
-      </button>
-      <button
-        onClick={() => paginate(1)}
-        className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 p-2 sm:p-3 rounded-full text-white transition-all z-10 opacity-0 group-hover:opacity-100 focus:opacity-100"
-        aria-label="Next Slide"
-      >
-        <ChevronRight size={20} className="h-5 w-5 sm:h-6 sm:w-6" />
-      </button>
-
-      {/* Dots Indicator */}
-      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 z-10">
-        {slides.map((_, slideIndex) => (
-          <button
-            key={slideIndex}
-            onClick={() => goToSlide(slideIndex)}
-            className={`h-2.5 rounded-full transition-all duration-300 ease-in-out
-              ${slideIndex === currentIndex ? "bg-primary w-6 sm:w-8" : "bg-white/40 hover:bg-white/70 w-2.5"}`}
-            aria-label={`Go to slide ${slideIndex + 1}`}
-          />
-        ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* Autoplay Progress Bar (Optional) */}
-       {autoPlayInterval > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-transparent z-20" // transparent track
-            style={{ pointerEvents: 'none' }}
-        >
-          <AnimatePresence>
-            { !isHovering && ( // Only show progress when not hovering
-                <motion.div
-                    className="h-full bg-primary/70" // Progress color
-                    initial={{ width: 0 }}
-                    animate={{ width: "100%" }}
-                    exit={{ opacity: 0 }}
-                    transition={{
-                        duration: autoPlayInterval / 1000,
-                        ease: "linear",
-                    }}
-                    key={currentIndex} // Re-trigger animation on slide change
-                />
-            )}
-          </AnimatePresence>
-        </div>
+      {slides.length > 1 && (
+        <>
+          {/* Navigation Buttons */}
+          <button
+            onClick={goToPrevious}
+            className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 bg-black/20 hover:bg-black/50 p-2 sm:p-2.5 rounded-full text-white transition-all duration-200 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="สไลด์ก่อนหน้า"
+          >
+            <ArrowLeft size={20} className="h-4 w-4 sm:h-5 sm:w-5" />
+          </button>
+          <button
+            onClick={goToNext}
+            className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 bg-black/20 hover:bg-black/50 p-2 sm:p-2.5 rounded-full text-white transition-all duration-200 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="สไลด์ถัดไป"
+          >
+            <ArrowRight size={20} className="h-4 w-4 sm:h-5 sm:w-5" />
+          </button>
+
+          {/* Dots Indicator */}
+          <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2 z-10">
+            {slides.map((_, slideIndex) => (
+              <button
+                key={slideIndex}
+                onClick={() => goToSlide(slideIndex)}
+                className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ease-out
+                  ${slideIndex === currentIndex ? 'bg-primary scale-125' : 'bg-white/40 hover:bg-white/70'}`}
+                aria-label={`ไปที่สไลด์ ${slideIndex + 1}`}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

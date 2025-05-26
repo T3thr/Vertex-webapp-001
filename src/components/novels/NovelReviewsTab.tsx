@@ -3,7 +3,7 @@
 import React from 'react';
 
 interface NovelReviewsTabProps {
-  novelId: string; // อาจจะใช้ ID ในการ fetch รีวิว
+  novelId: string; // ID ของนิยาย (ควรเป็น string)
 }
 
 export function NovelReviewsTab({ novelId }: NovelReviewsTabProps) {
