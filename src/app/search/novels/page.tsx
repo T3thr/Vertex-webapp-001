@@ -444,7 +444,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <div className="grid gap-6">
           {query && (
             <div className="text-sm text-muted-foreground">
-              ผลการค้นหาสำหรับ <span className="font-medium text-foreground">"{query}"</span> - พบทั้งหมด {pagination.totalItems} รายการ
+              ผลการค้นหาสำหรับ <span className="font-medium text-foreground">&quot;{query}&quot;</span> - พบทั้งหมด {pagination.totalItems} รายการ
             </div>
           )}
 
