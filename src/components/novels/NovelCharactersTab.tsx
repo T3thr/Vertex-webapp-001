@@ -1,20 +1,19 @@
 // src/components/novels/NovelCharactersTab.tsx
-// (เพิ่มใหม่) Component แสดงรายการตัวละครทั้งหมดสำหรับนิยาย
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { UsersRound, ArrowRight } from "lucide-react";
-// ✅ แก้ไข: อ้างอิง PopulatedCharacterSummary จาก API Route
-import { PopulatedCharacterSummary } from "@/app/api/novels/[slug]/route"; // เปลี่ยนชื่อ type ที่ import
+// ✅ ใช้ PopulatedCharacterForDetailPage จาก API Route หรือ type ที่ export มาสำหรับ client
+import { PopulatedCharacterForDetailPage } from "@/app/api/novels/[slug]/route";
 
 interface NovelCharactersTabProps {
-  characters: PopulatedCharacterSummary[]; // ✅ ใช้ PopulatedCharacterSummary
-  novelId: string; // ID ของนิยายปัจจุบัน (สำหรับสร้าง Link ไปยังหน้าตัวละครเต็มๆ)
+  characters: PopulatedCharacterForDetailPage[];
+  novelSlug: string; // เปลี่ยน novelId เป็น novelSlug เพื่อความชัดเจน
 }
 
-export function NovelCharactersTab({ characters, novelId }: NovelCharactersTabProps) {
+export function NovelCharactersTab({ characters, novelSlug }: NovelCharactersTabProps) {
   if (!characters || characters.length === 0) {
     return (
       <div className="py-10 text-center text-muted-foreground">
@@ -44,16 +43,14 @@ export function NovelCharactersTab({ characters, novelId }: NovelCharactersTabPr
       >
         {characters.map((character) => (
           <motion.div
-            key={character._id} // _id เป็น string แล้วจาก PopulatedCharacterSummary
+            key={character._id} // _id เป็น string จาก PopulatedCharacterForDetailPage ที่ API ส่งมา
             variants={itemVariants}
             className="bg-card border border-border rounded-xl shadow-lg overflow-hidden hover:shadow-primary/20 transition-all duration-300 ease-out group"
           >
-            {/* ✅ แก้ไข: ปรับ Link href ไปยังหน้าตัวละคร ถ้ามี */}
-            {/* สมมติว่า URL ของหน้ารายละเอียดตัวละครเป็น /novels/[novelSlug]/characters/[characterId] */}
-            {/* ถ้าโครงสร้าง URL ต่างไป ให้ปรับตามนั้น */}
-            <Link href={`/novels/${novelId}/characters/${character.characterCode || character._id}`} className="block">
+            {/* สมมติว่า URL ของหน้ารายละเอียดตัวละครเป็น /novels/[novelSlug]/characters/[characterCode] */}
+            <Link href={`/novels/${novelSlug}/characters/${character.characterCode || character._id}`} className="block">
               <div className="relative aspect-[3/4] w-full overflow-hidden">
-                {character.profileImageUrl ? (
+                {character.profileImageUrl ? ( // character.profileImageUrl เป็น virtual ที่ควรได้จาก API
                   <Image
                     src={character.profileImageUrl}
                     alt={character.name || "รูปตัวละคร"}
@@ -76,8 +73,9 @@ export function NovelCharactersTab({ characters, novelId }: NovelCharactersTabPr
                     {character.roleInStory.replace(/_/g, ' ')}{character.customRoleDetails ? ` (${character.customRoleDetails})` : ''}
                   </p>
                 )}
-                {character.synopsis && (
-                  <p className="text-sm text-foreground/80 mt-2 line-clamp-2">{character.synopsis}</p>
+                {/* ✅ แก้ไข: CharacterModel ใช้ description, ไม่ใช่ synopsis */}
+                {character.description && (
+                  <p className="text-sm text-foreground/80 mt-2 line-clamp-2">{character.description}</p>
                 )}
               </div>
             </Link>

@@ -1,199 +1,172 @@
 // src/components/novels/NovelDetailsTab.tsx
-// Component แสดงเนื้อหาสำหรับ Tab รายละเอียด
-import { PopulatedNovelForDetailPage } from "@/app/api/novels/[slug]/route"; // อัปเดต import
-import { TagBadge } from "./TagBadge";
-import { AlertTriangle, Languages, Calendar, Clock, CheckCircle, Info, Users, ShieldCheck, Edit3, UsersRound, FileText, Milestone, Paintbrush, Palette } from 'lucide-react'; // เพิ่ม UsersRound, FileText, Milestone, Paintbrush
-import { format } from 'date-fns';
-import { th } from 'date-fns/locale';
-import Image from "next/image";
-import { NovelStatus } from "@/backend/models/Novel"; // Import enum โดยตรง
-import Link from "next/link";
+import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
+import { TagBadge } from './TagBadge';
+import { Layers3, BookCopy, Palette, Brain, Users, Languages, ShieldAlert, Info, Clock, CalendarDays, Type, GitFork, FileText, UserCheck, Globe, AlertTriangle, ThumbsDown, Lightbulb, BookHeart } from 'lucide-react';
+import { NovelContentType, NovelEndingType, NovelStatus} from '@/backend/models/Novel'; //
 
 interface NovelDetailsTabProps {
   novel: PopulatedNovelForDetailPage;
 }
 
-// ฟังก์ชัน format วันที่ (ตรวจสอบว่า Date object หรือ ISO string)
-const formatDateFull = (dateInput?: Date | string | null): string => {
-  if (!dateInput) return "ไม่มีข้อมูล";
-  try {
-    const date = new Date(dateInput); // new Date() สามารถรับ Date object หรือ ISO string
-    if (isNaN(date.getTime())) return "วันที่ไม่ถูกต้อง"; // ตรวจสอบว่าเป็นวันที่ถูกต้องหรือไม่
-    return format(date, "d MMMM yyyy, HH:mm", { locale: th });
-  } catch (e) {
-    return "วันที่ไม่ถูกต้อง";
+const DetailSection: React.FC<{ title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string }> = ({ title, icon, children, className }) => (
+  <div className={`mb-8 p-4 sm:p-6 bg-card rounded-lg shadow-md border border-border ${className}`}>
+    <h3 className="text-xl font-semibold text-foreground mb-3 sm:mb-4 flex items-center">
+      {icon && <span className="mr-2 text-primary">{icon}</span>}
+      {title}
+    </h3>
+    <div className="text-foreground/80 space-y-2 text-sm sm:text-base">
+      {children}
+    </div>
+  </div>
+);
+
+const CategoryList: React.FC<{ items: PopulatedNovelForDetailPage['themeAssignment']['moodAndTone'], defaultText?: string }> = ({ items, defaultText = "ไม่มีข้อมูล" }) => {
+  if (!items || items.length === 0) {
+    return <p className="text-muted-foreground italic">{defaultText}</p>;
   }
-};
-
-// Mapping ค่า status ให้สอดคล้องกับ Enum (สำคัญมาก)
-const statusMap: { [key in NovelStatus]: string } = {
-  [NovelStatus.DRAFT]: "ฉบับร่าง",
-  [NovelStatus.PUBLISHED]: "เผยแพร่แล้ว",
-  [NovelStatus.COMPLETED]: "เผยแพร่ (จบแล้ว)",
-  [NovelStatus.UNPUBLISHED]: "ยกเลิกการเผยแพร่",
-  [NovelStatus.ARCHIVED]: "เก็บเข้าคลัง",
-  [NovelStatus.PENDING_REVIEW]: "รอการตรวจสอบ",
-  [NovelStatus.REJECTED_BY_ADMIN]: "ถูกปฏิเสธโดยผู้ดูแล",
-  [NovelStatus.BANNED_BY_ADMIN]: "ถูกระงับโดยผู้ดูแล",
-  [NovelStatus.SCHEDULED]: "ตั้งเวลาเผยแพร่",
-};
-
-
-export function NovelDetailsTab({ novel }: NovelDetailsTabProps) {
-  // ดึงข้อมูล Category จาก PopulatedNovelForDetailPage (ซึ่งควรจะเป็น PopulatedCategory ที่มี _id เป็น string)
-  const langCat = novel.languageCategory;
-  const ageCat = novel.ageRatingCategory;
-  const artStyleCat = novel.artStyleCategory; // จาก narrativeFocus
-
   return (
-    <div className="space-y-8 pb-10">
-      {/* Long Description */}
-      {novel.longDescription && (
-        <section>
-          <h3 className="text-xl font-semibold mb-3 text-foreground flex items-center gap-2">
-            <FileText size={20} className="text-primary" /> คำนำเรื่อง / เรื่องราวเพิ่มเติม
-          </h3>
-          <div
-            className="prose prose-sm sm:prose-base max-w-none text-foreground/90 dark:prose-invert dark:text-foreground/80 leading-relaxed whitespace-pre-wrap break-words bg-secondary/30 dark:bg-secondary/20 p-4 rounded-lg"
-            dangerouslySetInnerHTML={{ __html: novel.longDescription.replace(/\n/g, '<br />') }} // หรือใช้ CSS `white-space: pre-wrap`
-          />
-        </section>
-      )}
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => item && <TagBadge key={item._id.toString()} category={item} />)}
+    </div>
+  );
+};
 
-      {/* Categories & Tags */}
-      <section>
-        <h3 className="text-xl font-semibold mb-3 text-foreground">หมวดหมู่และแท็ก</h3>
-        <div className="flex flex-wrap gap-2">
-          {novel.mainThemeCategory && (
-             <TagBadge key={`mainCat-${novel.mainThemeCategory._id}`} text={novel.mainThemeCategory.name} type="category" slug={novel.mainThemeCategory.slug} />
-          )}
-          {novel.subThemeCategories?.map((subCat) => (
-            <TagBadge key={`subCat-${subCat._id}`} text={subCat.name} type="category" slug={subCat.slug} variant="secondary" />
-          ))}
-          {novel.moodAndToneCategories?.map((moodCat) => (
-            <TagBadge key={`moodCat-${moodCat._id}`} text={moodCat.name} type="category" slug={moodCat.slug} variant="secondary" />
-          ))}
-          {/* แสดง Content Warnings จาก novel.contentWarningCategories */}
-          {novel.contentWarningCategories?.map((warningCat) => (
-            <TagBadge key={`warningCat-${warningCat._id}`} text={warningCat.name} type="category" slug={warningCat.slug} variant="secondary" />
-          ))}
-          {novel.customTags?.map((tag) => (
-             <TagBadge key={`tag-${tag}`} text={tag} type="tag" />
-          ))}
-          {/* แสดงข้อความถ้าไม่มีหมวดหมู่หรือแท็ก */}
-          {
-            !novel.mainThemeCategory &&
-            (!novel.subThemeCategories || novel.subThemeCategories.length === 0) &&
-            (!novel.moodAndToneCategories || novel.moodAndToneCategories.length === 0) &&
-            (!novel.contentWarningCategories || novel.contentWarningCategories.length === 0) &&
-            (!novel.customTags || novel.customTags.length === 0) &&
-            (<p className="text-muted-foreground text-sm">ไม่มีหมวดหมู่หรือแท็กที่ระบุ</p>)
-          }
-        </div>
-      </section>
 
-       {/* Characters Section (ปรับปรุง) */}
-       {novel.charactersList && novel.charactersList.length > 0 && (
-        <section>
-          <h3 className="text-xl font-semibold mb-4 text-foreground flex items-center gap-2">
-            <UsersRound size={22} className="text-primary"/> ตัวละครเด่น ({novel.charactersList.length})
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* แสดงตัวละครไม่เกิน 6 ตัว หรือตามที่ต้องการ */}
-            {novel.charactersList.slice(0, 6).map((character) => (
-              <div key={character._id} className="bg-card border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-3">
-                  {character.profileImageUrl ? (
-                    <Image
-                      src={character.profileImageUrl}
-                      alt={character.name || "รูปตัวละคร"}
-                      width={64}
-                      height={64}
-                      className="w-16 h-16 rounded-md object-cover border border-border"
-                      onError={(e) => { (e.target as HTMLImageElement).src = "/images/default-avatar.png"; }}
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-md bg-secondary flex items-center justify-center text-muted-foreground">
-                      <UsersRound size={32} /> {/* Icon fallback */}
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <h4 className="text-md font-semibold text-foreground">{character.name}</h4>
-                    {character.roleInStory && (
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {character.roleInStory.replace(/_/g, ' ')}{character.customRoleDetails ? ` (${character.customRoleDetails})` : ''}
-                      </p>
-                    )}
-                    {character.synopsis && (
-                         <p className="text-xs text-foreground/80 mt-1 line-clamp-2">{character.synopsis}</p>
-                    )}
-                  </div>
+export const NovelDetailsTab: React.FC<NovelDetailsTabProps> = ({ novel }) => {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        {novel.longDescription && (
+          <DetailSection title="เรื่องเต็ม / คำโปรย" icon={<FileText />}>
+            <div className="prose prose-sm sm:prose-base dark:prose-invert max-w-none whitespace-pre-wrap break-words">
+                {novel.longDescription}
+            </div>
+          </DetailSection>
+        )}
+
+        <DetailSection title="ธีมและหมวดหมู่" icon={<Layers3 />}>
+          <div className="space-y-3">
+            <div>
+              <strong className="font-medium text-foreground block mb-1">หมวดหมู่หลัก:</strong>
+              {novel.themeAssignment?.mainTheme?.categoryId ? (
+                <TagBadge category={novel.themeAssignment.mainTheme.categoryId} />
+              ) : <span className="text-muted-foreground italic">ไม่มีข้อมูล</span>}
+              {novel.themeAssignment?.mainTheme?.customName && <span className="ml-2 text-sm text-muted-foreground">({novel.themeAssignment.mainTheme.customName})</span>}
+            </div>
+            {novel.themeAssignment?.subThemes && novel.themeAssignment.subThemes.length > 0 && (
+              <div>
+                <strong className="font-medium text-foreground block mb-1">หมวดหมู่รอง:</strong>
+                <CategoryList items={novel.themeAssignment.subThemes.map(st => st.categoryId).filter(Boolean) as any[]} />
+              </div>
+            )}
+            {novel.themeAssignment?.moodAndTone && novel.themeAssignment.moodAndTone.length > 0 && (
+              <div>
+                <strong className="font-medium text-foreground block mb-1">อารมณ์และโทน:</strong>
+                <CategoryList items={novel.themeAssignment.moodAndTone} />
+              </div>
+            )}
+            {novel.themeAssignment?.customTags && novel.themeAssignment.customTags.length > 0 && (
+              <div>
+                <strong className="font-medium text-foreground block mb-1">แท็กที่ผู้เขียนกำหนด:</strong>
+                <div className="flex flex-wrap gap-2">
+                  {novel.themeAssignment.customTags.map(tag => <TagBadge key={tag} text={tag} category={{name: tag, color: 'var(--accent)'}}/>)}
                 </div>
               </div>
-            ))}
+            )}
           </div>
-          {/* อาจจะมี Link ไปหน้าแสดงตัวละครทั้งหมดถ้ามีข้อมูลมากกว่าที่แสดง */}
-          {novel.charactersList.length > 6 && (
-            <div className="mt-4 text-center">
-              <Link href={`/novels/${novel.slug}/characters`} className="text-sm text-primary hover:underline">
-                ดูตัวละครทั้งหมด ({novel.charactersList.length})
-              </Link>
-            </div>
-          )}
-        </section>
-      )}
+        </DetailSection>
+        
+        {novel.narrativeFocus && Object.values(novel.narrativeFocus).some(val => Array.isArray(val) ? val.length > 0 : val) && (
+            <DetailSection title="จุดเน้นการเล่าเรื่อง" icon={<Lightbulb />}>
+                <div className="space-y-3">
+                    {novel.narrativeFocus.narrativePacingTags && novel.narrativeFocus.narrativePacingTags.length > 0 && (
+                        <div><strong className="font-medium text-foreground block mb-1">จังหวะการดำเนินเรื่อง:</strong> <CategoryList items={novel.narrativeFocus.narrativePacingTags} /></div>
+                    )}
+                    {novel.narrativeFocus.primaryConflictTypes && novel.narrativeFocus.primaryConflictTypes.length > 0 && (
+                        <div><strong className="font-medium text-foreground block mb-1">ประเภทความขัดแย้งหลัก:</strong> <CategoryList items={novel.narrativeFocus.primaryConflictTypes} /></div>
+                    )}
+                    {novel.narrativeFocus.narrativePerspective && (
+                        <div><strong className="font-medium text-foreground block mb-1">มุมมองการเล่าเรื่อง:</strong> <TagBadge category={novel.narrativeFocus.narrativePerspective} /></div>
+                    )}
+                    {novel.narrativeFocus.storyArcStructure && (
+                        <div><strong className="font-medium text-foreground block mb-1">โครงสร้างเส้นเรื่อง:</strong> <TagBadge category={novel.narrativeFocus.storyArcStructure} /></div>
+                    )}
+                    {novel.narrativeFocus.artStyle && (
+                        <div><strong className="font-medium text-foreground block mb-1">สไตล์ภาพ (ถ้ามี):</strong> <TagBadge category={novel.narrativeFocus.artStyle} /></div>
+                    )}
+                    {novel.narrativeFocus.gameplayMechanics && novel.narrativeFocus.gameplayMechanics.length > 0 && (
+                        <div><strong className="font-medium text-foreground block mb-1">กลไกการเล่น (ถ้ามี):</strong> <CategoryList items={novel.narrativeFocus.gameplayMechanics} /></div>
+                    )}
+                     {novel.narrativeFocus.interactivityLevel && (
+                        <div><strong className="font-medium text-foreground block mb-1">ระดับการโต้ตอบ:</strong> <TagBadge category={novel.narrativeFocus.interactivityLevel} /></div>
+                    )}
+                    {novel.narrativeFocus.lengthTag && (
+                        <div><strong className="font-medium text-foreground block mb-1">ความยาว:</strong> <TagBadge category={novel.narrativeFocus.lengthTag} /></div>
+                    )}
+                    {novel.narrativeFocus.commonTropes && novel.narrativeFocus.commonTropes.length > 0 && (
+                        <div><strong className="font-medium text-foreground block mb-1">Common Tropes:</strong> <CategoryList items={novel.narrativeFocus.commonTropes} /></div>
+                    )}
+                     {novel.narrativeFocus.targetAudienceProfileTags && novel.narrativeFocus.targetAudienceProfileTags.length > 0 && (
+                        <div><strong className="font-medium text-foreground block mb-1">กลุ่มเป้าหมาย:</strong> <CategoryList items={novel.narrativeFocus.targetAudienceProfileTags} /></div>
+                    )}
+                    {novel.narrativeFocus.avoidIfYouDislikeTags && novel.narrativeFocus.avoidIfYouDislikeTags.length > 0 && (
+                        <div><strong className="font-medium text-foreground block mb-1 text-red-600 dark:text-red-400">ควรหลีกเลี่ยงหากไม่ชอบ:</strong> <CategoryList items={novel.narrativeFocus.avoidIfYouDislikeTags} /></div>
+                    )}
+                </div>
+            </DetailSection>
+        )}
 
-      {/* Additional Details */}
-      <section>
-        <h3 className="text-xl font-semibold mb-4 text-foreground">ข้อมูลเพิ่มเติม</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 text-sm">
-          {/* ตรวจสอบว่า novel.status เป็น key ที่ถูกต้องของ statusMap ก่อนใช้งาน */}
-          <DetailItem icon={Info} label="สถานะ" value={(novel.status && statusMap[novel.status]) || novel.status.toString()} />
-          {ageCat && <DetailItem icon={Users} label="ระดับผู้อ่าน" value={ageCat.name} />}
-          {langCat && <DetailItem icon={Languages} label="ภาษา" value={langCat.name} />}
-          {artStyleCat && <DetailItem icon={Palette} label="สไตล์ภาพ" value={artStyleCat.name} /> } {/* ใช้ Palette icon จาก lucide */}
-          {/* NovelModel ไม่มี isExplicitContent โดยตรง, อาจต้องดูจาก ageRating หรือ contentWarnings */}
-          {novel.firstPublishedAt && <DetailItem icon={Calendar} label="เผยแพร่ครั้งแรก" value={formatDateFull(novel.firstPublishedAt)} />}
-          <DetailItem icon={Clock} label="อัปเดตข้อมูลล่าสุด" value={formatDateFull(novel.updatedAt)} />
-          {novel.lastContentUpdatedAt && <DetailItem icon={Clock} label="อัปเดตเนื้อหาล่าสุด" value={formatDateFull(novel.lastContentUpdatedAt)} /> }
-          {/* NovelModel ไม่มี sourceType.type โดยตรง, แต่มี sourceType object */}
-          {/* <DetailItem icon={novel.sourceType?.type === "ORIGINAL" ? ShieldCheck : Edit3} label="ประเภทผลงาน" value={novel.sourceType?.type || "ไม่ระบุ"} /> */}
-          {novel.isCompleted && (
-             <DetailItem icon={CheckCircle} label="สถานะการจบ" value="จบสมบูรณ์แล้ว" valueClassName="text-green-600 dark:text-green-400 font-medium" />
-          )}
-          {novel.endingType && <DetailItem icon={Milestone} label="รูปแบบตอนจบ" value={novel.endingType.replace(/_/g, ' ')} /> }
-        </div>
-      </section>
 
-      {/* Content Warnings (ย้ายมาแสดงจาก novel.contentWarningCategories ที่ถูก populate) */}
-      {novel.contentWarningCategories && novel.contentWarningCategories.length > 0 && (
-        <section>
-          <h3 className="text-xl font-semibold mb-3 text-foreground flex items-center gap-2">
-             <AlertTriangle className="w-5 h-5 text-yellow-500"/> คำเตือนเนื้อหา
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {novel.contentWarningCategories.map((warningCat) => (
-              <TagBadge key={`detailsWarning-${warningCat._id}`} text={warningCat.name} type="category" slug={warningCat.slug} variant="secondary" />
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-// Helper component for displaying detail items
-function DetailItem({ icon: Icon, label, value, valueClassName }: { icon: React.ElementType, label: string, value?: string | number | null, valueClassName?: string }) {
-  if (value === null || value === undefined || value === '') return null;
-  return (
-    <div className="flex items-start gap-2">
-      <Icon className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-      <div>
-        <span className="font-medium text-foreground/80 dark:text-foreground/70">{label}:</span>{' '}
-        <span className={valueClassName || "text-foreground"}>
-          {value}
-        </span>
+        {novel.worldBuildingDetails && (novel.worldBuildingDetails.loreSummary || novel.worldBuildingDetails.magicSystemRules || novel.worldBuildingDetails.technologyPrinciples) && (
+          <DetailSection title="รายละเอียดโลกในเรื่อง" icon={<Globe />}>
+            {novel.worldBuildingDetails.loreSummary && <p><strong>Lore:</strong> {novel.worldBuildingDetails.loreSummary}</p>}
+            {novel.worldBuildingDetails.magicSystemRules && <p><strong>ระบบเวทมนตร์:</strong> {novel.worldBuildingDetails.magicSystemRules}</p>}
+            {novel.worldBuildingDetails.technologyPrinciples && <p><strong>เทคโนโลยี:</strong> {novel.worldBuildingDetails.technologyPrinciples}</p>}
+          </DetailSection>
+        )}
       </div>
+
+      <aside className="lg:col-span-1 space-y-6">
+        <DetailSection title="ข้อมูลทั่วไป" icon={<Info />}>
+          <p><strong>สถานะ:</strong> {novel.status === NovelStatus.COMPLETED ? "จบแล้ว" : novel.status === NovelStatus.PUBLISHED ? "เผยแพร่แล้ว" : novel.status}</p> {/* */}
+          <p><strong>การเข้าถึง:</strong> {novel.accessLevel}</p>
+          <p><strong>เขียนจบแล้ว:</strong> {novel.isCompleted ? 'ใช่' : 'ไม่ใช่'}</p>
+          <p><strong>ประเภทตอนจบ:</strong> {novel.endingType === NovelEndingType.MULTIPLE_ENDINGS ? "หลายตอนจบ" : novel.endingType === NovelEndingType.SINGLE_ENDING ? "ตอนจบเดียว" : novel.endingType === NovelEndingType.OPEN_ENDING ? "ปลายเปิด" : "กำลังดำเนินเรื่อง"}</p> {/* */}
+          <p><strong>ภาษา:</strong> {novel.language?.name || 'ไม่ระบุ'}</p>
+          <p><strong>อัปเดตล่าสุด:</strong> {new Date(novel.lastContentUpdatedAt).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          {novel.publishedAt && <p><strong>เผยแพร่เมื่อ:</strong> {new Date(novel.publishedAt).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>}
+        </DetailSection>
+
+        <DetailSection title="ประเภทเนื้อหา" icon={<BookCopy />}>
+          <p><strong>ประเภท:</strong> {
+            novel.sourceType.type === NovelContentType.FAN_FICTION ? "แฟนฟิคชั่น" :
+            novel.sourceType.type === NovelContentType.TRANSLATION ? "ผลงานแปล" :
+            novel.sourceType.type === NovelContentType.ADAPTATION ? "ผลงานดัดแปลง" :
+            novel.sourceType.type === NovelContentType.INTERACTIVE_FICTION ? "นิยายเชิงโต้ตอบ" : "ต้นฉบับ"
+          }</p> {/* */}
+          {novel.sourceType.type === NovelContentType.FAN_FICTION && novel.sourceType.fandomCategoryId && ( // This requires fandomCategoryId to be populated. For now, we assume it might not be fully.
+            <p><strong>Fandom:</strong> {(novel.sourceType.fandomCategoryId as any)?.name || 'ไม่ระบุ'}</p>
+          )}
+          {novel.sourceType.originalWorkTitle && <p><strong>จากเรื่อง:</strong> {novel.sourceType.originalWorkTitle}</p>}
+          {novel.sourceType.originalWorkAuthor && <p><strong>ผู้แต่งเดิม:</strong> {novel.sourceType.originalWorkAuthor}</p>}
+        </DetailSection>
+
+        {novel.themeAssignment?.contentWarnings && novel.themeAssignment.contentWarnings.length > 0 && (
+          <DetailSection title="คำเตือนเนื้อหา" icon={<AlertTriangle className="text-orange-500" />}>
+            <CategoryList items={novel.themeAssignment.contentWarnings} />
+          </DetailSection>
+        )}
+         {novel.ageRatingCategoryId && (
+            <DetailSection title="เรทผู้อ่าน" icon={<UserCheck />}>
+                <TagBadge category={novel.ageRatingCategoryId} />
+            </DetailSection>
+        )}
+        {novel.psychologicalAnalysisConfig?.allowsPsychologicalAnalysis && (
+             <DetailSection title="การวิเคราะห์ทางจิตวิทยา" icon={<Brain />}>
+                <p className="text-sm text-muted-foreground">นิยายเรื่องนี้อนุญาตให้มีการวิเคราะห์ทางจิตวิทยาเพื่อประสบการณ์การอ่านที่ลึกซึ้งยิ่งขึ้น</p>
+             </DetailSection>
+        )}
+      </aside>
     </div>
   );
-}
+};

@@ -38,7 +38,8 @@ export enum NovelStatus {
   REJECTED_BY_ADMIN = "rejected_by_admin",
   BANNED_BY_ADMIN = "banned_by_admin",
   SCHEDULED = "scheduled",
-  COMPLETED = "completed", // เพิ่มเข้ามาเพื่อความชัดเจน แม้จะมี isCompleted field
+  COMPLETED = "completed",
+  ONGOING = "ONGOING", // เพิ่มเข้ามาเพื่อความชัดเจน แม้จะมี isCompleted field
 }
 
 /**

@@ -1,9 +1,8 @@
 // src/app/api/auth/[...nextauth]/options.ts
 // การกำหนดค่า NextAuth สำหรับการยืนยันตัวตน
 // รองรับการล็อกอินด้วยอีเมลหรือชื่อผู้ใช้ผ่าน Credentials และ OAuth providers ต่างๆ
-// อัปเดต: ปรับ Path การเรียก API และการจัดการ User Model ที่รวมแล้ว
+// อัปเดต: ลดขนาด JWT, ดึงข้อมูล session เต็มจาก DB ใน session callback
 // แก้ไข: จัดการ Type Mismatch สำหรับ Lean Documents และ Populated Fields ใน Session/JWT
-// แก้ไขเพิ่มเติม: ลบ/ปรับ interface User ที่ว่างเปล่าเพื่อแก้ไข @typescript-eslint/no-empty-object-type
 
 import { NextAuthOptions, Profile } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -28,15 +27,21 @@ import {
   IWriterStats,
   IShowcasedGamificationItem as OriginalShowcasedItem,
   IUserDisplayBadge as OriginalDisplayBadge,
-  IUserGamification as OriginalUserGamification
-} from "@/backend/models/User";
-import UserModel from "@/backend/models/User";
-import { ILevelReward, ILevel as OriginalILevel } from "@/backend/models/Level";
-import dbConnect from "@/backend/lib/mongodb";
+  IUserGamification as OriginalUserGamification,
+} from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
+import UserModel from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
+import {
+  ILevelReward,
+  ILevel as OriginalILevel,
+} from "@/backend/models/Level"; // ตรวจสอบ path ให้ถูกต้อง
+import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบ path ให้ถูกต้อง
 
-// SECTION: Session-Specific Plain Object Types
+// SECTION: Session-Specific Plain Object Types (คงเดิมตามที่ผู้ใช้ให้มา)
 
-export type SessionLevelReward = Omit<ILevelReward, 'achievementIdToUnlock' | 'badgeIdToAward'> & {
+export type SessionLevelReward = Omit<
+  ILevelReward,
+  "achievementIdToUnlock" | "badgeIdToAward"
+> & {
   achievementIdToUnlock?: string;
   badgeIdToAward?: string;
 };
@@ -90,6 +95,7 @@ export type SessionUserGamification = {
   lastActivityAt?: string;
 };
 
+// SessionUser type นี้คือสิ่งที่เราต้องการให้ session object สุดท้ายมี
 export type SessionUser = {
   id: string;
   name: string;
@@ -109,11 +115,13 @@ export type SessionUser = {
   isEmailVerified: boolean;
   isBanned: boolean;
   bannedUntil?: string;
+  // เพิ่ม field error แบบ optional สำหรับกรณี session ไม่สมบูรณ์
+  error?: string;
 };
 
 // END SECTION: Session-Specific Plain Object Types
 
-// Helper to convert date to ISO string if it's a Date object or valid date string
+// Helper to convert date to ISO string if it's a Date object or valid date string (คงเดิม)
 const toISOStringOrUndefined = (date?: Date | string): string | undefined => {
   if (!date) return undefined;
   try {
@@ -123,7 +131,8 @@ const toISOStringOrUndefined = (date?: Date | string): string | undefined => {
   }
 };
 
-// Helper function to convert a Mongoose document (or lean object) to SessionUser format
+// Helper function to convert a Mongoose document (or lean object) to SessionUser format (คงเดิมตามที่ผู้ใช้ให้มา)
+// ตรวจสอบให้แน่ใจว่า function นี้คืนค่า default ที่เหมาะสมสำหรับทุก fields ของ SessionUser
 function toSessionUserFormat(userDoc: any): SessionUser {
   const {
     _id,
@@ -136,7 +145,7 @@ function toSessionUserFormat(userDoc: any): SessionUser {
     preferences,
     wallet,
     gamification,
-    verification,
+    verification, // นี่คือ writerVerification ใน User model
     donationSettings,
     writerStats,
     isActive,
@@ -145,13 +154,34 @@ function toSessionUserFormat(userDoc: any): SessionUser {
     bannedUntil,
   } = userDoc;
 
-  const formatGamification = (g: any): SessionUserGamification | undefined => {
-    if (!g) return undefined;
+  const formatGamification = (
+    g: OriginalUserGamification | undefined
+  ): SessionUserGamification => {
+    if (!g) {
+      // ให้ค่า default ถ้า gamification object ไม่มีใน userDoc หรือเป็น undefined
+      return {
+        level: 1,
+        currentLevelObject: null,
+        experiencePoints: 0,
+        totalExperiencePointsEverEarned: 0,
+        nextLevelXPThreshold: 100, // หรือค่าเริ่มต้นจาก Level model
+        achievements: [],
+        showcasedItems: [],
+        primaryDisplayBadge: undefined,
+        secondaryDisplayBadges: [],
+        loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 },
+        dailyCheckIn: { currentStreakDays: 0 },
+        lastActivityAt: undefined,
+      };
+    }
     let formattedCurrentLevelObject: string | SessionLeanLevel | null = null;
 
     if (g.currentLevelObject) {
-      if (typeof g.currentLevelObject === 'object' && g.currentLevelObject._id) {
-        const lvl = g.currentLevelObject;
+      if (
+        typeof g.currentLevelObject === "object" &&
+        g.currentLevelObject._id
+      ) {
+        const lvl = g.currentLevelObject as OriginalILevel;
         formattedCurrentLevelObject = {
           _id: lvl._id.toString(),
           levelNumber: lvl.levelNumber,
@@ -159,15 +189,17 @@ function toSessionUserFormat(userDoc: any): SessionUser {
           levelGroupName: lvl.levelGroupName,
           xpRequiredForThisLevel: lvl.xpRequiredForThisLevel,
           xpToNextLevelFromThis: lvl.xpToNextLevelFromThis,
-          rewardsOnReach: lvl.rewardsOnReach?.map((r: ILevelReward) => ({
-            type: r.type,
-            coinsAwarded: r.coinsAwarded,
-            achievementIdToUnlock: r.achievementIdToUnlock?.toString(),
-            badgeIdToAward: r.badgeIdToAward?.toString(),
-            featureKeyToUnlock: r.featureKeyToUnlock,
-            cosmeticItemKey: r.cosmeticItemKey,
-            description: r.description,
-          })),
+          rewardsOnReach: lvl.rewardsOnReach?.map(
+            (r: ILevelReward): SessionLevelReward => ({
+              type: r.type,
+              coinsAwarded: r.coinsAwarded,
+              achievementIdToUnlock: r.achievementIdToUnlock?.toString(),
+              badgeIdToAward: r.badgeIdToAward?.toString(),
+              featureKeyToUnlock: r.featureKeyToUnlock,
+              cosmeticItemKey: r.cosmeticItemKey,
+              description: r.description,
+            })
+          ),
           description: lvl.description,
           iconUrl: lvl.iconUrl,
           themeColor: lvl.themeColor,
@@ -188,15 +220,29 @@ function toSessionUserFormat(userDoc: any): SessionUser {
       totalExperiencePointsEverEarned: g.totalExperiencePointsEverEarned,
       nextLevelXPThreshold: g.nextLevelXPThreshold,
       achievements: g.achievements?.map((id: any) => id.toString()) || [],
-      showcasedItems: g.showcasedItems?.map((item: OriginalShowcasedItem) => ({ ...item, earnedItemId: item.earnedItemId.toString() })) || [],
-      primaryDisplayBadge: g.primaryDisplayBadge ? { ...g.primaryDisplayBadge, earnedBadgeId: g.primaryDisplayBadge.earnedBadgeId.toString() } : undefined,
-      secondaryDisplayBadges: g.secondaryDisplayBadges?.map((badge: OriginalDisplayBadge) => ({ ...badge, earnedBadgeId: badge.earnedBadgeId.toString() })) || [],
+      showcasedItems:
+        g.showcasedItems?.map((item: OriginalShowcasedItem) => ({
+          ...item,
+          earnedItemId: item.earnedItemId.toString(),
+        })) || [],
+      primaryDisplayBadge: g.primaryDisplayBadge
+        ? {
+            ...g.primaryDisplayBadge,
+            earnedBadgeId: g.primaryDisplayBadge.earnedBadgeId.toString(),
+          }
+        : undefined,
+      secondaryDisplayBadges:
+        g.secondaryDisplayBadges?.map((badge: OriginalDisplayBadge) => ({
+          ...badge,
+          earnedBadgeId: badge.earnedBadgeId.toString(),
+        })) || [],
       loginStreaks: {
-        ...(g.loginStreaks || {}),
+        currentStreakDays: g.loginStreaks?.currentStreakDays || 0,
+        longestStreakDays: g.loginStreaks?.longestStreakDays || 0,
         lastLoginDate: toISOStringOrUndefined(g.loginStreaks?.lastLoginDate),
       },
       dailyCheckIn: {
-        ...(g.dailyCheckIn || {}),
+        currentStreakDays: g.dailyCheckIn?.currentStreakDays || 0,
         lastCheckInDate: toISOStringOrUndefined(g.dailyCheckIn?.lastCheckInDate),
       },
       lastActivityAt: toISOStringOrUndefined(g.lastActivityAt),
@@ -209,12 +255,57 @@ function toSessionUserFormat(userDoc: any): SessionUser {
     email: email || undefined,
     username: username || `user${_id.toString().slice(-6)}`,
     roles: roles || ["Reader"],
-    profile: profile || {},
-    trackingStats: trackingStats || { joinDate: new Date(), totalLoginDays:0, totalNovelsRead:0, totalEpisodesRead:0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0 },
-    socialStats: socialStats || { followersCount: 0, followingCount: 0, novelsCreatedCount:0, commentsMadeCount:0,ratingsGivenCount:0, likesGivenCount:0},
-    preferences: preferences || { language: "th", display: { theme:"system", reading:{fontSize:"medium", readingModeLayout:"scrolling", lineHeight: 1.6, textAlignment: "left"}, accessibility:{dyslexiaFriendlyFont: false, highContrastMode: false}}, notifications:{masterNotificationsEnabled:true, email:{enabled:true}, push:{enabled:true}, inApp:{enabled:true}}, contentAndPrivacy:{showMatureContent:false, preferredGenres:[], profileVisibility:"public", readingHistoryVisibility:"followers_only", showActivityStatus:true, allowDirectMessagesFrom:"followers", analyticsConsent:{allowPsychologicalAnalysis:false}}},
+    profile: profile || { displayName: username || "User" },
+    trackingStats: trackingStats || {
+      joinDate: new Date(),
+      totalLoginDays: 0,
+      totalNovelsRead: 0,
+      totalEpisodesRead: 0,
+      totalTimeSpentReadingSeconds: 0,
+      totalCoinSpent: 0,
+      totalRealMoneySpent: 0,
+    },
+    socialStats: socialStats || {
+      followersCount: 0,
+      followingCount: 0,
+      novelsCreatedCount: 0,
+      commentsMadeCount: 0,
+      ratingsGivenCount: 0,
+      likesGivenCount: 0,
+    },
+    preferences: preferences || {
+      language: "th",
+      display: {
+        theme: "system",
+        reading: {
+          fontSize: "medium",
+          readingModeLayout: "scrolling",
+          lineHeight: 1.6,
+          textAlignment: "left",
+        },
+        accessibility: {
+          dyslexiaFriendlyFont: false,
+          highContrastMode: false,
+        },
+      },
+      notifications: {
+        masterNotificationsEnabled: true,
+        email: { enabled: true } as any,
+        push: { enabled: true } as any,
+        inApp: { enabled: true } as any,
+      },
+      contentAndPrivacy: {
+        showMatureContent: false,
+        preferredGenres: [],
+        profileVisibility: "public",
+        readingHistoryVisibility: "followers_only",
+        showActivityStatus: true,
+        allowDirectMessagesFrom: "followers",
+        analyticsConsent: { allowPsychologicalAnalysis: false },
+      },
+    },
     wallet: wallet || { coinBalance: 0 },
-    gamification: formatGamification(gamification) as SessionUserGamification,
+    gamification: formatGamification(gamification as OriginalUserGamification | undefined),
     writerVerification: verification,
     donationSettings: donationSettings,
     writerStats: writerStats,
@@ -225,32 +316,67 @@ function toSessionUserFormat(userDoc: any): SessionUser {
   };
 }
 
-// Provider Profile Interfaces
-interface GoogleProfile extends Profile { picture?: string; name?: string; given_name?: string; family_name?: string; }
-interface TwitterProfile extends Profile { data?: { name?: string; username?: string; profile_image_url?: string; }; name?: string; username?: string; profile_image_url?: string; }
-interface FacebookProfile extends Profile { picture?: { data?: { url?: string; }; }; first_name?: string; last_name?: string;}
-interface AppleProfile extends Omit<Profile, "name"> { name?: { firstName?: string; lastName?: string; }; picture?: string; }
-interface LineProfile extends Profile { displayName?: string; pictureUrl?: string; userId?: string; }
+// Provider Profile Interfaces (คงเดิม)
+interface GoogleProfile extends Profile {
+  picture?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+}
+interface TwitterProfile extends Profile {
+  data?: { name?: string; username?: string; profile_image_url?: string };
+  name?: string;
+  username?: string;
+  profile_image_url?: string;
+}
+interface FacebookProfile extends Profile {
+  picture?: { data?: { url?: string } };
+  first_name?: string;
+  last_name?: string;
+}
+interface AppleProfile extends Omit<Profile, "name"> {
+  name?: { firstName?: string; lastName?: string };
+  picture?: string;
+}
+interface LineProfile extends Profile {
+  displayName?: string;
+  pictureUrl?: string;
+  userId?: string;
+}
 
 const validateEnv = () => {
   const requiredEnvVars = [
-    { key: "GOOGLE_CLIENT_ID", provider: "Google" }, { key: "GOOGLE_CLIENT_SECRET", provider: "Google" },
-    { key: "TWITTER_CLIENT_ID", provider: "Twitter" }, { key: "TWITTER_CLIENT_SECRET", provider: "Twitter" },
-    { key: "FACEBOOK_CLIENT_ID", provider: "Facebook" }, { key: "FACEBOOK_CLIENT_SECRET", provider: "Facebook" },
-    { key: "APPLE_CLIENT_ID", provider: "Apple" }, { key: "APPLE_CLIENT_SECRET", provider: "Apple" },
-    { key: "LINE_CLIENT_ID", provider: "Line" }, { key: "LINE_CLIENT_SECRET", provider: "Line" },
-    { key: "NEXTAUTH_SECRET", provider: "NextAuth" }, { key: "NEXTAUTH_URL", provider: "NextAuth" },
+    { key: "GOOGLE_CLIENT_ID", provider: "Google" },
+    { key: "GOOGLE_CLIENT_SECRET", provider: "Google" },
+    { key: "TWITTER_CLIENT_ID", provider: "Twitter" },
+    { key: "TWITTER_CLIENT_SECRET", provider: "Twitter" },
+    { key: "FACEBOOK_CLIENT_ID", provider: "Facebook" },
+    { key: "FACEBOOK_CLIENT_SECRET", provider: "Facebook" },
+    { key: "APPLE_CLIENT_ID", provider: "Apple" },
+    { key: "APPLE_CLIENT_SECRET", provider: "Apple" },
+    { key: "LINE_CLIENT_ID", provider: "Line" },
+    { key: "LINE_CLIENT_SECRET", provider: "Line" },
+    { key: "NEXTAUTH_SECRET", provider: "NextAuth" },
+    { key: "NEXTAUTH_URL", provider: "NextAuth" },
     { key: "MONGODB_URI", provider: "Database" },
   ];
-  const missingVars = requiredEnvVars.filter((envVar) => !process.env[envVar.key]).map((envVar) => envVar.key);
+  const missingVars = requiredEnvVars
+    .filter((envVar) => !process.env[envVar.key])
+    .map((envVar) => envVar.key);
   if (missingVars.length > 0) {
-    console.warn(`⚠️ คำเตือน: ตัวแปรสภาพแวดล้อมต่อไปนี้ไม่ได้ถูกกำหนด: ${missingVars.join(", ")}. Providers ที่เกี่ยวข้องอาจไม่ทำงาน`);
+    console.warn(
+      `⚠️ คำเตือน: ตัวแปรสภาพแวดล้อมต่อไปนี้ไม่ได้ถูกกำหนด: ${missingVars.join(
+        ", "
+      )}. Providers ที่เกี่ยวข้องอาจไม่ทำงาน`
+    );
   }
 };
 
 validateEnv();
 
 export const authOptions: NextAuthOptions = {
+  // adapter: ไม่มี adapter เนื่องจากผู้ใช้ไม่ต้องการใช้ @next-auth/mongodb-adapter
+  // และ strategy เป็น "jwt"
   providers: [
     CredentialsProvider({
       id: "credentials",
@@ -260,40 +386,59 @@ export const authOptions: NextAuthOptions = {
         password: { label: "รหัสผ่าน", type: "password" },
       },
       async authorize(credentials) {
+        // Logic การ authorize ของ CredentialsProvider (คงเดิมจากโค้ดผู้ใช้)
+        // ตรวจสอบให้แน่ใจว่า API /api/auth/signin/credentials ทำงานถูกต้อง
+        // และคืนค่า user object ที่มีโครงสร้างตาม IUser
         try {
-          console.log(`⏳ [AuthOptions] เริ่มการตรวจสอบ CredentialsProvider สำหรับ identifier=${credentials?.identifier}`);
+          console.log(
+            `⏳ [AuthOptions] เริ่มการตรวจสอบ CredentialsProvider สำหรับ identifier=${credentials?.identifier}`
+          );
           if (!credentials?.identifier || !credentials?.password) {
             console.error("❌ [AuthOptions] ขาดข้อมูล identifier หรือ password");
             throw new Error("กรุณาระบุอีเมล/ชื่อผู้ใช้ และรหัสผ่าน");
           }
 
-          const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin/credentials`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ identifier: credentials.identifier, password: credentials.password }),
-          });
+          const response = await fetch(
+            `${process.env.NEXTAUTH_URL}/api/auth/signin/credentials`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                identifier: credentials.identifier,
+                password: credentials.password,
+              }),
+            }
+          );
 
           const responseData = await response.json();
 
           if (!response.ok || !responseData.user) {
-            console.error(`❌ [AuthOptions] การตรวจสอบ Credentials ล้มเหลวจาก API: ${responseData.error || "ไม่มีข้อมูลผู้ใช้"}`);
-            throw new Error(responseData.error || "ข้อมูลรับรองไม่ถูกต้อง หรือเกิดข้อผิดพลาด");
+            console.error(
+              `❌ [AuthOptions] การตรวจสอบ Credentials ล้มเหลวจาก API: ${
+                responseData.error || "ไม่มีข้อมูลผู้ใช้"
+              }`
+            );
+            throw new Error(
+              responseData.error || "ข้อมูลรับรองไม่ถูกต้อง หรือเกิดข้อผิดพลาด"
+            );
           }
 
-          const userFromApi = responseData.user as IUser & { _id: Types.ObjectId | string };
-
-          if (!userFromApi.isEmailVerified && userFromApi.email) {
-             console.warn(`⚠️ [AuthOptions] ผู้ใช้ ${userFromApi.email || userFromApi.username} ยังไม่ได้ยืนยันอีเมล แต่ API อนุญาตให้ผ่าน`);
-          }
-          console.log(`✅ [AuthOptions] CredentialsProvider สำเร็จสำหรับผู้ใช้ ${userFromApi.email || userFromApi.username}`);
-          
-          return toSessionUserFormat(userFromApi);
+          // responseData.user คือ plain object ที่ได้จาก API
+          // toSessionUserFormat จะแปลง plain object นี้ให้เป็น SessionUser
+          // และ authorize callback จะต้องคืนค่า object ที่มีโครงสร้างตรงกับ SessionUser หรืออย่างน้อยมี id
+          console.log(`✅ [AuthOptions] CredentialsProvider สำเร็จสำหรับผู้ใช้ ${(responseData.user as IUser).email || (responseData.user as IUser).username}`);
+          return toSessionUserFormat(responseData.user as IUser & { _id: Types.ObjectId | string });
         } catch (error: any) {
-          console.error(`❌ [AuthOptions] ข้อผิดพลาดใน authorize (CredentialsProvider): ${error.message}`);
-          throw new Error(error.message || "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์");
+          console.error(
+            `❌ [AuthOptions] ข้อผิดพลาดใน authorize (CredentialsProvider): ${error.message}`
+          );
+          throw new Error(
+            error.message || "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์"
+          );
         }
       },
     }),
+    // ... (OAuth Providers คงเดิม)
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
@@ -328,148 +473,127 @@ export const authOptions: NextAuthOptions = {
   ],
 
   session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
+    strategy: "jwt", // ใช้ JWT strategy
+    maxAge: 30 * 24 * 60 * 60, // 30 วัน
   },
 
   callbacks: {
     async jwt({ token, user, account, profile, trigger }) {
-      if (account && user) {
-        console.log(`⏳ [AuthOptions JWT] Sign-in JWT callback for provider=${account.provider}, user_id=${user.id}`);
-        
-        let sessionData: SessionUser;
+      // `user` ที่ส่งมาให้ JWT callback นี้คือ object ที่ authorize() return (สำหรับ credentials)
+      // หรือเป็น object ที่สร้างจาก profile (สำหรับ OAuth)
 
+      // **ปรับปรุง: ลดขนาดข้อมูลใน JWT Token ให้เหลือน้อยที่สุด**
+      if (account && user) { // Sign-in or link account
+        console.log(`⏳ [AuthOptions JWT] Sign-in/Link. Provider=${account.provider}, UserID from 'user' obj=${user.id}`);
+        // `user.id` ควรจะมีอยู่แล้วจาก authorize() หรือการ map profile ของ OAuth
+        token.id = user.id;
+        token.provider = account.provider;
+
+        // ดึงข้อมูล username และ roles จาก user object
+        // สำหรับ Credentials: user object คือ SessionUser ที่ได้จาก toSessionUserFormat(responseData.user)
+        // สำหรับ OAuth: user object อาจจะต้องดึงข้อมูลจาก API /api/auth/signin/oauth
         if (account.provider === "credentials") {
-            sessionData = user as SessionUser;
-        } else {
-            let apiEmail: string | undefined = (profile as any)?.email || undefined;
-            let apiDisplayName: string = "";
-            let apiUsernameSuggestion: string = "";
-            let apiAvatar: string | undefined = undefined;
+            const sessionUserCredentials = user as SessionUser; // Cast 'user' ที่ได้จาก authorize()
+            token.username = sessionUserCredentials.username;
+            token.roles = sessionUserCredentials.roles;
+        } else { // OAuth sign-in
+            // Logic การดึงข้อมูลจาก OAuth profile และเรียก API ของคุณ (คงเดิมจากโค้ดผู้ใช้)
+            let apiEmailFromProfile: string | undefined = (profile as any)?.email || undefined;
+            let apiDisplayNameFromProfile: string = "";
+            let apiUsernameSuggestionFromProfile: string = "";
 
             switch (account.provider) {
                 case "google":
                     const googleProfile = profile as GoogleProfile;
-                    apiEmail = googleProfile.email || undefined;
-                    apiDisplayName = googleProfile.name || googleProfile.given_name || "";
-                    if (googleProfile.given_name && googleProfile.family_name) { apiDisplayName = `${googleProfile.given_name} ${googleProfile.family_name}`.trim(); }
-                    apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    apiAvatar = googleProfile.picture || undefined;
+                    apiEmailFromProfile = googleProfile.email || undefined;
+                    apiDisplayNameFromProfile = googleProfile.name || googleProfile.given_name || "";
+                    if (googleProfile.given_name && googleProfile.family_name) { apiDisplayNameFromProfile = `${googleProfile.given_name} ${googleProfile.family_name}`.trim(); }
+                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
                     break;
                 case "twitter":
                     const twitterProfile = profile as TwitterProfile;
-                    apiEmail = twitterProfile.email || undefined;
-                    apiDisplayName = twitterProfile.data?.name || twitterProfile.name || "";
-                    apiUsernameSuggestion = twitterProfile.data?.username || twitterProfile.username || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    apiAvatar = twitterProfile.data?.profile_image_url || twitterProfile.profile_image_url || undefined;
+                    apiEmailFromProfile = twitterProfile.email || undefined;
+                    apiDisplayNameFromProfile = twitterProfile.data?.name || twitterProfile.name || "";
+                    apiUsernameSuggestionFromProfile = twitterProfile.data?.username || twitterProfile.username || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
                     break;
                 case "facebook":
                     const facebookProfile = profile as FacebookProfile;
-                    apiEmail = facebookProfile.email || undefined;
-                    apiDisplayName = facebookProfile.name || `${facebookProfile.first_name || ""} ${facebookProfile.last_name || ""}`.trim() || "";
-                    apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    apiAvatar = facebookProfile.picture?.data?.url || undefined;
+                    apiEmailFromProfile = facebookProfile.email || undefined;
+                    apiDisplayNameFromProfile = facebookProfile.name || `${facebookProfile.first_name || ""} ${facebookProfile.last_name || ""}`.trim() || "";
+                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
                     break;
                 case "apple":
                     const appleProfile = profile as AppleProfile;
-                    apiEmail = appleProfile.email || undefined;
-                    apiDisplayName = appleProfile.name ? `${appleProfile.name.firstName || ""} ${appleProfile.name.lastName || ""}`.trim() : "";
-                    apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    apiAvatar = appleProfile.picture || undefined;
+                    apiEmailFromProfile = appleProfile.email || undefined;
+                    apiDisplayNameFromProfile = appleProfile.name ? `${appleProfile.name.firstName || ""} ${appleProfile.name.lastName || ""}`.trim() : "";
+                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
                     break;
                 case "line":
                     const lineProfile = profile as LineProfile;
-                    apiEmail = lineProfile.email || undefined;
-                    apiDisplayName = lineProfile.displayName || "";
-                    apiUsernameSuggestion = apiEmail?.split("@")[0] || apiDisplayName.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    apiAvatar = lineProfile.pictureUrl || undefined;
+                    apiEmailFromProfile = lineProfile.email || undefined;
+                    apiDisplayNameFromProfile = lineProfile.displayName || "";
+                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
                     break;
             }
-
-            if (!apiEmail && account.provider !== "twitter") {
-                console.error(`❌ [AuthOptions JWT] ไม่มีอีเมลจาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayName}`);
+            if (!apiEmailFromProfile && account.provider !== "twitter" && account.provider !== "apple") {
+                console.error(`❌ [AuthOptions JWT] ไม่มีอีเมลจาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayNameFromProfile}`);
                 throw new Error(`ไม่ได้รับอีเมลจาก ${account.provider}.`);
             }
-            if (account.provider === "twitter" && !apiEmail && !apiUsernameSuggestion) {
-                console.error(`❌ [AuthOptions JWT] ไม่มีทั้งอีเมลและชื่อผู้ใช้จาก Twitter provider สำหรับผู้ใช้ ${apiDisplayName}`);
-                throw new Error("ไม่ได้รับข้อมูลที่เพียงพอจาก Twitter.");
+            if ((account.provider === "twitter" || account.provider === "apple") && !apiEmailFromProfile && !apiUsernameSuggestionFromProfile) {
+                console.error(`❌ [AuthOptions JWT] ไม่มีทั้งอีเมลและชื่อผู้ใช้จาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayNameFromProfile}`);
+                throw new Error(`ไม่ได้รับข้อมูลที่เพียงพอจาก ${account.provider}.`);
             }
 
             try {
+                console.log(`⏳ [AuthOptions JWT] OAuth: เรียก /api/auth/signin/oauth สำหรับ provider=${account.provider}, accountId=${account.providerAccountId}`);
                 const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin/oauth`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         provider: account.provider,
                         providerAccountId: account.providerAccountId,
-                        email: apiEmail || null,
-                        name: apiDisplayName,
-                        usernameSuggestion: apiUsernameSuggestion,
-                        picture: apiAvatar || null,
+                        email: apiEmailFromProfile || null,
+                        name: apiDisplayNameFromProfile,
+                        usernameSuggestion: apiUsernameSuggestionFromProfile,
+                        picture: (profile as any).picture || (profile as GoogleProfile).picture || (profile as FacebookProfile).picture?.data?.url || (profile as TwitterProfile).data?.profile_image_url || (profile as LineProfile).pictureUrl || null,
                     }),
                 });
                 const responseData = await response.json();
                 if (!response.ok || !responseData.user) {
-                    console.error(`❌ [AuthOptions JWT] ข้อผิดพลาดในการบันทึก/ดึงข้อมูลผู้ใช้ OAuth (${account.provider}):`, responseData.error);
+                    console.error(`❌ [AuthOptions JWT] ข้อผิดพลาดในการบันทึก/ดึงข้อมูลผู้ใช้ OAuth (${account.provider}):`, responseData.error || "API did not return user");
                     throw new Error(responseData.error || `ไม่สามารถประมวลผลผู้ใช้ ${account.provider}`);
                 }
-                sessionData = toSessionUserFormat(responseData.user as IUser & { _id: Types.ObjectId | string });
+                const oauthUserFromApi = responseData.user as IUser & { _id: Types.ObjectId | string };
+                // token.id ถูกตั้งค่าไปแล้วจาก user.id ที่ NextAuth ส่งมา
+                // เราต้องแน่ใจว่า user.id ที่ NextAuth ส่งมาตรงกับ oauthUserFromApi._id.toString()
+                // หรืออัปเดต token.id ที่นี่
+                token.id = oauthUserFromApi._id.toString(); // <--- ตรวจสอบและอัปเดตถ้าจำเป็น
+                token.username = oauthUserFromApi.username || `user${oauthUserFromApi._id.toString().slice(-6)}`;
+                token.roles = oauthUserFromApi.roles || ["Reader"];
             } catch (error: any) {
                 console.error(`❌ [AuthOptions JWT] ข้อผิดพลาดขณะประมวลผล OAuth (${account.provider}): ${error.message}`);
-                throw error;
+                throw error; // Re-throw เพื่อให้ NextAuth จัดการ
             }
         }
-
-        token.id = sessionData.id;
-        token.name = sessionData.name;
-        token.email = sessionData.email;
-        token.username = sessionData.username;
-        token.roles = sessionData.roles;
-        token.profile = sessionData.profile;
-        token.trackingStats = sessionData.trackingStats;
-        token.socialStats = sessionData.socialStats;
-        token.preferences = sessionData.preferences;
-        token.wallet = sessionData.wallet;
-        token.gamification = sessionData.gamification;
-        token.writerVerification = sessionData.writerVerification;
-        token.donationSettings = sessionData.donationSettings;
-        token.writerStats = sessionData.writerStats;
-        token.isActive = sessionData.isActive;
-        token.isEmailVerified = sessionData.isEmailVerified;
-        token.isBanned = sessionData.isBanned;
-        token.bannedUntil = sessionData.bannedUntil;
-        token.provider = account.provider;
-        console.log(`✅ [AuthOptions JWT] Token populated for ${token.username}`);
+        // ลบ name และ email ออกจาก token โดยตรง เพื่อลดขนาด cookie
+        delete token.name;
+        delete token.email;
+        console.log(`✅ [AuthOptions JWT] Token populated minimally for ${token.username} (ID: ${token.id})`);
       }
 
+      // Handle session updates (e.g., user updates profile)
       if (trigger === "update" && token.id) {
-        console.log(`⏳ [AuthOptions JWT] 'update' trigger for user ID: ${token.id}. Re-fetching...`);
+        console.log(`⏳ [AuthOptions JWT] 'update' trigger for user ID: ${token.id}. Re-fetching essential data...`);
         try {
-          if (mongoose.connection.readyState === 0) { await dbConnect(); }
-          const userFromDbLean = await UserModel.findById(token.id).lean();
+          await dbConnect(); // Ensure DB connection
+          const userFromDb = await UserModel.findById(token.id).lean();
 
-          if (userFromDbLean) {
-            const updatedSessionData = toSessionUserFormat(userFromDbLean);
-            
-            token.id = updatedSessionData.id;
-            token.name = updatedSessionData.name;
-            token.email = updatedSessionData.email;
-            token.username = updatedSessionData.username;
-            token.roles = updatedSessionData.roles;
-            token.profile = updatedSessionData.profile;
-            token.trackingStats = updatedSessionData.trackingStats;
-            token.socialStats = updatedSessionData.socialStats;
-            token.preferences = updatedSessionData.preferences;
-            token.wallet = updatedSessionData.wallet;
-            token.gamification = updatedSessionData.gamification;
-            token.writerVerification = updatedSessionData.writerVerification;
-            token.donationSettings = updatedSessionData.donationSettings;
-            token.writerStats = updatedSessionData.writerStats;
-            token.isActive = updatedSessionData.isActive;
-            token.isEmailVerified = updatedSessionData.isEmailVerified;
-            token.isBanned = updatedSessionData.isBanned;
-            token.bannedUntil = updatedSessionData.bannedUntil;
-            console.log(`✅ [AuthOptions JWT] Token updated for ${token.username}. New theme: ${updatedSessionData.preferences?.display?.theme}`);
+          if (userFromDb) {
+            // อัปเดตเฉพาะ field ที่จำเป็นและเก็บใน token จริงๆ
+            token.username = userFromDb.username || `user${userFromDb._id.toString().slice(-6)}`;
+            token.roles = userFromDb.roles || ["Reader"];
+            // ไม่ต้องอัปเดต preferences หรือข้อมูลอื่นๆ ใน token โดยตรง
+            // console.log(`✅ [AuthOptions JWT] Token (essential fields) updated for ${token.username}. New username: ${token.username}`);
           } else {
             console.warn(`⚠️ [AuthOptions JWT] User not found in DB during 'update' for token ID: ${token.id}`);
           }
@@ -481,38 +605,43 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
+      // token ที่ได้จาก jwt callback จะมีเฉพาะ id, username, roles, provider
+      console.log(`⏳ [AuthOptions Session] Session callback for token.id=${token.id}`);
       if (token && token.id) {
-        session.user = {
-          id: token.id as string,
-          name: token.name as string,
-          email: token.email as string | undefined,
-          username: token.username as string,
-          roles: token.roles as SessionUser["roles"],
-          profile: token.profile as IUserProfile,
-          trackingStats: token.trackingStats as IUserTrackingStats,
-          socialStats: token.socialStats as IUserSocialStats,
-          preferences: token.preferences as IUserPreferences,
-          wallet: token.wallet as IUserWallet,
-          gamification: token.gamification as SessionUserGamification,
-          writerVerification: token.writerVerification as SessionUser["writerVerification"],
-          donationSettings: token.donationSettings as SessionUser["donationSettings"],
-          writerStats: token.writerStats as SessionUser["writerStats"],
-          isActive: token.isActive as boolean,
-          isEmailVerified: token.isEmailVerified as boolean,
-          isBanned: token.isBanned as boolean,
-          bannedUntil: token.bannedUntil as string | undefined,
-        };
+        try {
+          await dbConnect();
+          const userFromDb = await UserModel.findById(token.id)
+            .populate({ // Populate currentLevelObject ถ้าจำเป็น
+                path: 'gamification.currentLevelObject',
+                model: 'Level' // ชื่อ model ของ Level
+            })
+            .lean(); // ใช้ lean() เพื่อ performance
+
+          if (userFromDb) {
+            // แปลง Mongoose document (หรือ lean object) เป็น SessionUser format
+            session.user = toSessionUserFormat(userFromDb);
+            console.log(`✅ [AuthOptions Session] Session created/updated for user: ${session.user.username}, Theme from DB: ${session.user.preferences?.display?.theme}`);
+          } else {
+            console.error(`❌ [AuthOptions Session] User with ID ${token.id} not found in DB. Session will be invalid.`);
+            // ทำให้ session.user เป็น null เพื่อให้ client จัดการการออกจากระบบ
+            (session as any).user = null;
+          }
+        } catch (error: any) {
+          console.error(`❌ [AuthOptions Session] Error fetching user from DB for session: ${error.message}`, error.stack);
+          (session as any).user = null; // ทำให้ session ไม่สมบูรณ์หากเกิด error
+        }
       } else {
-        console.warn(`⚠️ [AuthOptions Session] Token missing id, cannot create user session.`);
+        console.warn(`⚠️ [AuthOptions Session] Token missing id, cannot create full user session.`);
+        (session as any).user = null;
       }
       return session;
     },
   },
 
   pages: {
-    signIn: "/auth/signin",
+    signIn: "/auth/signin", // หน้าสำหรับ Custom Sign-in
     signOut: "/auth/signout",
-    error: "/auth/error",
+    error: "/auth/error", // หน้าสำหรับแสดงข้อผิดพลาด (เช่น OAuth sign in error)
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
@@ -520,14 +649,21 @@ export const authOptions: NextAuthOptions = {
 
 // Augment NextAuth types
 declare module "next-auth" {
-  // interface User extends SessionUser {} // Removed to fix @typescript-eslint/no-empty-object-type
   interface Session {
-    user: SessionUser; // Directly use SessionUser
+    user: SessionUser | null; // session.user จะมี type เป็น SessionUser หรือ null ถ้า session ไม่สมบูรณ์
   }
+  // ไม่จำเป็นต้อง extend NextAuthUser ที่นี่ ถ้า authorize() และ OAuth profile flow ถูกจัดการให้คืนค่าที่มี id
 }
 
+// JWT callback จะใช้ interface นี้
+// ข้อมูลที่เก็บใน JWT token (ควรน้อยที่สุด)
 declare module "next-auth/jwt" {
-  interface JWT extends SessionUser {
+  interface JWT {
+    id: string;
+    username?: string | null;
+    roles?: Array<"Reader" | "Writer" | "Admin" | "Moderator" | "Editor">;
     provider?: string;
+    // ไม่ควรเก็บ name, email หรือ object ใหญ่ๆ ใน JWT โดยตรงแล้ว
+    // ข้อมูลอื่นๆ จะถูกดึงจาก DB ใน session callback
   }
 }
