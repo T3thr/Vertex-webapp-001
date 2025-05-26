@@ -399,8 +399,3 @@ function formatNumber(num: number | null | undefined): string {
   }
   return num.toString();
 }
-
-
-
-
-
