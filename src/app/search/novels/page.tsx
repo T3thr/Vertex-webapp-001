@@ -351,7 +351,7 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
             ? `นิยายในหมวดหมู่ "${selectedCategoryName}"`
             : 'นิยายทั้งหมด'}
           {selectedCategoryName && query && (
-            <span className="text-base text-muted-foreground ml-2">(ในหมวดหมู่ "{selectedCategoryName}")</span>
+            <span className="text-base text-muted-foreground ml-2">(ในหมวดหมู่ &quot;{selectedCategoryName}&quot;)</span>
           )}
           {status && status !== '' && (
             <span className="text-base text-muted-foreground ml-2">
