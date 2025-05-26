@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     // เชื่อมต่อกับฐานข้อมูล
     await dbConnect();
-    const Novel = NovelModel();
+    const Novel = NovelModel;
 
     // ดึงพารามิเตอร์การค้นหาจาก URL
     const searchParams = request.nextUrl.searchParams;
