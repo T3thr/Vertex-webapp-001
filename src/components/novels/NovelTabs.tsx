@@ -1,82 +1,204 @@
 // src/components/novels/NovelTabs.tsx
-'use client'; // This component needs client-side interactivity for tabs
+// Component สำหรับแสดงแท็บต่างๆ ในหน้ารายละเอียดนิยาย
+// ประกอบด้วย แท็บตอน, รายละเอียด, ตัวละคร, รีวิว
 
-import { useState } from 'react';
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
-import { NovelDetailsTab } from './NovelDetailsTab';
-import { NovelEpisodesTab } from './NovelEpisodesTab';
-import { NovelCharactersSection } from './NovelCharactersSection';
-import { NovelReviewsTab } from './NovelReviewsTab';
-import { ListChecks, BookText, Users2, MessageCircle, Info } from 'lucide-react';
+"use client";
+
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  BookOpen, 
+  Info, 
+  Users, 
+  MessageSquare,
+  FileText,
+  Star
+} from 'lucide-react';
+import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
+import NovelEpisodesTab from './NovelEpisodesTab';
+import NovelDetailsTab from './NovelDetailsTab';
+import NovelCharactersTab from './NovelCharactersTab';
+import NovelReviewsTab from './NovelReviewsTab';
+
+// ===================================================================
+// SECTION: TypeScript Interfaces
+// ===================================================================
 
 interface NovelTabsProps {
   novel: PopulatedNovelForDetailPage;
 }
 
-type TabName = 'details' | 'episodes' | 'characters' | 'reviews';
+interface TabItem {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  count?: number;
+}
 
-export const NovelTabs: React.FC<NovelTabsProps> = ({ novel }) => {
-  const [activeTab, setActiveTab] = useState<TabName>('details');
+// ===================================================================
+// SECTION: Animation Variants
+// ===================================================================
 
-  const tabs = [
-    { id: 'details' as TabName, label: 'รายละเอียด', icon: <Info size={18} /> },
-    { id: 'episodes' as TabName, label: `ตอนทั้งหมด (${novel.publishedEpisodesCount || 0})`, icon: <ListChecks size={18} /> },
-    { id: 'characters' as TabName, label: `ตัวละคร (${novel.charactersList?.length || 0})`, icon: <Users2 size={18} /> },
-    { id: 'reviews' as TabName, label: 'รีวิว', icon: <MessageCircle size={18} /> },
+const tabContainerVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      duration: 0.5,
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const tabVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0 }
+};
+
+const contentVariants = {
+  hidden: { opacity: 0, x: 20 },
+  visible: { 
+    opacity: 1, 
+    x: 0,
+    transition: { duration: 0.3 }
+  },
+  exit: { 
+    opacity: 0, 
+    x: -20,
+    transition: { duration: 0.2 }
+  }
+};
+
+// ===================================================================
+// SECTION: Main Component
+// ===================================================================
+
+export default function NovelTabs({novel}: NovelTabsProps) {
+  const [activeTab, setActiveTab] = useState('episodes');
+
+  // ตรวจสอบข้อมูลเบื้องต้น
+  if (!novel) {
+    return (
+      <div className="bg-card text-card-foreground p-8 rounded-lg">
+        <div className="text-center text-muted-foreground">
+          ไม่พบข้อมูลนิยาย
+        </div>
+      </div>
+    );
+  }
+
+  // เตรียมข้อมูลแท็บ
+  const tabs: TabItem[] = [
+    {
+      id: 'episodes',
+      label: 'ตอน',
+      icon: <BookOpen className="w-5 h-5" />,
+      count: novel.publishedEpisodesCount || 0
+    },
+    {
+      id: 'details',
+      label: 'รายละเอียด',
+      icon: <Info className="w-5 h-5" />
+    },
+    {
+      id: 'characters',
+      label: 'ตัวละคร',
+      icon: <Users className="w-5 h-5" />,
+      count: novel.characters?.length || 0
+    },
+    {
+      id: 'reviews',
+      label: 'รีวิว',
+      icon: <MessageSquare className="w-5 h-5" />,
+      count: novel.stats?.ratingsCount || 0
+    }
   ];
 
+  // ฟังก์ชันเปลี่ยนแท็บ
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+  };
+
+  // ฟังก์ชันเรนเดอร์เนื้อหาตามแท็บ
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'episodes':
+        return <NovelEpisodesTab novel={novel} />;
       case 'details':
         return <NovelDetailsTab novel={novel} />;
-      case 'episodes':
-        return <NovelEpisodesTab novel={novel} episodes={novel.episodesList || []} />;
       case 'characters':
-        return <NovelCharactersSection characters={novel.charactersList || []} />;
+        return <NovelCharactersTab novel={novel} />;
       case 'reviews':
-        return <NovelReviewsTab novelId={novel._id.toString()} />;
+        return <NovelReviewsTab novel={novel} />;
       default:
-        return null;
+        return <NovelEpisodesTab novel={novel} />;
     }
   };
 
   return (
-    <div className="w-full">
-      <div className="border-b border-border sticky top-0 z-20 bg-background/80 backdrop-blur-md -mx-2 sm:-mx-4 px-2 sm:px-4">
-        <nav className="container-custom mx-auto flex space-x-1 sm:space-x-2 overflow-x-auto" aria-label="Tabs">
+    <motion.div 
+      className="bg-card text-card-foreground rounded-lg overflow-hidden shadow-sm"
+      variants={tabContainerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* แถบแท็บ */}
+      <div className="border-b border-border">
+        <div className="flex overflow-x-auto">
           {tabs.map((tab) => (
-            <button
+            <motion.button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                ${activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'}
-                inline-flex items-center shrink-0 px-3 py-3 sm:px-4 sm:py-4 border-b-2 font-medium text-sm transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
-              `}
-              aria-current={activeTab === tab.id ? 'page' : undefined}
+              onClick={() => handleTabChange(tab.id)}
+              className={`relative flex items-center gap-2 px-6 py-4 font-medium transition-colors whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+              }`}
+              variants={tabVariants}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <span className="mr-2">{tab.icon}</span>
-              {tab.label}
-            </button>
+              {tab.icon}
+              <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className={`px-2 py-1 text-xs rounded-full ${
+                  activeTab === tab.id
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  {tab.count > 999 ? '999+' : tab.count}
+                </span>
+              )}
+              
+              {/* เส้นบ่งบอกแท็บที่เลือก */}
+              {activeTab === tab.id && (
+                <motion.div
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                  layoutId="activeTab"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+            </motion.button>
           ))}
-        </nav>
+        </div>
       </div>
 
-      <div className="mt-6 md:mt-8">
+      {/* เนื้อหาแท็บ */}
+      <div className="min-h-[400px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            variants={contentVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="p-6"
           >
             {renderTabContent()}
           </motion.div>
         </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 };

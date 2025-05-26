@@ -4,10 +4,10 @@
 import { Metadata, ResolvingMetadata } from "next";
 import { notFound } from "next/navigation";
 import { PopulatedNovelForDetailPage } from "@/app/api/novels/[slug]/route"; 
-import { NovelHeader } from "@/components/novels/NovelHeader";
-import { NovelTabs } from "@/components/novels/NovelTabs";
-// NovelCharactersSection is now rendered inside NovelTabs, so direct import might not be needed here
-// import { NovelCharactersSection } from "@/components/novels/NovelCharactersSection";
+import NovelHeader from "@/components/novels/NovelHeader";
+import NovelTabs from "@/components/novels/NovelTabs";
+// NovelCharactersTab is now rendered inside NovelTabs, so direct import might not be needed here
+// import NovelCharactersTab from "@/components/novels/NovelCharactersTab";
 
 interface NovelPageProps {
   params: { slug: string };
