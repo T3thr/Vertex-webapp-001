@@ -309,7 +309,7 @@ export async function GET(
 
     // แปลง novelData (Mongoose Document) เป็น Plain Object ก่อนที่จะเพิ่ม field อื่นๆ
     // เพื่อให้ virtuals ทำงาน และสามารถเพิ่ม property ใหม่ได้
-    let novelObject = novelData.toObject({ virtuals: true, getters: true }) as any;
+    const novelObject = novelData.toObject({ virtuals: true, getters: true }) as any;
 
 
     // 5. ดึงข้อมูลตัวละครที่เกี่ยวข้อง (Characters)
