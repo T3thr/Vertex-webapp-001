@@ -1,14 +1,16 @@
 /* src/components/ImageSlider.module.css */
 
 .carousel {
-  position: relative;
-  width: 100%;
-  height: 300px;
-  overflow: hidden;
-  border-radius: 0.5rem;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  position: relative; /* ตำแหน่งอ้างอิงสำหรับ elements ภายใน */
+  width: 100%; /* ความกว้างเต็มพื้นที่ของ parent */
+  height: 300px; /* ความสูงเริ่มต้น, ปรับตาม breakpoints */
+  overflow: hidden; /* ซ่อนส่วนของสไลด์ที่อยู่นอก viewport ของ carousel */
+  border-radius: 0.5rem; /* มุมโค้ง */
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); /* เงา */
+  -webkit-tap-highlight-color: transparent; /* ปิด highlight สีฟ้าเมื่อ tap บน mobile */
 }
 
+/* Responsive height adjustments */
 @media (min-width: 640px) {
   .carousel {
     height: 380px;
@@ -35,66 +37,87 @@
 }
 
 .slideContainer {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  will-change: transform;
+  position: relative; /* สำหรับการ transform */
+  width: 100%; /* จะถูกตั้งค่าเป็น 300% (สำหรับ 3 สไลด์) โดย JavaScript */
+  height: 100%; /* ความสูงเต็ม carousel */
+  display: flex; /* จัดเรียงสไลด์ในแนวนอน */
+  will-change: transform; /* บอก browser ให้ optimize การเปลี่ยนแปลง transform */
+  /* Transition สำหรับการ snap กลับ หรือเมื่อกด next/prev buttons.
+    cubic-bezier(0.25, 0.46, 0.45, 0.94) เป็น easing function ที่ให้ความรู้สึกนุ่มนวล (ease-out-expo 느낌)
+  */
   transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .slideContainer.dragging {
-  transition: none;
+  transition: none; /* ปิด transition ขณะผู้ใช้กำลังลากสไลด์ */
 }
 
 .slide {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  flex: none;
-  display: flex;
+  position: relative; /* สำหรับ overlay และ content */
+  width: 100%; /* แต่ละสไลด์จะมีความกว้าง 100% ของ *carousel container* (เนื่องจาก slideContainer กว้าง 300%) */
+  /* หรือคิดเป็น 1/3 ของ slideContainer width */
+  height: 100%; /* ความสูงเต็ม carousel */
+  flex: none; /* หรือ flex: 1 0 calc(100% / 3); ถ้า slideContainer มี width 100% และเราแบ่งเอง */
+              /* แต่ปัจจุบัน slideContainer width = 300%, ดังนั้นแต่ละ slide จะใช้ 100% ของ carousel width */
+  display: flex; /* สำหรับจัด content ภายใน (ถ้าจำเป็น) */
   align-items: center;
   justify-content: center;
+  overflow: hidden; /* ป้องกัน content ล้นสไลด์ */
 }
 
 .slideImage {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  user-select: none;
-  -webkit-user-drag: none;
+  /* Image component ของ Next.js จะจัดการ style เองบางส่วนเมื่อใช้ prop 'fill' */
+  /* เราสามารถ override หรือเพิ่มเติมได้ที่นี่ */
+  width: 100%; /* มั่นใจว่าภาพเต็มความกว้างของ .slide */
+  height: 100%; /* มั่นใจว่าภาพเต็มความสูงของ .slide */
+  object-fit: cover; /* ให้ภาพคลุมพื้นที่ทั้งหมด, อาจมีการ crop บางส่วน */
+  user-select: none; /* ป้องกันการเลือกภาพ */
+  -webkit-user-drag: none; /* ป้องกันการลากภาพใน Safari */
 }
 
 .slideOverlay {
-  position: absolute;
-  inset: 0;
+  position: absolute; /* วางทับบนภาพ */
+  inset: 0; /* ครอบคลุมพื้นที่ทั้งหมดของ parent (.slide) */
+  /* Gradient จากล่างขึ้นบน เพื่อให้ text ด้านล่างอ่านง่ายขึ้น */
   background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%);
+  z-index: 1; /* อยู่ใต้ slideContent */
 }
 
+/* Responsive overlay adjustments สำหรับจอใหญ่ขึ้น (อาจเน้น content ด้านซ้าย) */
 @media (min-width: 768px) {
   .slideOverlay {
     background: linear-gradient(to right, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.5) 50%, transparent 75%);
-    width: 75%;
+    width: 75%; /* Overlay ไม่เต็ม 100% ทำให้เห็นภาพด้านขวาชัดขึ้น */
   }
 }
 
 @media (min-width: 1024px) {
   .slideOverlay {
-    width: 66.666667%;
+    width: 66.666667%; /* 2/3 */
   }
 }
 
 .slideContent {
-  position: absolute;
-  inset: 0;
+  position: absolute; /* วางทับบน overlay และ image */
+  inset: 0; /* ครอบคลุมพื้นที่ทั้งหมด */
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-end; /* จัดเนื้อหาชิดล่าง (default) */
   padding: 1.5rem;
-  color: white;
-  width: 100%;
+  color: white; /* สีตัวอักษรหลัก */
+  width: 100%; /* Content เต็มความกว้าง (อาจปรับตาม breakpoint) */
+  z-index: 2; /* อยู่เหนือ overlay */
+  pointer-events: none; /* ทำให้ content ไม่ขวางการคลิก/ลาก ที่ตัว slide เอง */
 }
 
+/* ทำให้ link และ button ภายใน content สามารถคลิกได้ */
+.slideContent a,
+.slideContent button {
+  pointer-events: auto; 
+}
+
+
+/* Responsive content adjustments */
 @media (min-width: 640px) {
   .slideContent {
     padding: 2rem;
@@ -103,16 +126,16 @@
 
 @media (min-width: 768px) {
   .slideContent {
-    justify-content: center;
+    justify-content: center; /* จัดเนื้อหาอยู่กลางแนวตั้ง */
     padding: 2.5rem;
-    width: 75%;
+    width: 75%; /* ให้สอดคล้องกับ overlay */
   }
 }
 
 @media (min-width: 1024px) {
   .slideContent {
     padding: 4rem;
-    width: 66.666667%;
+    width: 66.666667%; /* 2/3 */
   }
 }
 
@@ -127,10 +150,11 @@
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.375rem 0.875rem;
-  border-radius: 9999px;
+  border-radius: 9999px; /* pill shape */
   margin-bottom: 0.75rem;
-  background-color: var(--color-primary);
-  color: var(--color-primary-foreground);
+  /* ใช้ CSS variables ถ้ามีการกำหนด theme, หรือ fallback color */
+  background-color: var(--color-primary, #007bff); 
+  color: var(--color-primary-foreground, white);
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 }
 
@@ -145,10 +169,15 @@
   font-size: 1.5rem;
   font-weight: 700;
   margin-bottom: 0.75rem;
-  line-height: 1.25;
-  letter-spacing: -0.025em;
-  text-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
+  line-height: 1.25; /* ความสูงบรรทัด */
+  letter-spacing: -0.025em; /* ลดระยะห่างตัวอักษรเล็กน้อย */
+  text-shadow: 0 2px 4px rgb(0 0 0 / 0.3); /* เงาให้ตัวอักษรเด่นขึ้น */
 }
+.slideTitle > a { /* สไตล์สำหรับ Link ภายใน Title */
+  color: inherit; /* ให้ Link ใช้สีเดียวกับ Title */
+  text-decoration: none;
+}
+
 
 @media (min-width: 640px) {
   .slideTitle {
@@ -171,12 +200,13 @@
 
 .slideDescription {
   font-size: 0.875rem;
-  color: rgb(226 232 240);
+  color: rgb(226 232 240); /* สีเทาอ่อน */
   margin-bottom: 1.25rem;
   line-height: 1.625;
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  /* จำกัดการแสดงผลหลายบรรทัดด้วย ellipsis */
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 2; /* จำนวนบรรทัดสูงสุด */
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -185,7 +215,7 @@
   .slideDescription {
     font-size: 1rem;
     margin-bottom: 2rem;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 3; /* เพิ่มจำนวนบรรทัดสำหรับจอที่ใหญ่ขึ้น */
   }
 }
 
@@ -196,21 +226,21 @@
 }
 
 .slideButton {
-  display: inline-flex;
+  display: inline-flex; /* ทำให้ icon กับ text อยู่ในแนวเดียวกัน */
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.625rem; /* ระยะห่างระหว่าง text กับ icon */
   padding: 0.75rem 1.5rem;
   font-size: 0.875rem;
   font-weight: 600;
-  background-color: var(--color-primary);
-  color: var(--color-primary-foreground);
-  border-radius: 0.375rem;
-  transition: all 0.2s ease-in-out;
+  background-color: var(--color-primary, #007bff);
+  color: var(--color-primary-foreground, white);
+  border-radius: 0.375rem; /* มุมโค้งของปุ่ม */
+  transition: all 0.2s ease-in-out; /* transition สำหรับ hover, active */
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  text-decoration: none;
-  border: none;
+  text-decoration: none; /* ลบขีดเส้นใต้ของ Link */
+  border: none; /* ไม่มีเส้นขอบ */
   cursor: pointer;
-  will-change: transform, background-color;
+  will-change: transform, background-color; /* Optimize animation */
 }
 
 @media (min-width: 640px) {
@@ -221,34 +251,35 @@
 }
 
 .slideButton:hover {
-  background-color: var(--color-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  background-color: var(--color-primary-hover, #0056b3); /* สีเมื่อ hover, ควรเข้มขึ้นเล็กน้อย */
+  transform: translateY(-1px); /* ยกปุ่มขึ้นเล็กน้อย */
+  box-shadow: 0 12px 20px -3px rgb(0 0 0 / 0.15); /* เพิ่มเงาเมื่อ hover */
 }
 
 .slideButton:active {
-  transform: translateY(0);
+  transform: translateY(0); /* กลับสู่ตำแหน่งเดิมเมื่อคลิก */
 }
 
 .slideButton:focus-visible {
-  outline: 2px solid var(--color-ring);
+  outline: 2px solid var(--color-ring, #007bff); /* outline เมื่อ focus ด้วย keyboard */
   outline-offset: 2px;
 }
 
+/* Navigation buttons (Arrows) */
 .navButton {
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
-  background-color: rgba(0, 0, 0, 0.3);
+  transform: translateY(-50%); /* จัดให้อยู่กึ่งกลางแนวตั้ง */
+  background-color: rgba(0, 0, 0, 0.3); /* พื้นหลังโปร่งแสง */
   color: white;
   border: none;
-  border-radius: 9999px;
+  border-radius: 9999px; /* ปุ่มกลม */
   padding: 0.625rem;
   transition: all 0.2s ease-in-out;
-  z-index: 10;
-  opacity: 0;
+  z-index: 10; /* อยู่เหนือ content อื่นๆ */
+  opacity: 0; /* ซ่อนไว้ตามปกติ */
   cursor: pointer;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px); /* เพิ่มความเบลอให้พื้นหลัง (ถ้า browser รองรับ) */
 }
 
 @media (min-width: 640px) {
@@ -257,19 +288,26 @@
   }
 }
 
+/* แสดง navButton เมื่อ hover ที่ carousel หรือเมื่อ button focus */
 .carousel:hover .navButton,
 .navButton:focus-visible {
   opacity: 1;
 }
 
 .navButton:hover {
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.6); /* เข้มขึ้นเมื่อ hover */
 }
 
 .navButton:focus-visible {
-  outline: 2px solid var(--color-ring);
+  /* outline สอดคล้องกับ slideButton */
+  outline: 2px solid var(--color-ring, white); 
   outline-offset: 2px;
 }
+.navButton:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 
 .navButtonPrev {
   left: 0.75rem;
@@ -291,13 +329,14 @@
   }
 }
 
+/* Dots Indicator */
 .dots {
   position: absolute;
   bottom: 1rem;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%); /* จัดกึ่งกลางแนวนอน */
   display: flex;
-  gap: 0.5rem;
+  gap: 0.5rem; /* ระยะห่างระหว่าง dots */
   z-index: 10;
 }
 
@@ -311,11 +350,12 @@
 .dot {
   width: 0.625rem;
   height: 0.625rem;
-  border-radius: 9999px;
-  background-color: rgba(255, 255, 255, 0.5);
+  border-radius: 9999px; /* dot กลม */
+  background-color: rgba(255, 255, 255, 0.5); /* สี dot ปกติ */
   transition: all 0.3s ease-out;
   cursor: pointer;
   border: none;
+  padding: 0; /* ลบ padding default ของ button */
   transform: scale(0.9);
 }
 
@@ -332,21 +372,25 @@
 }
 
 .dot.active {
-  background-color: var(--color-primary);
-  transform: scale(1.25);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary), 0.5), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  background-color: var(--color-primary, #007bff); /* สี dot ที่ active */
+  transform: scale(1.25); /* ขยาย dot ที่ active ให้เด่นขึ้น */
+  box-shadow: 0 0 0 2px rgba(var(--color-primary, 0, 123, 255), 0.5), 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .dot:focus-visible {
   outline: 2px solid white;
   outline-offset: 2px;
 }
+.dot:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-/* Animation classes สำหรับ content */
+/* Animation classes สำหรับ content ภายในสไลด์ */
 .slideContentEnter {
   opacity: 0;
   transform: translateY(25px);
-  animation: slideContentEnterAnimation 0.7s ease-out 0.3s forwards;
+  animation: slideContentEnterAnimation 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.3s forwards; /* delay 0.3s */
 }
 
 @keyframes slideContentEnterAnimation {
@@ -359,7 +403,7 @@
 .slideButtonEnter {
   opacity: 0;
   transform: translateY(15px);
-  animation: slideButtonEnterAnimation 0.6s ease-out 0.6s forwards;
+  animation: slideButtonEnterAnimation 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.6s forwards; /* delay 0.6s, หลัง content หลัก */
 }
 
 @keyframes slideButtonEnterAnimation {
