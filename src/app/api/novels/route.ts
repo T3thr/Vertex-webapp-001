@@ -1,13 +1,14 @@
 // src/app/api/novels/route.ts
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
-import NovelModel, { NovelStatus, NovelAccessLevel, INovel, NovelContentType } from "@/backend/models/Novel"; // Removed IPromotionDetails, INovelStats as they are part of INovel
-import UserModel, { IUser } from "@/backend/models/User";
-import CategoryModel, { ICategory } from "@/backend/models/Category"; // Removed CategoryType as it's part of ICategory
-import { NovelCardData, PopulatedAuthor, PopulatedCategory } from "@/components/NovelCard";
+import NovelModel, { NovelStatus, NovelAccessLevel, INovel, NovelContentType, IPromotionDetails, INovelStats } from "@/backend/models/Novel";
+import UserModel, { IUser } from "@/backend/models/User"; // UserModel ถูก import แต่ไม่ได้ใช้โดยตรงใน GET นี้ อาจใช้ใน POST/PUT
+import CategoryModel, { ICategory, CategoryType } from "@/backend/models/Category";
+import { NovelCardData, PopulatedAuthor, PopulatedCategory } from "@/components/NovelCard"; // ตรวจสอบ Path ให้ถูกต้อง
 import mongoose, { Types } from "mongoose";
 
 // Helper function to safely convert value to ObjectId
+// ตรวจสอบว่า id ที่รับมาเป็น string และ valid ObjectId format ก่อนแปลง
 const toObjectId = (id: string | undefined | null): Types.ObjectId | null => {
   if (typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) {
     return new mongoose.Types.ObjectId(id);
@@ -17,15 +18,16 @@ const toObjectId = (id: string | undefined | null): Types.ObjectId | null => {
 
 export async function GET(request: Request) {
   try {
-    await dbConnect(); // Ensure database connection
+    await dbConnect(); // เชื่อมต่อฐานข้อมูล
 
     const { searchParams } = new URL(request.url);
-    const filter = searchParams.get("filter") || "trending"; // Default filter is trending
-    const limit = parseInt(searchParams.get("limit") || "7", 10); // Default limit is 7
+    const filter = searchParams.get("filter") || "trending"; // default filter คือ trending
+    const limit = parseInt(searchParams.get("limit") || "7", 10); // default limit คือ 7 
     const page = parseInt(searchParams.get("page") || "1", 10);
     const categorySlug = searchParams.get("categorySlug");
     const languageIdParam = searchParams.get("languageId");
 
+    // ตรวจสอบ novelType และ cast ให้ตรงกับ NovelContentType หรือ null
     const novelTypeParam = searchParams.get("novelType");
     const novelType = novelTypeParam && Object.values(NovelContentType).includes(novelTypeParam as NovelContentType)
       ? novelTypeParam as NovelContentType
@@ -36,7 +38,7 @@ export async function GET(request: Request) {
     console.log(`📡 [API /api/novels] Called with URL: ${request.url}`);
     console.log(`ℹ️ [API /api/novels] Params - filter: ${filter}, limit: ${limit}, page: ${page}, categorySlug: ${categorySlug}, languageId: ${languageIdParam}, novelType: ${novelType}`);
 
-    // Base query: fetch only published or completed novels, public access, and not deleted
+    // Query พื้นฐาน: ดึงเฉพาะนิยายที่เผยแพร่แล้วหรือจบแล้ว, เป็นสาธารณะ, และไม่ถูกลบ
     const query: any = {
       status: { $in: [NovelStatus.PUBLISHED, NovelStatus.COMPLETED] },
       accessLevel: NovelAccessLevel.PUBLIC,
@@ -44,22 +46,23 @@ export async function GET(request: Request) {
     };
     const sort: any = {};
 
-    // Filter by novelType (e.g., interactive_fiction for Visual Novels)
+    // Filter ตาม sourceType (เช่น interactive_fiction สำหรับ Visual Novels)
     if (novelType) {
       query["sourceType.type"] = novelType;
       console.log(`ℹ️ [API /api/novels] Filtering for novelType: ${novelType}`);
     }
 
-    const andConditions: any[] = []; // Array for $and conditions if multiple are needed
+    // Array สำหรับเก็บ $and conditions ถ้ามีหลายเงื่อนไขที่ต้องใช้ $and
+    const andConditions: any[] = [];
 
-    // Filter by categorySlug
+    // Filter ตาม categorySlug
     if (categorySlug) {
       const category = await CategoryModel.findOne({ slug: categorySlug }).lean<ICategory>();
       if (category && category._id) {
         console.log(`ℹ️ [API /api/novels] Filtering by category: ${category.name} (ID: ${category._id})`);
-        const categoryObjId = category._id;
+        const categoryObjId = category._id; // lean() คืน ObjectId ถ้า schema เป็น ObjectId
         const categoryConditions = {
-          $or: [ // Novel must have this category in one of the following fields
+          $or: [ // นิยายต้องมี category นี้ใน field ใด field หนึ่งต่อไปนี้
             { "themeAssignment.mainTheme.categoryId": categoryObjId },
             { "themeAssignment.subThemes.categoryId": categoryObjId },
             { "themeAssignment.moodAndTone": categoryObjId },
@@ -80,44 +83,43 @@ export async function GET(request: Request) {
         andConditions.push(categoryConditions);
       } else {
         console.warn(`⚠️ [API /api/novels] Category with slug "${categorySlug}" not found. No novels will match this category slug.`);
-        // If categorySlug is provided but not found, return empty results to avoid user confusion
+        // ถ้า categorySlug ระบุมาแต่หาไม่เจอ, ควรคืนค่าว่างเพื่อไม่ให้ user สับสน
         return NextResponse.json({ novels: [], pagination: { total: 0, page, limit, totalPages: 0 } }, { status: 200 });
       }
     }
 
-    // Filter by languageId
+    // Filter ตาม languageId
     if (languageIdParam) {
       const langId = toObjectId(languageIdParam);
       if (langId) {
-        query.language = langId; // language in NovelModel is an ObjectId referencing Category
+        query.language = langId; // language ใน NovelModel เป็น ObjectId อ้างอิง Category
         console.log(`ℹ️ [API /api/novels] Filtering by languageId: ${languageIdParam}`);
       } else {
         console.warn(`⚠️ [API /api/novels] Invalid languageId format: "${languageIdParam}". Skipping language filter.`);
       }
     }
 
-    // Filtering and sorting logic based on the filter parameter
+    // Logic การกรองและเรียงลำดับตาม filter parameter
     switch (filter) {
       case "trending":
-        sort["stats.trendingStats.trendingScore"] = -1; // Sort by highest trending score
-        sort["stats.viewsCount"] = -1; // Fallback to view count
+        sort["stats.trendingStats.trendingScore"] = -1; // เรียงตามคะแนน trending สูงสุด
+        sort["stats.viewsCount"] = -1; // สำรองด้วยยอดวิว
         console.log(`ℹ️ [API /api/novels] Applying filter: trending`);
         break;
-      case "published": // For "อัปเดตล่าสุด" (Latest Updates)
-        sort["stats.lastPublishedEpisodeAt"] = -1; // Most recently published episode
-        sort["publishedAt"] = -1; // Novel's first publication date (fallback)
+      case "published":
+        sort["stats.lastPublishedEpisodeAt"] = -1; // ตอนล่าสุดที่เผยแพร่
+        sort["publishedAt"] = -1; // นิยายที่เผยแพร่ล่าสุด (fallback)
         console.log(`ℹ️ [API /api/novels] Applying filter: published (latest episodes/novels)`);
         break;
-      case "promoted": // For "โปรโมชันและเรื่องเด่น" (Promotions and Featured)
+      case "promoted":
         const now = new Date();
         const promotionConditions = {
-          $or: [ // Must be isFeatured OR have an active promotion
+          $or: [ // ต้องเป็น isFeatured หรือมีโปรโมชันที่ active
             { isFeatured: true },
             {
               "monetizationSettings.activePromotion.isActive": true,
               "monetizationSettings.activePromotion.promotionalPriceCoins": { $exists: true, $ne: null },
-              // Ensure promotion dates are valid if they exist
-              $and: [
+              $and: [ // ตรวจสอบวันเริ่มและสิ้นสุดโปรโมชัน
                 { $or: [{ "monetizationSettings.activePromotion.promotionStartDate": { $lte: now } }, { "monetizationSettings.activePromotion.promotionStartDate": { $exists: false } }] },
                 { $or: [{ "monetizationSettings.activePromotion.promotionEndDate": { $gte: now } }, { "monetizationSettings.activePromotion.promotionEndDate": { $exists: false } }] },
               ],
@@ -125,27 +127,27 @@ export async function GET(request: Request) {
           ]
         };
         andConditions.push(promotionConditions);
-        // Sort for promoted: featured items first, then by trending score or publication date
-        sort["isFeatured"] = -1; // isFeatured=true comes first
-        sort["stats.trendingStats.trendingScore"] = -1;
+        // Sort สำหรับ promoted: อาจจะเรียงตาม isFeatured ก่อน, แล้วตามความนิยม หรือวันที่เผยแพร่
+        sort["isFeatured"] = -1; // ให้ isFeatured=true มาก่อน
+        sort["stats.trendingStats.trendingScore"] = -1; // แล้วตาม trending
         sort["publishedAt"] = -1;
         console.log(`ℹ️ [API /api/novels] Applying filter: promoted (featured or active promotions)`);
         break;
       case "completed":
-        query.isCompleted = true; // Only completed novels
-        sort["stats.averageRating"] = -1; // Sort by average rating
+        query.isCompleted = true; // นิยายที่จบแล้ว
+        sort["stats.averageRating"] = -1; // เรียงตามคะแนนเฉลี่ย
         sort["stats.viewsCount"] = -1;
         sort["publishedAt"] = -1;
         console.log(`ℹ️ [API /api/novels] Applying filter: completed`);
         break;
       default:
-        // Fallback to 'trending' if filter is unknown or missing
+        // Fallback ไป trending ถ้า filter ไม่รู้จัก
         sort["stats.trendingStats.trendingScore"] = -1;
         sort["stats.viewsCount"] = -1;
         console.warn(`⚠️ [API /api/novels] Invalid or missing filter parameter: "${filter}". Defaulting to 'trending'.`);
     }
 
-    // Combine $andConditions with the main query
+    // รวม $andConditions เข้ากับ query หลัก
     if (andConditions.length > 0) {
       query.$and = query.$and ? [...query.$and, ...andConditions] : andConditions;
     }
@@ -154,20 +156,20 @@ export async function GET(request: Request) {
     console.log(`ℹ️ [API /api/novels] Final Query: ${JSON.stringify(query)}, Sort: ${JSON.stringify(sort)}`);
     console.log(`ℹ️ [API /api/novels] Found ${total} novels matching query.`);
 
-    // Fetch novels with populated fields
-    // Use .lean({ virtuals: true }) for plain JS objects including virtuals like currentEpisodePriceCoins
+    // ดึงข้อมูลนิยายพร้อม populate field ที่เกี่ยวข้อง
+    // ใช้ .lean({ virtuals: true }) เพื่อให้ได้ plain JS objects และรวม virtual fields (เช่น currentEpisodePriceCoins)
     const rawNovels = await NovelModel.find(query)
       .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
         path: "author",
-        select: "username profile.displayName profile.penName profile.avatarUrl roles", // Select necessary fields for card
-        model: UserModel, // Explicitly specify model for clarity
+        select: "username profile.displayName profile.penName profile.avatarUrl roles", // เลือก field ที่จำเป็นสำหรับ card
+        model: UserModel, // ระบุ model เพื่อความชัดเจน (Mongoose มักจะ infer ได้)
       })
       .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory }, subThemes: { categoryId: ICategory }[], moodAndTone: ICategory[], contentWarnings: ICategory[] } }>({
         path: "themeAssignment.mainTheme.categoryId",
         select: "name slug localizations iconUrl color categoryType description",
         model: CategoryModel,
       })
-      .populate({
+      .populate({ // Populate subThemes (array of objects)
         path: 'themeAssignment.subThemes.categoryId',
         select: 'name slug iconUrl color categoryType description',
         model: CategoryModel,
@@ -195,15 +197,16 @@ export async function GET(request: Request) {
       .sort(sort)
       .skip(skip)
       .limit(limit)
-      .lean({ virtuals: true }) as any[]; // Temporarily cast to any[], then map to strong type
+      .lean({ virtuals: true }) as any[]; // Cast to any[] ชั่วคราว, แล้ว map ด้านล่าง
 
-    // Map raw novel data to the NovelCardData structure expected by the client component
+    // Map ข้อมูลดิบ (rawNovels) ไปยังโครงสร้าง NovelCardData ที่ Client Component (NovelCard) คาดหวัง
+    // รวมถึงการแปลง ObjectId เป็น string
     const novels: NovelCardData[] = rawNovels.map(novel => {
-      // Helper function to transform a populated category (if it exists)
+      // Helper function สำหรับแปลง populated category (ถ้ามี)
       const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
-        if (!cat || typeof cat !== 'object' || !cat._id) return undefined;
+        if (!cat || typeof cat !== 'object' || !cat._id) return undefined; // ตรวจสอบว่า cat เป็น object และมี _id
         return {
-          _id: cat._id.toString(), // Convert ObjectId to string
+          _id: cat._id.toString(), // แปลง ObjectId เป็น string
           name: cat.name,
           slug: cat.slug,
           localizations: cat.localizations,
@@ -214,34 +217,29 @@ export async function GET(request: Request) {
         };
       };
       
-      // Helper to transform an array of populated categories
+      // Helper สำหรับแปลง array ของ populated categories
       const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
         if (!Array.isArray(cats)) return [];
         return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
       };
 
-      // Construct author object
+      // สร้าง object author
       const authorData: PopulatedAuthor = novel.author && typeof novel.author === 'object' && novel.author._id
         ? {
             _id: novel.author._id.toString(),
             username: novel.author.username,
-            // Assume profile sub-document is populated completely
-            profile: { 
-              displayName: novel.author.profile?.displayName,
-              penName: novel.author.profile?.penName,
-              avatarUrl: novel.author.profile?.avatarUrl,
-            },
+            profile: novel.author.profile, // สมมติว่า profile sub-document ถูก populate มาครบ
             roles: novel.author.roles,
           }
-        : { _id: new mongoose.Types.ObjectId().toString(), username: "ไม่ทราบนามปากกา", profile: {} }; // Default author if data is missing
+        : { _id: new mongoose.Types.ObjectId().toString(), username: "ไม่ทราบนามปากกา" }; // Default author ถ้าไม่มีข้อมูล
 
       return {
-        _id: novel._id?.toString(), // Novel's _id
+        _id: novel._id?.toString(), // _id ของ Novel
         title: novel.title,
         slug: novel.slug,
         synopsis: novel.synopsis,
         coverImageUrl: novel.coverImageUrl,
-        stats: { // Select only the stats needed by NovelCard
+        stats: { // เลือกเฉพาะ stats ที่ NovelCard ต้องการ
           viewsCount: novel.stats?.viewsCount || 0,
           likesCount: novel.stats?.likesCount || 0,
           averageRating: novel.stats?.averageRating || 0,
@@ -253,7 +251,7 @@ export async function GET(request: Request) {
         status: novel.status as NovelStatus,
         totalEpisodesCount: novel.totalEpisodesCount,
         publishedEpisodesCount: novel.publishedEpisodesCount,
-        currentEpisodePriceCoins: novel.currentEpisodePriceCoins, // Virtual field from Novel model
+        currentEpisodePriceCoins: novel.currentEpisodePriceCoins, // Virtual field
         monetizationSettings: novel.monetizationSettings as INovel['monetizationSettings'],
 
         author: authorData,
@@ -261,22 +259,20 @@ export async function GET(request: Request) {
         themeAssignment: {
           mainTheme: novel.themeAssignment?.mainTheme?.categoryId
             ? {
-                categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!, // Use ! as existence is checked by transformPopulatedCategory
+                categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!, // ใช้ ! เพราะมีการตรวจสอบข้างใน transformPopulatedCategory
                 customName: novel.themeAssignment.mainTheme.customName,
               }
-            // Ensure a default structure if mainTheme or its categoryId is missing
-            : { categoryId: { _id: new mongoose.Types.ObjectId().toString(), name: 'ทั่วไป', categoryType: "GENERAL" } as PopulatedCategory },
+            : { categoryId: { _id: new mongoose.Types.ObjectId().toString(), name: 'ทั่วไป' } as PopulatedCategory }, // Default mainTheme
           subThemes: novel.themeAssignment?.subThemes?.map((st: any) => ({
             categoryId: transformPopulatedCategory(st.categoryId)!,
             customName: st.customName,
-          })).filter((st: any) => st.categoryId && st.categoryId._id) || [], // Filter out those where categoryId couldn't be transformed
+          })).filter((st: any) => st.categoryId && st.categoryId._id) || [], // กรองอันที่ categoryId ถูกแปลงสำเร็จ
           moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone),
           contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings),
           customTags: novel.themeAssignment?.customTags || [],
         },
-        // Provide a default language object if novel.language is not populated or missing
-        language: transformPopulatedCategory(novel.language) || { _id: new mongoose.Types.ObjectId().toString(), name: 'ไม่ระบุ', categoryType: "LANGUAGE" } as PopulatedCategory,
-        ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId), // Can be undefined if not present
+        language: transformPopulatedCategory(novel.language) || { _id: new mongoose.Types.ObjectId().toString(), name: 'ไม่ระบุ' } as PopulatedCategory, // Default language
+        ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId), // อาจเป็น undefined ถ้าไม่มี
       };
     });
 
