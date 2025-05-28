@@ -1,3 +1,4 @@
+// src/components/NovelCard.tsx
 "use client";
 
 import Image from "next/image";
@@ -6,12 +7,11 @@ import { motion } from "framer-motion";
 import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, ThumbsUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
-// ตรวจสอบ path ของ INovel และอื่นๆ ให้ถูกต้อง
-import { INovel, NovelStatus, IMonetizationSettings, INovelStats } from "@/backend/models/Novel"; // INovelStats เพิ่มเข้ามา
-import { ICategory, CategoryType, ICategoryLocalization } from "@/backend/models/Category"; // ICategoryLocalization เพิ่มเข้ามา
-import { IUser } from "@/backend/models/User";
+import type { INovel, NovelStatus, IMonetizationSettings, INovelStats } from "@/backend/models/Novel"; 
+import type { ICategory, CategoryType, ICategoryLocalization } from "@/backend/models/Category"; 
+import type { IUser } from "@/backend/models/User"; 
 
-// อินเทอร์เฟซสำหรับผู้เขียนที่ถูก populate (ควรตรงกับที่ API `/api/novels` ส่งมาสำหรับ NovelCard)
+// อินเทอร์เฟซสำหรับผู้เขียนที่ถูก populate
 export interface PopulatedAuthor {
   _id: string;
   username?: string;
@@ -20,56 +20,52 @@ export interface PopulatedAuthor {
     penName?: string;
     avatarUrl?: string;
   };
-  roles?: IUser['roles']; // Optional, API for card might not send this
+  roles?: IUser['roles'];
 }
 
-// อินเทอร์เฟซสำหรับหมวดหมู่ที่ถูก populate (ควรตรงกับที่ API `/api/novels` ส่งมาสำหรับ NovelCard)
+// อินเทอร์เฟซสำหรับหมวดหมู่ที่ถูก populate
 export interface PopulatedCategory {
   _id: string;
   name: string;
-  slug?: string; // slug มาจาก CategoryModel
-  localizations?: ICategoryLocalization[]; // localizations มาจาก CategoryModel
+  slug?: string;
+  localizations?: ICategoryLocalization[];
   iconUrl?: string;
   color?: string;
   categoryType?: CategoryType;
   description?: string;
 }
 
-// อินเทอร์เฟซสำหรับข้อมูลการ์ดนิยาย ที่ปรับให้ตรงกับการ populate จาก API ที่ใช้แสดงรายการ
-// นี่คือ type ที่ NovelCard component คาดหวังจะได้รับ
+// อินเทอร์เฟซสำหรับข้อมูลการ์ดนิยาย
 export type NovelCardData = Pick<INovel,
   | '_id'
   | 'title'
   | 'slug'
   | 'synopsis'
   | 'coverImageUrl'
-  // | 'stats' // stats ถูก destructure ด้านล่าง
   | 'isCompleted'
   | 'isFeatured'
-  | 'publishedAt' // วันที่เผยแพร่นิยายครั้งแรก
+  | 'publishedAt'
   | 'status'
   | 'totalEpisodesCount'
   | 'publishedEpisodesCount'
-  | 'currentEpisodePriceCoins' // Virtual
+  | 'currentEpisodePriceCoins'
 > & {
   author: PopulatedAuthor;
-  themeAssignment: { // themeAssignment ควรมีโครงสร้างตามที่ API ส่งมา
+  themeAssignment: {
     mainTheme?: {
-      categoryId: PopulatedCategory; // Populated
+      categoryId: PopulatedCategory;
       customName?: string;
     };
-    // Optional additional theme aspects if API sends them for cards
     subThemes?: Array<{ categoryId: PopulatedCategory; customName?: string; }>;
     moodAndTone?: PopulatedCategory[];
     contentWarnings?: PopulatedCategory[];
     customTags?: string[];
   };
-  language: PopulatedCategory; // Populated
-  ageRatingCategoryId?: PopulatedCategory | null; // Populated, can be null
-  monetizationSettings?: IMonetizationSettings; // จาก INovel
-  stats: Pick<INovelStats, 'viewsCount' | 'likesCount' | 'averageRating' | 'lastPublishedEpisodeAt'>; // เลือกเฉพาะ field ที่ใช้
+  language: PopulatedCategory;
+  ageRatingCategoryId?: PopulatedCategory | null;
+  monetizationSettings?: IMonetizationSettings;
+  stats: Pick<INovelStats, 'viewsCount' | 'likesCount' | 'averageRating' | 'lastPublishedEpisodeAt'>;
 };
-
 
 interface NovelCardProps {
   novel: NovelCardData;
@@ -82,13 +78,18 @@ export function NovelCard({
   novel,
   priority = false,
   className = "",
-  imageClassName = "aspect-[2/3.1]", // aspect-[3/4.5] หรือ aspect-[2/3] เป็นที่นิยม
+  imageClassName = "aspect-[2/3]", // ปรับเป็น 2:3 ให้เล็กลงเหมือน readawrite.com
 }: NovelCardProps) {
 
-  // ตรวจสอบ novel object ก่อนใช้งาน
   if (!novel || !novel.slug) {
     console.warn("[NovelCard] Novel data or slug is missing.", novel);
-    return <div className={`bg-card rounded-lg md:rounded-xl shadow-md overflow-hidden p-4 ${className}`}>ข้อมูลนิยายไม่ถูกต้อง</div>;
+    return (
+      <div
+        className={`bg-card rounded-lg shadow-sm overflow-hidden p-3 text-xs ${className} w-[120px] min-[400px]:w-[130px] sm:w-[140px] md:w-[150px]`}
+      >
+        ข้อมูลนิยายไม่ถูกต้อง
+      </div>
+    );
   }
 
   const lastUpdatedText = novel.stats?.lastPublishedEpisodeAt
@@ -105,17 +106,24 @@ export function NovelCard({
 
   const mainGenre = novel.themeAssignment?.mainTheme?.categoryId;
   const mainGenreName = mainGenre?.name || novel.themeAssignment?.mainTheme?.customName || "เรื่องเล่า";
-  // ใช้สีจาก mainGenre ถ้ามี, หรือ fallback ไปสี primary ของ theme
-  const mainGenreColor = mainGenre?.color || 'hsl(var(--primary))';
+  const mainGenreColor = mainGenre?.color && mainGenre.color !== "#000000" && mainGenre.color !== "#FFFFFF" ? mainGenre.color : 'var(--color-primary)';
 
-
+  // ปรับสี status badges ให้ดูดีขึ้น
   const statusBadges: { label: string; colorClass: string; icon?: React.ReactNode; title?: string }[] = [];
 
   if (novel.isFeatured) {
-    statusBadges.push({ label: "แนะนำ", colorClass: "bg-amber-500 text-amber-foreground", icon: <Sparkles size={11} /> });
+    statusBadges.push({ 
+      label: "แนะนำ", 
+      colorClass: "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm", 
+      icon: <Sparkles size={8} className="fill-current" /> 
+    });
   }
   if (novel.isCompleted) {
-    statusBadges.push({ label: "จบแล้ว", colorClass: "bg-emerald-600 text-emerald-foreground", icon: <CheckCircle size={11} /> });
+    statusBadges.push({ 
+      label: "จบแล้ว", 
+      colorClass: "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-sm", 
+      icon: <CheckCircle size={8} className="fill-current" /> 
+    });
   }
 
   const promo = novel.monetizationSettings?.activePromotion;
@@ -129,30 +137,28 @@ export function NovelCard({
   ) {
     statusBadges.push({
       label: "ลดราคา",
-      colorClass: "bg-rose-500 text-rose-foreground", // ใช้สี foreground ที่เหมาะสม
-      icon: <ThumbsUp size={11} />,
+      colorClass: "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-sm",
+      icon: <ThumbsUp size={8} className="fill-current" />,
       title: promo.promotionDescription || `พิเศษ ${promo.promotionalPriceCoins} เหรียญ/ตอน`,
     });
   }
 
+  // แสดงเฉพาะ 18+ เท่านั้น
   const ageRating = novel.ageRatingCategoryId;
-  const ageRatingText = ageRating?.name;
-  // ถ้า ageRating.color มีค่า, ให้ใช้ค่านั้น. ถ้าไม่มี, ให้ fallback ไปสีที่ generic กว่า หรือสีที่กำหนดไว้สำหรับ age rating
-  const ageRatingColorStyle = ageRating?.color ? { backgroundColor: ageRating.color, color: 'hsl(var(--card-foreground))' } : { backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' };
-  const ageRatingDesc = ageRating?.description || ageRatingText;
-
+  const isAdultContent = ageRating?.name === "18+" || ageRating?.name?.includes("18");
+  const ageRatingText = isAdultContent ? "18+" : null;
 
   const cardVariants = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 1, 0.5, 1] } }, // easeOutExpo
+    initial: { opacity: 0, y: 4 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" } },
     hover: {
-      y: -5,
-      boxShadow: "0 10px 20px -5px hsla(var(--primary)/0.2), 0 4px 6px -2px hsla(var(--primary)/0.1)", // improved shadow
-      transition: { duration: 0.25, ease: "circOut" },
+      y: -2,
+      boxShadow: "var(--shadow-md)",
+      transition: { duration: 0.15, ease: "easeOut" },
     },
   };
 
-  const placeholderCover = "/images/placeholder-cover.webp"; // ตรวจสอบว่า path นี้ถูกต้อง
+  const placeholderCover = "/images/placeholder-cover.webp";
 
   return (
     <motion.div
@@ -160,78 +166,78 @@ export function NovelCard({
       initial="initial"
       animate="animate"
       whileHover="hover"
-      className={`bg-card rounded-lg md:rounded-xl shadow-md hover:shadow-lg overflow-hidden flex flex-col transition-all duration-300 ease-in-out group ${className}`}
+      className={`bg-card rounded-lg shadow-sm hover:shadow-md overflow-hidden flex flex-col group border border-border/50 ${className}`}
       role="article"
       aria-labelledby={`novel-title-${novel._id}`}
     >
       <Link href={`/novels/${novel.slug}`} className="block h-full flex flex-col" title={novel.title}>
-        {/* Image Container */}
-        <div className={`relative w-full overflow-hidden rounded-t-lg md:rounded-t-xl ${imageClassName}`}>
+        {/* Image Container - ปรับให้เล็กลงตาม readawrite.com */}
+        <div className={`relative w-full overflow-hidden rounded-t-lg ${imageClassName}`}>
           <Image
             src={novel.coverImageUrl || placeholderCover}
             alt={`ปกนิยายเรื่อง ${novel.title}`}
             fill
-            sizes="(max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1024px) 22vw, 18vw"
-            className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+            sizes="(max-width: 640px) 25vw, (max-width: 768px) 20vw, (max-width: 1024px) 15vw, 12vw"
+            className="object-cover transition-transform duration-200 ease-in-out group-hover:scale-105"
             priority={priority}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              if (target.src !== placeholderCover && target.srcset !== placeholderCover) { // ตรวจสอบ srcset ด้วย
-                target.srcset = placeholderCover; // กำหนด srcset และ src
+              if (target.src !== placeholderCover && target.srcset !== placeholderCover) {
+                target.srcset = placeholderCover;
                 target.src = placeholderCover;
               }
             }}
           />
-          {/* Badges Area */}
-          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1 z-10">
-            {statusBadges.map((badge, index) => (
-              <span
-                key={`${badge.label}-${index}`} // แก้ไข key ให้ unique
-                title={badge.title || badge.label}
-                className={`text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${badge.colorClass} shadow-sm backdrop-blur-sm bg-opacity-85 leading-tight`}
-              >
-                {badge.icon} {badge.label}
-              </span>
-            ))}
-            {ageRatingText && (
-              <span
-                style={ageRatingColorStyle}
-                className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm backdrop-blur-sm bg-opacity-85 leading-tight"
-                title={ageRatingDesc || ageRatingText}
-              >
-                <ShieldCheck size={11} className="flex-shrink-0" /> {ageRatingText}
-              </span>
-            )}
-          </div>
-
-          {/* Gradient Overlay & Title on Image */}
-          <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-2 md:p-2.5 text-primary-foreground">
-            <h3
-              id={`novel-title-${novel._id}`}
-              className="font-semibold text-xs sm:text-sm md:text-base line-clamp-2 leading-tight drop-shadow-sm" // ใช้ font-semibold และ drop-shadow
-              title={novel.title}
-            >
-              {novel.title}
-            </h3>
-            <p
-              className="text-[10px] sm:text-xs text-gray-300 line-clamp-1 drop-shadow-sm"
-              title={authorDisplay}
-            >
-              {authorDisplay}
-            </p>
-          </div>
+          
+          {/* Badges Area - ปรับตำแหน่งและขนาด */}
+          {(statusBadges.length > 0 || ageRatingText) && (
+            <div className="absolute top-1 right-1 flex flex-col items-end gap-0.5 z-10">
+              {statusBadges.map((badge, index) => (
+                <span
+                  key={`${badge.label}-${index}-${novel._id}`}
+                  title={badge.title || badge.label}
+                  className={`text-[7px] sm:text-[8px] font-semibold px-1 py-0.5 rounded-full flex items-center gap-0.5 ${badge.colorClass} backdrop-blur-sm leading-tight whitespace-nowrap`}
+                >
+                  {badge.icon}{badge.label}
+                </span>
+              ))}
+              {ageRatingText && (
+                <span
+                  className="text-[7px] sm:text-[8px] font-semibold px-1 py-0.5 rounded-full flex items-center gap-0.5 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-sm backdrop-blur-sm leading-tight whitespace-nowrap"
+                  title="เนื้อหาสำหรับผู้ใหญ่ 18 ปีขึ้นไป"
+                >
+                  <ShieldCheck size={8} className="flex-shrink-0 fill-current" />{ageRatingText}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Content Area below image */}
-        <div className="p-2 md:p-2.5 flex flex-col flex-grow text-xs">
-          {/* Main Genre Tag */}
+        {/* Content Area - ปรับให้กระชับขึ้น */}
+        <div className="p-2 flex flex-col flex-grow text-xs">
+          {/* Title - ปรับขนาดให้เล็กลง */}
+          <h3
+            id={`novel-title-${novel._id}`}
+            className="font-semibold text-xs sm:text-sm text-foreground hover:text-primary line-clamp-2 leading-snug mb-1"
+            title={novel.title}
+          >
+            {novel.title}
+          </h3>
+
+          {/* Author - ปรับให้เล็กลง */}
+          <p
+            className="text-[9px] sm:text-[10px] text-muted-foreground line-clamp-1 mb-1"
+            title={authorDisplay}
+          >
+            {authorDisplay}
+          </p>
+
+          {/* Genre - ปรับขนาดไอคอนและข้อความ */}
           {mainGenreName && (
-            <div className="flex items-center gap-1 mb-1.5"> {/* เพิ่ม mb */}
-              <Tag size={12} style={{ color: mainGenreColor }} className="flex-shrink-0" />
+            <div className="flex items-center gap-0.5 mb-1" title={mainGenreName}>
+              <Tag size={9} style={{ color: mainGenreColor }} className="flex-shrink-0" />
               <p
-                className="font-medium line-clamp-1 text-ellipsis" // เพิ่ม text-ellipsis
-                title={mainGenreName}
+                className="font-medium line-clamp-1 text-ellipsis text-[9px] sm:text-[10px]"
                 style={{ color: mainGenreColor }}
               >
                 {mainGenreName}
@@ -239,30 +245,25 @@ export function NovelCard({
             </div>
           )}
 
-          {/* Synopsis */}
-          <p className="text-muted-foreground line-clamp-2 mb-1.5 flex-grow min-h-[2.2em] text-[11px] sm:text-xs leading-relaxed" title={novel.synopsis || ""}>
-            {novel.synopsis || "ยังไม่มีเรื่องย่อ"}
-          </p>
-
-          {/* Stats and Footer */}
-          <div className="mt-auto pt-1.5 border-t border-border/60"> {/* ทำให้เส้นจางลง */}
-            <div className="grid grid-cols-3 gap-x-1 text-muted-foreground/90"> {/* เพิ่ม gap */}
+          {/* Stats - ปรับให้เล็กลงและกระชับขึ้น */}
+          <div className="mt-auto pt-1 border-t border-border/50">
+            <div className="grid grid-cols-3 gap-x-0.5 text-muted-foreground/90 mb-0.5">
               <div className="flex items-center gap-0.5 truncate" title={`ยอดเข้าชม: ${novel.stats?.viewsCount?.toLocaleString() || 0}`}>
-                <Eye size={11} className="text-sky-500 flex-shrink-0" />
-                <span className="truncate text-[10px] sm:text-xs">{formatNumber(novel.stats?.viewsCount)}</span>
+                <Eye size={9} className="text-sky-500 flex-shrink-0" />
+                <span className="truncate text-[8px] sm:text-[9px]">{formatNumber(novel.stats?.viewsCount)}</span>
               </div>
               <div className="flex items-center gap-0.5 truncate" title={`ถูกใจ: ${novel.stats?.likesCount?.toLocaleString() || 0}`}>
-                <Heart size={11} className="text-rose-500 flex-shrink-0" />
-                <span className="truncate text-[10px] sm:text-xs">{formatNumber(novel.stats?.likesCount)}</span>
+                <Heart size={9} className="text-rose-500 flex-shrink-0" />
+                <span className="truncate text-[8px] sm:text-[9px]">{formatNumber(novel.stats?.likesCount)}</span>
               </div>
               <div className="flex items-center gap-0.5 truncate" title={`คะแนนเฉลี่ย: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
-                <Star size={11} className="text-amber-400 flex-shrink-0" />
-                <span className="truncate text-[10px] sm:text-xs">{novel.stats?.averageRating?.toFixed(1) || "-"}</span>
+                <Star size={9} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+                <span className="truncate text-[8px] sm:text-[9px]">{novel.stats?.averageRating?.toFixed(1) || "-"}</span>
               </div>
             </div>
-            <div className="mt-1.5 flex items-center text-muted-foreground/70 text-[9px] sm:text-[10px]"> {/* เพิ่ม mt */}
-              <Clock className="mr-1 flex-shrink-0" size={9} /> {/* เพิ่ม mr */}
-              <span className="truncate">อัปเดต: {lastUpdatedText}</span>
+            <div className="flex items-center text-muted-foreground/70 text-[7px] sm:text-[8px]">
+              <Clock className="mr-0.5 flex-shrink-0" size={8} />
+              <span className="truncate">{lastUpdatedText}</span>
             </div>
           </div>
         </div>
@@ -271,20 +272,20 @@ export function NovelCard({
   );
 }
 
-// Helper function for NovelCard, can be moved to a utils file
+// ฟังก์ชัน formatNumber คงเดิม
 function formatNumber(num?: number | null): string {
-    if (num === null || num === undefined || isNaN(num) || typeof num !== 'number') {
-        return "0";
-    }
-    if (num === 0) return "0";
+  if (num === null || num === undefined || isNaN(num) || typeof num !== 'number') {
+    return "0";
+  }
+  if (num === 0) return "0";
 
-    if (Math.abs(num) >= 1000000) {
-        const result = (num / 1000000).toFixed(1);
-        return result.endsWith(".0") ? result.slice(0, -2) + "M" : result + "M";
-    }
-    if (Math.abs(num) >= 1000) {
-        const result = (num / 1000).toFixed(1);
-        return result.endsWith(".0") ? result.slice(0, -2) + "K" : result + "K";
-    }
-    return num.toString();
+  if (Math.abs(num) >= 1000000) {
+    const result = (num / 1000000).toFixed(1);
+    return result.endsWith(".0") ? result.slice(0, -2) + "M" : result + "M";
+  }
+  if (Math.abs(num) >= 1000) {
+    const result = (num / 1000).toFixed(1);
+    return result.endsWith(".0") ? result.slice(0, -2) + "K" : result + "K";
+  }
+  return num.toString();
 }

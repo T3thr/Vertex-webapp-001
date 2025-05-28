@@ -8,7 +8,7 @@ import Footer from "@/components/layouts/Footer";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User"; // ✅ Import UserModel ที่ถูกต้อง
+import UserModel from "@/backend/models/User";
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";

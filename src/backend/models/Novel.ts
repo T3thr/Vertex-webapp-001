@@ -74,7 +74,7 @@ export enum NovelContentType {
   FAN_FICTION = "fan_fiction",
   TRANSLATION = "translation",
   ADAPTATION = "adaptation",
-  INTERACTIVE_FICTION = "interactive_fiction",
+  INTERACTIVE_FICTION = "interactive_fiction", // ใช้สำหรับ Visual Novel
 }
 
 // ==================================================================================================
@@ -625,7 +625,9 @@ NovelSchema.index({ status: 1, accessLevel: 1, publishedAt: -1, isDeleted: 1 }, 
 NovelSchema.index({ "themeAssignment.mainTheme.categoryId": 1, status: 1, "stats.averageRating": -1, isDeleted: 1 }, { name: "NovelMainThemeStatusRatingIndex" });
 NovelSchema.index({ isFeatured: 1, status: 1, "stats.viewsCount": -1, isDeleted: 1 }, { name: "NovelFeaturedStatusViewsIndex" });
 NovelSchema.index({ isDeleted: 1, status: 1 });
-NovelSchema.index({ "stats.trendingStats.trendingScore": -1, status: 1, isDeleted: 1 }, { name: "NovelTrendingScoreIndex" }); // **เพิ่มใหม่** Index สำหรับ trendingScore
+// Index สำหรับ trendingScore เพื่อการ query ที่เร็วขึ้นสำหรับ "ผลงานยอดนิยม"
+NovelSchema.index({ "stats.trendingStats.trendingScore": -1, status: 1, isDeleted: 1, accessLevel: 1 }, { name: "NovelTrendingScoreIndex" });
+
 
 // ==================================================================================================
 // SECTION: Virtuals (ฟิลด์เสมือน)

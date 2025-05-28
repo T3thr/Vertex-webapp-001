@@ -3,6 +3,7 @@
 // อัปเดต: ปรับ Path การเรียก API ของ signInWithCredentials ให้ตรงกับโครงสร้างใหม่
 // อัปเดต: ทำให้สอดคล้องกับ SessionUser และ IUser ที่อัปเดตแล้ว และคง Logic เดิมตามที่คุณต้องการ
 // แก้ไข: เพิ่มการแปลงข้อมูล apiUser (IUser) เป็น SessionUser อย่างละเอียด และแก้ไข import
+"use client";
 
 import { createContext, useContext, useCallback, ReactNode, useState, useEffect } from "react";
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";

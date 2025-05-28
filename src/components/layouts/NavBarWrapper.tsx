@@ -1,5 +1,5 @@
 // src/components/layouts/NavBarWrapper.tsx
-
+"use client";
 import { Suspense } from "react";
 import NavBar from "./NavBar";
 import NavBarSkeleton from "./NavBarSkeleton";

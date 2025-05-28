@@ -24,31 +24,39 @@ interface GlobalProviderProps {
 }
 
 const AppContent = ({ children }: { children: ReactNode }) => {
-  const { mounted: themeMounted, resolvedTheme } = useTheme();
-  const [isReady, setIsReady] = useState(false);
+  const { mounted: themeContextMounted, resolvedTheme } = useTheme(); // renamed mounted to themeContextMounted
+  const [isAppContentReady, setIsAppContentReady] = useState(false);
 
   useEffect(() => {
-    if (themeMounted) {
+    // Wait for the theme context itself to be mounted and ready
+    if (themeContextMounted) {
+      // Use requestAnimationFrame to delay until the browser is ready for the next paint
+      // This can help ensure that theme styles are applied before making content visible
       const timer = requestAnimationFrame(() => {
-        setIsReady(true);
+        setIsAppContentReady(true);
       });
       return () => cancelAnimationFrame(timer);
     }
-  }, [themeMounted]);
+  }, [themeContextMounted]);
 
   const toastThemeMode = useMemo(() => {
-    if (!themeMounted) return "light";
-    if (resolvedTheme === "sepia") return "light"; // Sepia ใช้ toast สว่าง
-    return resolvedTheme; // 'light' หรือ 'dark'
-  }, [themeMounted, resolvedTheme]);
+    if (!themeContextMounted) return "light"; // Default if theme context not ready
+    if (resolvedTheme === "sepia") return "light";
+    return resolvedTheme || "light"; // 'light' or 'dark', fallback to 'light'
+  }, [themeContextMounted, resolvedTheme]);
 
-  if (!isReady) {
-    // แสดง children แบบ visibility: hidden เพื่อป้องกัน layout shift
+  // Render children hidden initially to prevent FOUC, or a proper skeleton/loader
+  if (!isAppContentReady) {
+    // Option 1: Render children but visually hidden (helps with layout stability)
     return (
-      <div className="opacity-0 transition-opacity duration-300" aria-hidden="true">
+      <div style={{ visibility: 'hidden' }} aria-hidden="true">
         {children}
       </div>
     );
+    // Option 2: Render nothing or a minimal loader (might cause more layout shift)
+    // return null;
+    // Option 3: If you have a global loading spinner component:
+    // return <GlobalSpinner />;
   }
 
   return (
@@ -57,7 +65,7 @@ const AppContent = ({ children }: { children: ReactNode }) => {
       <ToastContainer
         position="bottom-right"
         autoClose={3500}
-        // ... (props อื่นๆ ของ ToastContainer) ...
+        // ... other props
         theme={toastThemeMode}
         toastClassName={(context) => {
           const baseClass = "font-sans text-sm rounded-lg shadow-md";
@@ -77,9 +85,9 @@ const AppContent = ({ children }: { children: ReactNode }) => {
 export function GlobalProvider({ children }: GlobalProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={true}> 
-        <ThemeProvider storageKey="novelmaze-theme" defaultTheme="system"> 
-          <AuthProvider> 
+      <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={true}>
+        <ThemeProvider storageKey="novelmaze-theme" defaultTheme="system"> {/* defaultTheme here is the *preference* */}
+          <AuthProvider>
             <AppContent>{children}</AppContent>
           </AuthProvider>
         </ThemeProvider>

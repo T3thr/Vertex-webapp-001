@@ -1,7 +1,9 @@
 /* src/app/global.css */
 @import "tailwindcss";
 
-/* กำหนด keyframes สำหรับแอนิเมชั่น */
+/* --------------------------------------- */
+/* การกำหนด Keyframes สำหรับแอนิเมชั่น */
+/* --------------------------------------- */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -22,33 +24,39 @@
   to { transform: rotate(360deg); }
 }
 
-/* กำหนดตัวแปรพื้นฐานใน :root (Light Theme by default) */
+/* --------------------------------------- */
+/* การกำหนดตัวแปรพื้นฐานสำหรับ Light Theme (ค่าเริ่มต้น) */
+/* --------------------------------------- */
 :root {
   --background: #ffffff; /* White */
-  --foreground: #111827; 
-  --primary: #5495ff;    
+  --foreground: #111827; /* Cool Gray 900 */
+  --primary: #5495ff; /* Blue */
+  --primary-hover: #3c7df0; /* สีเข้มขึ้นเล็กน้อยสำหรับ hover */
   --primary-foreground: #ffffff; /* White */
-  --secondary: #eaeff8;  
-  --secondary-foreground: #1f2937; 
-  --accent: #a5b4fc;     
-  --muted: #707b90;      
-  --muted-foreground: #9ca3af; 
-  --card: #ffffff;       /* White */
-  --card-foreground: #111827; 
-  --border: #e5e7eb;    
-  --input: #f3f4f6;      
-  --ring: #60a5fa;       
-  --popover:#ffffff;
+  --secondary: #eaeff8; /* Light Gray */
+  --secondary-foreground: #1f2937; /* Cool Gray 800 */
+  --accent: #a5b4fc; /* Indigo 300 */
+  --accent-foreground: #111827; /* Text color for on accent backgrounds */
+  --muted: #707b90; /* Muted Gray */
+  --muted-foreground: #9ca3af; /* Cool Gray 400 */
+  --card: #ffffff; /* White */
+  --card-foreground: #111827; /* Cool Gray 900 */
+  --border: #e5e7eb; /* Cool Gray 200 */
+  --input: #f3f4f6; /* Cool Gray 100 */
+  --input-border: #d1d5db; /* Cool Gray 300 for input borders */
+  --ring: #60a5fa; /* Blue 400 */
+  --popover: #ffffff; /* White */
+  --popover-foreground: #111827;
 
-  --alert-error: #fef2f2; 
-  --alert-error-foreground: #b91c1c; 
-  --alert-error-border: #fecaca; 
-  --alert-success: #f0fdf4; 
-  --alert-success-foreground: #15803d; 
-  --alert-success-border: #bbf7d0; 
+  --alert-error: #fef2f2; /* Red 50 */
+  --alert-error-foreground: #b91c1c; /* Red 700 */
+  --alert-error-border: #fecaca; /* Red 300 */
+  --alert-success: #f0fdf4; /* Green 50 */
+  --alert-success-foreground: #15803d; /* Green 700 */
+  --alert-success-border: #bbf7d0; /* Green 300 */
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+  --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 
   --container-padding: 1rem; /* 16px */
   --container-padding-sm: 1.5rem; /* 24px for sm screens and up */
@@ -70,103 +78,119 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05); /* เพิ่ม shadow-inner */
 
-  --social-button-bg: #f3f4f6;
-  --social-button-google: #db4437;
-  --social-button-hover: #e5e7eb;
-  --social-button-text: #1f2937;
+  --social-button-bg: #f3f4f6; /* Cool Gray 100 */
+  --social-button-google: #db4437; /* Google Red */
+  --social-button-hover: #e5e7eb; /* Cool Gray 200 */
+  --social-button-text: #1f2937; /* Cool Gray 800 */
 
   --modal-gradient-start: var(--primary);
-  --modal-gradient-end: #60a5fa; 
+  --modal-gradient-end: #60a5fa; /* Blue 400 */
 }
 
-/* รูปแบบสำหรับโหมดมืด */
+/* --------------------------------------- */
+/* รูปแบบสำหรับโหมดมืด (Dark Theme) */
+/* --------------------------------------- */
 .dark {
-  --background: #0f172a; 
-  --foreground: #f8fafc; 
-  --primary: #60a5fa;    
-  --primary-foreground: #0f172a; 
-  --secondary: #1a2841;  
-  --secondary-foreground: #e2e8f0; 
-  --accent: #334155;     
-  --muted: #475569;      
-  --muted-foreground: #94a3b8; 
-  --card: #1e293b;       
-  --card-foreground: #f1f5f9;
-  --border: #334155;     
-  --input: #1e293b;      
-  --ring: #3b82f6;       
-  --popover: rgb(51, 78, 117);
+  --background: #0f172a; /* Slate 900 */
+  --foreground: #f8fafc; /* Slate 50 */
+  --primary: #60a5fa; /* Blue 400 */
+  --primary-hover: #3b82f6; /* Blue 500 */
+  --primary-foreground: #0f172a; /* Slate 900 */
+  --secondary: #1a2841; /* Slate (เข้มกว่า card) */
+  --secondary-foreground: #e2e8f0; /* Slate 200 */
+  --accent: #334155; /* Slate 700 */
+  --accent-foreground: #f8fafc;
+  --muted: #475569; /* Slate 600 */
+  --muted-foreground: #94a3b8; /* Slate 400 */
+  --card: #1e293b; /* Slate 800 */
+  --card-foreground: #f1f5f9; /* Slate 100 */
+  --border: #334155; /* Slate 700 */
+  --input: #1e293b; /* Slate 800 */
+  --input-border: #475569; /* Slate 600 for input borders */
+  --ring: #3b82f6; /* Blue 500 */
+  --popover: #334175; /* Slate (ปรับให้เข้มกว่า) */
+  --popover-foreground: #f8fafc;
 
-  --alert-error: #3f1212; /* Darker Red */
-  --alert-error-foreground: #fca5a5; 
-  --alert-error-border: #7f1d1d; 
-  --alert-success: #062f17; /* Darker Green */
-  --alert-success-foreground: #a7f3d0; 
-  --alert-success-border: #14532d; 
+  --alert-error: #3f1212; /* Dark Red */
+  --alert-error-foreground: #fca5a5; /* Red 300 */
+  --alert-error-border: #7f1d1d; /* Red 800 */
+  --alert-success: #062f17; /* Dark Green */
+  --alert-success-foreground: #a7f3d0; /* Green 300 */
+  --alert-success-border: #14532d; /* Green 800 */
 
-  --social-button-bg: #1e293b;
-  /* --social-button-google: #db4437; (คงเดิม) */
-  --social-button-hover: #334155;
-  --social-button-text: #e2e8f0;
+  --social-button-bg: #1e293b; /* Slate 800 */
+  --social-button-hover: #334155; /* Slate 700 */
+  --social-button-text: #e2e8f0; /* Slate 200 */
 
   --modal-gradient-start: var(--primary);
   --modal-gradient-end: #93c5fd; /* Blue 300 */
 }
 
-/* รูปแบบสำหรับโหมดซีเปีย */
+/* --------------------------------------- */
+/* รูปแบบสำหรับโหมดซีเปีย (Sepia Theme) */
+/* --------------------------------------- */
 .sepia {
-  --background: #f6ebdb; /* Sepia background - lighter */
-  --foreground: #4a3b31; /* Sepia foreground - darker brown */
-  --primary: #8c6f56;    /* Sepia primary - muted brown */
-  --primary-foreground: #e9dfbf; /* Sepia primary foreground - light cream */
-  --secondary: #cfc0a8;  /* Sepia secondary - lighter than card */
-  --secondary-foreground: #5a4b41; /* Sepia secondary foreground */
-  --accent: #b89d83;     /* Sepia accent - slightly more vibrant */
-  --muted: #9c8b7c;      /* Sepia muted - grayish brown */
-  --muted-foreground: #6b5a4d; /* Sepia muted foreground */
-  --card: #e9d3af;       /* Sepia card - slightly darker than bg */
-  --card-foreground: #4a3b31; /* Sepia card foreground */
-  --border: #d3c1ad;     /* Sepia border */
-  --input: #e9dfcf;      /* Sepia input */
-  --ring: #a0846c;       /* Sepia ring - derived from primary */
-  --popover:#ffffff;
+  --background: #f6ebdb; /* Sepia Background */
+  --foreground: #4a3b31; /* Sepia Foreground */
+  --primary: #8c6f56; /* Sepia Primary */
+  --primary-hover: #785b42; /* Sepia Darker */
+  --primary-foreground: #e9dfbf; /* Sepia Light */
+  --secondary: #cfc0a8; /* Sepia Secondary */
+  --secondary-foreground: #5a4b41; /* Sepia Dark */
+  --accent: #b89d83; /* Sepia Accent */
+  --accent-foreground: #4a3b31;
+  --muted: #9c8b7c; /* Sepia Muted */
+  --muted-foreground: #6b5a4d; /* Sepia Muted Foreground */
+  --card: #e9d3af; /* Sepia Card */
+  --card-foreground: #4a3b31; /* Sepia Foreground */
+  --border: #d3c1ad; /* Sepia Border */
+  --input: #e9dfcf; /* Sepia Input */
+  --input-border: #b89d83;
+  --ring: #a0846c; /* Sepia Ring */
+  --popover: #f6ebdb; /* Sepia Background */
+  --popover-foreground: #4a3b31;
 
-  --alert-error: #f0e0e0; /* Sepia-toned error bg */
-  --alert-error-foreground: #8c5353; /* Sepia-toned error text */
-  --alert-error-border: #e6c9c9; /* Sepia-toned error border */
-  --alert-success: #e0f0e0; /* Sepia-toned success bg */
-  --alert-success-foreground: #538c53; /* Sepia-toned success text */
-  --alert-success-border: #c9e6c9; /* Sepia-toned success border */
+  --alert-error: #f0e0e0; /* Sepia Error */
+  --alert-error-foreground: #8c5353; /* Sepia Error Foreground */
+  --alert-error-border: #e6c9c9; /* Sepia Error Border */
+  --alert-success: #e0f0e0; /* Sepia Success */
+  --alert-success-foreground: #538c53; /* Sepia Success Foreground */
+  --alert-success-border: #c9e6c9; /* Sepia Success Border */
 
-  --social-button-bg: #e9dfcf;
-  /* --social-button-google: #db4437; (อาจจะต้องปรับสี google ให้เข้ากับ sepia หรือคงเดิม) */
-  --social-button-hover: #d3c1ad;
-  --social-button-text: #5a4b41;
+  --social-button-bg: #e9dfcf; /* Sepia Button */
+  --social-button-hover: #d3c1ad; /* Sepia Button Hover */
+  --social-button-text: #5a4b41; /* Sepia Button Text */
 
   --modal-gradient-start: var(--primary);
-  --modal-gradient-end: #a98e74;
-  filter: sepia(0)
+  --modal-gradient-end: #a98e74; /* Sepia Gradient End */
+  filter: sepia(0.1); /* ลดค่า sepia ลงเล็กน้อยเพื่อไม่ให้สีเพี้ยนมากเกินไป */
 }
 
-
-/* กำหนดธีมสำหรับ Tailwind CSS 4.0+ (inline config) */
+/* --------------------------------------- */
+/* การกำหนดธีมสำหรับ Tailwind CSS 4.0+ */
+/* --------------------------------------- */
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover); /* เพิ่มสำหรับ hover state */
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-border: var(--input-border); /* เพิ่มสำหรับ input border */
   --color-ring: var(--ring);
   --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
 
   --color-alert-error: var(--alert-error);
   --color-alert-error-foreground: var(--alert-error-foreground);
@@ -175,29 +199,31 @@
   --color-alert-success-foreground: var(--alert-success-foreground);
   --color-alert-success-border: var(--alert-success-border);
 
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
-  --spacing-container-padding: var(--container-padding); /* เปลี่ยนชื่อให้สอดคล้อง */
+  --spacing-container-padding: var(--container-padding);
   --spacing-container-padding-sm: var(--container-padding-sm);
   --spacing-container-padding-lg: var(--container-padding-lg);
-  --size-container-max-width: var(--container-max-width); /* เปลี่ยนชื่อให้สอดคล้อง */
 
-  --duration-animation-fast: var(--animation-fast); /* เปลี่ยนชื่อให้สอดคล้อง */
+  --size-container-max-width: var(--container-max-width);
+
+  --duration-animation-fast: var(--animation-fast);
   --duration-animation-normal: var(--animation-normal);
   --duration-animation-slow: var(--animation-slow);
 
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
-  --radius-2xl: var(--radius-2xl);
-  --radius-full: var(--radius-full);
+  --border-radius-sm: var(--radius-sm);
+  --border-radius-md: var(--radius-md);
+  --border-radius-lg: var(--radius-lg);
+  --border-radius-xl: var(--radius-xl);
+  --border-radius-2xl: var(--radius-2xl);
+  --border-radius-full: var(--radius-full);
 
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
+  --box-shadow-sm: var(--shadow-sm);
+  --box-shadow-md: var(--shadow-md);
+  --box-shadow-lg: var(--shadow-lg);
+  --box-shadow-xl: var(--shadow-xl);
+  --box-shadow-inner: var(--shadow-inner);
 
   --color-social-button-bg: var(--social-button-bg);
   --color-social-button-google: var(--social-button-google);
@@ -208,53 +234,61 @@
   --color-modal-gradient-end: var(--modal-gradient-end);
 }
 
-/* ใช้รูปแบบพื้นฐานกับ body */
+/* --------------------------------------- */
+/* การกำหนดสไตล์พื้นฐานสำหรับ body */
+/* --------------------------------------- */
 body {
-  background-color: var(--background); /* Tailwind จะใช้ bg-background จาก @theme */
-  color: var(--foreground); /* Tailwind จะใช้ text-foreground จาก @theme */
+  background-color: var(--color-background); /* Tailwind จะใช้ bg-background จาก @theme */
+  color: var(--color-foreground); /* Tailwind จะใช้ text-foreground จาก @theme */
   font-family: var(--font-sans);
   font-size: 16px; /* 1rem */
   line-height: 1.625; /* เพิ่ม line-height เล็กน้อย */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility; /* ปรับปรุงการแสดงผลตัวอักษร */
+  overflow-x: hidden; /* ป้องกัน horizontal scroll ที่ไม่ต้องการบน body */
 }
 
-/* คลาสยูทิลิตี้ที่กำหนดเองสำหรับ container */
+/* --------------------------------------- */
+/* คลาสยูทิลิตี้สำหรับ container */
+/* --------------------------------------- */
 .container-custom {
   width: 100%;
-  max-width: var(--container-max-width);
+  max-width: var(--size-container-max-width); /* ใช้ตัวแปรจาก @theme */
   margin-left: auto;
   margin-right: auto;
-  padding-left: var(--container-padding);
-  padding-right: var(--container-padding);
+  padding-left: var(--spacing-container-padding); /* ใช้ตัวแปรจาก @theme */
+  padding-right: var(--spacing-container-padding);
 }
 
-@media (min-width: 640px) { /* sm breakpoint */
+@media (min-width: 640px) { /* sm breakpoint (Tailwind default) */
   .container-custom {
-    padding-left: var(--container-padding-sm);
-    padding-right: var(--container-padding-sm);
+    padding-left: var(--spacing-container-padding-sm);
+    padding-right: var(--spacing-container-padding-sm);
   }
 }
 
-@media (min-width: 1024px) { /* lg breakpoint */
+@media (min-width: 1024px) { /* lg breakpoint (Tailwind default) */
   .container-custom {
-    padding-left: var(--container-padding-lg);
-    padding-right: var(--container-padding-lg);
+    padding-left: var(--spacing-container-padding-lg);
+    padding-right: var(--spacing-container-padding-lg);
   }
 }
 
-
-/* คลาสสำหรับแอนิเมชั่น (ตัวอย่าง - Tailwind มี utility classes สำหรับ animation อยู่แล้ว) */
+/* --------------------------------------- */
+/* คลาสสำหรับแอนิเมชั่น */
+/* --------------------------------------- */
 .animate-fadeIn {
-  animation: fadeIn var(--animation-normal) ease-in-out;
+  animation: fadeIn var(--duration-animation-normal) ease-in-out;
 }
 
 .animate-slideIn {
-  animation: slideIn var(--animation-normal) ease-out;
+  animation: slideIn var(--duration-animation-normal) ease-out;
 }
 
-/* การปรับแต่ง scrollbar */
+/* --------------------------------------- */
+/* การปรับแต่ง Scrollbar */
+/* --------------------------------------- */
 /* For Webkit browsers (Chrome, Safari, Edge Chromium) */
 ::-webkit-scrollbar {
   width: 10px; /* ความกว้างของ scrollbar แนวตั้ง */
@@ -263,12 +297,12 @@ body {
 
 ::-webkit-scrollbar-track {
   background: var(--secondary);
-  border-radius: var(--radius-full);
+  border-radius: var(--border-radius-full);
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--accent);
-  border-radius: var(--radius-full);
+  border-radius: var(--border-radius-full);
   border: 2px solid var(--secondary); /* สร้างเอฟเฟกต์ padding รอบ thumb */
 }
 
@@ -277,43 +311,64 @@ body {
 }
 
 /* For Firefox */
-/* scrollbar-thin or scrollbar-auto or scrollbar-none */
-/* scrollbar-color: <thumb-color> <track-color> */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--accent) var(--secondary);
 }
 
-
-/* สไตล์เมื่อโฟกัส (เพื่อให้สอดคล้องกับ Tailwind focus-visible) */
-*:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm); /* เพิ่ม border-radius ให้ outline ดูดีขึ้น */
-}
-
-/* ไม่แสดง outline เมื่อ focus แต่ไม่ใช่ :focus-visible (เช่น คลิกด้วยเมาส์) */
-*:focus:not(:focus-visible) {
-  outline: none;
-}
-
-
-/* Utility class for specific scrollbar styling if needed */
+/* Utility class สำหรับ scrollbar แบบกำหนดเอง */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 6px; /* ความกว้างสำหรับ scrollbar แบบกำหนดเอง */
+  height: 6px; /* ความสูงสำหรับ scrollbar แบบกำหนดเอง */
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background-color: var(--primary);
+  border-radius: var(--border-radius-full);
 }
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary-hover);
+}
+
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--primary) var(--secondary);
 }
 
+/* --------------------------------------- */
+/* สไตล์เมื่อโฟกัส */
+/* --------------------------------------- */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm); /* เพิ่ม border-radius ให้ outline ดูดีขึ้น */
+  box-shadow: 0 0 0 4px rgb(var(--ring) / 0.2); /* เพิ่ม glow effect */
+}
+
+/* ไม่แสดง outline เมื่อ focus แต่ไม่ใช่ :focus-visible */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* --------------------------------------- */
+/* ป้องกัน Flash of Unstyled Content (FOUC) */
+/* --------------------------------------- */
 html {
   visibility: hidden; /* Hide by default to prevent FOUC */
 }
 
 html[data-theme-ready="true"] {
   visibility: visible; /* Show once the script has set the theme */
+}
+
+/* --------------------------------------- */
+/* Text Shadow Utilities */
+/* --------------------------------------- */
+.shadow-text-sm {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+.shadow-text-md {
+  text-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
 }
