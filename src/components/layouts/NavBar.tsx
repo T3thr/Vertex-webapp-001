@@ -165,7 +165,7 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
   const navLinks = useMemo(
     () => [
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
-      { href: "/novels/categories", label: "หมวดหมู่", icon: <Grid size={18} /> },
+      { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
       { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
     ],
     []

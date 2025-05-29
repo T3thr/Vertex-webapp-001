@@ -1,3 +1,4 @@
+// src/components/ImageSlider.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -22,322 +23,303 @@ interface ImageSliderProps {
   autoPlayInterval?: number;
 }
 
-export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProps) {
+const DESKTOP_FIXED_SLIDE_WIDTH = 1200; // กำหนดความกว้างคงที่ของสไลด์บนเดสก์ท็อป
+
+export function ImageSlider({ slides, autoPlayInterval = 8000 }: ImageSliderProps) {
   const [currentIndex, setCurrentIndex] = useState(0); // ดัชนีของสไลด์ที่ใช้งานจริง (logical index)
   const [isHovering, setIsHovering] = useState(false);
-  const [isDragging, setIsDragging] = useState(false); // สถานะกำลังลากหรือไม่
-  const [isAnimating, setIsAnimating] = useState(false); // สถานะกำลังเล่นอนิเมชั่น (สำหรับการคลิก next/prev)
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  const [startPos, setStartPos] = useState(0); // ตำแหน่งเริ่มต้นของการลาก (แกน X)
-  const [currentTranslate, setCurrentTranslate] = useState(0); // ค่า translate ปัจจุบันสำหรับ offset จากจุดศูนย์กลาง
-  const [prevTranslate, setPrevTranslate] = useState(0); // ค่า translate ก่อนหน้า (currentTranslate ณ ตอนเริ่มลาก)
+  const [startPos, setStartPos] = useState(0);
+  const [currentTranslate, setCurrentTranslate] = useState(0);
+  const [prevTranslate, setPrevTranslate] = useState(0);
 
-  const animationIdRef = useRef<number>(0); // Ref สำหรับเก็บ ID ของ requestAnimationFrame
-  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Ref สำหรับ setTimeout ของ transition
+  const animationIdRef = useRef<number>(0);
+  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const slideContainerRef = useRef<HTMLDivElement>(null);
 
-  // Helper function เพื่อเอา slide width ปัจจุบัน
-  // useCallback ถูกใช้เพื่อ memoize ฟังก์ชันนี้, แต่เนื่องจาก containerRef.current?.offsetWidth สามารถเปลี่ยนแปลงได้โดยไม่ทำให้ ref object เองเปลี่ยน,
-  // การ re-render ที่ใช้ getSlideWidth อาจไม่ได้ค่าล่าสุดเสมอไปหาก dependencies ของ useCallback ไม่ถูกตั้งค่าอย่างระมัดระวัง
-  // ในกรณีนี้, getSlideWidth ถูกเรียกภายใน event handlers หรือ effects ที่มี dependencies อื่นๆ ที่เหมาะสมอยู่แล้ว
-  const getSlideWidth = useCallback(() => {
+  // ฟังก์ชันสำหรับหาความกว้างของสไลด์ปัจจุบัน (responsive บน mobile, fixed บน desktop)
+  const getSlideWidth = useCallback((): number => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024 && slides.length > 1) { // 1024px คือ breakpoint สำหรับ desktop
+      return DESKTOP_FIXED_SLIDE_WIDTH;
+    }
     return containerRef.current?.offsetWidth || 0;
-  }, []); // containerRef เองไม่เปลี่ยน, แต่ offsetWidth อาจเปลี่ยน. การไม่มี deps หรือมี [containerRef] ให้ผลคล้ายกันในแง่การ memoize ตัวฟังก์ชัน
+  }, [slides.length]);
 
-  // คำนวณดัชนีสำหรับ infinite loop (ให้ index วนอยู่ในช่วงของ slides.length)
+
   const getSlideIndex = useCallback((index: number): number => {
     const slideCount = slides.length;
     if (slideCount === 0) return 0;
     return ((index % slideCount) + slideCount) % slideCount;
   }, [slides.length]);
 
-  // ฟังก์ชันสำหรับ animation loop ขณะลาก
+  // Animation loop ขณะลาก
   const animationLoop = useCallback(() => {
     if (slideContainerRef.current) {
-      // ใช้ calc(-100%) เพื่อให้สไลด์ตรงกลาง (extendedSlides[1]) เป็นหลัก (สไลด์ที่สองใน array 0, 1, 2)
-      // แล้วบวกด้วย currentTranslate ที่เป็น offset จากการลากหรืออนิเมชั่น
-      slideContainerRef.current.style.transform = `translateX(calc(-100% + ${currentTranslate}px))`;
+      // บน Desktop, -100% จะหมายถึง DESKTOP_FIXED_SLIDE_WIDTH
+      // บน Mobile, -100% จะหมายถึงความกว้างของ viewport
+      // การคำนวณ transform นี้จะทำให้สไลด์ตรงกลาง (ตาม DOM structure 3 สไลด์) อยู่ในตำแหน่งเริ่มต้น
+      // และ CSS data-position-in-loop จะจัดการเรื่อง peeking และ centering ที่แท้จริงบน desktop
+      const baseTranslatePercentage = slides.length > 1 ? -100 : 0; // ถ้ามีสไลด์เดียว ไม่ต้องเลื่อน base
+      slideContainerRef.current.style.transform = `translateX(calc(${baseTranslatePercentage}% + ${currentTranslate}px))`;
     }
     if (isDragging) {
       animationIdRef.current = requestAnimationFrame(animationLoop);
     }
-  }, [currentTranslate, isDragging]);
+  }, [currentTranslate, isDragging, slides.length]);
 
-  // ฟังก์ชันจัดการการเปลี่ยนสไลด์ (next/previous)
   const handleSlideChange = useCallback((direction: 'next' | 'prev') => {
-    if (isAnimating || slides.length <= 1) return; // ถ้ากำลัง animate หรือมีสไลด์เดียว ไม่ต้องทำอะไร
+    if (isAnimating || slides.length <= 1) return;
 
     setIsAnimating(true);
-    const slideWidth = getSlideWidth(); // ความกว้างของ container หนึ่งสไลด์
-    // targetTranslate คือ offset ที่จะทำให้สไลด์ถัดไป/ก่อนหน้าเข้ามาอยู่ตรงกลางชั่วคราว
-    // ถ้าไป next, slideContainer ต้องเลื่อนไปทางซ้าย (-slideWidth)
-    // ถ้าไป prev, slideContainer ต้องเลื่อนไปทางขวา (+slideWidth)
-    // ทั้งหมดนี้สัมพันธ์กับตำแหน่ง -100% ที่เป็น baseline
+    const slideWidth = getSlideWidth(); // ความกว้างของสไลด์ (fixed หรือ responsive)
+    // targetTranslate คือระยะที่ slideContainer ต้องเลื่อนไปเพื่อแสดงสไลด์ถัดไป/ก่อนหน้า
+    // ถ้าเป็น next, เลื่อนไปทางซ้าย (ลบ), ถ้าเป็น prev, เลื่อนไปทางขวา (บวก)
+    // เมื่อ currentTranslate ถูกเปลี่ยน, animationLoop หรือ useEffect ด้านล่างจะอัปเดต transform
     const targetTranslate = direction === 'next' ? -slideWidth : slideWidth;
 
-    // เปิด CSS transition (ลบ class 'dragging' ถ้ามี)
+
     if (slideContainerRef.current) {
-      slideContainerRef.current.classList.remove(styles.dragging);
+      slideContainerRef.current.classList.remove(styles.dragging); // เอา class dragging ออกเพื่อให้มี transition
     }
 
-    setCurrentTranslate(targetTranslate); // เริ่ม animate currentTranslate ไปยังเป้าหมาย
+    setCurrentTranslate(targetTranslate); // ตั้งค่า currentTranslate เพื่อเริ่ม animation ผ่าน CSS transition
 
-    // Clear timeout เก่า (ถ้ามี)
     if (transitionTimeoutRef.current) {
       clearTimeout(transitionTimeoutRef.current);
     }
 
+    // รอให้ CSS transition (0.6s) เสร็จสิ้น
     transitionTimeoutRef.current = setTimeout(() => {
       const newLogicalIndex = getSlideIndex(direction === 'next' ? currentIndex + 1 : currentIndex - 1);
-      setCurrentIndex(newLogicalIndex); // อัปเดต currentIndex จริง
+      setCurrentIndex(newLogicalIndex); // อัปเดต logical index ของสไลด์ปัจจุบัน
 
-      // Snap กลับไปที่ตรงกลาง (currentTranslate = 0) โดยปิด CSS transition ชั่วคราว
-      // เพื่อให้สไลด์ที่เพิ่ง active (ตาม newLogicalIndex) แสดงผลทันทีที่ตำแหน่ง -100% (ตรงกลาง)
+      // Reset transform และ state สำหรับการสไลด์ครั้งต่อไป
       if (slideContainerRef.current) {
-        slideContainerRef.current.classList.add(styles.dragging); // ใช้ class dragging เพื่อปิด transition
-        setCurrentTranslate(0); // รีเซ็ต offset กลับไปที่ 0 (สไลด์กลางจะอยู่ที่ -100% ตามปกติ)
-        setPrevTranslate(0); // รีเซ็ต prevTranslate ด้วย
-        
-        // Force reflow เล็กน้อยเพื่อให้ DOM อัปเดต transform ทันทีก่อนคืน transition
-        void slideContainerRef.current.offsetHeight; 
-        
-        slideContainerRef.current.classList.remove(styles.dragging); // คืน transition
+        slideContainerRef.current.classList.add(styles.dragging); // ใส่ class dragging เพื่อปิด transition ชั่วคราว
+        setCurrentTranslate(0); // Reset currentTranslate สำหรับสไลด์ "ชุดใหม่" ที่จะแสดง
+        setPrevTranslate(0);
+
+        // บังคับ reflow เพื่อให้ browser รับรู้การเปลี่ยนแปลง style ก่อนที่จะเอา class dragging ออก
+        // ซึ่งจะทำให้ transform ถูก reset ทันทีโดยไม่มี animation
+        const _ = slideContainerRef.current?.offsetHeight;
+
+        slideContainerRef.current.classList.remove(styles.dragging); // เอา class dragging ออก เพื่อให้พร้อมสำหรับ transition ครั้งต่อไป
       }
       setIsAnimating(false);
-    }, 600); // ระยะเวลาควรตรงกับ CSS transition duration (0.6s)
+    }, 600); // ระยะเวลาควรตรงกับ transition-duration ใน CSS
 
   }, [isAnimating, slides.length, getSlideWidth, currentIndex, getSlideIndex]);
 
 
   const goToNext = useCallback(() => {
-    if (isDragging) return; // ถ้ากำลังลากอยู่ ไม่ต้องทำอะไร
+    if (isDragging) return;
     handleSlideChange('next');
   }, [isDragging, handleSlideChange]);
 
   const goToPrevious = useCallback(() => {
-    if (isDragging) return; // ถ้ากำลังลากอยู่ ไม่ต้องทำอะไร
+    if (isDragging) return;
     handleSlideChange('prev');
   }, [isDragging, handleSlideChange]);
 
   const goToSlide = useCallback((slideIndex: number) => {
-    if (isDragging || isAnimating || slides.length <=1 ) return;
-    
-    const newLogicalIndex = getSlideIndex(slideIndex);
-    if (newLogicalIndex === currentIndex) return; // ถ้าเป็นสไลด์ปัจจุบัน ไม่ต้องทำอะไร
+    if (isDragging || isAnimating || slides.length <= 1 ) return;
 
-    // สำหรับ goToSlide เราจะ snap โดยตรง ไม่มีการ animate slideContainer ไปซ้าย/ขวา ก่อน
-    // แค่อัปเดต currentIndex แล้ว reset transform
+    const newLogicalIndex = getSlideIndex(slideIndex);
+    if (newLogicalIndex === currentIndex) return;
+
+    // การเปลี่ยนไปยังสไลด์ที่ระบุโดยตรง (เช่น คลิก dot)
+    // จำเป็นต้องมีการจัดการที่ซับซ้อนกว่าถ้าต้องการ animation ที่ราบรื่นเหมือน next/prev
+    // สำหรับตอนนี้, จะเป็นการ "snap" ไปยังสไลด์นั้นๆ โดยการอัปเดต currentIndex
+    // ซึ่งจะทำให้ extendedSlides re-render และ useEffect ด้านล่างจะปรับ transform
     setCurrentIndex(newLogicalIndex);
-    
+
     if (slideContainerRef.current) {
-      slideContainerRef.current.classList.add(styles.dragging); // ปิด transition ชั่วคราว
-      setCurrentTranslate(0); // รีเซ็ต offset, สไลด์ใหม่จะแสดงตรงกลางทันที
+      slideContainerRef.current.classList.add(styles.dragging);
+      setCurrentTranslate(0);
       setPrevTranslate(0);
-      void slideContainerRef.current.offsetHeight; // Force reflow
-      slideContainerRef.current.classList.remove(styles.dragging); // คืน transition
+      const _ = slideContainerRef.current?.offsetHeight;
+      slideContainerRef.current.classList.remove(styles.dragging);
     }
   }, [isDragging, isAnimating, slides.length, getSlideIndex, currentIndex]);
 
-  // Auto play logic
+  // Autoplay
   useEffect(() => {
-    // หยุด auto play ถ้าผู้ใช้กำลังโต้ตอบ (hover, drag) หรือ slider กำลัง animate, หรือมีสไลด์ไม่พอ
     if (isHovering || slides.length <= 1 || isDragging || isAnimating) {
-      // ไม่จำเป็นต้อง clear timeout ที่นี่ เพราะ timer จะถูก clear ใน cleanup function ของ useEffect อยู่แล้ว
-      // และการ resume จะจัดการโดย timeout ใหม่เมื่อเงื่อนไขเปลี่ยน
-      return; 
+      return;
     }
     const timer = setTimeout(goToNext, autoPlayInterval);
-    return () => clearTimeout(timer); // Cleanup: clear timeout เมื่อ component unmount หรือ dependencies เปลี่ยน
+    return () => clearTimeout(timer);
   }, [currentIndex, goToNext, slides.length, autoPlayInterval, isHovering, isDragging, isAnimating]);
 
 
-  // Touch และ Mouse handlers สำหรับ drag
   const getPositionX = (event: MouseEvent | TouchEvent) => {
-    return event.type.includes('mouse') 
-      ? (event as MouseEvent).clientX 
+    return event.type.includes('mouse')
+      ? (event as MouseEvent).clientX
       : (event as TouchEvent).touches[0].clientX;
   };
 
-  // Handle resize: จัดตำแหน่งสไลด์ใหม่เมื่อขนาดหน้าจอเปลี่ยน
+  // Handle resize
   useEffect(() => {
     const performResize = () => {
-      // ทำต่อเมื่อไม่กำลังลากหรือ animate และ refs พร้อมใช้งาน
       if (!isDragging && !isAnimating && containerRef.current && slideContainerRef.current) {
         slideContainerRef.current.classList.add(styles.dragging); // ปิด transition ชั่วคราว
-        // คำนวณ transform ใหม่เพื่อให้สไลด์ปัจจุบัน (ตรงกลาง) แสดงผลถูกต้อง
-        // เนื่องจาก currentTranslate คือ offset, การ reset เป็น 0 จะทำให้สไลด์ตรงกลางเสมอ
-        setCurrentTranslate(0); 
+        setCurrentTranslate(0); // Reset translate
         setPrevTranslate(0);
-        void slideContainerRef.current.offsetHeight; // Force reflow
-        // อัปเดต transform ทันทีโดยไม่ต้องรอ animationLoop เพราะ isDragging เป็น false
-        slideContainerRef.current.style.transform = `translateX(calc(-100% + 0px))`; 
-        slideContainerRef.current.classList.remove(styles.dragging); // คืน transition
+        // บังคับ reflow
+        const _ = slideContainerRef.current?.offsetHeight;
+        // `style.transform` จะถูกอัปเดตโดย useEffect ด้านล่างที่ขึ้นกับ `currentTranslate`
+        slideContainerRef.current.classList.remove(styles.dragging); // เปิด transition กลับ
       }
     };
 
-    // ตรวจสอบว่า window object พร้อมใช้งาน (สำคัญสำหรับ SSR Safety และ hydration)
     if (typeof window !== "undefined") {
-      // เรียกครั้งแรกเพื่อให้ตำแหน่งถูกต้องหลังจาก component mount และ DOM พร้อม
-      // ใช้ setTimeout เล็กน้อยเพื่อให้แน่ใจว่า DOM elements ถูกผูกกับ refs อย่างสมบูรณ์
-      const initTimeout = setTimeout(performResize, 0); 
+      // เรียก performResize ครั้งแรกเพื่อให้แน่ใจว่า layout ถูกต้อง (เช่น หลัง SSR หรือ client-side nav)
+      const initTimeout = setTimeout(performResize, 0);
       window.addEventListener('resize', performResize);
-      
-      return () => { // Cleanup function
+
+      return () => {
         clearTimeout(initTimeout);
         window.removeEventListener('resize', performResize);
       };
     }
-  }, [isDragging, isAnimating]); // Dependencies: ทำงานใหม่เมื่อสถานะ dragging หรือ animating เปลี่ยน
+  }, [isDragging, isAnimating]); // ไม่มี slides.length หรือ getSlideWidth เพราะ getSlideWidth จะถูกเรียกใช้เมื่อจำเป็น
 
 
-  // Drag start
   const dragStart = useCallback((event: MouseEvent | TouchEvent) => {
-    if (slides.length <= 1 || isAnimating) return; // ไม่ให้ลากถ้ามีสไลด์เดียวหรือกำลัง animate
-    
-    // สำหรับ touch events, default behavior อาจจะยังคงทำให้เกิด scroll ได้
-    // event.preventDefault() อาจจำเป็นในบางกรณีที่ซับซ้อนกว่านี้ แต่ระวังเรื่อง accessibility
+    if (slides.length <= 1 || isAnimating) return;
+
     if (event.type === 'mousedown') {
-      (event as MouseEvent).preventDefault(); // ป้องกันการลากรูปภาพ default ของ browser
+      (event as MouseEvent).preventDefault();
     }
-    
+
     setIsDragging(true);
     setStartPos(getPositionX(event));
-    setPrevTranslate(currentTranslate); // เก็บ offset ปัจจุบันไว้ (ปกติควรเป็น 0 ถ้าไม่ได้ลากค้างไว้)
-    
+    setPrevTranslate(currentTranslate); // เก็บ translate ปัจจุบันไว้
+
     if (slideContainerRef.current) {
-      slideContainerRef.current.classList.add(styles.dragging); // ปิด CSS transition ขณะลาก
+      slideContainerRef.current.classList.add(styles.dragging); // ปิด transition ขณะลาก
     }
     animationIdRef.current = requestAnimationFrame(animationLoop); // เริ่ม animation loop สำหรับการลาก
-  }, [slides.length, isAnimating, currentTranslate, animationLoop, getPositionX]); // เพิ่ม getPositionX ใน deps
+  }, [slides.length, isAnimating, currentTranslate, animationLoop, getPositionX]);
 
-  // Drag move
   const dragMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!isDragging) return;
-    
+
     const currentPosition = getPositionX(event);
     const diff = currentPosition - startPos;
     setCurrentTranslate(prevTranslate + diff); // อัปเดต currentTranslate ตามการลาก
-  }, [isDragging, startPos, prevTranslate, getPositionX]); // เพิ่ม getPositionX ใน deps
+  }, [isDragging, startPos, prevTranslate, getPositionX]);
 
-  // Drag end
   const dragEnd = useCallback(() => {
     if (!isDragging) return;
-    
+
     setIsDragging(false);
-    cancelAnimationFrame(animationIdRef.current); // หยุด animation loop
-    
+    cancelAnimationFrame(animationIdRef.current);
+
     if (slideContainerRef.current) {
-      slideContainerRef.current.classList.remove(styles.dragging); // เปิด CSS transition อีกครั้ง
+      slideContainerRef.current.classList.remove(styles.dragging); // เปิด transition กลับ
     }
 
     const slideWidth = getSlideWidth();
-    // const movedBy = currentTranslate - prevTranslate; // ระยะที่ลากจริงจากจุดที่เริ่มลากครั้งนี้ (ไม่ค่อยได้ใช้ในการตัดสินใจ)
-    
-    // ตัดสินใจว่าจะเลื่อนไปสไลด์ไหน
-    // ใช้ currentTranslate (offset จาก 0 หรือ offset จาก -100% ของสไลด์กลาง) เทียบกับ slideWidth
-    // ถ้า currentTranslate < -threshold (ลากไปซ้ายเยอะ) -> next
-    // ถ้า currentTranslate > threshold (ลากไปขวาเยอะ) -> prev
-    const threshold = slideWidth * 0.2; // เกณฑ์การตัดสินใจ: 20% ของความกว้างสไลด์
+    const threshold = slideWidth * 0.2; // เกณฑ์ในการตัดสินใจว่าจะเปลี่ยนสไลด์หรือไม่
 
-    if (currentTranslate < -threshold) { // ลากไปทางซ้ายมากพอ (ต้องการไป next)
+    if (currentTranslate < -threshold) { // ลากไปทางซ้ายมากพอ
       handleSlideChange('next');
-    } else if (currentTranslate > threshold) { // ลากไปทางขวามากพอ (ต้องการไป prev)
+    } else if (currentTranslate > threshold) { // ลากไปทางขวามากพอ
       handleSlideChange('prev');
     } else {
-      // ไม่ถึง threshold, กลับไปตำแหน่งเดิม (currentTranslate = 0 สำหรับสไลด์กลาง)
-      setCurrentTranslate(0); // จะ animate กลับเพราะ class 'dragging' ถูกลบแล้ว และ CSS transition ทำงาน
-      // prevTranslate จะถูกรีเซ็ตเป็น 0 ใน handleSlideChange หรือเมื่อ setCurrentTranslate(0) ด้านบนทำงานเสร็จ (ถ้าไม่มีการเปลี่ยนสไลด์)
-      // เพื่อความแน่นอน, รีเซ็ต prevTranslate หากไม่มีการเปลี่ยนสไลด์
-      setPrevTranslate(0); 
+      // ลากไม่ถึงเกณฑ์, กลับไปที่ตำแหน่งเดิม (ของสไลด์ปัจจุบัน)
+      setCurrentTranslate(0); // จะทำให้ transform กลับไปที่ -100% (หรือตำแหน่ง base)
+      setPrevTranslate(0);
     }
-    // ไม่จำเป็นต้อง setPrevTranslate(0) ที่นี่อีก ถ้ามีการเรียก handleSlideChange หรือ setCurrentTranslate(0) แล้ว
-    // เพราะ handleSlideChange และการ snap กลับจะจัดการ prevTranslate และ currentTranslate ให้เป็น 0 ในท้ายที่สุด
-  }, [isDragging, currentTranslate, /* prevTranslate, */ getSlideWidth, handleSlideChange]); // นำ prevTranslate ออกจาก deps ถ้าไม่จำเป็นโดยตรงในการคำนวณ dragEnd (มันถูกใช้โดย currentTranslate)
+  }, [isDragging, currentTranslate, getSlideWidth, handleSlideChange]);
 
-  // Touch handlers
+  // Event handlers สำหรับ touch
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const targetElement = e.target as HTMLElement;
-    if (targetElement.closest('a, button')) { // หาก target เป็น link หรือ button ภายในสไลด์, ไม่ควรเริ่ม drag
+    if (targetElement.closest('a, button')) { // ป้องกันการลากถ้าเริ่มบน link หรือ button
       return;
     }
     dragStart(e.nativeEvent);
   }, [dragStart]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    // if (isDragging) { 
-    //   // ป้องกัน vertical scroll ขณะ horizontal swipe (อาจมีผลข้างเคียง พิจารณาตามความเหมาะสม)
-    //   // e.preventDefault(); 
-    // }
-    // ไม่จำเป็นต้องเช็ค isDragging ที่นี่ เพราะ dragMove ภายในก็เช็คแล้ว
     dragMove(e.nativeEvent);
   }, [dragMove]);
 
-
-  // Mouse handlers
+  // Event handlers สำหรับ mouse
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const targetElement = e.target as HTMLElement;
-    if (targetElement.closest('a, button')) { // หาก target เป็น link หรือ button ภายในสไลด์, ไม่ควรเริ่ม drag
+    if (targetElement.closest('a, button')) {
       return;
     }
     dragStart(e.nativeEvent);
   }, [dragStart]);
 
-  // useEffect สำหรับ mousemove และ mouseup listeners (ผูกกับ document)
+  // Add/remove global event listeners for mouse move/up
   useEffect(() => {
-    // สร้าง handlers ภายใน useEffect เพื่อให้มั่นใจว่า dragMove และ dragEnd ที่ใช้เป็นเวอร์ชันล่าสุดจาก useCallback
     const moveHandler = (e: MouseEvent) => dragMove(e);
     const upHandler = () => dragEnd();
 
     if (isDragging) {
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
-      document.addEventListener('mouseleave', upHandler); // เพิ่ม mouseleave เผื่อลากออกนอกหน้าจอ
+      document.addEventListener('mouseleave', upHandler); // จัดการกรณีลากออกนอกหน้าต่าง
     }
 
-    return () => { // Cleanup function
+    return () => {
       document.removeEventListener('mousemove', moveHandler);
       document.removeEventListener('mouseup', upHandler);
       document.removeEventListener('mouseleave', upHandler);
     };
-  }, [isDragging, dragMove, dragEnd]); // Dependencies: ทำงานใหม่เมื่อ isDragging, dragMove, หรือ dragEnd เปลี่ยน
+  }, [isDragging, dragMove, dragEnd]);
 
-  // useEffect สำหรับการตั้งค่า transform เริ่มต้นและเมื่อ currentTranslate เปลี่ยนแปลง (นอกเหนือจากการลาก)
+  // useEffect นี้จะคอยอัปเดต transform ของ slideContainer เมื่อ currentTranslate เปลี่ยนแปลง (และไม่ได้กำลังลาก)
+  // หรือเมื่อ currentIndex เปลี่ยน (ซึ่งจะ reset currentTranslate เป็น 0)
   useEffect(() => {
     if (!isDragging && slideContainerRef.current) {
-      // เมื่อไม่ได้ลาก, การเปลี่ยนแปลง currentTranslate (เช่น จาก goToNext, goToPrevious, goToSlide, หรือ snap back)
-      // ควรใช้ CSS transition ที่กำหนดไว้ใน .slideContainer
-      // baseline คือ -100% (สไลด์กลาง) บวกด้วย offset ปัจจุบัน
-      slideContainerRef.current.style.transform = `translateX(calc(-100% + ${currentTranslate}px))`;
+      // baseTranslatePercentage: บน mobile/desktop, -100% หมายถึงการเลื่อน slideContainer เพื่อให้สไลด์ "ตรงกลาง" (ตาม DOM structure 3 สไลด์)
+      // มาอยู่ในตำแหน่งเริ่มต้นของ viewport ของมันเอง (คือ slideContainer)
+      // CSS `data-position-in-loop` จะจัดการเรื่องการ peeking และการจัดให้อยู่ตรงกลาง viewport จริงๆ บน desktop
+      const baseTranslatePercentage = slides.length > 1 ? -100 : 0;
+      slideContainerRef.current.style.transform = `translateX(calc(${baseTranslatePercentage}% + ${currentTranslate}px))`;
     }
-  }, [currentTranslate, isDragging]); // ทำงานเมื่อ currentTranslate หรือ isDragging เปลี่ยน
-
+  }, [currentTranslate, isDragging, slides.length]); // เพิ่ม slides.length เพราะ baseTranslatePercentage ขึ้นกับมัน
 
   if (!slides || slides.length === 0) {
     return (
-      <div className={`${styles.carousel} bg-secondary animate-pulse flex items-center justify-center`} style={{ height: '300px' /* fallback height */ }}>
+      <div className={`${styles.carousel} bg-secondary animate-pulse flex items-center justify-center`} style={{ height: '400px' }}> {/* Default height */}
         <p className="text-muted-foreground">กำลังโหลดสไลด์...</p>
       </div>
     );
   }
 
-  // สร้าง slides array สำหรับ infinite loop (แสดง 3 slides: prev, current, next)
-  // extendedSlides จะมี 3 items: [สไลด์ก่อนหน้า, สไลด์ปัจจุบัน, สไลด์ถัดไป]
-  // เพื่อให้การเลื่อนเป็นแบบ infinite ได้อย่างราบรื่น
+  // สร้าง array ของสไลด์ที่จะแสดงผล (สไลด์ก่อนหน้า, ปัจจุบัน, ถัดไป)
+  // เพื่อให้เกิด infinite loop illusion
   const extendedSlides = [];
-  if (slides.length > 0) { 
-    for (let i = -1; i <= 1; i++) { // i = -1 (prev), 0 (current), 1 (next)
-      const slideDataIndex = getSlideIndex(currentIndex + i);
-      extendedSlides.push({
-        ...slides[slideDataIndex],
-        originalIndex: slideDataIndex, // เก็บ index เดิมของ slide จาก array `slides`
-        positionInLoop: i, // -1 for prev, 0 for current, 1 for next (สัมพันธ์กับตำแหน่งใน extendedSlides)
-      });
+  if (slides.length > 0) {
+    if (slides.length === 1) { // กรณีมีสไลด์เดียว
+        extendedSlides.push({
+            ...slides[0],
+            originalIndex: 0,
+            positionInLoop: 0, // สไลด์เดียว อยู่ตรงกลางเสมอ
+        });
+    } else { // กรณีมีมากกว่า 1 สไลด์
+        for (let i = -1; i <= 1; i++) { // สร้าง 3 สไลด์: prev, current, next
+            const slideDataIndex = getSlideIndex(currentIndex + i);
+            extendedSlides.push({
+                ...slides[slideDataIndex],
+                originalIndex: slideDataIndex,
+                positionInLoop: i, // -1 (prev), 0 (current), 1 (next)
+            });
+        }
     }
   }
 
-  // const currentVisibleSlide = slides[getSlideIndex(currentIndex)]; // ไม่ได้ใช้โดยตรงในการ render แต่มีประโยชน์สำหรับการ debug หรือ logic อื่นๆ
 
   return (
     <div
@@ -347,56 +329,58 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
       onMouseLeave={() => setIsHovering(false)}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
-      onTouchEnd={dragEnd} // dragEnd ถูกเรียกทั้ง touchEnd และ mouseUp
+      onTouchEnd={dragEnd}
       onMouseDown={handleMouseDown}
       role="region"
       aria-roledescription="carousel"
       aria-label="โปรโมชั่นและเรื่องเด่น"
       style={{ userSelect: isDragging ? 'none' : 'auto' }} // ป้องกันการ select text ขณะลาก
     >
-      <div 
+      <div
         ref={slideContainerRef}
         className={`${styles.slideContainer} ${isDragging ? styles.dragging : ''}`}
+        // ความกว้างของ slideContainer จะเป็น N เท่าของความกว้างสไลด์ (N = จำนวนสไลด์ใน extendedSlides)
+        // บน mobile: slide width = 100% viewport, container = 300% viewport
+        // บน desktop: slide width = 1200px, container = 3 * 1200px = 3600px
+        // แต่ style width นี้จะถูกจัดการโดย CSS ผ่าน flex หรือ implicit width ของ children ได้ดีกว่า
+        // การกำหนด width โดยตรงที่นี่อาจไม่จำเป็นถ้า CSS จัดการได้ดี
         style={{
-          // transform ถูกตั้งค่าโดย animationLoop (ขณะลาก) หรือ useEffect (เมื่อ currentTranslate เปลี่ยนนอกการลาก)
-          // ค่าเริ่มต้นจะถูกตั้งโดย resize handler หรือ useEffect [currentTranslate, isDragging]
-          // slideContainer จะกว้าง 300% ของ carousel container เพื่อรองรับ 3 สไลด์ (prev, current, next)
-          width: `${extendedSlides.length * 100}%` 
+           width: slides.length > 1 ? `${extendedSlides.length * 100}%` : '100%', // ถ้ามีสไลด์เดียว container กว้าง 100%
         }}
       >
         {extendedSlides.map((slide) => (
           <div
-            // key ควรจะ unique และ เสถียรต่อการ re-render ของ item นั้นๆ
-            // การใช้ slide.id ร่วมกับ originalIndex และ positionInLoop ช่วยให้ key มีความเสถียรและ unique
-            key={`slide-${slide.id}-${slide.originalIndex}-pos${slide.positionInLoop}`}
+            // key ที่ไม่ซ้ำกันและเสถียรสำคัญมากสำหรับการ re-render ที่ถูกต้อง
+            key={`slide-${slide.id}-${slide.originalIndex}-loopPos${slide.positionInLoop}`}
             className={styles.slide}
-            // aria-live polite สำหรับสไลด์ปัจจุบัน เพื่อประกาศการเปลี่ยนแปลงเมื่อสไลด์เปลี่ยน
-            aria-live={slide.positionInLoop === 0 ? "polite" : "off"} 
-            aria-atomic="true" // เนื้อหาทั้งหมดของสไลด์ปัจจุบันควรอ่านเมื่อมีการเปลี่ยนแปลง
-            // aria-hidden={slide.positionInLoop !== 0} // ซ่อนสไลด์ที่ไม่ใช่ปัจจุบันจาก screen reader (อาจพิจารณาใช้ถ้ามีปัญหา accessibility)
+            data-position-in-loop={slide.positionInLoop} // สำหรับ CSS styling (peeking effect)
+            aria-live={slide.positionInLoop === 0 ? "polite" : "off"} // ประกาศการเปลี่ยนแปลงเฉพาะสไลด์ที่ active
+            aria-atomic="true"
+            // aria-hidden={slide.positionInLoop !== 0} // สไลด์ที่ไม่ active ถูกซ่อนจาก accessibility tree
           >
             <Image
               src={slide.imageUrl}
               alt={slide.title}
-              fill // ให้ Image component ครอบคลุมพื้นที่ของ parent div (.slide)
-              priority={slide.positionInLoop === 0} // ให้ priority กับสไลด์ปัจจุบัน (สไลด์ที่สองใน extendedSlides)
-              // sizes ควรปรับให้เหมาะสมกับ layout จริงของ carousel และ breakpoints
-              // ตัวอย่าง: "(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1024px"
-              // หาก carousel เต็มหน้าจอ อาจเป็น "100vw"
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // placeholder, ควรปรับตามจริง
+              fill // ให้ Image component จัดการขนาดตาม parent (.slide)
+              priority={slide.positionInLoop === 0} // โหลดภาพปัจจุบันก่อน
+              // sizes ช่วยให้ browser เลือก source ที่เหมาะสมตามขนาด viewport
+              // (max-width: 1023px) สำหรับ mobile (เต็มความกว้าง)
+              // (min-width: 1024px) สำหรับ desktop (ภาพขนาด 1200px)
+              sizes="(max-width: 1023px) 100vw, 1200px"
               className={styles.slideImage}
-              draggable={false} // ป้องกัน default browser drag ของ image
-              unoptimized={false} // ตั้งเป็น true หากใช้ external image provider ที่ไม่รองรับ Next/Image optimization
+              draggable={false} // ป้องกันการลากภาพ (เรามีการลากสไลเดอร์เอง)
+              unoptimized={false} // เปิด optimization ของ Next/Image
             />
-            
-            <div className={styles.slideOverlay}></div>
-            
-            {/* แสดงเนื้อหาเฉพาะสไลด์ที่กำลัง active (positionInLoop === 0 คือสไลด์ตรงกลาง) */}
+
+            <div className={styles.slideOverlay}></div> {/* Overlay เพิ่มความคมชัดให้ text */}
+
+            {/* แสดงเนื้อหาเฉพาะสไลด์ที่ "ควรจะ" active (positionInLoop === 0)
+                CSS จะจัดการการซ่อน/แสดง content ของสไลด์ที่ peek ออกมาบน desktop */}
             {slide.positionInLoop === 0 && (
               <div className={styles.slideContent}>
-                <div className={styles.slideContentEnter}> {/* animation class สำหรับเนื้อหา */}
+                <div className={styles.slideContentEnter}> {/* Animation container สำหรับ content */}
                   {slide.category && (
-                    <span 
+                    <span
                       className={styles.slideCategory}
                       style={slide.highlightColor ? { backgroundColor: slide.highlightColor } : {}}
                     >
@@ -404,12 +388,11 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
                     </span>
                   )}
                   <h2 className={styles.slideTitle}>
-                    <Link 
-                      href={slide.link} 
+                    <Link
+                      href={slide.link}
                       className="hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 rounded-sm"
-                      draggable={false} // ป้องกันการลาก link
-                      onClick={(e) => e.stopPropagation()} // หยุด event propagation เพื่อไม่ให้ carousel ลากเมื่อคลิก link
-                      // การ tab focus ที่ link นี้ ควรหยุด autoPlay หรือการลากด้วย (อาจต้องจัดการ state เพิ่มเติมถ้าต้องการ)
+                      draggable={false}
+                      onClick={(e) => e.stopPropagation()} // ป้องกันการ trigger drag ของ slider
                     >
                       {slide.title}
                     </Link>
@@ -420,7 +403,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
                     </p>
                   )}
                   {slide.primaryAction && (
-                    <div className={styles.slideButtonEnter}> {/* animation class สำหรับปุ่ม */}
+                    <div className={styles.slideButtonEnter}> {/* Animation container สำหรับ button */}
                       <Link
                         href={slide.primaryAction.href}
                         className={styles.slideButton}
@@ -439,15 +422,14 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
         ))}
       </div>
 
-      {/* แสดง Navigation Buttons และ Dots Indicator ถ้ามีมากกว่า 1 สไลด์ */}
+      {/* ปุ่ม Navigation และ Dots (แสดงเมื่อมีมากกว่า 1 สไลด์) */}
       {slides.length > 1 && (
         <>
-          {/* Navigation Buttons */}
           <button
             onClick={goToPrevious}
             className={`${styles.navButton} ${styles.navButtonPrev}`}
             aria-label="สไลด์ก่อนหน้า"
-            disabled={isAnimating || isDragging} // ปิดการใช้งานขณะ animate หรือ ลาก
+            disabled={isAnimating || isDragging}
           >
             <ArrowLeft size={22} />
           </button>
@@ -460,11 +442,10 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
             <ArrowRight size={22} />
           </button>
 
-          {/* Dots Indicator */}
           <div className={styles.dots}>
             {slides.map((_, slideIdx) => (
               <button
-                key={slideIdx}
+                key={`dot-${slideIdx}`}
                 onClick={() => goToSlide(slideIdx)}
                 className={`${styles.dot} ${getSlideIndex(currentIndex) === slideIdx ? styles.active : ''}`}
                 aria-label={`ไปที่สไลด์ ${slideIdx + 1}`}
