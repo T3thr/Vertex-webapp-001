@@ -6,17 +6,8 @@ import { notFound } from 'next/navigation'; // Function สำหรับแส
 import Image from 'next/image'; // Component สำหรับแสดงรูปภาพจาก Next.js
 import React from 'react'; // React library
 
-// กำหนด Type สำหรับ Props ที่ Page Component นี้จะได้รับ
-// params: คือ object ที่เก็บ dynamic route parameters เช่น { username: "testuser" }
-// searchParams: คือ object ที่เก็บ URL query parameters (ถ้ามี)
-// การระบุ searchParams (แม้จะไม่ได้ใช้) ช่วยให้ Type ตรงกับที่ Next.js คาดหวังสำหรับ PageProps
-type UserPageProps = {
-  params: { username: string };
-  searchParams?: { [key: string]: string | string[] | undefined }; // Optional: เผื่อ Next.js ส่งมา
-};
-
-// Page component เป็น async function เพราะมีการดึงข้อมูลจาก database
-export default async function UserPage({ params }: UserPageProps) { // ใช้ UserPageProps ที่กำหนดไว้
+// ไม่ต้องกำหนด type UserPageProps
+export default async function UserPage({ params }: { params: { username: string } }) {
   await dbConnect(); // เชื่อมต่อกับ MongoDB
 
   // ค้นหา user จาก database ด้วย username และ isDeleted เป็น false
