@@ -17,8 +17,8 @@ import { IUser } from "./User"; // สำหรับ userId
  * - `Episode`: ตอนใดตอนหนึ่งของนิยาย (ถ้าอนุญาตให้คะแนน/รีวิวรายตอน)
  * - `Character`: (อนาคต) ตัวละครในนิยาย
  * - `StoryArc`: (อนาคต) โครงเรื่องหรือเนื้อเรื่องส่วนสำคัญ (Arc) ในนิยาย
- * - `PlatformFeature`: (อนาคต) ฟีเจอร์ของแพลตฟอร์ม NovelMaze (เช่น UI, editor)
- * - `OfficialMedia`: (อนาคต) สื่อทางการจากคลัง NovelMaze
+ * - `PlatformFeature`: (อนาคต) ฟีเจอร์ของแพลตฟอร์ม DivWy (เช่น UI, editor)
+ * - `OfficialMedia`: (อนาคต) สื่อทางการจากคลัง DivWy
  * - `UserGeneratedContent`: (อนาคต) เนื้อหาอื่นๆ ที่ผู้ใช้สร้างขึ้น (เช่น บทความ, fan art ถ้ามีระบบรองรับ)
  */
 export enum RateableType {

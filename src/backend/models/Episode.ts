@@ -1,5 +1,5 @@
 // src/backend/models/Episode.ts
-// โมเดลตอนของนิยาย (Episode Model) - จัดการข้อมูลของตอนต่างๆ ในนิยายสำหรับแพลตฟอร์ม NovelMaze
+// โมเดลตอนของนิยาย (Episode Model) - จัดการข้อมูลของตอนต่างๆ ในนิยายสำหรับแพลตฟอร์ม DivWy
 
 import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
 // Import NovelModel และ INovel interface เพื่อใช้ใน method และ type hinting

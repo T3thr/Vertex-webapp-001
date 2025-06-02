@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "novelmaze",
+      "name": "divwy",
       "dependencies": {
         "@google-recaptcha/react": "^2.2.0",
         "@hcaptcha/react-hcaptcha": "^1.12.0",

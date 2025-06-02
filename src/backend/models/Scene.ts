@@ -1,5 +1,5 @@
 // src/backend/models/Scene.ts
-// โมเดลฉากใน Visual Novel (Scene Model) - หัวใจหลักของ Visual Novel Editor แพลตฟอร์ม NovelMaze
+// โมเดลฉากใน Visual Novel (Scene Model) - หัวใจหลักของ Visual Novel Editor แพลตฟอร์ม DivWy
 // เวอร์ชันปรับปรุง: เพิ่มความสามารถในการจัดการสถานะที่ซับซ้อน, UI elements, และ Timeline control ที่ละเอียดขึ้น
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";

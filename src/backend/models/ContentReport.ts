@@ -95,7 +95,7 @@ export enum ReportReasonDetail {
 /**
  * @enum {string} ReportStatus
  * @description สถานะการจัดการรายงาน
- * - `PENDING_REVIEW`: รอดำเนินการตรวจสอบโดยทีมงาน NovelMaze
+ * - `PENDING_REVIEW`: รอดำเนินการตรวจสอบโดยทีมงาน DivWy
  * - `UNDER_INVESTIGATION`: กำลังอยู่ในระหว่างการตรวจสอบอย่างละเอียด
  * - `AWAITING_MORE_INFO_REPORTER`: รอข้อมูลเพิ่มเติมจากผู้รายงาน
  * - `AWAITING_MORE_INFO_OWNER`: รอข้อมูลเพิ่มเติมจากเจ้าของเนื้อหา (ถ้ามีการติดต่อ)
@@ -493,7 +493,7 @@ ContentReportSchema.post<IContentReport>("save", async function (doc, next) {
       case ReportStatus.ACTION_TAKEN_USER_WARNED:
       case ReportStatus.ACTION_TAKEN_USER_SUSPENDED:
       case ReportStatus.ACTION_TAKEN_USER_BANNED:
-        notificationMessage = `ทีมงานได้ดำเนินการตามรายงานของคุณสำหรับเนื้อหา (${doc.contentType} ID: ${doc.contentId}) แล้ว สถานะ: ${doc.status}. ขอบคุณที่ช่วยให้ NovelMaze เป็นชุมชนที่ปลอดภัย`;
+        notificationMessage = `ทีมงานได้ดำเนินการตามรายงานของคุณสำหรับเนื้อหา (${doc.contentType} ID: ${doc.contentId}) แล้ว สถานะ: ${doc.status}. ขอบคุณที่ช่วยให้ DivWy เป็นชุมชนที่ปลอดภัย`;
         severity = NotificationSeverity.SUCCESS;
         sendNotification = true;
         break;

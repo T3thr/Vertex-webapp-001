@@ -4,9 +4,9 @@ import type { Metadata } from 'next';
 // Metadata ใน layout จะเป็นค่าพื้นฐาน และ page.tsx สามารถ override หรือเพิ่มเติมได้
 // กำหนด title และ description ทั่วไปสำหรับส่วนค้นหานิยาย
 export const metadata: Metadata = {
-  title: 'ค้นหานิยาย | NovelMaze',
-  description: 'สำรวจและค้นหานิยายหลากหลายประเภทบน NovelMaze ไม่ว่าจะเป็นนิยายแปล นิยายแต่ง หรือการ์ตูนออนไลน์',
-  keywords: 'ค้นหานิยาย, นิยายออนไลน์, การ์ตูน, Visual Novel, NovelMaze', // Keywords ทั่วไป
+  title: 'ค้นหานิยาย | DivWy',
+  description: 'สำรวจและค้นหานิยายหลากหลายประเภทบน DivWy ไม่ว่าจะเป็นนิยายแปล นิยายแต่ง หรือการ์ตูนออนไลน์',
+  keywords: 'ค้นหานิยาย, นิยายออนไลน์, การ์ตูน, Visual Novel, DivWy', // Keywords ทั่วไป
 };
 
 export default async function SearchNovelLayout({

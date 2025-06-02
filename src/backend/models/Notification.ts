@@ -19,7 +19,7 @@ import { IPurchase } from "./Purchase"; // สำหรับ purchaseId
 
 /**
  * @enum {string} NotificationType
- * @description ประเภทของการแจ้งเตือน (สามารถขยายเพิ่มเติมได้ตามความต้องการของ NovelMaze)
+ * @description ประเภทของการแจ้งเตือน (สามารถขยายเพิ่มเติมได้ตามความต้องการของ DivWy)
  * SOCIAL: เกี่ยวกับกิจกรรมทางสังคม
  * CONTENT: เกี่ยวกับเนื้อหา (นิยาย, ตอน, ความคิดเห็น)
  * GAMIFICATION: เกี่ยวกับความสำเร็จ รางวัล เควส และ Leaderboards

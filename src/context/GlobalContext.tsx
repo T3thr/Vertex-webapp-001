@@ -86,7 +86,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={true}>
-        <ThemeProvider storageKey="novelmaze-theme" defaultTheme="system"> {/* defaultTheme here is the *preference* */}
+        <ThemeProvider storageKey="divwy-theme" defaultTheme="system"> {/* defaultTheme here is the *preference* */}
           <AuthProvider>
             <AppContent>{children}</AppContent>
           </AuthProvider>

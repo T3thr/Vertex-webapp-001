@@ -1,6 +1,6 @@
 // src/backend/models/Achievement.ts
 // โมเดลรางวัลความสำเร็จ (Achievement Model)
-// กำหนดรางวัลความสำเร็จต่างๆ ที่ผู้ใช้สามารถปลดล็อกได้ในแพลตฟอร์ม NovelMaze, พร้อมระบบเงื่อนไขและรางวัลที่ยืดหยุ่น
+// กำหนดรางวัลความสำเร็จต่างๆ ที่ผู้ใช้สามารถปลดล็อกได้ในแพลตฟอร์ม DivWy, พร้อมระบบเงื่อนไขและรางวัลที่ยืดหยุ่น
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IBadge } from "./Badge"; // สำหรับ rewardBadgeId

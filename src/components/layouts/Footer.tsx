@@ -33,7 +33,7 @@ export default function Footer()  {
           <div className="md:col-span-1 lg:col-span-1">
             <Link href="/" className="inline-block mb-3">
               <span className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-                NOVELMAZE
+                DIVWY
               </span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">
@@ -107,10 +107,10 @@ export default function Footer()  {
 
         <div className="border-t border-border pt-6 text-center">
           <p className="text-sm text-muted-foreground">
-            &copy; {currentYear} NOVELMAZE. สงวนลิขสิทธิ์ทั้งหมด
+            &copy; {currentYear} DIVWY. สงวนลิขสิทธิ์ทั้งหมด
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            พัฒนาโดยทีม NovelMaze
+            พัฒนาโดยทีม DivWy
           </p>
         </div>
       </div>

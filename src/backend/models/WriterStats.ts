@@ -125,7 +125,7 @@ export const WriterStatsSchema = new Schema<IWriterStats>(
 // 1. ขนาดของข้อมูล: ถ้า novelPerformanceSummaries มีจำนวนมาก การแยก collection อาจดีกว่า
 // 2. ความถี่ในการ query: ถ้า query writer stats บ่อยๆ พร้อม user data การ embed อาจเร็วกว่า
 // 3. ความซับซ้อนในการอัปเดต: การอัปเดต sub-document ที่ซับซ้อนอาจยุ่งยากกว่า collection แยก
-// สำหรับ NovelMaze ที่เน้น performance และ scalability, ถ้า novelPerformanceSummaries จะมีข้อมูลเยอะมาก
+// สำหรับ DivWy ที่เน้น performance และ scalability, ถ้า novelPerformanceSummaries จะมีข้อมูลเยอะมาก
 // อาจพิจารณาเก็บ WriterStats หลักๆ embed ไว้ และมี collection `NovelPerformanceDailyStats` แยกต่างหาก
 // ที่ update ด้วย background job เพื่อไม่ให้ User document ใหญ่เกินไป
 // ในที่นี้ WriterStatsSchema ออกแบบมาให้ค่อนข้างกระชับ สามารถ embed ได้

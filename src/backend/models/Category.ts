@@ -1,5 +1,5 @@
 // src/backend/models/Category.ts
-// โมเดลหมวดหมู่ (Category Model) - อัปเกรดสำหรับแพลตฟอร์ม NovelMaze
+// โมเดลหมวดหมู่ (Category Model) - อัปเกรดสำหรับแพลตฟอร์ม DivWy
 // จัดการหมวดหมู่ต่างๆ ในระบบ เช่น ประเภทนิยาย, แท็ก, ธีม, กลุ่มเป้าหมายผู้อ่าน, คำเตือนเนื้อหา, Fandoms ฯลฯ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";

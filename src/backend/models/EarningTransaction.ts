@@ -80,7 +80,7 @@ export enum TransactionStatus {
  * @description สกุลเงินของธุรกรรม
  */
 export enum TransactionCurrency {
-  COIN = "COIN", // เหรียญภายในแพลตฟอร์ม NovelMaze
+  COIN = "COIN", // เหรียญภายในแพลตฟอร์ม DivWy
   THB = "THB", // เงินบาทไทย
   USD = "USD", // ดอลลาร์สหรัฐ
   // สามารถเพิ่มสกุลเงินอื่นๆ ได้ตามต้องการ

@@ -22,7 +22,7 @@ import { IUser } from "./User"; // สำหรับ userId
  * - `USER_POST`: (อนาคต) โพสต์ของผู้ใช้ในส่วนโซเชียล
  * - `REVIEW`: (อนาคต) รีวิวที่ผู้ใช้เขียน
  * - `WRITER_PROFILE`: (อนาคต) โปรไฟล์นักเขียน
- * - `OFFICIAL_MEDIA`: สื่อทางการจากคลัง NovelMaze
+ * - `OFFICIAL_MEDIA`: สื่อทางการจากคลัง DivWy
  */
 export enum LikeableType {
   NOVEL = "Novel",

@@ -35,21 +35,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"),
   title: {
-    default: "NovelMaze",
-    template: "%s — NovelMaze",
+    default: "DivWy",
+    template: "%s — DivWy",
   },
   description: "แพลตฟอร์ม Visual Novel ที่ทันสมัยและหลากหลายแนวสำหรับคุณ",
   openGraph: {
-    title: { default: "NovelMaze", template: "%s — NovelMaze" },
-    description: "ค้นพบและดื่มด่ำกับ Visual Novels คุณภาพสูงบน NovelMaze",
+    title: { default: "DivWy", template: "%s — DivWy" },
+    description: "ค้นพบและดื่มด่ำกับ Visual Novels คุณภาพสูงบน DivWy",
     url: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
-    siteName: "NovelMaze",
+    siteName: "DivWy",
     images: [
       {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "NovelMaze - ประตูสู่โลกแห่งนิยายภาพ",
+        alt: "DivWy - ประตูสู่โลกแห่งนิยายภาพ",
       },
     ],
     locale: 'th_TH',
@@ -57,9 +57,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: { default: "NovelMaze", template: "%s — NovelMaze" },
-    description: "ดำดิ่งสู่เรื่องราวอันน่าทึ่งกับ Visual Novels บน NovelMaze",
-    images: [{ url: "/twitter-image.png", alt: "NovelMaze" }],
+    title: { default: "DivWy", template: "%s — DivWy" },
+    description: "ดำดิ่งสู่เรื่องราวอันน่าทึ่งกับ Visual Novels บน DivWy",
+    images: [{ url: "/twitter-image.png", alt: "DivWy" }],
   },
   icons: {
     icon: [
@@ -75,7 +75,7 @@ export const metadata: Metadata = {
     google: process.env.GOOGLE_SITE_VERIFICATION_TOKEN,
   },
   appleWebApp: {
-    title: 'NovelMaze',
+    title: 'DivWy',
     statusBarStyle: 'default',
     capable: true,
   },
@@ -100,7 +100,7 @@ function ThemeInitializerScript() {
   const scriptContent = `
 (function() { // IIFE
   try {
-    const storageKey = 'novelmaze-theme';
+    const storageKey = 'divwy-theme';
     const defaultCssTheme = 'light'; // Fallback CSS class สุดท้ายหากเกิดข้อผิดพลาด
     const serverThemeAttribute = document.documentElement.getAttribute('data-server-theme');
     const userDbThemeFromServer = serverThemeAttribute === 'null' ? null : serverThemeAttribute;

@@ -119,7 +119,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
         const adminProfileData: IUserProfile = {
             displayName: ADMIN_USERNAME,
             penName: ADMIN_USERNAME,
-            bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ NovelMaze",
+            bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ DivWy",
             gender: "prefer_not_to_say",
         };
         const adminTrackingStatsData: IUserTrackingStats = {

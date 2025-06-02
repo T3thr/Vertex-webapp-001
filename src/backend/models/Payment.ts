@@ -23,7 +23,7 @@ import { IPurchase, PurchaseStatus } from "./Purchase"; // สำหรับ pu
  * - `BANK_TRANSFER`: การโอนเงินผ่านธนาคาร (มักจะต้องมีการยืนยันด้วยตนเองจากทีมงาน)
  * - `APPLE_PAY_DIRECT`: การผสาน Apple Pay โดยตรง (ไม่ใช่ผ่าน Stripe)
  * - `GOOGLE_PAY_DIRECT`: การผสาน Google Pay โดยตรง
- * - `COIN_WALLET`: ชำระเงินโดยใช้เหรียญภายในแพลตฟอร์ม NovelMaze (เป็นการชำระเงินภายใน)
+ * - `COIN_WALLET`: ชำระเงินโดยใช้เหรียญภายในแพลตฟอร์ม DivWy (เป็นการชำระเงินภายใน)
  * - `INTERNAL_TEST`: สำหรับการทดสอบภายในระบบ (ไม่ใช้เงินหรือเหรียญจริง)
  * - `OTHER`: ช่องทางอื่นๆ ที่ไม่ได้ระบุไว้
  */
@@ -157,7 +157,7 @@ const GatewayDetailsSchema = new Schema<IGatewayDetails>(
  * @property {Types.ObjectId | IUser} userId - ID ของผู้ใช้ที่ทำการชำระเงิน (**จำเป็น**)
  * @property {PaymentForType} paymentForType - ระบุว่าการชำระเงินนี้สำหรับอะไร (เช่น PURCHASE_ORDER, COIN_TOPUP, **จำเป็น**)
  * @property {Types.ObjectId} relatedDocumentId - ID ของเอกสารที่เกี่ยวข้องตาม `paymentForType` (เช่น PurchaseId, SubscriptionId, UserId สำหรับ Coin Topup) - ควรใช้ refPath ในอนาคต
- * @property {string} description - คำอธิบายรายการชำระเงิน (**จำเป็น**, เช่น "ซื้อแพ็กเกจ 500 เหรียญ NovelMaze", "ค่าสมาชิกรายเดือน NovelMaze Premium")
+ * @property {string} description - คำอธิบายรายการชำระเงิน (**จำเป็น**, เช่น "ซื้อแพ็กเกจ 500 เหรียญ DivWy", "ค่าสมาชิกรายเดือน DivWy Premium")
  * @property {number} amount - จำนวนเงินที่ชำระ (หน่วยเป็นสกุลเงินจริง เช่น บาท, ดอลลาร์ หรือ "เหรียญ" ถ้าเป็นการชำระด้วยเหรียญ)
  * @property {string} currency - สกุลเงิน (**จำเป็น**, ISO 4217 currency code เช่น "THB", "USD", หรือ "COIN" สำหรับเหรียญในระบบ)
  * @property {number} [feeAmount] - ค่าธรรมเนียมการทำธุรกรรม (ถ้ามี, เช่น ค่าธรรมเนียม gateway และต้องการบันทึกแยก)
@@ -450,7 +450,7 @@ PaymentSchema.post<IPayment>("save", async function (doc, next) {
           userId: doc.userId,
           type: "PAYMENT_SUCCEEDED",
           title: "การชำระเงินสำเร็จ",
-          message: `การชำระเงินหมายเลข ${doc.paymentReadableId} จำนวน ${doc.amount} ${doc.currency} ของคุณสำหรับ "${doc.description}" สำเร็จแล้ว ขอบคุณที่ใช้บริการ NovelMaze!`,
+          message: `การชำระเงินหมายเลข ${doc.paymentReadableId} จำนวน ${doc.amount} ${doc.currency} ของคุณสำหรับ "${doc.description}" สำเร็จแล้ว ขอบคุณที่ใช้บริการ DivWy!`,
           data: { paymentId: doc._id, paymentReadableId: doc.paymentReadableId, amount: doc.amount, currency: doc.currency, paymentFor: doc.paymentForType, description: doc.description },
           isRead: false,
         });

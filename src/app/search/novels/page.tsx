@@ -187,25 +187,25 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   const categorySlug = typeof params.category === 'string' ? params.category : '';
 
   // ค่าเริ่มต้นสำหรับ title และ description
-  let title = 'ค้นหานิยายทั้งหมด | NovelMaze';
-  let description = 'ค้นหานิยายและการ์ตูนออนไลน์จากทั่วทุกมุมโลก แบ่งตามหมวดหมู่ สถานะ และอื่นๆ บน NovelMaze';
+  let title = 'ค้นหานิยายทั้งหมด | DivWy';
+  let description = 'ค้นหานิยายและการ์ตูนออนไลน์จากทั่วทุกมุมโลก แบ่งตามหมวดหมู่ สถานะ และอื่นๆ บน DivWy';
 
   // ปรับ title และ description ตาม query และ category
   if (query && categorySlug) {
-    title = `ผลการค้นหา "${query}" ในหมวดหมู่ '${categorySlug}' | NovelMaze`;
-    description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" ในหมวดหมู่ '${categorySlug}' บน NovelMaze`;
+    title = `ผลการค้นหา "${query}" ในหมวดหมู่ '${categorySlug}' | DivWy`;
+    description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" ในหมวดหมู่ '${categorySlug}' บน DivWy`;
   } else if (query) {
-    title = `ผลการค้นหา "${query}" | NovelMaze`;
-    description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" บน NovelMaze`;
+    title = `ผลการค้นหา "${query}" | DivWy`;
+    description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" บน DivWy`;
   } else if (categorySlug) {
-    title = `นิยายในหมวดหมู่ '${categorySlug}' | NovelMaze`;
-    description = `สำรวจนิยายและการ์ตูนในหมวดหมู่ '${categorySlug}' บน NovelMaze`;
+    title = `นิยายในหมวดหมู่ '${categorySlug}' | DivWy`;
+    description = `สำรวจนิยายและการ์ตูนในหมวดหมู่ '${categorySlug}' บน DivWy`;
   }
 
   return {
     title,
     description,
-    keywords: `ค้นหานิยาย, นิยายออนไลน์, ${query ? query + ',' : ''} ${categorySlug ? categorySlug + ',' : ''} NovelMaze, การ์ตูน`,
+    keywords: `ค้นหานิยาย, นิยายออนไลน์, ${query ? query + ',' : ''} ${categorySlug ? categorySlug + ',' : ''} DivWy, การ์ตูน`,
     openGraph: {
       title,
       description,

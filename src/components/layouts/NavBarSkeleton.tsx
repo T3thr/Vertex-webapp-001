@@ -16,7 +16,7 @@ export default function NavBarSkeleton() {
       <div className="container mx-auto px-4 flex h-16 items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center space-x-2">
-          <span className="font-bold text-lg tracking-tight text-foreground">NOVELMAZE</span>
+          <span className="font-bold text-lg tracking-tight text-foreground">DIVWY</span>
         </Link>
 
         {/* Desktop Navigation */}

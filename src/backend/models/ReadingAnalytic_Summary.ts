@@ -107,7 +107,7 @@ const DemographicBreakdownSchema = new Schema<IDemographicBreakdown>(
  * @property {Types.DocumentArray<{ category: Types.ObjectId | ICategory, count: number, totalTimeSpentInSeconds: number }>} [favoriteCategoriesRead] - (สำหรับ USER) ประเภท/หมวดหมู่นิยายที่ผู้ใช้อ่านบ่อยที่สุดในช่วงเวลานี้
  *
  * @property {Types.DocumentArray<IDemographicBreakdown>} [readerDemographics] - (สำหรับ NOVEL/AUTHOR) ข้อมูลสรุปผู้อ่านตามกลุ่มประชากร
- * @property {Map<string, number>} [trafficSources] - (สำหรับ NOVEL/AUTHOR) แหล่งที่มาของผู้อ่าน (เช่น 'direct', 'referral_novelmaze', 'search_google', 'social_facebook')
+ * @property {Map<string, number>} [trafficSources] - (สำหรับ NOVEL/AUTHOR) แหล่งที่มาของผู้อ่าน (เช่น 'direct', 'referral_divwy', 'search_google', 'social_facebook')
  * @property {Map<string, number>} [deviceTypes] - (สำหรับ NOVEL/AUTHOR/USER) ประเภทอุปกรณ์ที่ใช้อ่าน (เช่น 'desktop', 'mobile', 'tablet')
  *
  * @property {Record<string, any>} [customMetrics] - (Optional) Metrics เพิ่มเติมที่กำหนดเองตามความต้องการของแพลตฟอร์ม

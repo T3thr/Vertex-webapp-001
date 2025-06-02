@@ -1,7 +1,7 @@
 // src/app/page.tsx
-// หน้านี้เป็น Server Component ที่ปรับปรุงให้โหลดเร็วสูงสุด
-// ใช้ parallel fetching และ static generation เพื่อลด loading time ให้เหลือศูนย์
-// ลบ Suspense boundaries ที่ไม่จำเป็นเพื่อป้องกัน loading flicker
+// หน้านี้เป็น Server Component โดยสมบูรณ์ การดึงข้อมูลเกิดขึ้นบนเซิร์ฟเวอร์
+// Next.js App Router ทำให้ Server Components เป็น SSR โดยอัตโนมัติ
+// ปรับปรุงเพื่อความเร็วสูงสุดและไม่มี loading flickering
 
 import { NovelCard, NovelCardData } from "@/components/NovelCard";
 import { ImageSlider, SlideData as SliderSlideData } from "@/components/ImageSlider";
@@ -17,46 +17,12 @@ import { Metadata } from 'next';
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: 'NovelMaze - คลังเรื่องเล่า นิยาย และวิชวลโนเวลที่คุณออกแบบได้',
-  description: 'ค้นพบและสร้างสรรค์เรื่องราวในรูปแบบที่คุณชื่นชอบ ไม่ว่าจะเป็นนิยายแชท นิยายภาพ หรือวิชวลโนเวลแบบอินเทอร์แอคทีฟ ที่ NovelMaze',
+  title: 'DivWy | คลังเรื่องราววิชวลโนเวลที่จะทำให้คุณติดงอมแงม',
+  description: 'ค้นพบและสร้างสรรค์เรื่องราวในรูปแบบที่คุณชื่นชอบ ไม่ว่าจะเป็นนิยายแชท นิยายภาพ หรือวิชวลโนเวลแบบอินเทอร์แอคทีฟ ที่ DivWy',
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 const NOVELS_PER_SECTION = 8; // เพิ่มจำนวนเนื่องจาก card เล็กลง
-
-// ✨ Pre-define static slider data เพื่อไม่ให้มี delay ในการโหลด
-const STATIC_SLIDER_DATA: SliderSlideData[] = [
-  {
-    id: "vn-discovery-slide",
-    title: "โลกใบใหม่ใน Visual Novel",
-    description: "ทุกการตัดสินใจของคุณ กำหนดเรื่องราวและปลายทางที่แตกต่าง ค้นหามหากาพย์ที่คุณเป็นผู้ลิขิต",
-    imageUrl: "/images/featured/banner-vn-world.webp",
-    link: "/novels?novelType=interactive_fiction&filter=trending",
-    category: "Visual Novels",
-    highlightColor: "var(--color-primary)",
-    primaryAction: { label: "สำรวจวิชวลโนเวล", href: "/novels?novelType=interactive_fiction&filter=trending" },
-  },
-  {
-    id: "epic-adventure-awaits",
-    title: "ตำนานรักข้ามภพ",
-    description: "โชคชะตา ความรัก และการผจญภัยครั้งยิ่งใหญ่ในดินแดนที่ไม่เคยหลับใหล รอคุณมาสัมผัส",
-    imageUrl: "/images/featured/banner-fantasy-romance.webp",
-    link: "/novels/love-across-dimensions",
-    category: "โรแมนติกแฟนตาซี",
-    highlightColor: "#ec4899",
-    primaryAction: { label: "อ่านตำนานรัก", href: "/novels/love-across-dimensions" },
-  },
-  {
-    id: "author-spotlight-promo",
-    title: "นักเขียนไฟแรง สร้างสรรค์ไม่หยุด",
-    description: "พบกับผลงานล่าสุดจากนักเขียนดาวรุ่งที่กำลังมาแรงที่สุดใน NovelMaze คัดสรรมาเพื่อคุณโดยเฉพาะ",
-    imageUrl: "/images/featured/banner-new-authors.webp",
-    link: "/authors",
-    category: "นักเขียนยอดนิยม",
-    highlightColor: "#14b8a6",
-    primaryAction: { label: "ค้นหานักเขียน", href: "/authors" },
-  },
-];
 
 interface SectionConfig {
   key: string;
@@ -68,97 +34,73 @@ interface SectionConfig {
   viewAllLink: string;
 }
 
-// ⚡ ปรับปรุง fetch function ให้รวดเร็วและมี timeout protection
-async function getNovels(
-  filter: string,
-  limit: number = NOVELS_PER_SECTION,
-  novelType?: string
-): Promise<{ novels: NovelCardData[], totalAvailable?: number }> {
-  try {
-    const params = new URLSearchParams({
-      limit: limit.toString(),
-      filter,
-    });
-    if (novelType) {
-      params.append("novelType", novelType);
-    }
-
-    const url = `${API_URL}/api/novels?${params.toString()}`;
-    console.log(`⚡ [HomePage Server] Fast fetching from: ${url}`);
-
-    // ✨ ใช้ revalidation แทน no-store เพื่อให้ faster caching
-    // ✨ เพิ่ม timeout protection เพื่อป้องกัน slow API calls
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-
-    const res = await fetch(url, { 
-      next: { revalidate: 300 }, // cache 5 minutes instead of no-store
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'max-age=300', // client-side caching
-      }
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      console.error(`❌ [HomePage Server] API error for ${filter} (HTTP ${res.status})`);
-      return { novels: [], totalAvailable: 0 };
-    }
-
-    const data = await res.json();
-    const fetchedNovels = Array.isArray(data.novels) ? data.novels : [];
-    console.log(`✅ [HomePage Server] Got ${fetchedNovels.length} novels for ${filter}`);
-    
-    return { novels: fetchedNovels };
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      console.warn(`⏰ [HomePage Server] Timeout for ${filter}, returning empty`);
-    } else {
-      console.error(`❌ [HomePage Server] Error for ${filter}:`, error.message);
-    }
-    return { novels: [], totalAvailable: 0 };
-  }
+interface SectionData {
+  config: SectionConfig;
+  novels: NovelCardData[];
+  showViewAllButton: boolean;
 }
 
-// ✨ Pre-defined section configurations สำหรับ faster rendering
-const SECTIONS_CONFIG: SectionConfig[] = [
-  {
-    key: "trending-all",
-    title: "ผลงานยอดนิยม",
-    description: "เรื่องราวที่กำลังฮิตติดลมบน",
-    icon: <TrendingUp className="h-5 w-5 text-primary" />,
-    filter: "trending",
-    viewAllLink: "/novels?filter=trending",
-  },
-  {
-    key: "new-releases",
-    title: "อัปเดตล่าสุด",
-    description: "ตอนใหม่และนิยายเปิดตัวสดใหม่",
-    icon: <Clock className="h-5 w-5 text-primary" />,
-    filter: "published",
-    viewAllLink: "/novels?filter=published",
-  },
-  {
-    key: "promoted-deals",
-    title: "โปรโมชันและเรื่องเด่น",
-    description: "นิยายคุณภาพพร้อมข้อเสนอพิเศษ",
-    icon: <BadgePercent className="h-5 w-5 text-primary" />,
-    filter: "promoted",
-    viewAllLink: "/novels?filter=promoted",
-  },
-  {
-    key: "completed-stories",
-    title: "อ่านรวดเดียวจบ",
-    description: "นิยายจบครบบริบูรณ์ อ่านสนุก",
-    icon: <CheckCircle className="h-5 w-5 text-primary" />,
-    filter: "completed",
-    viewAllLink: "/novels?filter=completed",
-  },
-];
+// ปรับปรุงฟังก์ชันดึงข้อมูลให้รองรับ parallel fetching
+async function getAllNovelsData(sectionsConfig: SectionConfig[]): Promise<SectionData[]> {
+  console.log('🚀 [HomePage Server] Starting parallel fetch for all sections');
+  
+  // สร้าง Promise array สำหรับ fetch ทุก section พร้อมกัน
+  const fetchPromises = sectionsConfig.map(async (config): Promise<SectionData> => {
+    try {
+      const params = new URLSearchParams({
+        limit: NOVELS_PER_SECTION.toString(),
+        filter: config.filter,
+      });
+      if (config.novelType) {
+        params.append("novelType", config.novelType);
+      }
 
-// ⚡ Optimized component สำหรับ section title (no re-renders)
+      const url = `${API_URL}/api/novels?${params.toString()}`;
+      console.log(`📞 [HomePage Server] Fetching ${config.key} from: ${url}`);
+
+      // ใช้ revalidation แทน no-store เพื่อให้ cache ได้ในระดับหนึ่ง
+      const res = await fetch(url, { 
+        next: { revalidate: 300 }, // cache 5 นาที
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!res.ok) {
+        console.error(`❌ [HomePage Server] Failed to fetch ${config.key} (HTTP ${res.status})`);
+        return {
+          config,
+          novels: [],
+          showViewAllButton: false
+        };
+      }
+
+      const data = await res.json();
+      const fetchedNovels = Array.isArray(data.novels) ? data.novels : [];
+      console.log(`✅ [HomePage Server] Received ${fetchedNovels.length} novels for ${config.key}`);
+      
+      return {
+        config,
+        novels: fetchedNovels,
+        showViewAllButton: fetchedNovels.length === NOVELS_PER_SECTION
+      };
+    } catch (error: any) {
+      console.error(`❌ [HomePage Server] Error fetching ${config.key}:`, error.message);
+      return {
+        config,
+        novels: [],
+        showViewAllButton: false
+      };
+    }
+  });
+
+  // รอให้ทุก Promise เสร็จสิ้นพร้อมกัน
+  const results = await Promise.all(fetchPromises);
+  console.log('✅ [HomePage Server] All sections fetched successfully');
+  
+  return results;
+}
+
 function SectionTitle({ icon, title, description }: { icon: React.ReactNode; title: string; description?: string }) {
   return (
     <div className="flex items-center gap-2.5 md:gap-3">
@@ -173,18 +115,7 @@ function SectionTitle({ icon, title, description }: { icon: React.ReactNode; tit
   );
 }
 
-// ⚡ Optimized empty state component
-function EmptyState({ filterKey }: { filterKey: string }) {
-  return (
-    <div className="text-center text-muted-foreground py-8 md:py-10 col-span-full flex flex-col items-center justify-center min-h-[200px] bg-secondary/20 rounded-lg my-2">
-      <BookOpen size={36} strokeWidth={1.5} className="mx-auto mb-3 text-primary/60" />
-      <p className="font-semibold text-base text-foreground/80">ยังไม่พบนิยายในหมวดนี้</p>
-      <p className="text-xs sm:text-sm text-muted-foreground max-w-xs mx-auto">ลองสำรวจหมวดหมู่อื่นๆ หรือแวะมาใหม่เร็วๆ นี้นะ</p>
-    </div>
-  );
-}
-
-// ⚡ Optimized novel row component (no skeleton needed)
+// ลบ Suspense และ skeleton เพื่อลด flickering
 function NovelRow({
   novels,
   filterKey,
@@ -196,11 +127,18 @@ function NovelRow({
   viewAllLink: string;
   showViewAllButton: boolean;
 }) {
+  // ปรับขนาด card ให้เล็กลงตาม readawrite.com
   const cardWidthClasses = "w-[120px] min-[400px]:w-[130px] sm:w-[140px] md:w-[150px]";
   const imageAspectRatio = "aspect-[2/3]";
 
   if (!novels || novels.length === 0) {
-    return <EmptyState filterKey={filterKey} />;
+    return (
+      <div className="text-center text-muted-foreground py-8 md:py-10 col-span-full flex flex-col items-center justify-center min-h-[200px] bg-secondary/20 rounded-lg my-2">
+        <BookOpen size={36} strokeWidth={1.5} className="mx-auto mb-3 text-primary/60" />
+        <p className="font-semibold text-base text-foreground/80">ยังไม่พบนิยายในหมวดนี้</p>
+        <p className="text-xs sm:text-sm text-muted-foreground max-w-xs mx-auto">ลองสำรวจหมวดหมู่อื่นๆ หรือแวะมาใหม่เร็วๆ นี้นะ</p>
+      </div>
+    );
   }
 
   return (
@@ -223,8 +161,10 @@ function NovelRow({
         </div>
       ))}
 
-      {showViewAllButton && novels.length >= NOVELS_PER_SECTION && (
-        <div className={`flex-shrink-0 ${cardWidthClasses} snap-start`}>
+      {showViewAllButton && (
+        <div
+          className={`flex-shrink-0 ${cardWidthClasses} snap-start`}
+        >
           <Link
             href={viewAllLink}
             className="bg-card hover:bg-secondary transition-colors duration-200 rounded-lg shadow-sm hover:shadow-md flex flex-col items-center justify-center h-full group p-3 text-center border border-border/50"
@@ -247,78 +187,116 @@ function NovelRow({
   );
 }
 
-// ⚡ Fast section component - renders immediately with data
-function FastSection({
-  title,
-  description,
-  icon,
-  sectionKey,
-  viewAllLink,
-  novels
-}: SectionConfig & { 
-  sectionKey: string; 
-  novels: NovelCardData[];
-}) {
-  const showViewAllButton = novels.length >= NOVELS_PER_SECTION;
-
+// ลบ async และ Suspense เพื่อลด render blocking
+function SectionRenderer({ data }: { data: SectionData }) {
+  const { config, novels, showViewAllButton } = data;
+  
   return (
-    <section aria-labelledby={sectionKey} className="mb-6 md:mb-10">
+    <section aria-labelledby={config.key} className="mb-6 md:mb-10">
       <div className="flex justify-between items-center mb-2.5 md:mb-3">
-        <SectionTitle icon={icon} title={title} description={description} />
+        <SectionTitle icon={config.icon} title={config.title} description={config.description} />
       </div>
       <NovelRow
         novels={novels}
-        filterKey={sectionKey}
-        viewAllLink={viewAllLink}
+        filterKey={config.key}
+        viewAllLink={config.viewAllLink}
         showViewAllButton={showViewAllButton}
       />
     </section>
   );
 }
 
-// ⚡ MAIN OPTIMIZED HOMEPAGE - ใช้ parallel fetching เพื่อความเร็วสูงสุด
 export default async function HomePage() {
-  console.log("🚀 [HomePage] Starting ultra-fast parallel data fetching...");
+  console.log('🎯 [HomePage Server] Starting homepage render');
   
-  // ✨ PARALLEL FETCHING - ดึงข้อมูลทุก section พร้อมกันเพื่อลด loading time
-  const startTime = Date.now();
-  
-  const dataPromises = SECTIONS_CONFIG.map(async (section) => {
-    const { novels } = await getNovels(section.filter, NOVELS_PER_SECTION, section.novelType);
-    return {
-      section,
-      novels
-    };
-  });
+  // ข้อมูล slider แบบ static เพื่อไม่ต้อง fetch
+  const imageSlideData: SliderSlideData[] = [
+    {
+      id: "vn-discovery-slide",
+      title: "โลกใบใหม่ใน Visual Novel",
+      description: "ทุกการตัดสินใจของคุณ กำหนดเรื่องราวและปลายทางที่แตกต่าง ค้นหามหากาพย์ที่คุณเป็นผู้ลิขิต",
+      imageUrl: "/images/featured/banner-vn-world.webp",
+      link: "/novels?novelType=interactive_fiction&filter=trending",
+      category: "Visual Novels",
+      highlightColor: "var(--color-primary)",
+      primaryAction: { label: "สำรวจวิชวลโนเวล", href: "/novels?novelType=interactive_fiction&filter=trending" },
+    },
+    {
+      id: "epic-adventure-awaits",
+      title: "ตำนานรักข้ามภพ",
+      description: "โชคชะตา ความรัก และการผจญภัยครั้งยิ่งใหญ่ในดินแดนที่ไม่เคยหลับใหล รอคุณมาสัมผัส",
+      imageUrl: "/images/featured/banner-fantasy-romance.webp",
+      link: "/novels/love-across-dimensions",
+      category: "โรแมนติกแฟนตาซี",
+      highlightColor: "#ec4899",
+      primaryAction: { label: "อ่านตำนานรัก", href: "/novels/love-across-dimensions" },
+    },
+    {
+      id: "author-spotlight-promo",
+      title: "นักเขียนไฟแรง สร้างสรรค์ไม่หยุด",
+      description: "พบกับผลงานล่าสุดจากนักเขียนดาวรุ่งที่กำลังมาแรงที่สุดใน NovelMaze คัดสรรมาเพื่อคุณโดยเฉพาะ",
+      imageUrl: "/images/featured/banner-new-authors.webp",
+      link: "/authors",
+      category: "นักเขียนยอดนิยม",
+      highlightColor: "#14b8a6",
+      primaryAction: { label: "ค้นหานักเขียน", href: "/authors" },
+    },
+  ];
 
-  // ⚡ รอให้ทุก API calls เสร็จพร้อมกัน (แทนการรอทีละตัว)
-  const sectionsData = await Promise.all(dataPromises);
-  
-  const totalTime = Date.now() - startTime;
-  console.log(`✅ [HomePage] All data fetched in ${totalTime}ms using parallel fetching!`);
+  const sectionsConfig: SectionConfig[] = [
+    {
+      key: "trending-all",
+      title: "ผลงานยอดนิยม",
+      description: "เรื่องราวที่กำลังฮิตติดลมบน",
+      icon: <TrendingUp className="h-5 w-5 text-primary" />,
+      filter: "trending",
+      viewAllLink: "/novels?filter=trending",
+    },
+    {
+      key: "new-releases",
+      title: "อัปเดตล่าสุด",
+      description: "ตอนใหม่และนิยายเปิดตัวสดใหม่",
+      icon: <Clock className="h-5 w-5 text-primary" />,
+      filter: "published",
+      viewAllLink: "/novels?filter=published",
+    },
+    {
+      key: "promoted-deals",
+      title: "โปรโมชันและเรื่องเด่น",
+      description: "นิยายคุณภาพพร้อมข้อเสนอพิเศษ",
+      icon: <BadgePercent className="h-5 w-5 text-primary" />,
+      filter: "promoted",
+      viewAllLink: "/novels?filter=promoted",
+    },
+    {
+      key: "completed-stories",
+      title: "อ่านรวดเดียวจบ",
+      description: "นิยายจบครบบริบูรณ์ อ่านสนุก",
+      icon: <CheckCircle className="h-5 w-5 text-primary" />,
+      filter: "completed",
+      viewAllLink: "/novels?filter=completed",
+    },
+  ];
 
-  // ✨ IMMEDIATE RENDER - ไม่มี Suspense boundaries ที่ทำให้เกิด loading flicker
+  // ดึงข้อมูลทั้งหมดแบบ parallel เพื่อความเร็วสูงสุด
+  const sectionsData = await getAllNovelsData(sectionsConfig);
+  
+  console.log('✅ [HomePage Server] Homepage data ready, rendering...');
+
   return (
     <div className="bg-background text-foreground min-h-screen">
       <main className="pb-10 md:pb-16">
-        {/* ⚡ Static slider renders immediately - no loading delay */}
+        {/* ลบ Suspense ออกจาก ImageSlider เพื่อลด flickering */}
         <section className="w-full mb-6 md:mb-10 xl:mb-12 relative">
-          <ImageSlider slides={STATIC_SLIDER_DATA} autoPlayInterval={7000} />
+          <ImageSlider slides={imageSlideData} autoPlayInterval={7000} />
         </section>
 
-        {/* ⚡ All sections render immediately with pre-fetched data */}
         <div className="container-custom space-y-8 md:space-y-12">
-          {sectionsData.map(({ section, novels }) => (
-            <FastSection
-              key={section.key}
-              sectionKey={section.key}
-              title={section.title}
-              description={section.description}
-              icon={section.icon}
-              filter={section.filter}
-              novelType={section.novelType}
-              viewAllLink={section.viewAllLink}
-              novels={novels}
+          {/* ลบ Suspense ออกและ render ทุก section พร้อมกัน */}
+          {sectionsData.map((data) => (
+            <SectionRenderer
+              key={data.config.key}
+              data={data}
             />
           ))}
         </div>

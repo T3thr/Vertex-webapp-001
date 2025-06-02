@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react']
+  },
   reactStrictMode: true,
   images: {
     domains: ["lh3.googleusercontent.com" , "example.com" , "via.placeholder.com" , "picsum.photos"], // อนุญาตให้โหลดภาพจาก Googleusercontent

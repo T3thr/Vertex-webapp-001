@@ -1,7 +1,7 @@
 // src/backend/models/Purchase.ts
-// โมเดลการซื้อ (Purchase Model) - อัปเกรดสำหรับแพลตฟอร์ม NovelMaze
+// โมเดลการซื้อ (Purchase Model) - อัปเกรดสำหรับแพลตฟอร์ม DivWy
 // บันทึกรายการซื้อต่างๆ ภายในแพลตฟอร์ม เช่น การซื้อตอนนิยาย, การซื้อเหรียญ, การสมัครสมาชิก
-// อัปเกรดจาก Purchase.ts เดิม โดยเพิ่มรายละเอียด, Type Safety, คอมเมนต์ภาษาไทย, Indexes, และปรับปรุงตามมาตรฐาน NovelMaze
+// อัปเกรดจาก Purchase.ts เดิม โดยเพิ่มรายละเอียด, Type Safety, คอมเมนต์ภาษาไทย, Indexes, และปรับปรุงตามมาตรฐาน DivWy
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IUser } from "./User"; // สำหรับ userId
@@ -69,7 +69,7 @@ export enum PurchaseStatus {
  * @description รายละเอียดของแต่ละรายการสินค้าในการซื้อ
  * @property {Types.ObjectId} itemId - ID ของสิ่งที่ซื้อ (เช่น EpisodeId, CoinPackageId, SubscriptionPlanId) - ควรใช้ refPath เพื่อ dynamic reference ในอนาคต
  * @property {PurchaseItemType} itemType - ประเภทของสิ่งที่ซื้อ
- * @property {string} title - ชื่อของสิ่งที่ซื้อ (เช่น "ตอนที่ 5: การผจญภัยเริ่มขึ้น", "แพ็กเกจ 100 เหรียญ NovelMaze") - ควรดึงมาจากข้อมูลสินค้าจริง
+ * @property {string} title - ชื่อของสิ่งที่ซื้อ (เช่น "ตอนที่ 5: การผจญภัยเริ่มขึ้น", "แพ็กเกจ 100 เหรียญ DivWy") - ควรดึงมาจากข้อมูลสินค้าจริง
  * @property {string} [description] - คำอธิบายเพิ่มเติมของสินค้าที่ซื้อ
  * @property {number} quantity - จำนวนที่ซื้อ (ปกติเป็น 1 สำหรับตอนนิยาย, อาจมากกว่า 1 สำหรับสินค้าอื่นๆ)
  * @property {number} unitPrice - ราคาต่อหน่วย (อาจเป็น "เหรียญ" หรือสกุลเงินหลักของแพลตฟอร์ม เช่น THB, USD)
@@ -452,7 +452,7 @@ PurchaseSchema.post<IPurchase>("save", async function (doc, next) {
           userId: doc.userId,
           type: "PURCHASE_COMPLETED",
           title: "การซื้อสำเร็จ",
-          message: `การซื้อหมายเลข ${doc.purchaseReadableId} ของคุณสำหรับรายการ "${doc.items.map(i => i.title).join(', ')}" สำเร็จแล้ว ขอบคุณที่ใช้บริการ NovelMaze!`,
+          message: `การซื้อหมายเลข ${doc.purchaseReadableId} ของคุณสำหรับรายการ "${doc.items.map(i => i.title).join(', ')}" สำเร็จแล้ว ขอบคุณที่ใช้บริการ DivWy!`,
           data: { purchaseId: doc._id, purchaseReadableId: doc.purchaseReadableId, items: doc.items.map(i => ({title: i.title, type: i.itemType})) },
           isRead: false,
         });

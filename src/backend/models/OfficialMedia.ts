@@ -1,6 +1,6 @@
 // src/backend/models/OfficialMedia.ts
 // โมเดลสื่อทางการ (Official Media Model)
-// จัดการคลังสื่อกลางที่ดูแลโดยทีมงาน NovelMaze เช่น รูปภาพพื้นหลัง, เทมเพลตตัวละคร, เพลงประกอบ, เสียงเอฟเฟกต์ ที่ผู้เขียนสามารถนำไปใช้ได้
+// จัดการคลังสื่อกลางที่ดูแลโดยทีมงาน DivWy เช่น รูปภาพพื้นหลัง, เทมเพลตตัวละคร, เพลงประกอบ, เสียงเอฟเฟกต์ ที่ผู้เขียนสามารถนำไปใช้ได้
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 // นำเข้า schema และ types ที่แชร์จาก Media.ts
@@ -27,11 +27,11 @@ import { ICategory } from "./Category"; // สำหรับ metadata.categoryI
  * - `template_character_art`: เทมเพลตภาพตัวละครทางการ (เช่น sprite sheet, portrait base)
  * - `template_background_art`: เทมเพลตภาพพื้นหลังทางการ (เช่น ห้องเรียน, ป่าไม้ แบบต่างๆ)
  * - `ui_theme_asset`: Asset สำหรับธีม UI ของแพลตฟอร์มที่ผู้ใช้สามารถนำไปปรับใช้ (เช่น กรอบข้อความ, ปุ่ม)
- * - `tutorial_asset`: Asset สำหรับใช้ในบทช่วยสอนการใช้งานแพลตฟอร์ม NovelMaze
- * - `marketing_material`: สื่อสำหรับใช้ในการตลาดของ NovelMaze (เช่น แบนเนอร์โปรโมท, โลโก้)
+ * - `tutorial_asset`: Asset สำหรับใช้ในบทช่วยสอนการใช้งานแพลตฟอร์ม DivWy
+ * - `marketing_material`: สื่อสำหรับใช้ในการตลาดของ DivWy (เช่น แบนเนอร์โปรโมท, โลโก้)
  * - `music_track`: เพลงประกอบทางการ (BGM) ที่มีลิขสิทธิ์ถูกต้อง
  * - `sound_effect`: เสียงเอฟเฟกต์ทางการ (SFX)
- * - `official_font`: ฟอนต์ทางการที่ NovelMaze จัดเตรียมไว้ให้
+ * - `official_font`: ฟอนต์ทางการที่ DivWy จัดเตรียมไว้ให้
  * ... (รวมถึงค่าจาก GeneralMediaType เช่น IMAGE, AUDIO, VIDEO ถ้า Official Media สามารถเป็นประเภทเหล่านั้นได้โดยตรง)
  */
 export enum OfficialMediaType {
@@ -54,8 +54,8 @@ export enum OfficialMediaType {
 
 /**
  * @enum {string} OfficialMediaStatus
- * @description สถานะของสื่อทางการในคลังของ NovelMaze
- * - `pending_review`: รอการตรวจสอบและอนุมัติจากทีมงาน NovelMaze หลังจากการอัปโหลดโดยทีมงาน
+ * @description สถานะของสื่อทางการในคลังของ DivWy
+ * - `pending_review`: รอการตรวจสอบและอนุมัติจากทีมงาน DivWy หลังจากการอัปโหลดโดยทีมงาน
  * - `approved_for_library`: อนุมัติให้ใช้งานในคลังสาธารณะสำหรับผู้เขียนแล้ว
  * - `rejected`: ถูกปฏิเสธการนำเข้าคลัง (ควรมีเหตุผลประกอบใน statusMessage)
  * - `deprecated`: เลิกใช้งานแล้ว (อาจมีเวอร์ชันใหม่มาแทน หรือไม่เหมาะสมอีกต่อไป) แต่ยังเก็บไว้ในระบบ
@@ -109,7 +109,7 @@ const OfficialMediaCollectionInfoSchema = new Schema<IOfficialMediaCollectionInf
  * @property {string} title - ชื่อสื่อ (สำหรับแสดงในคลังให้ผู้ใช้เห็น, **จำเป็น**)
  * @property {string} [description] - คำอธิบายสื่อ, วิธีการใช้งานเบื้องต้น, หรือแรงบันดาลใจ
  * @property {string} internalName - ชื่อภายในระบบสำหรับทีมงาน (อาจเป็นรหัสหรือชื่อเฉพาะที่ไม่ซ้ำกัน, **จำเป็น, unique**)
- * @property {string} originalFileName - ชื่อไฟล์เดิมที่ทีมงาน NovelMaze อัปโหลด
+ * @property {string} originalFileName - ชื่อไฟล์เดิมที่ทีมงาน DivWy อัปโหลด
  * @property {string} storedFileName - ชื่อไฟล์ที่จัดเก็บในระบบ (ควร unique และมีการจัดการที่ดี)
  * @property {string} storagePath - Path ที่เก็บไฟล์ใน storage provider (เช่น "official_assets/backgrounds/forest_01.webp", **จำเป็น, unique**)
  * @property {MediaStorageProvider} storageProvider - ผู้ให้บริการพื้นที่จัดเก็บไฟล์ (นำเข้าจาก Media.ts)
@@ -128,8 +128,8 @@ const OfficialMediaCollectionInfoSchema = new Schema<IOfficialMediaCollectionInf
  * @property {OfficialMediaStatus} status - สถานะของสื่อในคลัง (pending_review, approved_for_library, **จำเป็น**)
  * @property {string} [statusMessage] - ข้อความเพิ่มเติมเกี่ยวกับสถานะ (เช่น เหตุผลที่ reject, รายละเอียดการ deprecated)
  * @property {string} [version] - เวอร์ชั่นของสื่อทางการ (เช่น "1.0", "2.1.3", สำหรับการปรับปรุงแก้ไข)
- * @property {string} licenseType - ประเภทใบอนุญาตการใช้งานที่ NovelMaze มอบให้ผู้ใช้ (เช่น "NovelMaze Standard License", "Free for Commercial Use on NovelMaze") (**จำเป็น**)
- * @property {string} [usageRestrictions] - ข้อจำกัดหรือเงื่อนไขการใช้งานเพิ่มเติม (เช่น "ห้ามใช้ในเนื้อหาสำหรับผู้ใหญ่", "ต้องให้เครดิต NovelMaze")
+ * @property {string} licenseType - ประเภทใบอนุญาตการใช้งานที่ DivWy มอบให้ผู้ใช้ (เช่น "DivWy Standard License", "Free for Commercial Use on DivWy") (**จำเป็น**)
+ * @property {string} [usageRestrictions] - ข้อจำกัดหรือเงื่อนไขการใช้งานเพิ่มเติม (เช่น "ห้ามใช้ในเนื้อหาสำหรับผู้ใหญ่", "ต้องให้เครดิต DivWy")
  * @property {string} [usageInstructions] - คำแนะนำการใช้งานสื่อนี้ใน Visual Novel (เช่น "เหมาะสำหรับฉากกลางคืน", "ควรปรับสีให้เข้ากับธีม")
  * @property {string} [sourceInformation] - แหล่งที่มาของสื่อ (ถ้าเป็น asset ที่ซื้อมาหรือได้ลิขสิทธิ์มาจากบุคคลที่สาม)
  * @property {boolean} isPremiumAsset - สื่อนี้เป็น Premium Asset หรือไม่ (ผู้ใช้อาจต้องมี subscription ระดับสูง หรือจ่ายเงินเพื่อใช้งาน)
@@ -143,7 +143,7 @@ const OfficialMediaCollectionInfoSchema = new Schema<IOfficialMediaCollectionInf
  * @property {Date} [lastReviewedAt] - วันที่ตรวจสอบหรือรีวิวล่าสุดโดยทีมงาน
  * @property {Date} [deprecatedAt] - วันที่เลิกใช้งานสื่อนี้
  * @property {string} [deprecationReason] - เหตุผลที่เลิกใช้งานสื่อนี้
- * @property {Record<string, any>} [customFields] - ฟิลด์เพิ่มเติมที่กำหนดโดยทีมงาน NovelMaze (เช่น ข้อมูลเฉพาะสำหรับ media type นั้นๆ)
+ * @property {Record<string, any>} [customFields] - ฟิลด์เพิ่มเติมที่กำหนดโดยทีมงาน DivWy (เช่น ข้อมูลเฉพาะสำหรับ media type นั้นๆ)
  * @property {Date} createdAt - วันที่สร้างเอกสาร (Mongoose `timestamps`)
  * @property {Date} updatedAt - วันที่อัปเดตเอกสารล่าสุด (Mongoose `timestamps`)
  */
@@ -288,7 +288,7 @@ const OfficialMediaSchema = new Schema<IOfficialMedia>(
     },
     statusMessage: { type: String, trim: true, maxlength: [500, "Status message ยาวเกินไป"] },
     version: { type: String, trim: true, maxlength: [50, "Version ยาวเกินไป (เช่น 1.0.0, 2.1)"] },
-    licenseType: { // License ที่ NovelMaze ให้กับผู้ใช้
+    licenseType: { // License ที่ DivWy ให้กับผู้ใช้
       type: String,
       required: [true, "กรุณาระบุประเภทใบอนุญาต (License type is required)"],
       trim: true,
@@ -463,7 +463,7 @@ export default OfficialMediaModel;
 //     - Version Control เต็มรูปแบบสำหรับสื่อทางการ (เช่น การย้อนกลับไปเวอร์ชันเก่า, การเปรียบเทียบเวอร์ชัน).
 //     - AI Tagging และ Image Recognition เพื่อช่วยในการจัดหมวดหมู่และค้นหาอัตโนมัติ.
 // 4.  **Content Delivery Network (CDN) Integration**: ตรวจสอบว่า `accessUrl` ชี้ไปยัง CDN และมีการจัดการ cache ที่เหมาะสมเพื่อประสิทธิภาพสูงสุด.
-// 5.  **Analytics Dashboard**: แดชบอร์ดสำหรับทีมงาน NovelMaze เพื่อดูสถิติการใช้งาน, ความนิยม, และ feedback ของสื่อทางการแต่ละชิ้น.
+// 5.  **Analytics Dashboard**: แดชบอร์ดสำหรับทีมงาน DivWy เพื่อดูสถิติการใช้งาน, ความนิยม, และ feedback ของสื่อทางการแต่ละชิ้น.
 // 6.  **Bulk Operations Tools**: เครื่องมือสำหรับ Admin ในการจัดการสื่อจำนวนมาก (อัปโหลดเป็นชุด, แก้ไข metadata พร้อมกัน, จัดเข้าคอลเลกชัน).
 // 7.  **Detailed Licensing Management**: ระบบจัดการใบอนุญาตที่ซับซ้อนขึ้น (เช่น attribution requirements แบบละเอียด, วันหมดอายุของ license).
 // 8.  **User Feedback Loop**: ช่องทางให้ผู้เขียนนิยายสามารถให้ feedback, รายงานปัญหา, หรือ request สื่อทางการใหม่ๆ ได้โดยตรง.

@@ -24,12 +24,12 @@ export default function SignInPage() {
         {/* Logo placeholder - replace with your actual logo */}
         <div className="mb-6 relative w-48 h-16 flex items-center justify-center">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-            NovelMaze
+            DivWy
           </h1>
         </div>
         
         <h2 className="text-2xl font-bold text-foreground mb-4">
-          Welcome to NovelMaze
+          Welcome to DivWy
         </h2>
         
         <p className="text-muted-foreground mb-8">

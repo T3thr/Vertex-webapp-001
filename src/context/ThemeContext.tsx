@@ -39,7 +39,7 @@ interface ThemeProviderProps {
   defaultTheme?: Theme; // This is the fallback if nothing in localStorage
 }
 
-const DEFAULT_STORAGE_KEY = "novelmaze-theme";
+const DEFAULT_STORAGE_KEY = "divwy-theme";
 const DEFAULT_THEME_PREFERENCE: Theme = "system"; // Default *preference*
 
 export function ThemeProvider({

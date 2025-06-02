@@ -115,7 +115,7 @@ export enum MediaStatus {
 /**
  * @enum {string} MediaStorageProvider
  * @description ผู้ให้บริการพื้นที่จัดเก็บไฟล์
- * - `LOCAL`: จัดเก็บบนเซิร์ฟเวอร์ NovelMaze
+ * - `LOCAL`: จัดเก็บบนเซิร์ฟเวอร์ DivWy
  * - `AWS_S3`: Amazon S3
  * - `GOOGLE_CLOUD_STORAGE`: Google Cloud Storage
  * - `AZURE_BLOB_STORAGE`: Azure Blob Storage

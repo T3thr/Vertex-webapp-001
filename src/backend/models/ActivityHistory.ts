@@ -1,6 +1,6 @@
 // src/backend/models/ActivityHistory.ts
-// โมเดลประวัติกิจกรรมผู้ใช้ (ActivityHistory Model) - อัปเกรดสำหรับแพลตฟอร์ม NovelMaze
-// บันทึกกิจกรรมต่างๆ ที่ผู้ใช้ทำบนแพลตฟอร์ม NovelMaze เพื่อการวิเคราะห์, การแสดงผล, และการตรวจสอบ
+// โมเดลประวัติกิจกรรมผู้ใช้ (ActivityHistory Model) - อัปเกรดสำหรับแพลตฟอร์ม DivWy
+// บันทึกกิจกรรมต่างๆ ที่ผู้ใช้ทำบนแพลตฟอร์ม DivWy เพื่อการวิเคราะห์, การแสดงผล, และการตรวจสอบ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IUser } from "./User"; // สำหรับ userId

@@ -94,7 +94,7 @@ export async function generateMetadata(
   if (typeof slug !== 'string' || !slug.trim()) {
     console.warn(`⚠️ [generateMetadata] Slug ไม่ถูกต้อง: "${slug}"`);
     return {
-      title: "ข้อมูลไม่ถูกต้อง - NovelMaze",
+      title: "ข้อมูลไม่ถูกต้อง - DivWy",
       description: "ไม่สามารถโหลดข้อมูลสำหรับเนื้อหานี้ได้เนื่องจาก slug ไม่ถูกต้อง",
       robots: { index: false, follow: false }
     };
@@ -104,13 +104,13 @@ export async function generateMetadata(
 
   if (!novel) {
     return {
-      title: "ไม่พบนิยาย - NovelMaze",
+      title: "ไม่พบนิยาย - DivWy",
       description: `ขออภัย ไม่พบข้อมูลนิยายที่คุณกำลังค้นหา (slug: ${slug})`,
       robots: { index: false, follow: false }
     };
   }
 
-  const siteName = (await parent).openGraph?.siteName || process.env.NEXT_PUBLIC_SITE_NAME || "NovelMaze";
+  const siteName = (await parent).openGraph?.siteName || process.env.NEXT_PUBLIC_SITE_NAME || "DivWy";
   const authorName = novel.author?.profile?.penName || novel.author?.profile?.displayName || novel.author?.username || 'ผู้เขียนนิรนาม';
   const pageTitle = `${novel.title} - โดย ${authorName} | ${siteName}`;
   const description = novel.synopsis

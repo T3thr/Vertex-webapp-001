@@ -18,7 +18,7 @@ import { INotification, NotificationType, NotificationSeverity } from "./Notific
  * @description ประเภทของเป้าหมายการบริจาค
  * - `WRITER`: บริจาคให้นักเขียนโดยตรง (ต้องมี targetWriterId)
  * - `NOVEL`: บริจาคให้โปรเจกต์นิยาย (ต้องมี targetNovelId, อาจจะไปที่ผู้เขียนหลักของนิยายหรือทีม)
- * - `PLATFORM`: บริจาคให้แพลตฟอร์ม NovelMaze โดยรวม
+ * - `PLATFORM`: บริจาคให้แพลตฟอร์ม DivWy โดยรวม
  */
 export enum DonationTargetType {
   WRITER = "writer",
@@ -29,7 +29,7 @@ export enum DonationTargetType {
 /**
  * @enum {string} DonationCurrency
  * @description สกุลเงินที่ใช้บริจาค
- * - `COIN`: บริจาคด้วยเหรียญภายในแพลตฟอร์ม NovelMaze
+ * - `COIN`: บริจาคด้วยเหรียญภายในแพลตฟอร์ม DivWy
  * - `THB`: บริจาคด้วยเงินบาทไทย (ผ่าน Payment Gateway)
  * - `USD`: บริจาคด้วยเงินดอลลาร์สหรัฐ (ผ่าน Payment Gateway)
  */

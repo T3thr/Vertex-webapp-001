@@ -1,5 +1,5 @@
 // src/backend/models/Novel.ts
-// โมเดลนิยาย (Novel Model) - ศูนย์กลางข้อมูลของนิยายแต่ละเรื่องสำหรับแพลตฟอร์ม NovelMaze
+// โมเดลนิยาย (Novel Model) - ศูนย์กลางข้อมูลของนิยายแต่ละเรื่องสำหรับแพลตฟอร์ม DivWy
 
 import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
 import { CategoryType, ICategory } from "./Category"; // Import CategoryType และ ICategory

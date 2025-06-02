@@ -76,7 +76,7 @@ interface NavBarProps {
   logoText?: string;
 }
 
-export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
+export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
   const { user: authContextUser, status: authStatus, signOut } = useAuth();
   const {
     theme: currentThemeChoice,
@@ -328,7 +328,7 @@ export default function NavBar({ logoText = "NOVELMAZE" }: NavBarProps) {
           <div className="flex items-center justify-between h-16"> {/* Flex container สำหรับ items ใน navbar */}
             {/* Logo Section */}
             <div className="flex items-center">
-              <Link href="/" className="flex items-center space-x-2" aria-label="หน้าหลัก NovelMaze">
+              <Link href="/" className="flex items-center space-x-2" aria-label="หน้าหลัก DivWy">
                 {/* SVG Logo with primary color */}
                 <svg width="32" height="32" viewBox="0 0 100 100" className="text-primary" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                   <path d="M50 10L10 30L10 70L50 90L90 70L90 30L50 10ZM20 35L20 65L50 80L80 65L80 35L50 20L20 35Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
