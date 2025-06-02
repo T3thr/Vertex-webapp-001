@@ -6,8 +6,14 @@ import { notFound } from 'next/navigation'; // Function สำหรับแส
 import Image from 'next/image'; // Component สำหรับแสดงรูปภาพจาก Next.js
 import React from 'react'; // React library
 
+interface UserPageProps {
+  params: Promise<{ username: string }>;
+}
+
 // ไม่ต้องกำหนด type UserPageProps
-export default async function UserPage({ params }: { params: { username: string } }) {
+export default async function UserPage({ params: paramsPromise }: UserPageProps) {
+  const params = await paramsPromise;
+
   await dbConnect(); // เชื่อมต่อกับ MongoDB
 
   // ค้นหา user จาก database ด้วย username และ isDeleted เป็น false
@@ -63,7 +69,7 @@ export default async function UserPage({ params }: { params: { username: string 
 
       {/* ส่วนแสดง Bio ถ้ามี */}
       {profile?.bio && (
-        <div className="mb-4 text-gray-800 whitespace-pre-line">{profile.bio}</div>
+        <div className="mb-4 text-foreground whitespace-pre-line">{profile.bio}</div>
       )}
 
       {/* สามารถเพิ่ม Section อื่นๆ ที่เกี่ยวข้องกับ User Profile ได้ที่นี่
