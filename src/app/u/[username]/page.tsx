@@ -6,11 +6,7 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import React from 'react';
 
-interface UserPageProps {
-  params: { username: string };
-}
-
-export default async function UserPage({ params }: UserPageProps) {
+export default async function UserPage({ params }: { params: { username: string } }) {
   await dbConnect();
   const user = await UserModel.findOne({ username: params.username, isDeleted: false })
     .select('username profile roles isActive isBanned')
