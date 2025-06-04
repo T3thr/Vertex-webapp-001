@@ -813,6 +813,7 @@ export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId
     // Initialize writerStats if it doesn't exist
     if (!author.writerStats) {
         author.writerStats = {
+            totalViewsReceived: 0, 
             totalNovelsPublished: 0, totalEpisodesPublished: 0, totalViewsAcrossAllNovels: 0,
             totalReadsAcrossAllNovels: 0, totalLikesReceivedOnNovels: 0, totalCommentsReceivedOnNovels: 0,
             totalEarningsToDate: 0, totalCoinsReceived: 0, totalRealMoneyReceived: 0, totalDonationsReceived: 0,
