@@ -1,6 +1,7 @@
-import FavoriteItem from '@/components/FavouriteItem';
-import LibraryItemCard from '@/components/LibraryItemCard';
-import TabNavigation from '@/components/TapNavigation';
+// src/app/library/page.tsx หรือไฟล์ที่เหมาะสมตามโครงสร้างโปรเจคของคุณ
+import FavoriteItem from '@/components/FavouriteItem'; 
+import LibraryItemCard from '@/components/LibraryItemCard'; 
+import TabNavigation from '@/components/TabNavigation'; 
 import Link from 'next/link';
 
 // Mock data with 3 additional novels for "recent" tab only
@@ -179,19 +180,25 @@ interface LibraryItem {
   addedAt: string;
 }
 
+// ฟังก์ชันดึงข้อมูลจำลอง (สามารถเปลี่ยนเป็น API call จริงได้)
 async function getLibraryItems(tab: string): Promise<LibraryItem[]> {
+  // สร้างสำเนาของ mockLibraryItems เพื่อป้องกันการแก้ไขข้อมูลต้นฉบับโดยตรง
   let filteredItems = [...mockLibraryItems];
 
+  // ฟังก์ชันช่วยสำหรับการเรียงลำดับตาม lastReadAt
   const sortByLastRead = (items: LibraryItem[]) => {
     return items.sort((a, b) => {
       const dateA = new Date(a.readingProgress.lastReadAt);
       const dateB = new Date(b.readingProgress.lastReadAt);
+      // ตรวจสอบว่าเป็นวันเวลาที่ถูกต้องหรือไม่ ก่อนทำการเปรียบเทียบ
       if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
-        return dateB.getTime() - dateA.getTime();
+        return dateB.getTime() - dateA.getTime(); // เรียงจากใหม่ไปเก่า
       }
+      // กรณีที่ dateA ไม่ถูกต้อง ให้จัดลำดับไปท้ายๆ
       if (isNaN(dateA.getTime())) return 1;
+      // กรณีที่ dateB ไม่ถูกต้อง ให้จัดลำดับไปท้ายๆ (เทียบกับ a)
       if (isNaN(dateB.getTime())) return -1;
-      return 0;
+      return 0; // ถ้าทั้งคู่ไม่ถูกต้องหรือไม่สามารถเปรียบเทียบได้
     });
   };
 
@@ -203,40 +210,61 @@ async function getLibraryItems(tab: string): Promise<LibraryItem[]> {
       return sortByLastRead(filteredItems);
 
     case 'favorites':
+      // คัดกรองเฉพาะรายการที่มี userRating ตั้งแต่ 4 ดาวขึ้นไป
       filteredItems = filteredItems.filter(
         (item) => item.userRating >= 4
       );
-      return filteredItems;
+      // สำหรับ 'favorites' อาจจะไม่จำเป็นต้องเรียงตาม lastReadAt หรือ addedAt
+      // หรืออาจจะเรียงตามวันที่เพิ่มเป็น favorite หรือวันที่ให้ rating (ถ้ามีข้อมูล)
+      // ในที่นี้จะคืนค่าตามลำดับที่กรองได้ หรือจะเรียงตาม addedAt ก็ได้
+      return filteredItems.sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
+
 
     case 'recent':
-      // Filter items read within the last 30 days
       const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30); // June 4, 2025 - 30 days = May 5, 2025
+      // ตั้งค่าเวลาปัจจุบันเป็น June 4, 2025 เพื่อให้สอดคล้องกับข้อมูล mock และ comment
+      // ในโค้ดจริง บรรทัดนี้ไม่จำเป็นต้องมี เพราะ new Date() จะใช้เวลาปัจจุบันของ server/client อยู่แล้ว
+      // thirtyDaysAgo.setFullYear(2025, 5, 4); // เดือนใน JS คือ 0-11, ดังนั้น 5 คือ June
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
       filteredItems = filteredItems.filter(
         (item) => new Date(item.readingProgress.lastReadAt) >= thirtyDaysAgo
       );
       return sortByLastRead(filteredItems);
 
     default:
+      // กรณี tab ไม่ตรงกับที่กำหนด หรือเป็น 'all' (ถ้ามี)
+      // เรียงตามวันที่เพิ่มเข้าระบบล่าสุด
       return filteredItems.sort((a, b) =>
         new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
       );
   }
 }
 
-export default async function LibraryPage({ searchParams }: { searchParams: { tab?: string } }) {
-  const activeTab = searchParams.tab || 'recent';
+// แก้ไข Props type ให้สอดคล้องกับ Next.js App Router
+// searchParams สามารถมี key เป็น string และ value เป็น string, string[] หรือ undefined
+interface LibraryPageProps {
+  searchParams: { [key: string]: string | string[] | undefined };
+}
+
+export default async function LibraryPage({ searchParams }: LibraryPageProps) {
+  // ดึงค่า 'tab' จาก searchParams และตรวจสอบประเภท
+  // ถ้า searchParams.tab เป็น array ให้ใช้ตัวแรก หรือถ้าไม่มีค่า ให้เป็น 'recent'
+  const tabQueryParam = searchParams?.tab;
+  const activeTab = Array.isArray(tabQueryParam) ? (tabQueryParam[0] || 'recent') : (tabQueryParam || 'recent');
+
   let libraryItems: LibraryItem[] = [];
 
   try {
     libraryItems = await getLibraryItems(activeTab);
   } catch (error) {
     console.error('Error fetching library items:', error);
+    // หน้าแสดงข้อผิดพลาด
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-6xl mx-auto px-4 py-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">นิยายของฉัน</h1>
-          <TabNavigation />
+          <TabNavigation /> {/* TabNavigation ยังคงแสดงได้ แม้ข้อมูลจะ error */}
           <div className="text-center py-12">
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               เกิดข้อผิดพลาด
@@ -250,6 +278,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { ta
     );
   }
 
+  // ส่วนแสดงผลหลัก
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -265,8 +294,10 @@ export default async function LibraryPage({ searchParams }: { searchParams: { ta
               )
             ))
           ) : (
+            // ส่วนแสดงเมื่อไม่มีข้อมูล
             <div className="text-center py-12">
               <div className="mx-auto text-gray-400 mb-4">
+                {/* SVG Icon for empty state */}
                 <svg
                   className="w-12 h-12"
                   fill="none"
@@ -286,20 +317,26 @@ export default async function LibraryPage({ searchParams }: { searchParams: { ta
                 ไม่พบรายการในห้องสมุด
               </h3>
               <p className="text-gray-500 mb-4">
-                ยังไม่มีนิยายในห้องสมุดของคุณ
+                {/* ปรับข้อความตาม activeTab */}
+                {activeTab === 'recent' && 'ยังไม่มีนิยายที่ดูล่าสุดในช่วง 30 วันนี้'}
+                {activeTab === 'history' && 'ยังไม่มีประวัติการอ่านนิยาย'}
+                {activeTab === 'favorites' && 'ยังไม่มีนิยายที่คุณชื่นชอบ'}
+                {activeTab !== 'recent' && activeTab !== 'history' && activeTab !== 'favorites' && 'ยังไม่มีนิยายในห้องสมุดของคุณ'}
               </p>
-              {activeTab === 'history' && (
+              {/* แสดง Link ค้นหาเฉพาะบาง tab หรือตามเงื่อนไขที่ต้องการ */}
+              {(activeTab === 'history' || activeTab === 'favorites' || activeTab === 'recent') && (
                 <p className="text-gray-600">
-                  ถ้าหาไม่เจอ สามารถ{' '}
+                  ลองดูสิ?{' '}
                   <Link href="/search" className="text-blue-500 hover:underline">
                     ค้นหานิยาย
                   </Link>{' '}
-                  ได้
+                  ที่น่าสนใจ
                 </p>
               )}
             </div>
           )}
         </div>
+        {/* ปุ่มโหลดเพิ่มเติม (ถ้ามีข้อมูล) */}
         {libraryItems.length > 0 && (
           <div className="text-center mt-8">
             <button className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">

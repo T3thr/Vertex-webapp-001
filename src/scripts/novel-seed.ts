@@ -19,18 +19,22 @@ import UserModelImport, { IUser, IWriterStats, INovelPerformanceStats } from "@/
 import { config } from "dotenv";
 
 // โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
-config({ path: ".env" }); 
+config({ path: ".env" });
 
 const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME;
 
 // Helper function to generate slugs
 function generateSlug(title: string): string {
+  if (!title) return ""; // Handle cases where title might be undefined or null
   return title
     .toString()
     .toLowerCase() // Convert to lowercase
     .trim() // Remove leading/trailing whitespace
     .replace(/\s+/g, '-') // Replace spaces with hyphens
-    .replace(/[^\u0E00-\u0E7F\w-]+/g, '') // Remove non-Thai, non-word characters except hyphens. \u0E00-\u0E7F is the Unicode range for Thai characters.
+    // Keep letters from any script (Unicode), numbers from any script (Unicode), and hyphens.
+    // Remove any character that is NOT a letter, NOT a number, and NOT a hyphen.
+    // The 'u' flag enables Unicode mode for the regex.
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
     .replace(/--+/g, '-'); // Replace multiple hyphens with a single hyphen
 }
 
@@ -205,7 +209,7 @@ async function seedInitialCategories() {
         displayOrder: 0,
         isSystemDefined: true,
       });
-      console.log(`   ✅ สร้าง Category: ${category.name} (ประเภท: ${category.categoryType}, Slug: ${category.slug})`);
+      console.log(`    ✅ สร้าง Category: ${category.name} (ประเภท: ${category.categoryType}, Slug: ${category.slug})`);
     }
     if (!seededCategoryIds[catData.categoryType]) {
       seededCategoryIds[catData.categoryType] = {};
@@ -253,7 +257,7 @@ async function getAuthorId(): Promise<Types.ObjectId> {
         }
     }
     await author.save();
-    console.log(`   ✅ เพิ่มบทบาท 'Writer' และ writerStats เริ่มต้นให้ ${AUTHOR_USERNAME}`);
+    console.log(`    ✅ เพิ่มบทบาท 'Writer' และ writerStats เริ่มต้นให้ ${AUTHOR_USERNAME}`);
   }
   return author._id;
 }
@@ -365,7 +369,7 @@ async function generateSampleNovels(authorId: Types.ObjectId): Promise<Partial<I
           isActive: true,
           promotionalPriceCoins: 7, // ราคาโปรโมชันต่อตอน
           promotionStartDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // เริ่ม 10 วันที่แล้ว
-          promotionEndDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),   // สิ้นสุดในอีก 20 วัน
+          promotionEndDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),    // สิ้นสุดในอีก 20 วัน
           promotionDescription: "ลดราคาพิเศษ! ฉลองครบรอบการผจญภัยในเอเทเรีย",
         } as IPromotionDetails,
       },
@@ -1065,20 +1069,21 @@ async function seedNovels() {
         continue;
       }
       // Ensure slug is present, which it should be now from generateSampleNovels
-      if (!novelData.slug) {
+      if (!novelData.slug) { // This check might be redundant if generateSlug always returns a string, but good for safety.
         console.warn(`⚠️ ข้อมูลนิยายไม่สมบูรณ์ (ขาด slug): ${novelData.title}, ข้าม...`);
         continue;
       }
 
-
-      const existingNovel = await Novel.findOne({ title: novelData.title, author: novelData.author });
-      // For more robust checking, you might want to find by slug if titles can be non-unique but slugs must be unique
+      // It's generally better to find by a unique field like slug if titles can be non-unique.
+      // However, your current logic uses title + author. If this is intended, keep it.
+      // For more robust unique identification, a combination of slug and author might be best.
       // const existingNovel = await Novel.findOne({ slug: novelData.slug, author: novelData.author });
+      const existingNovel = await Novel.findOne({ title: novelData.title, author: novelData.author });
 
 
       if (existingNovel) {
         // อัปเดตนิยายที่มีอยู่
-        // ใช้ Object.keys และ type assertion เพื่อความปลอดภัยในการ assign property
+        // Use Object.keys and type assertion to safely assign properties
         Object.keys(novelData).forEach(key => {
           (existingNovel as any)[key] = (novelData as any)[key];
         });
