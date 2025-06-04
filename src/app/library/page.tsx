@@ -219,7 +219,6 @@ async function getLibraryItems(tab: string): Promise<LibraryItem[]> {
       // ในที่นี้จะคืนค่าตามลำดับที่กรองได้ หรือจะเรียงตาม addedAt ก็ได้
       return filteredItems.sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
 
-
     case 'recent':
       const thirtyDaysAgo = new Date();
       // ตั้งค่าเวลาปัจจุบันเป็น June 4, 2025 เพื่อให้สอดคล้องกับข้อมูล mock และ comment
@@ -242,15 +241,15 @@ async function getLibraryItems(tab: string): Promise<LibraryItem[]> {
 }
 
 // แก้ไข Props type ให้สอดคล้องกับ Next.js App Router
-// searchParams สามารถมี key เป็น string และ value เป็น string, string[] หรือ undefined
+// searchParams ถูกส่งเข้ามาเป็น Promise ที่จะ resolve เป็น object ของ query parameters
 interface LibraryPageProps {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
-  // ดึงค่า 'tab' จาก searchParams และตรวจสอบประเภท
-  // ถ้า searchParams.tab เป็น array ให้ใช้ตัวแรก หรือถ้าไม่มีค่า ให้เป็น 'recent'
-  const tabQueryParam = searchParams?.tab;
+  // แก้ไขการดึงค่า 'tab' จาก searchParams โดย await Promise เพื่อ resolve ค่า
+  const resolvedSearchParams = await searchParams;
+  const tabQueryParam = resolvedSearchParams?.tab;
   const activeTab = Array.isArray(tabQueryParam) ? (tabQueryParam[0] || 'recent') : (tabQueryParam || 'recent');
 
   let libraryItems: LibraryItem[] = [];
