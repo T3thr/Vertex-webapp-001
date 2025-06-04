@@ -22,12 +22,12 @@ import { IUser } from "./User"; // อ้างอิง User model
  * - `CANCELLED`: ผู้สมัครยกเลิกเอง
  */
 export enum WriterApplicationStatus {
-  PENDING_REVIEW = "pending_review",
-  UNDER_REVIEW = "under_review",
-  APPROVED = "approved",
-  REJECTED = "rejected",
-  REQUIRES_MORE_INFO = "requires_more_info",
-  CANCELLED = "cancelled",
+  PENDING_REVIEW = "PENDING_REVIEW",
+  UNDER_REVIEW = "UNDER_REVIEW",
+  REQUIRES_MORE_INFO = "REQUIRES_MORE_INFO",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
+  CANCELLED = "CANCELLED"
 }
 
 /**
@@ -245,11 +245,13 @@ export interface IWriterApplication extends Document {
   sampleContent?: string;
   writingFrequency?: WritingFrequency;
   goalDescription?: string;
+  applicationReason?: string;
   status: WriterApplicationStatus;
   statusHistory: Types.DocumentArray<IStatusChange>;
   reviewNotes: Types.DocumentArray<IReviewNote>;
   applicantMessages: Types.DocumentArray<IApplicantMessage>;
   rejectionReason?: string;
+  adminNotes?: string;
   assignedLevel?: WriterLevel;
   hasReadTerms: boolean;
   submittedAt: Date;
@@ -352,6 +354,11 @@ const WriterApplicationSchema = new Schema<IWriterApplication, WriterApplication
       trim: true,
       maxlength: [500, "เป้าหมายต้องไม่เกิน 500 ตัวอักษร"],
     },
+    applicationReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "เหตุผลที่ต้องการเป็นนักเขียนต้องไม่เกิน 500 ตัวอักษร"],
+    },
     status: {
       type: String,
       enum: Object.values(WriterApplicationStatus),
@@ -366,6 +373,11 @@ const WriterApplicationSchema = new Schema<IWriterApplication, WriterApplication
       type: String,
       trim: true,
       maxlength: [500, "เหตุผลการปฏิเสธต้องไม่เกิน 500 ตัวอักษร"],
+    },
+    adminNotes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, "หมายเหตุจากทีมงานต้องไม่เกิน 1000 ตัวอักษร"],
     },
     assignedLevel: {
       type: String,
@@ -501,6 +513,7 @@ WriterApplicationSchema.post<IWriterApplication>("save", async function (this: I
     // 2. อัปเดต/สร้าง writerStats
     if (!user.writerStats) {
       user.writerStats = {
+        totalViewsReceived: 0,
         totalNovelsPublished: 0,
         totalEpisodesPublished: 0,
         totalViewsAcrossAllNovels: 0,

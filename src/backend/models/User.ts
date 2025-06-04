@@ -511,7 +511,12 @@ export interface IMentalWellbeingInsights {
  * @property {number} [totalEarningsFromNovel] - รายได้รวมจากนิยายเรื่องนี้ (ถ้ามีการติดตามรายได้รายนิยาย)
  */
 export interface INovelPerformanceStats {
-  novelId: Types.ObjectId; // ID นิยาย
+  novelId?: Types.ObjectId | {
+    _id: string;
+    slug?: string;
+    coverImageUrl?: string;
+    // ...other fields if needed
+  };
   novelTitle: string; // ชื่อนิยาย
   totalViews: number; // ยอดเข้าชมทั้งหมด
   totalReads: number; // ยอดอ่านจบ
@@ -520,6 +525,7 @@ export interface INovelPerformanceStats {
   totalFollowers: number; // ผู้ติดตามนิยายนี้
   averageRating?: number; // คะแนนเฉลี่ย
   totalEarningsFromNovel?: number; // รายได้จากนิยายนี้
+  totalChapters?: number; // <-- Add this line
 }
 
 /**
@@ -575,9 +581,10 @@ export interface ITrendingNovelSummary {
  * @property {number} [writerRank] - (Optional) อันดับของนักเขียน (ถ้ามีระบบ Ranking)
  */
 export interface IWriterStats {
+  totalViewsReceived: any;
   totalNovelsPublished: number; // จำนวนนิยายที่เผยแพร่
   totalEpisodesPublished: number; // จำนวนตอนที่เผยแพร่
-  totalViewsAcrossAllNovels: number; // ยอดเข้าชมรวมทุกนิยาย // ตรงกับ uniqueViewersCount ใน Novel.stats
+  totalViewsAcrossAllNovels: number; // ยอดเข้าชมรวมทุกนิยาย
   totalReadsAcrossAllNovels: number; // ยอดอ่านรวมทุกนิยาย
   totalLikesReceivedOnNovels: number; // ยอดไลค์รวมทุกนิยาย
   totalCommentsReceivedOnNovels: number; // ยอดคอมเมนต์รวมทุกนิยาย
@@ -700,6 +707,7 @@ const NovelPerformanceStatsSchema = new Schema<INovelPerformanceStats>(
     totalFollowers: { type: Number, default: 0, min: 0, comment: "ผู้ติดตามนิยายนี้" },
     averageRating: { type: Number, min: 0, max: 5, comment: "คะแนนเฉลี่ย" },
     totalEarningsFromNovel: { type: Number, default: 0, min: 0, comment: "รายได้จากนิยายนี้" },
+    totalChapters: { type: Number, min: 0, max: 100, comment: "จำนวนตอนที่อ่านทั้งหมด" },
   },
   { _id: false }
 );
@@ -743,9 +751,9 @@ const WriterStatsSchema = new Schema<IWriterStats>(
     totalReadsAcrossAllNovels: { type: Number, default: 0, min: 0, comment: "ยอดอ่านรวมทุกนิยาย" },
     totalLikesReceivedOnNovels: { type: Number, default: 0, min: 0, comment: "ยอดไลค์รวมทุกนิยาย" },
     totalCommentsReceivedOnNovels: { type: Number, default: 0, min: 0, comment: "ยอดคอมเมนต์รวมทุกนิยาย" },
-    totalEarningsToDate: { type: Number, default: 0, min: 0, comment: "รายได้รวมทั้งหมด (สกุลเงินหลัก)" },
+    totalEarningsToDate: { type: Number, default: 0, min: 0, comment: "รายได้รวมทั้งหมด (สกุลเงินหลักของระบบ)" },
     totalCoinsReceived: { type: Number, default: 0, min: 0, comment: "เหรียญที่ได้รับทั้งหมด" },
-    totalRealMoneyReceived: { type: Number, default: 0, min: 0, comment: "เงินจริงที่ได้รับทั้งหมด (สกุลเงินหลัก)" },
+    totalRealMoneyReceived: { type: Number, default: 0, min: 0, comment: "เงินจริงที่ได้รับทั้งหมด (สกุลเงินหลักของระบบ)" },
     totalDonationsReceived: { type: Number, default: 0, min: 0, comment: "จำนวนครั้งที่ได้รับบริจาค" },
     novelPerformanceSummaries: { type: [NovelPerformanceStatsSchema], default: [], comment: "สรุปผลงานรายนิยาย" },
     writerSince: { type: Date, comment: "วันที่เริ่มเป็นนักเขียน" },
@@ -1326,6 +1334,7 @@ UserSchema.pre<IUser>("save", async function (next) {
   if (isNowWriter && (!this.writerStats || !wasPreviouslyWriter)) {
     if (!this.writerStats) { // ถ้า writerStats ยังไม่มี ให้สร้างใหม่ทั้งหมด
       this.writerStats = {
+        totalViewsReceived: 0,
         totalNovelsPublished: 0,
         totalEpisodesPublished: 0,
         totalViewsAcrossAllNovels: 0,

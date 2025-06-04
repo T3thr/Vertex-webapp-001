@@ -293,6 +293,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
         const authorSecuritySettingsData: IUserSecuritySettings = { twoFactorAuthentication: { isEnabled: false }, loginAttempts: { count: 0 }, activeSessions: [] };
         const authorMentalWellbeingData: IMentalWellbeingInsights = { overallEmotionalTrend: "unknown" };
         const authorWriterStatsData: IWriterStats = {
+            totalViewsReceived: 0, 
             totalNovelsPublished: 0, totalEpisodesPublished: 0, totalViewsAcrossAllNovels: 0, totalReadsAcrossAllNovels: 0,
             totalLikesReceivedOnNovels: 0, totalCommentsReceivedOnNovels: 0, totalEarningsToDate: 0, totalCoinsReceived: 0,
             totalRealMoneyReceived: 0, totalDonationsReceived: 0, writerSince: new Date(),
