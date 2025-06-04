@@ -180,7 +180,7 @@ export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
         condition: !!userDisplay?.username,
       },
       {
-        href: userDisplay?.roles?.includes("Writer") ? `/dashboard/writer` : `/dashboard/reader`,
+        href: userDisplay?.roles?.includes("Writer") ? `/dashboard` : `/dashboard`,
         label: "แดชบอร์ด",
         icon: <Layout size={16} />,
         condition: !!userDisplay,
@@ -192,7 +192,7 @@ export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
         condition: !!userDisplay,
       },
       {
-        href: `/settings/account`, // Path สำหรับ settings
+        href: `/settings`, // Path สำหรับ settings
         label: "การตั้งค่า",
         icon: <Settings size={16} />,
         condition: !!userDisplay,
