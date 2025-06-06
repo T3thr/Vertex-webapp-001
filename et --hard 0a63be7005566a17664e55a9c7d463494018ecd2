@@ -1,0 +1,602 @@
+[33mcommit b58ea2b45fd9222e71ff5517e5a53a206b0375ec[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Fri Jun 6 19:52:09 2025 +0700
+
+    delete
+
+[33mcommit 0a63be7005566a17664e55a9c7d463494018ecd2[m[33m ([m[1;31morigin/feature/writer[m[33m, [m[1;31morigin/feature/library[m[33m, [m[1;31morigin/feature/dashboard[m[33m, [m[1;31morigin/develop[m[33m, [m[1;32mfeature/writer[m[33m, [m[1;32mfeature/library[m[33m, [m[1;32mfeature/dashboard[m[33m, [m[1;32mdevelop[m[33m)[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 21:52:44 2025 +0700
+
+    update navbar
+
+[33mcommit 849c438221b1e06c4fa2a3fe8d58582f77c48a9f[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 21:12:29 2025 +0700
+
+    solve
+
+[33mcommit b3d88433305dcf4eff6a1b9e5f1b3e990a337179[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 21:03:30 2025 +0700
+
+    solve package
+
+[33mcommit 3fd3841bb5565b6cc306019f93480939737dcfa8[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 21:02:20 2025 +0700
+
+    solve package
+
+[33mcommit 74748b9da5ad934036dcc643daffea20ef013487[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 20:57:14 2025 +0700
+
+    solve peering
+
+[33mcommit 094d43eb487cf3055a0f59077a8b2545b725dad7[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 20:44:31 2025 +0700
+
+    solve peering
+
+[33mcommit 814390462ec0c153946d95a9322f0f6c1c0741ec[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 19:38:05 2025 +0700
+
+    imageslider
+
+[33mcommit fc159eef7d03c9948b27583af66dd35208c5d49f[m[33m ([m[1;32mmerge-features-into-develop[m[33m)[m
+Merge: 0348ad4 6636afc
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 16:33:38 2025 +0700
+
+    Merge remote-tracking branch 'origin/feature/writer' into merge-features-into-develop
+
+[33mcommit 0348ad45b27365c8d259902813e2a9e639b31092[m
+Merge: 858a467 43449f7
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 16:33:33 2025 +0700
+
+    Merge remote-tracking branch 'origin/feature/library' into merge-features-into-develop
+
+[33mcommit 858a46755621da4b8ce4f70bb4c06a4e1d3190f0[m
+Merge: 2eeeafa 51b15fc
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 16:33:28 2025 +0700
+
+    Merge remote-tracking branch 'origin/feature/dashboard' into merge-features-into-develop
+
+[33mcommit 6636afc69aa08da372d12b6c22edaf3817277600[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 15:30:12 2025 +0700
+
+    admin-seed
+
+[33mcommit 88251a4bb3e9447fd4b91dd27fabfedc63f6d164[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 15:24:31 2025 +0700
+
+    Novel , User model fix
+
+[33mcommit 9c3e9b3069bca080b6ec701bd088ead6fb75b9ff[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed Jun 4 15:19:18 2025 +0700
+
+    writer dashboard
+
+[33mcommit 43449f76e63e13d0ccb52e69f38e72539abb97e7[m
+Author: 033MTCN <tancharnokk66@nu.ac.th>
+Date:   Wed Jun 4 01:14:18 2025 +0700
+
+    ll
+
+[33mcommit 51b15fc312654f3b7a3a89b1e375c02e6c51ca09[m
+Author: Hun Siwakittikul <siwakittikul@example.com>
+Date:   Wed Jun 4 01:13:19 2025 +0700
+
+    mydashboard part1
+
+[33mcommit 2eeeafa94cc87b0c4a37f2bcc2f54bbf5e0108d9[m[33m ([m[1;31morigin/feature/Thread[m[33m, [m[1;32mfeature/Thread[m[33m)[m
+Author: thongbongkoch <thongbongkochp66@nu.ac.th>
+Date:   Wed Jun 4 01:11:32 2025 +0700
+
+    cherry
+
+[33mcommit 0ee0d664d900ff9a119355247e0f959c5c42fc76[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:44:41 2025 +0700
+
+    solve critters error
+
+[33mcommit ff1a68c56099f0c67d69e0b7c0dcf1eee1c134bf[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:37:20 2025 +0700
+
+    version1.0
+
+[33mcommit 468815894389a0d0f61766ca252b113589efd553[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:29:07 2025 +0700
+
+    delete api
+
+[33mcommit 0741a5e6b7c865d918076556e926e738184e1aee[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:26:21 2025 +0700
+
+    version1.0
+
+[33mcommit 498d33a30a9ba5787b67da4787ad851dab84d4ba[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:20:48 2025 +0700
+
+    version 1.0
+
+[33mcommit bc6d209c898c5e0e9de25bfe06542c4c36cef13e[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:12:59 2025 +0700
+
+    version1.0
+
+[33mcommit 0b8bc9970c248ec0b60550ee74e4d67cb62878e9[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon Jun 2 20:09:20 2025 +0700
+
+    version 1.0
+
+[33mcommit fda846dbc7feb1ebd84c72fc9b31809697252f9e[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sat May 31 21:30:40 2025 +0700
+
+    first commit
+
+[33mcommit 9bdea8ddc15a2c81650be9cf0951bd515937ce00[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 29 10:05:28 2025 +0700
+
+    optimize homepage
+
+[33mcommit 372a60f53d711d0d60e9329b9a4e4cc1dc06f948[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 29 09:44:01 2025 +0700
+
+    optimize banner
+
+[33mcommit baed90d7a42aed2e89e247b9c2c4912bf7205fe6[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed May 28 21:46:33 2025 +0700
+
+    fix api
+
+[33mcommit b2b1545d93e55809b5eed93607e152da2a44d6e2[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed May 28 21:39:09 2025 +0700
+
+    fix
+
+[33mcommit fee8c337506f39ae0c3c3f70736f32df5f2394cf[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed May 28 21:19:40 2025 +0700
+
+    hello
+
+[33mcommit 99b5eae500244e6bec961dca5e1264c6575dde63[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Tue May 27 01:11:38 2025 +0700
+
+    fix
+
+[33mcommit ce5b02fa5353df6c7b96dd469814c6ebe019ee1f[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Tue May 27 01:08:53 2025 +0700
+
+    solve error
+
+[33mcommit 01cd2cd099390ef9ee3497178f874461eb3c7c58[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 22:35:10 2025 +0700
+
+    &quot;
+
+[33mcommit 27b07dbf0bc315dabadd60bb1df98baadd63fa59[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 22:31:09 2025 +0700
+
+    search page
+
+[33mcommit 97b95dac5151d1b9a17d98a24603b2926efb0d76[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 20:42:59 2025 +0700
+
+    search
+
+[33mcommit d68ebbc5f3b5ce6ea262f1e138676fae90ce4f6f[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:48:56 2025 +0700
+
+    solve
+
+[33mcommit ca98807d8f1e6ac6c91260ac081bbb3686ad0181[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:46:27 2025 +0700
+
+    solve
+
+[33mcommit 9a972b56d8b14384a7f3bc7ab54c6889eac5dcf1[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:44:14 2025 +0700
+
+    solve
+
+[33mcommit d156b4552fc076107375fa09e75b8369c3d71fd0[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:35:24 2025 +0700
+
+    solve GET function api
+
+[33mcommit 4f33cf613fb7272ce116cc52a00d3aa1865ef46b[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:15:34 2025 +0700
+
+    solve GET error
+
+[33mcommit f1a36ea08f89260bb5859c1d6f3417b4d83dcc41[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:11:04 2025 +0700
+
+    fix quot
+
+[33mcommit ecda5a2aee678b2b535d73f2d13316106915635d[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 19:06:04 2025 +0700
+
+    solve error
+
+[33mcommit 87d0d94a9d0dc0f9b6948512dbe08582b4cb8ec2[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 18:06:43 2025 +0700
+
+    update route
+
+[33mcommit 1488878f420b44a69c31ebbf3b56d90d5dbdb2f3[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 17:41:46 2025 +0700
+
+    brand new novel slug page
+
+[33mcommit 936590a2fca4f15502e41c07565e5a54359ad0a1[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 14:41:41 2025 +0700
+
+    fix use client
+
+[33mcommit 9d6e1f0de62a37dc4ca5d391ec9e802db6dccf27[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 14:34:41 2025 +0700
+
+    redesign route slug novel
+
+[33mcommit 81ff85ab00a23b72d9ef0335ae6ce2ec51a185a2[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 10:15:28 2025 +0700
+
+    solve
+
+[33mcommit a6e3ea73039239834900a7fea03b3fa2aa1b8956[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 09:36:06 2025 +0700
+
+    let to const
+
+[33mcommit cb228c6e9c59a4b5c9b94e14668d6175c2659d13[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 09:33:31 2025 +0700
+
+    solve error
+
+[33mcommit b18471a8e4025cf0a1bd5d12852403992edef593[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 09:32:29 2025 +0700
+
+    solve error
+
+[33mcommit 3a1d1b82cce42129398e00315727017a9dc6d193[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 09:28:12 2025 +0700
+
+    fix error roue
+
+[33mcommit 5dc673bb7479b2a86bf0bff891326180937ce882[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 09:25:00 2025 +0700
+
+    new route slug novel
+
+[33mcommit ba8734b3b0e4662b4645c211f87adcc33d779762[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 08:50:21 2025 +0700
+
+    fix route
+
+[33mcommit 06cba67a34f2402b35746332ccf9555b1a8a0121[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 08:28:47 2025 +0700
+
+    return route
+
+[33mcommit 0973a0f3a453f2e121e6ffc25ee12340bb864771[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 08:25:18 2025 +0700
+
+    m
+
+[33mcommit 928f92905a0985a8bbb7187391cb4f809fe8b740[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 08:23:07 2025 +0700
+
+    m
+
+[33mcommit 08e0f3c2cc195a79a02f5fc1208f644f16a7eac0[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 08:15:10 2025 +0700
+
+    route
+
+[33mcommit ab2785f1b1c3ed5244f4cba4304a77f59e91550a[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 26 08:12:05 2025 +0700
+
+    correct the version
+
+[33mcommit d842afe64c7c4e18e08de62c0a7ad01422a9ce76[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Fri May 23 07:28:32 2025 +0700
+
+    enhanced models
+
+[33mcommit 4f4090eada5d11756424ed41e90d2cb1b1635445[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 22 18:41:08 2025 +0700
+
+    change let to const
+
+[33mcommit 3701817d20b7fc40115391f6af7e9a08d286a356[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 22 18:37:57 2025 +0700
+
+    solve build error
+
+[33mcommit c8bea1901dabe52cb509358930f737136df6af0e[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 22 17:08:31 2025 +0700
+
+    solve
+
+[33mcommit 4d942dd914eadb02a3d254f1b375097f338fc359[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 22 12:15:47 2025 +0700
+
+    delete social
+
+[33mcommit 51dc344dadbae0f1d0fe793df379c242d2f703fc[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 22 09:15:07 2025 +0700
+
+    update themecontext
+
+[33mcommit 0e30e313aee0402f8ba153a407a6b150c1b2c698[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 22 07:44:51 2025 +0700
+
+    update theme system
+
+[33mcommit 688925eb2497680b3c97c4c0c7893074caf6dc3f[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed May 21 07:25:52 2025 +0700
+
+    seeding fix
+
+[33mcommit ccd01a7430b37a6d0607770db872810166c2893d[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Tue May 20 22:25:07 2025 +0700
+
+    fix authmodal and novel model
+
+[33mcommit d078d5c1e20414a4865ea58b6728fba08a3432e9[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 19 10:03:24 2025 +0700
+
+    perfect(maybe) mongoose model v1.0
+
+[33mcommit 0529046f76aa6bb5a08c51d3974e79f4bb2c7268[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 19 08:55:09 2025 +0700
+
+    level model added
+
+[33mcommit 281027b2a6f4fb4fcecd12845c36ee2d0e905f74[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 19 03:32:47 2025 +0700
+
+    new achievement added
+
+[33mcommit 0a0dd3e22010acedc9055d967810f6fcfcc21c3a[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 10:24:03 2025 +0700
+
+    character
+
+[33mcommit 907bce723e9dabf458b9013277bee59c7096a9ab[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 10:23:25 2025 +0700
+
+    character model changed
+
+[33mcommit 75be080a083f3ab2b59815c47aa7504e12c7feb2[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 10:19:54 2025 +0700
+
+    character model updated
+
+[33mcommit c67eb6fe2e5ee6e69853284f17cd49202132b8d9[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 10:01:19 2025 +0700
+
+    updaete character and scene model
+
+[33mcommit 6966f95378e10a5b8f55f3ff41522f71c8d8b05b[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 08:52:01 2025 +0700
+
+    improve gamification system
+
+[33mcommit 3bcffc32bbde122957fb1f3fdea8f3b1c557c780[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 07:22:16 2025 +0700
+
+    update user model
+
+[33mcommit 842c0df615d3b54c0aa701e798398a65627d7e3c[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 18 04:58:23 2025 +0700
+
+    update storymap
+
+[33mcommit fc60ab3cea95755fff3dbb8556436e1139db2247[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sat May 17 22:15:19 2025 +0700
+
+    upgrade models
+
+[33mcommit 5331153310b9df0237861c354bc8478bc94301d2[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Thu May 15 04:23:45 2025 +0700
+
+    remove socialmediauser
+
+[33mcommit 7406e5a2fdb03ff6f12f337b1a3fe9239e5d8652[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Wed May 14 21:50:14 2025 +0700
+
+    redesign database
+
+[33mcommit 8dbe379dfa36a0d2f7658b5e3da7528f7441b8cc[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 22:18:31 2025 +0700
+
+    resolve api
+
+[33mcommit c641712e41d8203419dea49ffe09b720db8658fb[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 22:03:18 2025 +0700
+
+    solve api
+
+[33mcommit b3b1fdaef5bdc3afa7b2f21e1d40a4d926831e1c[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 21:58:24 2025 +0700
+
+    solve api
+
+[33mcommit c2a164456bb02fa3e96fa9fae48898b1db2a22cf[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 21:32:16 2025 +0700
+
+    solve GET error
+
+[33mcommit 4022439975b7dff3f42078d485e3631a789ce015[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 21:27:45 2025 +0700
+
+    fix GET slug novels route
+
+[33mcommit bad18805c26564a9423be252e96ce0ce6deb87af[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 21:24:38 2025 +0700
+
+    fix frontend novel slug
+
+[33mcommit d6f60c6b475cd7b94897e3528193d7a41909d842[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:39:53 2025 +0700
+
+    solve error
+
+[33mcommit cc1cef84f7486488b5d42b174ff0bf0eeb86aa57[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:35:56 2025 +0700
+
+    solve error
+
+[33mcommit 0b03058a63e3353686a92dd160747adc318a6e72[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:32:38 2025 +0700
+
+    fix route
+
+[33mcommit 2a2b1ef9675c78d204cfcfa2768a72ba3200675a[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:28:12 2025 +0700
+
+    add noovel slug route
+
+[33mcommit 405d9481a548ae68059eb1f38ade47c7bb2af016[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:23:45 2025 +0700
+
+    route add
+
+[33mcommit c94988c1d85920a46840fee2df408fcc7b08e9f4[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:19:59 2025 +0700
+
+    add slug novel route
+
+[33mcommit 8c17b197ca1dd287a8b852e2062b913b53f65952[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:16:23 2025 +0700
+
+    solve quot error
+
+[33mcommit dfbacd43ea459d788e124b64c0dc70dc3de31a9b[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 20:01:55 2025 +0700
+
+    added search apge
+
+[33mcommit 2cdc6ca46e452e15e3d92d304fca17ed6b6d3a4d[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Mon May 12 04:03:29 2025 +0700
+
+    theme + db
+
+[33mcommit 04fd29f23d8f68b73dbbe24a48f20c0e145bc1b1[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 11 22:50:16 2025 +0700
+
+    fix verify-email system
+
+[33mcommit de9ba17e52564472219644de64711d998c7e1dda[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 11 22:25:32 2025 +0700
+
+    solve recaptcha duplicate and session error on usre model
+
+[33mcommit c133416165b73d7b327d2f54ec8b79fe6ac954a1[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 11 21:43:08 2025 +0700
+
+    delete ts-ignore
+
+[33mcommit 53ba9782880da466aa18ea7026e62441f5f5e5a4[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 11 21:36:41 2025 +0700
+
+    solve recaptcha duplicate
+
+[33mcommit 5a0ec027a699e97ec178eecf043ad858632aee44[m
+Author: T3thr <t.theerapat33@gmail.com>
+Date:   Sun May 11 08:11:28 2025 +0700
+
+    fix signuo
