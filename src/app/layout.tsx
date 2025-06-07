@@ -9,6 +9,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
+import { Toaster } from 'sonner';
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
@@ -221,6 +222,7 @@ export default async function RootLayout({
         </GlobalProvider>
         <Analytics />
         <SpeedInsights />
+        <Toaster richColors position="top-center" />
       </body>
     </html>
   );
