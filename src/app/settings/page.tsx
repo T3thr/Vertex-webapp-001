@@ -278,6 +278,8 @@ export default function SettingsPage() {
             </TabsTrigger>
           </TabsList>
 
+
+
           {/* Display Settings */}
           <TabsContent value="display" className="-mt-1 z-10 relative">
             <Card className="rounded-b-lg">
