@@ -23,7 +23,7 @@ export const Tabs = () => {
       </div>
 
       {/* Tab Content */}
-      <div className="border-t pt-4 border-gray-300">
+      <div className="border-t border-gray-300">
         {activeTab === "writing" && <Writing />}
         {activeTab === "trophy" && <Trophy />}
         {activeTab === "penname" && <Penname />}
