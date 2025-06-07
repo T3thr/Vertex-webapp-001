@@ -4,7 +4,9 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+// CODE-MOD: เพิ่มการ import คอมโพเนนต์ Link จาก next/link สำหรับการทำ internal navigation
+import Link from 'next/link';
+import {
   Plus,
   BookOpen,
   Eye,
@@ -72,31 +74,31 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
   // กำหนดสีสถานะ
   const getStatusConfig = (status: string) => {
     const statusConfigs = {
-      'published': { 
+      'published': {
         icon: CheckCircle,
         text: 'เผยแพร่แล้ว',
         color: 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800',
         dot: 'bg-green-500'
       },
-      'draft': { 
+      'draft': {
         icon: Clock,
         text: 'ฉบับร่าง',
         color: 'text-gray-600 bg-gray-50 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800',
         dot: 'bg-gray-500'
       },
-      'completed': { 
+      'completed': {
         icon: CheckCircle,
         text: 'จบแล้ว',
         color: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
         dot: 'bg-blue-500'
       },
-      'pending_review': { 
+      'pending_review': {
         icon: AlertCircle,
         text: 'รอตรวจสอบ',
         color: 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800',
         dot: 'bg-yellow-500'
       },
-      'rejected_by_admin': { 
+      'rejected_by_admin': {
         icon: XCircle,
         text: 'ถูกปฏิเสธ',
         color: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
@@ -122,13 +124,13 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
       >
         <div className="flex items-center gap-6">
           {/* Cover Image */}
-          <motion.div 
+          <motion.div
             className="w-20 h-28 bg-secondary rounded-lg overflow-hidden flex-shrink-0"
             whileHover={{ scale: 1.05 }}
           >
             {novel.coverImageUrl ? (
-              <img 
-                src={novel.coverImageUrl} 
+              <img
+                src={novel.coverImageUrl}
                 alt={novel.title}
                 className="w-full h-full object-cover"
               />
@@ -162,14 +164,18 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
               </div>
 
               <div className="flex items-center gap-2 ml-4">
-                <motion.button
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <Edit className="w-4 h-4" />
-                </motion.button>
-                
+                {/* CODE-MOD: เพิ่ม Link เพื่อให้ปุ่ม Edit นำทางไปยังหน้า overview ของนิยายเรื่องนั้นๆ ผ่าน slug */}
+                <Link href={`/novels/${novel.slug}/overview`} passHref>
+                  <motion.button
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    aria-label={`จัดการนิยาย ${novel.title}`}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </motion.button>
+                </Link>
+
                 <motion.button
                   className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
                   whileHover={{ scale: 1.1 }}
@@ -235,8 +241,8 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
       <div className="relative">
         <div className="w-full h-48 bg-secondary overflow-hidden">
           {novel.coverImageUrl ? (
-            <motion.img 
-              src={novel.coverImageUrl} 
+            <motion.img
+              src={novel.coverImageUrl}
               alt={novel.title}
               className="w-full h-full object-cover transition-transform group-hover:scale-110"
               whileHover={{ scale: 1.1 }}
@@ -257,19 +263,22 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
         </div>
 
         {/* Quick Actions */}
-        <motion.div 
+        <motion.div
           className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={isHovered ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.8 }}
         >
-          <motion.button
-            className="p-2 bg-background/80 backdrop-blur-sm text-foreground hover:bg-primary hover:text-primary-foreground rounded-lg transition-colors shadow-lg"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <Edit className="w-4 h-4" />
-          </motion.button>
-          
+          <Link href={`/novels/${novel.slug}/overview`} passHref>
+            <motion.button
+              className="p-2 bg-background/80 backdrop-blur-sm text-foreground hover:bg-primary hover:text-primary-foreground rounded-lg transition-colors shadow-lg"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              aria-label={`จัดการนิยาย ${novel.title}`}
+            >
+              <Edit className="w-4 h-4" />
+            </motion.button>
+          </Link>
+
           <motion.button
             className="p-2 bg-background/80 backdrop-blur-sm text-foreground hover:bg-primary hover:text-primary-foreground rounded-lg transition-colors shadow-lg"
             whileHover={{ scale: 1.1 }}
@@ -281,7 +290,7 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
 
         {/* Reading Progress */}
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
-          <motion.div 
+          <motion.div
             className="h-full bg-primary"
             initial={{ width: 0 }}
             animate={{ width: `${Math.random() * 100}%` }}
@@ -297,7 +306,7 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
           <h3 className="font-bold text-lg text-foreground line-clamp-2 group-hover:text-primary transition-colors mb-2">
             {novel.title}
           </h3>
-          
+
           <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -354,18 +363,21 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-3">
-          <motion.button 
-            className="bg-primary text-primary-foreground py-2.5 px-4 rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors shadow-lg"
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Edit className="w-4 h-4" />
-              จัดการตอน
-            </div>
-          </motion.button>
-          
-          <motion.button 
+          {/* CODE-MOD: เพิ่ม Link เพื่อให้ปุ่ม "จัดการตอน" นำทางไปยังหน้า overview ของนิยายเรื่องนั้นๆ ผ่าน slug */}
+          <Link href={`/novels/${novel.slug}/overview`} passHref>
+            <motion.button
+              className="w-full bg-primary text-primary-foreground py-2.5 px-4 rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors shadow-lg"
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Edit className="w-4 h-4" />
+                จัดการตอน
+              </div>
+            </motion.button>
+          </Link>
+
+          <motion.button
             className="bg-secondary text-secondary-foreground py-2.5 px-4 rounded-lg text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
             whileHover={{ scale: 1.05, y: -2 }}
             whileTap={{ scale: 0.95 }}
@@ -501,7 +513,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
       animate="visible"
     >
       {/* Header Actions */}
-      <motion.div 
+      <motion.div
         className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8"
         variants={itemVariants}
       >
@@ -521,7 +533,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
           </p>
         </div>
 
-        <motion.button 
+        <motion.button
           className="bg-gradient-to-r from-primary to-primary-hover text-primary-foreground px-8 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-3"
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
@@ -533,7 +545,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
       </motion.div>
 
       {/* Summary Cards */}
-      <motion.div 
+      <motion.div
         className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
         variants={itemVariants}
       >
@@ -545,7 +557,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
           action="ดูรายละเอียด"
           delay={0.1}
         />
-        
+
         <SummaryCard
           title="กิจกรรมล่าสุด"
           description="การอัปเดตและความเคลื่อนไหวในสัปดาห์นี้"
@@ -554,7 +566,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
           action="ดูกิจกรรม"
           delay={0.2}
         />
-        
+
         <SummaryCard
           title="การดำเนินการ"
           description="จัดการเนื้อหาและตอบกลับผู้อ่าน"
@@ -566,7 +578,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
       </motion.div>
 
       {/* Filters and View Controls */}
-      <motion.div 
+      <motion.div
         className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 p-6 bg-secondary/30 rounded-xl border border-border/50"
         variants={itemVariants}
       >
@@ -640,7 +652,7 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
       {/* Novels List */}
       <AnimatePresence mode="wait">
         {filteredAndSortedNovels.length > 0 ? (
-          <motion.div 
+          <motion.div
             key={`${viewMode}-${filterStatus}-${sortBy}`}
             className={
               viewMode === 'grid'
@@ -653,28 +665,28 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
             exit="hidden"
           >
             {filteredAndSortedNovels.map((novel, index) => (
-              <NovelCard 
-                key={novel._id.toString()} 
-                novel={novel} 
+              <NovelCard
+                key={novel._id.toString()}
+                novel={novel}
                 index={index}
                 viewMode={viewMode}
               />
             ))}
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             className="text-center py-20"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
           >
             <motion.div
-              animate={{ 
+              animate={{
                 y: [0, -10, 0],
                 rotate: [0, 5, -5, 0]
               }}
-              transition={{ 
-                duration: 4, 
+              transition={{
+                duration: 4,
                 repeat: Infinity,
                 ease: "easeInOut"
               }}
@@ -685,21 +697,21 @@ export default function NovelTab({ novels, totalStats, user }: NovelTabProps) {
                 <Coffee className="w-20 h-20 text-muted-foreground mx-auto mb-6" />
               )}
             </motion.div>
-            
+
             <h3 className="text-2xl font-bold text-foreground mb-3">
-              {searchQuery || filterStatus !== 'all' 
-                ? 'ไม่พบนิยายที่ตรงกับเงื่อนไข' 
+              {searchQuery || filterStatus !== 'all'
+                ? 'ไม่พบนิยายที่ตรงกับเงื่อนไข'
                 : 'ยังไม่มีนิยาย'}
             </h3>
-            
+
             <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
               {searchQuery || filterStatus !== 'all'
                 ? 'ลองปรับเปลี่ยนคำค้นหาหรือตัวกรองเพื่อดูผลลัพธ์อื่น'
                 : 'เริ่มต้นการเดินทางในการเป็นนักเขียนด้วยการสร้างนิยายเรื่องแรกของคุณ'}
             </p>
-            
+
             {(!searchQuery && filterStatus === 'all') && (
-              <motion.button 
+              <motion.button
                 className="bg-gradient-to-r from-primary to-primary-hover text-primary-foreground px-10 py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-3 mx-auto"
                 whileHover={{ scale: 1.05, y: -2 }}
                 whileTap={{ scale: 0.95 }}

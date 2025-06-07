@@ -4,6 +4,7 @@
 // เพิ่มการรวม WriterStats และการรองรับ Mental Wellbeing Insights
 // อัปเดตล่าสุด: เพิ่ม VisualNovelGameplayPreferences สำหรับการตั้งค่าเฉพาะของ Visual Novel
 // อัปเดตล่าสุด (Gamification): ปรับปรุง IUserGamification, เพิ่ม totalExperiencePointsEverEarned, currentLevelObject, showcasedItems, displayBadges
+// อัปเดตล่าสุด (Board Integration): เพิ่ม boardPostsCreatedCount ใน socialStats เพื่อทำงานร่วมกับ Board.ts
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
@@ -240,7 +241,8 @@ export interface IAccount extends Document {
  * @interface IUserProfile
  * @description ข้อมูลโปรไฟล์สาธารณะของผู้ใช้
  * @property {string} [displayName] - ชื่อที่แสดง (อาจซ้ำกับผู้อื่นได้)
- * @property {string} [penName] - นามปากกาสำหรับนักเขียน (อาจซ้ำกับ displayName หรือตั้งใหม่, ควร unique ถ้าเป็นนักเขียน)
+ * @property {string} [penNames] - นามปากกาสำหรับนักเขียน (อาจซ้ำกับ displayName หรือตั้งใหม่, ควร unique ถ้าเป็นนักเขียน)
+ * @property {string} [primaryPenName] - นามปากกาสำหรับนักเขียนหลัก
  * @property {string} [avatarUrl] - URL รูปโปรไฟล์ (อ้างอิง Media model หรือ URL ภายนอก)
  * @property {string} [coverImageUrl] - URL รูปปกโปรไฟล์ (อ้างอิง Media model หรือ URL ภายนอก)
  * @property {string} [bio] - คำอธิบายตัวตนสั้นๆ
@@ -253,7 +255,8 @@ export interface IAccount extends Document {
  */
 export interface IUserProfile {
   displayName?: string; // ชื่อที่แสดงทั่วไป
-  penName?: string; // นามปากกาสำหรับนักเขียน
+  penNames?: string[]; // นามปากกาสำหรับนักเขียน
+  primaryPenName?: string; // นามปากกาหลักที่ใช้แสดง
   avatarUrl?: string; // URL รูปโปรไฟล์
   coverImageUrl?: string; // URL รูปปกโปรไฟล์
   bio?: string; // คำอธิบายตัวตน
@@ -298,7 +301,8 @@ export interface IUserTrackingStats {
  * @property {number} followersCount - จำนวนผู้ติดตาม
  * @property {number} followingCount - จำนวนที่กำลังติดตาม
  * @property {number} novelsCreatedCount - จำนวนนิยายที่ผู้ใช้สร้าง
- * @property {number} commentsMadeCount - จำนวนความคิดเห็นที่ผู้ใช้สร้าง
+ * @property {number} boardPostsCreatedCount - (เพิ่มใหม่) จำนวนกระทู้ที่ผู้ใช้สร้างในเว็บบอร์ด
+ * @property {number} commentsMadeCount - จำนวนความคิดเห็นที่ผู้ใช้สร้าง (ในนิยายและกระทู้)
  * @property {number} ratingsGivenCount - จำนวนการให้คะแนนนิยายที่ผู้ใช้ทำ
  * @property {number} likesGivenCount - จำนวนการกดถูกใจที่ผู้ใช้ทำ (นิยาย, ตอน, ความคิดเห็น)
  */
@@ -306,6 +310,7 @@ export interface IUserSocialStats {
   followersCount: number; // จำนวนผู้ติดตาม
   followingCount: number; // จำนวนที่กำลังติดตาม
   novelsCreatedCount: number; // จำนวนนิยายที่สร้าง
+  boardPostsCreatedCount: number; // << เพิ่มใหม่: จำนวนกระทู้ที่สร้าง
   commentsMadeCount: number; // จำนวนความคิดเห็นที่สร้าง
   ratingsGivenCount: number; // จำนวนการให้คะแนน
   likesGivenCount: number; // จำนวนการกดถูกใจ
@@ -353,7 +358,7 @@ export interface IUserDisplayBadge {
  * @property {number} totalExperiencePointsEverEarned - (ใหม่) คะแนนประสบการณ์ทั้งหมดที่เคยได้รับ
  * @property {number} nextLevelXPThreshold - คะแนนประสบการณ์ที่ต้องใช้เพื่อขึ้นระดับถัดไป (อาจจะดึงมาจาก `currentLevelObject.xpToNextLevelFromThis`)
  * @property {Types.ObjectId[]} achievements - รายการ ID ของ **UserEarnedItem** (ที่มี itemType='Achievement') ที่ผู้ใช้ปลดล็อก
- * @property {IShowcasedGamificationItem[]} [showcasedItems] - (ใหม่) รายการ Achievements/Badges ที่ผู้ใช้เลือกแสดงบนโปรไฟล์ [cite: 5]
+ * @property {IShowcasedGamificationItem[]} [showcasedItems] - (ใหม่) รายการ Achievements/Badges ที่ผู้ใช้เลือกแสดงบนโปรไฟล์
  * @property {IUserDisplayBadge} [primaryDisplayBadge] - (ใหม่) Badge หลักที่ผู้ใช้เลือกแสดง
  * @property {IUserDisplayBadge[]} [secondaryDisplayBadges] - (ใหม่) Badge รองที่ผู้ใช้เลือกแสดง (จำกัด 2 อัน)
  * @property {object} loginStreaks - ข้อมูลสตรีคการล็อกอิน
@@ -913,8 +918,31 @@ const AccountSchema = new Schema<IAccount>(
 const UserProfileSchema = new Schema<IUserProfile>(
   {
     displayName: { type: String, trim: true, minlength: [1, "ชื่อที่แสดงต้องมีอย่างน้อย 1 ตัวอักษร"], maxlength: [100, "ชื่อที่แสดงต้องไม่เกิน 100 ตัวอักษร"], comment: "ชื่อที่แสดงทั่วไป" },
-    penName: { type: String, trim: true, unique: true, sparse: true, minlength: [2, "นามปากกาต้องมีอย่างน้อย 2 ตัวอักษร"], maxlength: [50, "นามปากกาต้องไม่เกิน 50 ตัวอักษร"], validate: { validator: function (v: string) { return v === null || v === undefined || v === '' || /^[ก-๙a-zA-Z0-9\s\-_.'()&]+$/.test(v); }, message: "นามปากกาต้องประกอบด้วยอักขระที่อนุญาตเท่านั้น" }, comment: "นามปากกา (สำหรับนักเขียน)" },
-    avatarUrl: { type: String, trim: true, maxlength: [2048, "URL รูปโปรไฟล์ยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปโปรไฟล์ไม่ถูกต้อง" }, comment: "URL รูปโปรไฟล์" },
+    penNames: {
+      type: [String], // <<<< เปลี่ยนเป็น Array of String
+      trim: true,
+      sparse: true,
+      // Validator จะต้องปรับให้ทำงานกับ Array โดยตรวจสอบทุก element
+      validate: {
+          validator: function(arr: string[]) {
+              if (!arr) return true;
+              // ตรวจสอบแต่ละ pen name ใน array
+              return arr.every(v => 
+                  v.length >= 2 && 
+                  v.length <= 50 && 
+                  /^[ก-๙a-zA-Z0-9\s\-_.'()&]+$/.test(v)
+              );
+          },
+          message: "นามปากกาแต่ละชื่อต้องมีความยาว 2-50 ตัวอักษร และประกอบด้วยอักขระที่อนุญาตเท่านั้น"
+      },
+      comment: "รายการนามปากกาของนักเขียน (แต่ละชื่อต้องไม่ซ้ำกันทั่วทั้งระบบ)" 
+  },
+  primaryPenName: { // <<<< เพิ่มฟิลด์สำหรับนามปากกาหลัก
+      type: String,
+      trim: true,
+      maxlength: [50, "นามปากกาหลักต้องไม่เกิน 50 ตัวอักษร"],
+      comment: "นามปากกาหลักที่ใช้แสดงผล (ควรเป็นหนึ่งในชื่อที่มีอยู่ใน penNames)"
+  },    avatarUrl: { type: String, trim: true, maxlength: [2048, "URL รูปโปรไฟล์ยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปโปรไฟล์ไม่ถูกต้อง" }, comment: "URL รูปโปรไฟล์" },
     coverImageUrl: { type: String, trim: true, maxlength: [2048, "URL รูปปกยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปปกไม่ถูกต้อง" }, comment: "URL รูปปกโปรไฟล์" },
     bio: { type: String, trim: true, maxlength: [500, "คำอธิบายตัวตนต้องไม่เกิน 500 ตัวอักษร"], comment: "คำอธิบายตัวตน" },
     gender: { type: String, enum: ["male", "female", "lgbtq+", "other", "prefer_not_to_say"], comment: "เพศ" },
@@ -948,7 +976,8 @@ const UserSocialStatsSchema = new Schema<IUserSocialStats>(
     followersCount: { type: Number, default: 0, min: 0, comment: "จำนวนผู้ติดตาม" },
     followingCount: { type: Number, default: 0, min: 0, comment: "จำนวนที่กำลังติดตาม" },
     novelsCreatedCount: { type: Number, default: 0, min: 0, comment: "จำนวนนิยายที่สร้าง" },
-    commentsMadeCount: { type: Number, default: 0, min: 0, comment: "จำนวนความคิดเห็นที่สร้าง" },
+    boardPostsCreatedCount: { type: Number, default: 0, min: 0, comment: "จำนวนกระทู้ที่สร้าง" }, // << เพิ่มใหม่
+    commentsMadeCount: { type: Number, default: 0, min: 0, comment: "จำนวนความคิดเห็นที่สร้าง (ในนิยายและกระทู้)" },
     ratingsGivenCount: { type: Number, default: 0, min: 0, comment: "จำนวนการให้คะแนน" },
     likesGivenCount: { type: Number, default: 0, min: 0, comment: "จำนวนการกดถูกใจ" },
   },
@@ -1148,7 +1177,7 @@ const UserSchema = new Schema<IUser>(
     },
     socialStats: {
         type: UserSocialStatsSchema,
-        default: () => ({ followersCount: 0, followingCount: 0, novelsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0 }),
+        default: () => ({ followersCount: 0, followingCount: 0, novelsCreatedCount: 0, boardPostsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0 }), // << เพิ่ม boardPostsCreatedCount
         comment: "สถิติทางสังคม",
     },
     preferences: {
@@ -1263,8 +1292,8 @@ UserSchema.index(
   { name: "UserMentalWellbeingAssessmentDateIndex" }
 );
 UserSchema.index(
-    { "profile.penName": 1 },
-    { unique: true, sparse: true, name: "UserProfilePenNameIndex" }
+  { "profile.penNames": 1 }, // <<<< แก้ไขจาก "profile.penName" เป็น "profile.penNames"
+  { unique: true, sparse: true, name: "UserProfilePenNamesIndex" } // ชื่อ Index อาจจะเปลี่ยนเพื่อความชัดเจน (optional)
 );
 UserSchema.index(
     { "writerStats.activeNovelPromotions.novelId": 1 }, // **เพิ่มใหม่** (ถ้าต้องการ query user จาก novel ที่มี promotion)
@@ -1367,21 +1396,29 @@ UserSchema.pre<IUser>("save", async function (next) {
     }
 
     // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง ยังคงเดิม)
-    if (this.profile?.displayName && !this.profile.penName) {
-        const UserModelInstance = models.User || model<IUser>("User");
-        try {
-            const existingUserWithPenName = await UserModelInstance.findOne({
-                "profile.penName": this.profile.displayName,
-                 _id: { $ne: this._id } // ตรวจสอบว่าไม่ใช่ user คนปัจจุบัน
-            });
-            if (!existingUserWithPenName) {
-                this.profile.penName = this.profile.displayName;
-            }
-        } catch(penNameError) {
-            console.error(`[User Pre-Save Hook] Error checking existing penName for user ${this.username}:`, penNameError);
-            // ไม่ควร block การ save หลัก แค่ log error
-        }
-    }
+  // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง)
+  // <<<< ปรับปรุง Logic สำหรับ penNames ที่เป็น Array
+  if (isNowWriter && this.profile?.displayName && (!this.profile.penNames || this.profile.penNames.length === 0)) {
+      const UserModelInstance = models.User || model<IUser>("User");
+      try {
+          // ตรวจสอบว่า displayName นี้ถูกใช้เป็น penName ของคนอื่นแล้วหรือยัง
+          const existingUserWithPenName = await UserModelInstance.findOne({
+              "profile.penNames": this.profile.displayName, // <<<< ค้นหาใน array
+              _id: { $ne: this._id }
+          });
+
+          // ถ้ายังไม่มีใครใช้ และ penNames ของ user คนนี้ยังว่างอยู่
+          if (!existingUserWithPenName) {
+              // เพิ่ม displayName เข้าไปเป็น penName แรกใน array
+              this.profile.penNames = [this.profile.displayName];
+              // และตั้งเป็นนามปากกาหลักโดยอัตโนมัติ
+              this.profile.primaryPenName = this.profile.displayName;
+          }
+      } catch(penNameError) {
+          console.error(`[User Pre-Save Hook] Error checking existing penName for user ${this.username}:`, penNameError);
+          // ไม่ควร block การ save หลัก แค่ log error
+      }
+  }
   } else if (!isNowWriter && wasPreviouslyWriter) {
     // ถ้าถูกถอด role Writer อาจจะล้าง writerStats หรือเก็บไว้เป็นประวัติ (ขึ้นอยู่กับนโยบาย)
     // this.writerStats = undefined; // ตัวอย่างการล้าง
@@ -1415,7 +1452,7 @@ UserSchema.pre<IUser>("save", async function (next) {
 // ==================================================================================================
 
 UserSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
-  // console.log(`[matchPassword] Comparing: '<span class="math-inline">\{enteredPassword\}' with stored hash\: '</span>{this.password ? this.password.substring(0,10)+'...' : 'NO_PASSWORD'}'`);
+  // console.log(`[matchPassword] Comparing: '${enteredPassword}' with stored hash: '${this.password ? this.password.substring(0,10)+'...' : 'NO_PASSWORD'}'`);
   if (!this.password) {
     return false;
   }
@@ -1489,7 +1526,7 @@ export default UserModel;
 //     -   `User.gamification.currentLevelObject`: (ใหม่) ObjectId อ้างอิงไปยังเอกสาร Level ปัจจุบันใน `levels` collection
 //         ช่วยให้ดึงข้อมูล Level (เช่น `levelTitle`, `xpToNextLevelFromThis`) ได้ง่ายขึ้น
 //     -   `User.gamification.experiencePoints`: XP สะสมของผู้ใช้
-//     -   `User.gamification.totalExperiencePointsEverEarned`: (ใหม่) XP ทั้งหมดที่เคยได้รับ [cite: 3]
+//     -   `User.gamification.totalExperiencePointsEverEarned`: (ใหม่) XP ทั้งหมดที่เคยได้รับ
 //     -   `User.gamification.nextLevelXPThreshold`: XP ที่ต้องใช้เพื่อขึ้นระดับถัดไป
 //         ค่านี้ควรถูกอัปเดตโดยอัตโนมัติเมื่อ `currentLevelObject` เปลี่ยน (เช่น ผ่าน pre-save hook หรือ service layer)
 //         โดยดึงมาจาก `Level.xpToNextLevelFromThis`
@@ -1498,7 +1535,7 @@ export default UserModel;
 //         ไม่ใช่ ObjectId ของ `Achievement` ต้นแบบโดยตรง เพื่อให้ติดตามการได้รับแต่ละครั้งได้ (ถ้า Achievement นั้น repeatable)
 //         และเพื่อให้สามารถเก็บข้อมูล snapshot ของ Achievement ณ ตอนที่ได้รับได้
 //     -   `User.gamification.showcasedItems`: (ใหม่) Array ของ Object ที่มี `{ earnedItemId: Types.ObjectId, itemType: "Achievement" | "Badge" }`
-//         `earnedItemId` อ้างอิง `_id` ของ `UserEarnedItem` ใน `UserAchievement` collection [cite: 5]
+//         `earnedItemId` อ้างอิง `_id` ของ `UserEarnedItem` ใน `UserAchievement` collection
 //         เพื่อให้ผู้ใช้เลือกแสดง Achievement หรือ Badge ที่ตนเองได้รับบนโปรไฟล์
 //     -   `User.gamification.primaryDisplayBadge` และ `secondaryDisplayBadges`: (ใหม่) Object และ Array ของ Object ตามลำดับ
 //         สำหรับเก็บ `earnedBadgeId` (จาก `UserAchievement.earnedItems._id` ที่เป็น Badge)
@@ -1533,4 +1570,12 @@ export default UserModel;
 //     เพื่อเพิ่มประสิทธิภาพในการ query สำหรับ Writer Dashboard. ต้องแน่ใจว่ามีกลไกการอัปเดตที่สอดคล้องกัน.
 // 11. **Performance**: การมี array ย่อยใน `writerStats` ควรพิจารณาถึงขนาดของ array ด้วย. หากมีจำนวนมาก (เช่น นักเขียนมีนิยายเป็นร้อยเรื่องที่มีโปรโมชัน)
 //     อาจจะต้องพิจารณาการ query แบบ on-demand สำหรับบางกรณี หรือจำกัดจำนวนรายการที่ denormalize.
+// 12. **Board Model Integration**: (เพิ่มใหม่)
+//     -   **เพิ่ม `socialStats.boardPostsCreatedCount`**: ได้เพิ่ม field นี้เพื่อแยกการนับจำนวนกระทู้ที่สร้างออกจากจำนวนนิยายที่สร้าง (`novelsCreatedCount`) ให้ชัดเจน
+//         ซึ่งเป็นแนวทางปฏิบัติที่ดีกว่าในการจัดการสถิติ
+//     -   **คำแนะนำสำหรับ `Board.ts`**: ใน Middleware `post-save` ของ `Board.ts`, ควรเปลี่ยนจากการ `$inc: { "socialStats.novelsCreatedCount": 1 }`
+//         ไปเป็นการใช้ `$inc: { "socialStats.boardPostsCreatedCount": 1 }` แทนเพื่อให้ข้อมูลถูกบันทึกใน field ที่ถูกต้อง
+//     -   **ข้อมูลที่เกี่ยวข้องอื่นๆ**: ข้อมูลอื่นๆ เช่น กระทู้ที่ผู้ใช้ติดตาม (subscribers) หรือกระทู้ทั้งหมดที่ผู้ใช้สร้าง สามารถ Query ได้โดยตรงจาก `BoardModel`
+//         (เช่น `BoardModel.find({ authorId: userId })`) การเก็บข้อมูลเหล่านี้ซ้ำซ้อนใน `UserModel` อาจทำให้ข้อมูลไม่ตรงกันและเพิ่มขนาดของเอกสารโดยไม่จำเป็น
+//         ดังนั้นการมี field สำหรับนับจำนวน (`count`) จึงเป็นวิธีที่สมดุลที่สุด
 // ==================================================================================================

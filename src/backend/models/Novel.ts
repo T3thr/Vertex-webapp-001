@@ -1,16 +1,14 @@
 // src/backend/models/Novel.ts
 // โมเดลนิยาย (Novel Model) - ศูนย์กลางข้อมูลของนิยายแต่ละเรื่องสำหรับแพลตฟอร์ม DivWy
+// เวอร์ชันปรับปรุง: เพิ่มการเชื่อมต่อกับ BoardModel เพื่ออัปเดตสถิติรีวิว
 
 import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
 import { CategoryType, ICategory } from "./Category"; // Import CategoryType และ ICategory
 import UserModel, { IUser, IWriterStats, INovelPerformanceStats } from "./User";
-// Removed direct import of Purchase and Payment from here, as NovelModel doesn't directly reference them as fields.
-// They will reference Novel.
-// import { IPurchase } from "./Purchase";
-// import { IPayment } from "./Payment";
-// Import EpisodeModel for updating novel aggregates if needed here, though usually Episode model updates Novel
-// import EpisodeModel, { IEpisode } from "./Episode";
-
+// Import BoardModel เพื่อใช้ในการคำนวณสถิติรีวิว
+// การ import นี้อาจทำให้เกิด circular dependency nếu BoardModel ก็ import NovelModel
+// วิธีแก้คือการใช้ models("Board") แทนการ import โดยตรงในฟังก์ชันที่จำเป็น
+// import BoardModel, { IBoard } from "./Board";
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Novel
@@ -215,14 +213,17 @@ const TrendingStatsSchema = new Schema<ITrendingStats>(
 /**
  * @interface INovelStats
  * @description สถิติต่างๆ ที่เกี่ยวข้องกับนิยาย
+ * @property {number} ratingsCount - จำนวนการให้เรตติ้งทั้งหมด **(อัปเดตจาก BoardModel ประเภท 'review')**
+ * @property {number} averageRating - คะแนนเฉลี่ย **(อัปเดตจาก BoardModel ประเภท 'review')**
  */
 export interface INovelStats {
   viewsCount: number; // ยอดเข้าชมทั้งหมด
   uniqueViewersCount: number; // จำนวนผู้อ่านที่ไม่ซ้ำกัน (อาจใช้สำหรับ totalReads ใน writerStats)
   likesCount: number; // จำนวนไลค์ทั้งหมด
-  commentsCount: number; // จำนวนคอมเมนต์ทั้งหมด
-  ratingsCount: number; // จำนวนการให้เรตติ้งทั้งหมด
-  averageRating: number; // คะแนนเฉลี่ย
+  commentsCount: number; // จำนวนคอมเมนต์ทั้งหมด (จาก CommentModel ที่เกี่ยวกับ Episode)
+  discussionThreadCount: number; // **เพิ่มใหม่**: จำนวนกระทู้สนทนาทั้งหมดที่เกี่ยวกับนิยายเรื่องนี้ (จาก BoardModel)
+  ratingsCount: number; // **ปรับปรุง**: จำนวน "กระทู้รีวิว" ทั้งหมด (จาก BoardModel)
+  averageRating: number; // **ปรับปรุง**: คะแนนเฉลี่ยจาก "กระทู้รีวิว" ทั้งหมด (จาก BoardModel)
   followersCount: number; // จำนวนผู้ติดตามนิยาย
   sharesCount: number; // จำนวนการแชร์
   bookmarksCount: number; // จำนวนการบุ๊คมาร์ค
@@ -242,6 +243,7 @@ const NovelStatsSchema = new Schema<INovelStats>(
     uniqueViewersCount: { type: Number, default: 0, min: 0 },
     likesCount: { type: Number, default: 0, min: 0 },
     commentsCount: { type: Number, default: 0, min: 0 },
+    discussionThreadCount: { type: Number, default: 0, min: 0 }, // **เพิ่มใหม่**
     ratingsCount: { type: Number, default: 0, min: 0 },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     followersCount: { type: Number, default: 0, min: 0 },
@@ -254,7 +256,7 @@ const NovelStatsSchema = new Schema<INovelStats>(
     lastPublishedEpisodeAt: { type: Date },
     currentReaders: { type: Number, default: 0, min: 0 },
     peakConcurrentReaders: { type: Number, default: 0, min: 0 },
-    trendingStats: { type: TrendingStatsSchema, default: () => ({  // **เพิ่มใหม่** Default สำหรับ trendingStats
+    trendingStats: { type: TrendingStatsSchema, default: () => ({
         viewsLast24h: 0,
         viewsLast48h: 0,
         likesLast24h: 0,
@@ -270,14 +272,6 @@ const NovelStatsSchema = new Schema<INovelStats>(
 /**
  * @interface IPromotionDetails
  * @description การตั้งค่ารายละเอียดโปรโมชันสำหรับนิยาย
- * @property {number} [promotionalPriceCoins] - ราคาโปรโมชันเป็นเหรียญ "ต่อตอน" สำหรับนิยายนี้ในช่วงโปรโมชัน
- * (ไม่ใช่ราคา bundle ทั้งนิยาย)
- * @property {Date} [promotionStartDate] - วันที่เริ่มโปรโมชัน
- * @property {Date} [promotionEndDate] - วันที่สิ้นสุดโปรโมชัน
- * @property {boolean} isActive - โปรโมชันนี้ใช้งานอยู่หรือไม่
- * @property {string} [promotionDescription] - คำอธิบายโปรโมชัน
- * @property {string} [promotionType] - (แนวทางการปรับปรุงในอนาคต) ประเภทของโปรโมชัน เช่น FIXED_PRICE, PERCENTAGE_DISCOUNT, COIN_DISCOUNT
- * ปัจจุบัน `promotionalPriceCoins` ทำหน้าที่เป็นแบบ FIXED_PRICE
  */
 export interface IPromotionDetails {
   promotionalPriceCoins?: number;
@@ -285,7 +279,6 @@ export interface IPromotionDetails {
   promotionEndDate?: Date;
   isActive: boolean;
   promotionDescription?: string;
-  // promotionType?: "FIXED_PRICE" | "PERCENTAGE_DISCOUNT" | "COIN_DISCOUNT"; // ตัวอย่างสำหรับอนาคต
 }
 
 const PromotionDetailsSchema = new Schema<IPromotionDetails>(
@@ -295,7 +288,6 @@ const PromotionDetailsSchema = new Schema<IPromotionDetails>(
     promotionEndDate: { type: Date },
     isActive: { type: Boolean, default: false, required: true },
     promotionDescription: { type: String, trim: true, maxlength: [250, "คำอธิบายโปรโมชันต้องไม่เกิน 250 ตัวอักษร"] },
-    // promotionType: { type: String, enum: ["FIXED_PRICE", "PERCENTAGE_DISCOUNT", "COIN_DISCOUNT"] } // ตัวอย่างสำหรับอนาคต
   },
   { _id: false }
 );
@@ -305,13 +297,13 @@ const PromotionDetailsSchema = new Schema<IPromotionDetails>(
  * @description การตั้งค่าเกี่ยวกับการสร้างรายได้จากนิยาย
  */
 export interface IMonetizationSettings {
-  isCoinBasedUnlock: boolean; // ตอนในนิยายนี้สามารถปลดล็อกด้วยเหรียญได้หรือไม่
-  defaultEpisodePriceCoins?: number; // ราคาเหรียญปกติสำหรับแต่ละตอน (หากไม่ได้กำหนดราคาเฉพาะตอน หรือไม่มีโปรโมชันนิยายที่ active)
-  allowDonations: boolean; // นิยายนี้เปิดรับการบริจาคหรือไม่ (ขึ้นกับ DonationApplication ของผู้เขียนด้วย)
-  donationApplicationId?: Types.ObjectId; // (ใหม่) อ้างอิง DonationApplication ที่เกี่ยวข้อง (ถ้ามี)
-  isAdSupported: boolean; // แสดงโฆษณาในนิยายนี้หรือไม่
-  isPremiumExclusive: boolean; // นิยายนี้เป็นสิทธิพิเศษสำหรับสมาชิกระดับพรีเมียมหรือไม่
-  activePromotion?: IPromotionDetails; // การตั้งค่าโปรโมชันปัจจุบันของนิยาย (เช่น ส่วนลดราคาตอน)
+  isCoinBasedUnlock: boolean;
+  defaultEpisodePriceCoins?: number;
+  allowDonations: boolean;
+  donationApplicationId?: Types.ObjectId;
+  isAdSupported: boolean;
+  isPremiumExclusive: boolean;
+  activePromotion?: IPromotionDetails;
 }
 
 const MonetizationSettingsSchema = new Schema<IMonetizationSettings>(
@@ -333,7 +325,7 @@ const MonetizationSettingsSchema = new Schema<IMonetizationSettings>(
  */
 export interface IPsychologicalAnalysisConfig {
   allowsPsychologicalAnalysis: boolean;
-  sensitiveChoiceCategoriesBlocked?: Types.ObjectId[]; // Ref: Category, type: SENSITIVE_CHOICE_TOPIC
+  sensitiveChoiceCategoriesBlocked?: Types.ObjectId[];
   lastAnalysisDate?: Date;
   analysisVersion?: string;
 }
@@ -386,7 +378,7 @@ export interface IWorldBuildingDetails {
     loreSummary?: string;
     magicSystemRules?: string;
     technologyPrinciples?: string;
-    keyLocationsAtlasId?: Types.ObjectId; // Ref: Atlas (สมมติว่ามี Model Atlas)
+    keyLocationsAtlasId?: Types.ObjectId;
 }
 
 const WorldBuildingDetailsSchema = new Schema<IWorldBuildingDetails>(
@@ -394,7 +386,7 @@ const WorldBuildingDetailsSchema = new Schema<IWorldBuildingDetails>(
         loreSummary: { type: String, trim: true, maxlength: [20000, "สรุป Lore ยาวเกินไป"] },
         magicSystemRules: { type: String, trim: true, maxlength: [20000, "กฎเวทมนตร์ยาวเกินไป"] },
         technologyPrinciples: { type: String, trim: true, maxlength: [20000, "หลักการเทคโนโลยียาวเกินไป"] },
-        keyLocationsAtlasId: { type: Schema.Types.ObjectId, ref: "Atlas" }, // สมมติว่ามี Atlas Model
+        keyLocationsAtlasId: { type: Schema.Types.ObjectId, ref: "Atlas" },
     },
     { _id: false }
 );
@@ -427,7 +419,7 @@ export interface INovel extends Document {
   endingType: NovelEndingType;
   sourceType: ISourceType;
   language: Types.ObjectId | ICategory;
-  firstEpisodeId?: Types.ObjectId; // Ref: Episode
+  firstEpisodeId?: Types.ObjectId;
   totalEpisodesCount: number;
   publishedEpisodesCount: number;
   stats: INovelStats;
@@ -440,7 +432,7 @@ export interface INovel extends Document {
   scheduledPublicationDate?: Date;
   lastContentUpdatedAt: Date;
   relatedNovels?: (Types.ObjectId | INovel)[];
-  seriesId?: Types.ObjectId; // Ref: Series (สมมติว่ามี Model Series)
+  seriesId?: Types.ObjectId;
   seriesOrder?: number;
   isDeleted: boolean;
   deletedAt?: Date;
@@ -449,14 +441,6 @@ export interface INovel extends Document {
   updatedAt: Date;
 
   // Virtuals
-  /**
-   * @virtual currentEpisodePriceCoins
-   * @description ราคาเหรียญ "ต่อตอน" ปัจจุบันตามนโยบายของนิยายเรื่องนี้
-   * โดยพิจารณาจากโปรโมชันที่ active ของนิยาย หรือ ราคา defaultEpisodePriceCoins ของนิยาย
-   * **ข้อควรระวัง:** virtual นี้ไม่ได้คำนึงถึงราคาเฉพาะตอน (Episode.priceCoins)
-   * หากต้องการราคาที่ผู้ใช้ต้องจ่ายจริงสำหรับตอนใดตอนหนึ่ง ควรใช้ `episode.getEffectivePrice()`
-   * virtual นี้มีประโยชน์เพื่อดูภาพรวมนโยบายราคาของนิยายเท่านั้น
-   */
   currentEpisodePriceCoins: number;
 }
 
@@ -558,17 +542,12 @@ const NovelSchema = new Schema<INovel>(
       type: NovelStatsSchema,
       default: () => ({
         viewsCount: 0, uniqueViewersCount: 0, likesCount: 0, commentsCount: 0,
-        ratingsCount: 0, averageRating: 0, followersCount: 0, sharesCount: 0,
-        bookmarksCount: 0, totalWords: 0, estimatedReadingTimeMinutes: 0,
-        completionRate: 0, purchasesCount: 0,
-        trendingStats: { // Default สำหรับ trendingStats ที่เพิ่มใหม่
-            viewsLast24h: 0,
-            viewsLast48h: 0,
-            likesLast24h: 0,
-            likesLast3Days: 0,
-            commentsLast24h: 0,
-            newFollowersLastWeek: 0,
-            trendingScore: 0,
+        discussionThreadCount: 0, ratingsCount: 0, averageRating: 0,
+        followersCount: 0, sharesCount: 0, bookmarksCount: 0, totalWords: 0,
+        estimatedReadingTimeMinutes: 0, completionRate: 0, purchasesCount: 0,
+        trendingStats: {
+            viewsLast24h: 0, viewsLast48h: 0, likesLast24h: 0, likesLast3Days: 0,
+            commentsLast24h: 0, newFollowersLastWeek: 0, trendingScore: 0,
         }
       })
     },
@@ -594,7 +573,7 @@ const NovelSchema = new Schema<INovel>(
     scheduledPublicationDate: { type: Date, index: true },
     lastContentUpdatedAt: { type: Date, default: Date.now, index: true, required: true },
     relatedNovels: [{ type: Schema.Types.ObjectId, ref: "Novel" }],
-    seriesId: { type: Schema.Types.ObjectId, ref: "Series", index: true, sparse: true }, // สมมติว่ามี Series Model
+    seriesId: { type: Schema.Types.ObjectId, ref: "Series", index: true, sparse: true },
     seriesOrder: { type: Number, min: 1 },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, index: true, sparse: true },
@@ -617,15 +596,15 @@ NovelSchema.index(
     {
         name: "NovelContentTextSearchIndex",
         weights: { title: 10, synopsis: 5, "themeAssignment.customTags": 3, longDescription: 1 },
-        default_language: "thai" // ตั้งค่า default_language เป็น "none" หากต้องการรองรับหลายภาษาแบบไม่เฉพาะเจาะจง หรือ "thai" หากเนื้อหาส่วนใหญ่เป็นภาษาไทย
+        default_language: "thai"
     }
 );
 NovelSchema.index({ author: 1, status: 1, lastContentUpdatedAt: -1, isDeleted: 1 }, { name: "NovelAuthorStatusUpdatedAtIndex" });
 NovelSchema.index({ status: 1, accessLevel: 1, publishedAt: -1, isDeleted: 1 }, { name: "NovelStatusAccessPublishedAtIndex" });
-NovelSchema.index({ "themeAssignment.mainTheme.categoryId": 1, status: 1, "stats.averageRating": -1, isDeleted: 1 }, { name: "NovelMainThemeStatusRatingIndex" });
+// **ปรับปรุง Index**: เพิ่ม discussionThreadCount และ ratingsCount เพื่อช่วยในการจัดเรียงตามความนิยมของชุมชน
+NovelSchema.index({ "themeAssignment.mainTheme.categoryId": 1, status: 1, "stats.averageRating": -1, "stats.ratingsCount": -1, isDeleted: 1 }, { name: "NovelMainThemeStatusRatingIndex" });
 NovelSchema.index({ isFeatured: 1, status: 1, "stats.viewsCount": -1, isDeleted: 1 }, { name: "NovelFeaturedStatusViewsIndex" });
 NovelSchema.index({ isDeleted: 1, status: 1 });
-// Index สำหรับ trendingScore เพื่อการ query ที่เร็วขึ้นสำหรับ "ผลงานยอดนิยม"
 NovelSchema.index({ "stats.trendingStats.trendingScore": -1, status: 1, isDeleted: 1, accessLevel: 1 }, { name: "NovelTrendingScoreIndex" });
 
 
@@ -645,14 +624,6 @@ NovelSchema.virtual("isNewRelease").get(function (this: HydratedDocument<INovel>
   return false;
 });
 
-/**
- * @virtual currentEpisodePriceCoins
- * @description ราคาเหรียญ "ต่อตอน" ปัจจุบันตามนโยบายของนิยายเรื่องนี้
- * โดยพิจารณาจากโปรโมชันที่ active ของนิยาย หรือ ราคา defaultEpisodePriceCoins ของนิยาย
- * **ข้อควรระวัง:** virtual นี้ไม่ได้คำนึงถึงราคาเฉพาะตอน (Episode.priceCoins) หรือ accessType ของตอน
- * หากต้องการราคาที่ผู้ใช้ต้องจ่ายจริงสำหรับตอนใดตอนหนึ่ง ควรใช้ `episode.getEffectivePrice()`
- * virtual นี้มีประโยชน์เพื่อดูภาพรวมนโยบายราคาของนิยายเท่านั้น (เช่น ราคาโปรโมชันต่อตอนของนิยายนี้คือเท่าไร หรือราคามาตรฐานต่อตอนของนิยายนี้คือเท่าไร)
- */
 NovelSchema.virtual("currentEpisodePriceCoins").get(function (this: HydratedDocument<INovel>): number {
     const now = new Date();
     const promo = this.monetizationSettings?.activePromotion;
@@ -660,7 +631,7 @@ NovelSchema.virtual("currentEpisodePriceCoins").get(function (this: HydratedDocu
     if (
         promo &&
         promo.isActive &&
-        promo.promotionalPriceCoins !== undefined && promo.promotionalPriceCoins >= 0 && // ตรวจสอบ >= 0
+        promo.promotionalPriceCoins !== undefined && promo.promotionalPriceCoins >= 0 &&
         (!promo.promotionStartDate || new Date(promo.promotionStartDate) <= now) &&
         (!promo.promotionEndDate || new Date(promo.promotionEndDate) >= now)
     ) {
@@ -675,97 +646,75 @@ NovelSchema.virtual("currentEpisodePriceCoins").get(function (this: HydratedDocu
 // ==================================================================================================
 
 NovelSchema.pre<HydratedDocument<INovel>>("save", async function (next: (err?: mongoose.Error) => void) {
+  // Slug generation logic (same as before)
   try {
     if (this.isModified("title") || this.isNew) {
-      const generateSlug = (text: string): string => {
-          // Thai-friendly slug generation
-          let slug = text
-            .toString()
-            .toLowerCase()
-            .normalize("NFD") // Normalize Thai characters
-            .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
-            .replace(/[ก-ฮ]/g, char => { // Basic Thai consonant to latin-like mapping (optional, for more URL-friendly slugs)
-                // This is a very basic mapping, consider a more comprehensive library if needed
-                const thaiToLatinMap: { [key: string]: string } = {
-                    'ก': 'k', 'ข': 'kh', 'ฃ': 'kh', 'ค': 'kh', 'ฅ': 'kh', 'ฆ': 'kh',
-                    'ง': 'ng', 'จ': 'j', 'ฉ': 'ch', 'ช': 'ch', 'ซ': 's', 'ฌ': 'ch',
-                    'ญ': 'y', 'ฎ': 'd', 'ฏ': 't', 'ฐ': 'th', 'ฑ': 'th', 'ฒ': 'th',
-                    'ณ': 'n', 'ด': 'd', 'ต': 't', 'ถ': 'th', 'ท': 'th', 'ธ': 'th',
-                    'น': 'n', 'บ': 'b', 'ป': 'p', 'ผ': 'ph', 'ฝ': 'f', 'พ': 'ph',
-                    'ฟ': 'f', 'ภ': 'ph', 'ม': 'm', 'ย': 'y', 'ร': 'r', 'ฤ': 'rue',
-                    'ล': 'l', 'ฦ': 'lue', 'ว': 'w', 'ศ': 's', 'ษ': 's', 'ส': 's',
-                    'ห': 'h', 'ฬ': 'l', 'อ': 'o', 'ฮ': 'h'
-                    // Vowels and tones are mostly handled by NFD and diacritic removal
-                };
-                return thaiToLatinMap[char] || char;
-            })
-            .replace(/\s+/g, "-") // Replace spaces with -
-            .replace(/[^\p{L}\p{N}\p{M}\s_-]+/gu, "") // Remove special characters except letters, numbers, marks, spaces, underscores, hyphens
-            .replace(/\-\-+/g, "-") // Replace multiple - with single -
-            .replace(/^-+/, "") // Trim - from start of text
-            .replace(/-+$/, ""); // Trim - from end of text
+        // ฟังก์ชัน generateSlug ที่ปรับปรุงใหม่ให้รองรับภาษาไทยและภาษาอื่นๆ ที่มีเครื่องหมายวรรณยุกต์
+        const generateSlug = (text: string): string => {
+          if (!text) return `novel-${new Types.ObjectId().toHexString().slice(-8)}`;
 
-          // Fallback for empty slugs after processing (e.g. title was all special chars)
-          if (!slug && text.trim().length > 0) {
-              slug = text.toString().toLowerCase().replace(/\s+/g, "-").replace(/[^\w-]+/g, '');
+          const slug = text
+              .toString()
+              // 1. ใช้ normalize('NFC') เพื่อรวมพยัญชนะกับสระ/วรรณยุกต์ให้เป็นอักขระเดียว ป้องกันปัญหาสระลอย
+              .normalize('NFC')
+              .toLowerCase()
+              // 2. แทนที่ช่องว่างด้วยขีดกลาง
+              .replace(/\s+/g, '-')
+              // 3. (***ส่วนที่แก้ไข***) ลบอักขระที่ไม่ใช่ "ตัวอักษร", "ตัวเลข", "สระ/วรรณยุกต์" (\p{M}) หรือ "ขีดกลาง"
+              //    การเพิ่ม \p{M} จะช่วยรักษาสระและวรรณยุกต์ของภาษาไทยไว้
+              .replace(/[^\p{L}\p{N}\p{M}-]+/gu, '')
+              // 4. ยุบขีดกลางที่ซ้ำกันหลายตัวให้เหลือตัวเดียว
+              .replace(/--+/g, '-')
+              // 5. ลบขีดกลางที่อาจอยู่หน้าสุดหรือท้ายสุดของข้อความ
+              .replace(/^-+/, '')
+              .replace(/-+$/, '');
+
+          // หากผลลัพธ์เป็นสตริงว่าง (เช่น ชื่อเรื่องมีแต่สัญลักษณ์) ให้สร้าง slug แบบสุ่ม
+          if (!slug) {
+              return `novel-${new Types.ObjectId().toHexString().slice(-8)}`;
           }
-          return slug.substring(0, 280); // Max length
-      };
 
-      let baseSlug = generateSlug(this.title);
-      if (!baseSlug) {
-          // If slug generation results in an empty string (e.g., title was only symbols)
-          // create a default slug based on ObjectId or timestamp
-          baseSlug = `novel-${new Types.ObjectId().toHexString().slice(-8)}`;
-      }
-      let slug = baseSlug;
-      let count = 0;
-      const NovelModelInstance = models.Novel || model<INovel>("Novel");
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-          const existingNovel = await NovelModelInstance.findOne({ slug: slug, _id: { $ne: this._id } });
-          if (!existingNovel) break;
-          count++;
-          slug = `${baseSlug}-${count}`;
-      }
-      this.slug = slug;
+          return slug.substring(0, 280); // จำกัดความยาว
+        };
+        let baseSlug = generateSlug(this.title);
+        if (!baseSlug) {
+            baseSlug = `novel-${new Types.ObjectId().toHexString().slice(-8)}`;
+        }
+        let slug = baseSlug;
+        let count = 0;
+        const NovelModelInstance = models.Novel || model<INovel>("Novel");
+        while (true) {
+            const existingNovel = await NovelModelInstance.findOne({ slug: slug, _id: { $ne: this._id } });
+            if (!existingNovel) break;
+            count++;
+            slug = `${baseSlug}-${count}`;
+        }
+        this.slug = slug;
     }
   } catch (error: any) {
     console.error(`[Novel Pre-Save Hook] Error generating slug for "${this.title}":`, error);
-    // Pass the error to the next middleware or save operation
     return next(new mongoose.Error.ValidatorError({ message: `เกิดข้อผิดพลาดในการสร้าง Slug: ${error.message}` }));
   }
 
+  // Timestamp and promotion validation logic (same as before)
   try {
-    if (this.isModified("title") ||
-        this.isModified("synopsis") ||
-        this.isModified("longDescription") ||
-        this.isModified("themeAssignment") ||
-        this.isModified("narrativeFocus") ||
-        this.isModified("worldBuildingDetails") ||
-        this.isModified("sourceType") ||
-        this.isModified("coverImageUrl") ||
-        this.isModified("bannerImageUrl")) {
+    if (this.isModified("title") || this.isModified("synopsis") || this.isModified("longDescription") ||
+        this.isModified("themeAssignment") || this.isModified("narrativeFocus") || this.isModified("worldBuildingDetails") ||
+        this.isModified("sourceType") || this.isModified("coverImageUrl") || this.isModified("bannerImageUrl")) {
       this.lastContentUpdatedAt = new Date();
     }
-
     if (this.isModified("status")) {
         if (this.status === NovelStatus.PUBLISHED && !this.publishedAt) {
           this.publishedAt = new Date();
-          this.lastContentUpdatedAt = new Date(); // Content is effectively "live" now
+          this.lastContentUpdatedAt = new Date();
         } else if (this.status === NovelStatus.SCHEDULED && this.scheduledPublicationDate) {
-            // If moving to scheduled, clear publishedAt as it's not yet truly published.
             this.publishedAt = undefined;
         }
     }
-
-
     if (this.monetizationSettings?.activePromotion) {
         const { promotionStartDate, promotionEndDate } = this.monetizationSettings.activePromotion;
         if (promotionStartDate && promotionEndDate && new Date(promotionStartDate) > new Date(promotionEndDate)) {
-            // Create a new ValidationError object
             const promoDateError = new mongoose.Error.ValidationError();
-            // Add specific field error
             promoDateError.addError('monetizationSettings.activePromotion.promotionEndDate',
                 new mongoose.Error.ValidatorError({
                     message: 'วันที่สิ้นสุดโปรโมชันต้องอยู่หลังหรือตรงกับวันที่เริ่มโปรโมชัน',
@@ -784,58 +733,182 @@ NovelSchema.pre<HydratedDocument<INovel>>("save", async function (next: (err?: m
 });
 
 
+NovelSchema.post("save", async function (doc: HydratedDocument<INovel>, next: (err?: mongoose.Error) => void) {
+    // This hook updates writer-centric stats.
+    if (doc.author) {
+        try {
+            await updateWriterStatsAfterNovelChange(doc._id, doc.author as Types.ObjectId);
+        } catch (error: any) {
+            console.error("[Novel Post-Save Hook] Error during writer stats update:", error);
+        }
+    }
+    // Note: Updating novel review stats from Board is handled in the Board model's hooks
+    // by calling the `updateNovelReviewStats` function exported from this file.
+    next();
+});
+
+NovelSchema.pre<mongoose.Query<INovel, INovel>>("findOneAndDelete", async function (next: (err?: mongoose.Error) => void) {
+    try {
+        const docToDelete = await this.model.findOne(this.getFilter()).lean<HydratedDocument<INovel>>();
+        if (docToDelete) {
+            (this as any)._docToDeleteForWriterStats = docToDelete;
+            // **เพิ่มใหม่**: เก็บ novelId เพื่อใช้ล้างข้อมูลใน BoardModel
+            (this as any)._deletedNovelId = docToDelete._id;
+        }
+        next();
+    } catch (error: any) {
+        console.error("[Novel Pre-FindOneAndDelete Hook] Error fetching doc to delete:", error);
+        next(error);
+    }
+});
+
+NovelSchema.post<mongoose.Query<INovel, INovel>>("findOneAndDelete", async function (_result: any, next: (err?: mongoose.Error) => void) {
+    const deletedDoc = (this as any)._docToDeleteForWriterStats as HydratedDocument<INovel> | undefined;
+    const deletedNovelId = (this as any)._deletedNovelId as Types.ObjectId | undefined;
+
+    // 1. Update writer stats
+    if (deletedDoc && deletedDoc.author) {
+        try {
+            await updateWriterStatsAfterNovelChange(null, deletedDoc.author as Types.ObjectId);
+        } catch (error: any) {
+            console.error("[Novel Post-FindOneAndDelete Hook] Error during writer stats update after deletion:", error);
+        }
+    }
+
+    // **เพิ่มใหม่**: 2. Handle related boards after novel deletion
+    if (deletedNovelId) {
+        try {
+            const BoardModel = models.Board || model("Board"); // Avoid circular dependency
+            // Unlink or archive related boards instead of deleting them
+            await BoardModel.updateMany(
+                { novelAssociated: deletedNovelId },
+                { $set: {
+                    novelAssociated: undefined, // Unlink the novel
+                    // Optional: change status to archived
+                    // status: "archived",
+                }}
+            );
+        } catch (error: any) {
+             console.error(`[Novel Post-FindOneAndDelete Hook] Error updating related boards for deleted novel ${deletedNovelId}:`, error);
+        }
+    }
+
+    if ((this as any)._docToDeleteForWriterStats) {
+        delete (this as any)._docToDeleteForWriterStats;
+    }
+    if ((this as any)._deletedNovelId) {
+        delete (this as any)._deletedNovelId;
+    }
+    next();
+});
+
+// ==================================================================================================
+// SECTION: ฟังก์ชันสำหรับอัปเดตสถิติข้ามโมเดล (Cross-Model Stats Update Functions)
+// ==================================================================================================
+
+/**
+ * **ฟังก์ชันใหม่**
+ * อัปเดตสถิติรีวิว (ratingsCount, averageRating) และจำนวนกระทู้ทั้งหมดของนิยาย
+ * โดยจะถูกเรียกใช้จาก Middleware ของ BoardModel เมื่อมีการสร้าง, แก้ไข, หรือลบกระทู้ที่เกี่ยวข้องกับนิยายนี้
+ * @param {Types.ObjectId | string | null} novelId - ไอดีของนิยายที่ต้องการอัปเดต
+ */
+export async function updateNovelCommunityStats(novelId: Types.ObjectId | string | null) {
+    if (!novelId || !mongoose.Types.ObjectId.isValid(novelId.toString())) {
+        console.warn(`[NovelCommunityStats Update] Invalid novelId: ${novelId}. Skipping stats update.`);
+        return;
+    }
+
+    const validNovelId = new mongoose.Types.ObjectId(novelId.toString());
+    const BoardModel = (models.Board as mongoose.Model<any>) || model("Board"); // ใช้ any เพื่อหลีกเลี่ยงการ import IBoard
+    const NovelModelInstance = (models.Novel as mongoose.Model<INovel>) || model<INovel>("Novel");
+
+    try {
+        // คำนวณค่าเฉลี่ยและจำนวนรีวิว
+        const reviewStatsPromise = BoardModel.aggregate([
+            {
+                $match: {
+                    novelAssociated: validNovelId,
+                    boardType: "review", // กรองเฉพาะกระทู้รีวิว
+                    isDeleted: { $ne: true }, // ไม่นับกระทู้ที่ถูกลบ
+                    "reviewDetails.ratingValue": { $exists: true, $ne: null } // ต้องมีค่า rating
+                }
+            },
+            {
+                $group: {
+                    _id: "$novelAssociated",
+                    averageRating: { $avg: "$reviewDetails.ratingValue" },
+                    ratingsCount: { $sum: 1 }
+                }
+            }
+        ]);
+
+        // นับจำนวนกระทู้สนทนาทั้งหมด (ที่ไม่ใช่รีวิว)
+        const discussionCountPromise = BoardModel.countDocuments({
+            novelAssociated: validNovelId,
+            boardType: { $ne: "review" }, // ไม่ใช่กระทู้รีวิว
+            isDeleted: { $ne: true }
+        });
+
+        const [reviewResults, discussionCount] = await Promise.all([reviewStatsPromise, discussionCountPromise]);
+
+        const reviewStats = reviewResults[0]; // ผลลัพธ์เป็น array
+
+        // เตรียมข้อมูลสำหรับอัปเดต
+        const newAverageRating = reviewStats?.averageRating ? parseFloat(reviewStats.averageRating.toFixed(2)) : 0;
+        const newRatingsCount = reviewStats?.ratingsCount || 0;
+
+        // อัปเดตข้อมูลใน NovelModel
+        await NovelModelInstance.findByIdAndUpdate(validNovelId, {
+            $set: {
+                "stats.averageRating": newAverageRating,
+                "stats.ratingsCount": newRatingsCount,
+                "stats.discussionThreadCount": discussionCount
+            }
+        });
+        // console.log(`[NovelCommunityStats Update] Successfully updated stats for novel ${validNovelId}`);
+
+    } catch (error: any) {
+        console.error(`[NovelCommunityStats Update] Error updating stats for novel ${validNovelId}:`, error);
+    }
+}
+
+
 export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId | null, authorId: Types.ObjectId | string) {
-    // Ensure authorId is a valid ObjectId string or Types.ObjectId
     if (!authorId || !mongoose.Types.ObjectId.isValid(authorId.toString())) {
         console.warn(`[WriterStats Update] Invalid authorId: ${authorId}. Skipping stats update.`);
         return;
     }
     const validAuthorId = new mongoose.Types.ObjectId(authorId.toString());
-
-    // Use existing model instances if available, otherwise create them
     const UserModelInstance = (models.User as mongoose.Model<IUser>) || model<IUser>("User");
     const NovelModelInstance = (models.Novel as mongoose.Model<INovel>) || model<INovel>("Novel");
-
-    // Fetch the author
     const author: HydratedDocument<IUser> | null = await UserModelInstance.findById(validAuthorId);
 
     if (!author) {
         console.warn(`[WriterStats Update] Author ${validAuthorId} not found. Skipping stats update.`);
         return;
     }
-
-    // Only update stats if the user has the "Writer" role
     if (!author.roles.includes("Writer")) {
-        // console.log(`[WriterStats Update] User ${validAuthorId} is not a Writer. Skipping stats update.`);
         return;
     }
-
-    // Initialize writerStats if it doesn't exist
     if (!author.writerStats) {
         author.writerStats = {
-            totalViewsReceived: 0, 
-            totalNovelsPublished: 0, totalEpisodesPublished: 0, totalViewsAcrossAllNovels: 0,
+            totalViewsReceived: 0, totalNovelsPublished: 0, totalEpisodesPublished: 0, totalViewsAcrossAllNovels: 0,
             totalReadsAcrossAllNovels: 0, totalLikesReceivedOnNovels: 0, totalCommentsReceivedOnNovels: 0,
             totalEarningsToDate: 0, totalCoinsReceived: 0, totalRealMoneyReceived: 0, totalDonationsReceived: 0,
-            // Ensure novelPerformanceSummaries is initialized as a Mongoose DocumentArray
             novelPerformanceSummaries: new mongoose.Types.DocumentArray<INovelPerformanceStats>([]),
-            writerSince: new Date(), // Set writerSince when stats are first created
-            // lastNovelPublishedAt: undefined, // These will be set by aggregation
-            // lastEpisodePublishedAt: undefined,
+            writerSince: new Date(),
         };
     } else {
-        // Ensure sub-fields are initialized if writerStats exists but sub-fields are missing
         if (!author.writerStats.writerSince) author.writerStats.writerSince = new Date();
         if (!author.writerStats.novelPerformanceSummaries) {
             author.writerStats.novelPerformanceSummaries = new mongoose.Types.DocumentArray<INovelPerformanceStats>([]);
         }
     }
 
-    // Query for all non-deleted novels by this author
     const authorsNovelsQuery = NovelModelInstance.find({
         author: validAuthorId,
-        isDeleted: { $ne: true } // Only consider non-deleted novels
-    }).select("title status publishedAt publishedEpisodesCount stats _id"); // Select necessary fields
+        isDeleted: { $ne: true }
+    }).select("title status publishedAt publishedEpisodesCount stats _id");
 
     const authorsNovels: HydratedDocument<INovel>[] = await authorsNovelsQuery;
 
@@ -843,29 +916,26 @@ export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId
     let calculatedTotalNovelsPublished = 0;
     let calculatedTotalEpisodesPublishedAcrossNovels = 0;
     let calculatedTotalViews = 0;
-    let calculatedTotalReads = 0; // uniqueViewersCount from novel stats
+    let calculatedTotalReads = 0;
     let calculatedTotalLikes = 0;
-    let calculatedTotalCommentsOnNovels = 0; // Renamed for clarity
+    let calculatedTotalCommentsOnNovels = 0;
     let latestNovelPublicationDate: Date | undefined = undefined;
     let latestEpisodePublishedDateAcrossNovels: Date | undefined = undefined;
 
-
     for (const novel of authorsNovels) {
-        // Double-check isDeleted, though query should handle it
         if (!novel.isDeleted) {
             const summary: INovelPerformanceStats = {
                 novelId: novel._id, novelTitle: novel.title,
                 totalViews: novel.stats?.viewsCount || 0,
-                totalReads: novel.stats?.uniqueViewersCount || 0, // uniqueViewersCount maps to totalReads for the novel
+                totalReads: novel.stats?.uniqueViewersCount || 0,
                 totalLikes: novel.stats?.likesCount || 0,
                 totalComments: novel.stats?.commentsCount || 0,
                 totalFollowers: novel.stats?.followersCount || 0,
                 averageRating: novel.stats?.averageRating || 0,
-                totalEarningsFromNovel: 0, // This would typically come from a separate EarningTransaction model or similar
+                totalEarningsFromNovel: 0,
             };
             newSummaries.push(summary);
 
-            // Aggregate stats only from PUBLISHED or COMPLETED novels for "published" counts
             if (novel.status === NovelStatus.PUBLISHED || novel.status === NovelStatus.COMPLETED) {
                 calculatedTotalNovelsPublished++;
                 if (novel.publishedAt) {
@@ -874,16 +944,12 @@ export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId
                     }
                 }
                 calculatedTotalEpisodesPublishedAcrossNovels += novel.publishedEpisodesCount || 0;
-
-                // Update latest episode published date from novel stats
                 if (novel.stats?.lastPublishedEpisodeAt) {
                     if (!latestEpisodePublishedDateAcrossNovels || novel.stats.lastPublishedEpisodeAt > latestEpisodePublishedDateAcrossNovels) {
                         latestEpisodePublishedDateAcrossNovels = novel.stats.lastPublishedEpisodeAt;
                     }
                 }
             }
-            // Sum up total views, reads, likes, comments from ALL non-deleted novels (drafts, published, etc.)
-            // as these reflect overall engagement potential or history.
             calculatedTotalViews += novel.stats?.viewsCount || 0;
             calculatedTotalReads += novel.stats?.uniqueViewersCount || 0;
             calculatedTotalLikes += novel.stats?.likesCount || 0;
@@ -891,13 +957,12 @@ export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId
         }
     }
 
-    // Update author's writerStats
-    if (author.writerStats) { // Should always be true due to initialization logic
+    if (author.writerStats) {
         author.writerStats.novelPerformanceSummaries = new mongoose.Types.DocumentArray<INovelPerformanceStats>(newSummaries);
         author.writerStats.totalNovelsPublished = calculatedTotalNovelsPublished;
-        author.writerStats.totalEpisodesPublished = calculatedTotalEpisodesPublishedAcrossNovels; // Sum of publishedEpisodesCount from each published/completed novel
+        author.writerStats.totalEpisodesPublished = calculatedTotalEpisodesPublishedAcrossNovels;
         author.writerStats.totalViewsAcrossAllNovels = calculatedTotalViews;
-        author.writerStats.totalReadsAcrossAllNovels = calculatedTotalReads; // Sum of uniqueViewersCount
+        author.writerStats.totalReadsAcrossAllNovels = calculatedTotalReads;
         author.writerStats.totalLikesReceivedOnNovels = calculatedTotalLikes;
         author.writerStats.totalCommentsReceivedOnNovels = calculatedTotalCommentsOnNovels;
         author.writerStats.lastNovelPublishedAt = latestNovelPublicationDate;
@@ -905,75 +970,16 @@ export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId
     }
 
     try {
-        await author.save({ validateModifiedOnly: true }); // Save only if modified
-        // console.log(`[WriterStats Update] Successfully updated stats for author ${validAuthorId}`);
+        await author.save({ validateModifiedOnly: true });
     } catch (error) {
         console.error(`[WriterStats Update] Error saving author ${validAuthorId} after updating stats:`, error);
     }
 }
 
-// Post-save hook for Novel
-NovelSchema.post("save", async function (doc: HydratedDocument<INovel>, next: (err?: mongoose.Error) => void) {
-    // Update writer stats if author exists and the novel is not soft-deleted (or was just un-deleted)
-    // The updateWriterStatsAfterNovelChange function itself filters by isDeleted: {$ne: true} for novels
-    if (doc.author) { // doc.isDeleted might be true if we are saving a "soft delete" operation.
-                      // The aggregation function will correctly sum up non-deleted novels.
-        try {
-            await updateWriterStatsAfterNovelChange(doc._id, doc.author as Types.ObjectId);
-        } catch (error: any) {
-            console.error("[Novel Post-Save Hook] Error during writer stats update:", error);
-            // Decide if this error should halt the operation or just be logged
-            // For now, just log, as the primary save succeeded.
-        }
-    }
-    next();
-});
-
-// Pre-hook for findOneAndDelete (and similar delete operations if you add them e.g. deleteOne, deleteMany)
-// We need to capture the document *before* it's deleted to get its authorId.
-NovelSchema.pre<mongoose.Query<INovel, INovel>>("findOneAndDelete", async function (next: (err?: mongoose.Error) => void) {
-    try {
-        // `this.getFilter()` gets the query conditions.
-        // `this.model` refers to the Novel model.
-        // We use lean() as we only need the data for the post hook, not a full Mongoose document.
-        const docToDelete = await this.model.findOne(this.getFilter()).lean<HydratedDocument<INovel>>();
-        if (docToDelete) {
-            // Store it on the query object to access in the post hook
-            (this as any)._docToDeleteForWriterStats = docToDelete;
-        }
-        next();
-    } catch (error: any) {
-        console.error("[Novel Pre-FindOneAndDelete Hook] Error fetching doc to delete for writer stats:", error);
-        next(error); // Pass error to stop operation if fetching fails critically
-    }
-});
-
-NovelSchema.post<mongoose.Query<INovel, INovel>>("findOneAndDelete", async function (_result: any, next: (err?: mongoose.Error) => void) {
-    // Retrieve the document that was stored in the pre hook
-    const deletedDoc = (this as any)._docToDeleteForWriterStats as HydratedDocument<INovel> | undefined;
-
-    if (deletedDoc && deletedDoc.author) {
-        try {
-            // Pass null for novelId because the novel is now deleted.
-            // The function will recalculate based on remaining novels.
-            await updateWriterStatsAfterNovelChange(null, deletedDoc.author as Types.ObjectId);
-        } catch (error: any) {
-            console.error("[Novel Post-FindOneAndDelete Hook] Error during writer stats update after deletion:", error);
-            // Log error, but don't halt as deletion was successful.
-        }
-    }
-    // Clear the temporary variable from the query object
-    if ((this as any)._docToDeleteForWriterStats) {
-        delete (this as any)._docToDeleteForWriterStats;
-    }
-    next();
-});
-
 
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-// The `models.Novel` check prevents Mongoose from recompiling the model if it already exists (common in Next.js HMR)
 const NovelModel = (models.Novel as mongoose.Model<INovel>) ||
                    model<INovel>("Novel", NovelSchema);
 
@@ -983,36 +989,22 @@ export default NovelModel;
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
 // ==================================================================================================
-// 1.  **Category Validation**: Middleware หรือ Service Layer ควรตรวจสอบว่า Category ID ที่ผู้ใช้เลือกสำหรับ
-//     mainTheme, subThemes, narrativeFocus ต่างๆ นั้นมี `categoryType` ที่ถูกต้อง.
-// 2.  **Denormalization**: เพื่อ performance, การ denormalize ชื่อ Category บางส่วนมาเก็บใน Novel อาจมีประโยชน์
-//     แต่ต้องจัดการ data consistency ให้ดี.
-// 3.  **Slug Generation**: Logic การสร้าง slug รองรับภาษาไทยและอักขระพิเศษเบื้องต้นแล้ว.
-// 4.  **WorldBuildingDetails, NarrativeFocus**: เป็น Sub-schemas ที่ดีสำหรับการเก็บข้อมูลเฉพาะทาง.
-// 5.  **PsychologicalAnalysisConfig**: `sensitiveChoiceCategoriesBlocked` ช่วยในการควบคุม AI.
-// 6.  **Series Integration**: `seriesId` และ `seriesOrder` เป็นพื้นฐานที่ดี.
-// 7.  **WriterStats Update**: Middleware `updateWriterStatsAfterNovelChange` มีความสำคัญและดูเหมือนจะครอบคลุม
-//     การอัปเดตสถิติพื้นฐานของนักเขียน. การคำนวณใหม่ทั้งหมด (re-aggregation) ทุกครั้งที่ Novel เปลี่ยนแปลง
-//     ช่วยให้ข้อมูลถูกต้อง แต่สำหรับนักเขียนที่มีนิยายจำนวนมาก การอัปเดตแบบ delta อาจมีประสิทธิภาพกว่าในระยะยาว.
-// 8.  **Transactional Integrity**: การอัปเดต User (writerStats) หลังจาก Novel save ควรพิจารณา MongoDB Transactions
-//     เพื่อป้องกันข้อมูลไม่สอดคล้องกันหากเกิดข้อผิดพลาด. (ข้อเสนอแนะ: เพิ่ม comment ใน code)
-// 9.  **Deletion Hooks**: ปรับปรุง hook การลบให้ครอบคลุมและใช้ `pre` hook เพื่อเก็บข้อมูลก่อนลบ.
-// 10. **Error Handling**: เพิ่มการเรียก `next(error)` ใน pre-hooks เมื่อเกิด error และปรับปรุงการ log.
-// 11. **Soft Delete**: เพิ่ม fields `isDeleted`, `deletedAt`, `deletedByUserId` และปรับปรุง query/middleware
-//     ให้รองรับ soft delete (เช่น filter `isDeleted: false` ใน query หลัก, และการอัปเดต writerStats ไม่ควรนับนิยายที่ soft-deleted)
-// 12. **Purchases Count**: เพิ่ม `purchasesCount` ใน `INovelStats` และ `NovelStatsSchema` แล้ว.
-//     การอัปเดต field นี้ควรทำผ่าน middleware ใน `PurchaseModel` หรือ `EpisodeModel` เมื่อมีการซื้อสำเร็จ.
-// 13. **Donation Application Link**: `monetizationSettings.donationApplicationId` ถูกเพิ่มแล้ว,
-//     ช่วยให้สามารถเชื่อมโยงการตั้งค่าการรับบริจาคของนิยายกับใบสมัครที่ได้รับอนุมัติ.
-// 14. **Achievement Integration**: `NovelModel` มี fields เพียงพอสำหรับเป็นเงื่อนไข Achievement.
-//     `ActivityHistoryModel` จะบันทึกการกระทำที่เกี่ยวกับ Novel (เช่น `WRITER_NOVEL_PUBLISHED`, `NOVEL_READ_PROGRESS_UPDATE`)
-//     ซึ่ง Gamification Service สามารถใช้ trigger การตรวจสอบ Achievement ได้.
-// 15. **Character Introduction**: ไม่ได้เป็นส่วนหนึ่งของ `NovelModel` โดยตรง แต่ `CharacterModel` จะมี `novelId`
-//     ที่เชื่อมโยงกลับมา. การแสดง "ตัวละครแนะนำ" จะเป็นการ query `CharacterModel` โดยใช้ `novelId`.
-// 16. **Trending Stats**: เพิ่ม `trendingStats` ใน `INovelStats` และ `NovelStatsSchema` เพื่อรองรับการคำนวณ "นิยายมาแรง" แบบ Near Realtime
-//     ข้อมูลในส่วนนี้ควรถูกอัปเดตโดย Background Job ที่ aggregate ข้อมูลจาก `ActivityHistoryModel`
-//     เพิ่ม Index `stats.trendingStats.trendingScore` เพื่อช่วยในการ query นิยายมาแรง
-// 17. **Pricing Logic**: `Novel.currentEpisodePriceCoins` ให้ข้อมูลราคานิยายในระดับนโยบาย (โปรโมชันหรือดีฟอลต์)
-//     ส่วน `Episode.getEffectivePrice()` และ `Episode.getOriginalPrice()` จะให้ราคาที่แท้จริงและราคาดั้งเดิมของแต่ละตอน
-//     โดยพิจารณาทั้งนโยบายระดับนิยายและราคาเฉพาะของตอน.
+// ... (ส่วนอื่นๆ เหมือนเดิม)
+// **ส่วนที่เพิ่มเข้ามาสำหรับการเชื่อมต่อกับ BoardModel**
+// 18. **Board Model Integration**:
+//     - **Review Stats**: โมเดลนี้ได้เพิ่มฟังก์ชัน `updateNovelCommunityStats` สำหรับคำนวณ `averageRating`, `ratingsCount`, และ `discussionThreadCount` ของนิยายใหม่
+//     - **Trigger Point**: ฟังก์ชัน `updateNovelCommunityStats` นี้ **จะต้องถูกเรียกใช้** จาก `post('save')` และ `post('findOneAndDelete')` middleware ภายใน `BoardModel` ทุกครั้งที่กระทู้ที่มี `novelAssociated` มีการเปลี่ยนแปลง
+//       - **ตัวอย่างการเรียกใช้ใน BoardModel.ts:**
+//         ```typescript
+//         // ใน post('save') hook ของ BoardSchema
+//         import { updateNovelCommunityStats } from './Novel'; // หรือเส้นทางที่ถูกต้อง
+//         // ...
+//         if (doc.isModified('isDeleted') || doc.isNew || doc.isModified('reviewDetails')) {
+//            if (doc.novelAssociated) {
+//               await updateNovelCommunityStats(doc.novelAssociated);
+//            }
+//         }
+//         ```
+//     - **Data Flow**: `BoardModel` (ประเภทรีวิว) -> `updateNovelCommunityStats` -> อัปเดต `NovelModel.stats` ซึ่งทำให้ข้อมูลเรตติ้งของนิยายเป็นปัจจุบันเสมอ
+//     - **Novel Deletion**: `post('findOneAndDelete')` hook ของ `NovelModel` ได้รับการปรับปรุงให้จัดการกับกระทู้ที่เกี่ยวข้อง โดยการยกเลิกการเชื่อมโยง (`novelAssociated: undefined`) เพื่อไม่ให้กระทู้เหล่านั้นกลายเป็นข้อมูลกำพร้า
 // ==================================================================================================

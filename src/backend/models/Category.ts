@@ -3,6 +3,7 @@
 // จัดการหมวดหมู่ต่างๆ ในระบบ เช่น ประเภทนิยาย, แท็ก, ธีม, กลุ่มเป้าหมายผู้อ่าน, คำเตือนเนื้อหา, Fandoms ฯลฯ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
+import BoardModel from "./Board"; // **เพิ่มเข้ามา:** import BoardModel เพื่อใช้ในการอัปเดตข้อมูลที่เกี่ยวข้อง
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Category
@@ -107,6 +108,7 @@ const CategoryLocalizationSchema = new Schema<ICategoryLocalization>(
  */
 export interface ICategoryUsageStats {
   novelCount: number; // จำนวนนิยายที่ใช้หมวดหมู่นี้
+  boardCount: number; // **เพิ่มเข้ามา:** จำนวนกระทู้ที่ใช้หมวดหมู่นี้
   viewCount: number; // จำนวนการเข้าชมหน้าหมวดหมู่นี้
   searchCount: number; // จำนวนครั้งที่หมวดหมู่นี้ถูกค้นหา
   lastUpdated: Date; // วันที่อัปเดตสถิติล่าสุด
@@ -114,6 +116,7 @@ export interface ICategoryUsageStats {
 const CategoryUsageStatsSchema = new Schema<ICategoryUsageStats>(
   {
     novelCount: { type: Number, default: 0, min: 0 },
+    boardCount: { type: Number, default: 0, min: 0 }, // **เพิ่มเข้ามา:**
     viewCount: { type: Number, default: 0, min: 0 },
     searchCount: { type: Number, default: 0, min: 0 },
     lastUpdated: { type: Date, default: Date.now },
@@ -219,7 +222,7 @@ const CategorySchema = new Schema<ICategory>(
     isPromoted: { type: Boolean, default: false, index: true },
     promotionStartDate: { type: Date },
     promotionEndDate: { type: Date },
-    usageStats: { type: CategoryUsageStatsSchema, default: () => ({ novelCount: 0, viewCount: 0, searchCount: 0, lastUpdated: new Date() }) },
+    usageStats: { type: CategoryUsageStatsSchema, default: () => ({ novelCount: 0, boardCount: 0, viewCount: 0, searchCount: 0, lastUpdated: new Date() }) }, // **อัปเดต default value**
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
     lastModifiedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
 
@@ -387,8 +390,17 @@ CategorySchema.post<mongoose.Query<ICategory, ICategory>>("findOneAndDelete", as
                 { relatedCategories: deletedDoc._id },
                 { $pull: { relatedCategories: deletedDoc._id } }
             );
+            
+            // 3. **อัปเดต Board ที่ใช้หมวดหมู่นี้** (เพิ่มเข้ามา)
+            // ค้นหากระทู้ทั้งหมดที่ใช้ categoryAssociated เป็น ID ของหมวดหมู่ที่ถูกลบ
+            // แล้วตั้งค่า categoryAssociated เป็น null หรือย้ายไปยังหมวดหมู่ "ทั่วไป" (ถ้ามี)
+            // ในที่นี้จะตั้งเป็น null เพื่อให้ผู้ดูแลระบบตัดสินใจต่อไป
+            await BoardModel.updateMany(
+                { categoryAssociated: deletedDoc._id },
+                { $set: { categoryAssociated: null } }
+            );
 
-            // 3. อัปเดต Novel ที่ใช้หมวดหมู่นี้ (ลบออกจาก array ต่างๆ ใน themeAssignment)
+            // 4. อัปเดต Novel ที่ใช้หมวดหมู่นี้ (ลบออกจาก array ต่างๆ ใน themeAssignment)
             // ต้องระบุ path ของ array ที่ต้องการ $pull ให้ถูกต้อง
             const pullOperations: any = {};
             pullOperations['themeAssignment.mainTheme.categoryId'] = deletedDoc._id; // อันนี้อาจจะต้อง handle ต่างหากถ้า mainTheme ถูกลบ
@@ -445,13 +457,13 @@ export default CategoryModel;
 // ==================================================================================================
 // 1.  **Hierarchical Categories**: ระบบหมวดหมู่แบบลำดับชั้น (`parentCategoryId`) มีความยืดหยุ่นสูง
 // 2.  **Localization**: `localizations` ช่วยรองรับหลายภาษา ควรมี UI ที่ดีในการจัดการ
-// 3.  **Usage Statistics**: `usageStats` ควรมี cron job หรือ trigger เพื่ออัปเดตข้อมูลเป็นระยะ
+// 3.  **Usage Statistics**: `usageStats` ควรมี cron job หรือ trigger เพื่ออัปเดตข้อมูลเป็นระยะ (รวมถึง `boardCount`)
 // 4.  **Promotion System**: `isPromoted` และวันที่เกี่ยวข้อง ควรมีระบบจัดการเบื้องหลัง
 // 5.  **SEO Optimization**: ควรมีการนำฟิลด์ SEO ไปใช้งานจริงในการสร้าง sitemap และ meta tags
 // 6.  **Flexibility vs Complexity**: การเพิ่ม CategoryType จำนวนมากช่วยให้ละเอียด แต่ต้องสมดุลกับความง่ายในการใช้งานของนักเขียน
 //     อาจมี UI ที่ชาญฉลาดช่วยแนะนำหรือจัดกลุ่ม CategoryType ที่เกี่ยวข้องกัน
-// 7.  **Data Integrity in Deletion**: Middleware `post('findOneAndDelete')` พยายามจัดการการอ้างอิง แต่ในเคสที่ซับซ้อนมากๆ
-//     การใช้ transaction หรือการจัดการใน service layer อาจจะปลอดภัยกว่า
+// 7.  **Data Integrity in Deletion**: Middleware `post('findOneAndDelete')` พยายามจัดการการอ้างอิงข้อมูลที่เกี่ยวข้องทั้งใน Novel และ Board
+//     การตั้งค่า ID ที่เกี่ยวข้องเป็น null เป็นวิธีที่ปลอดภัยวิธีหนึ่ง ซึ่งอาจต้องมีการกำหนดหมวดหมู่เริ่มต้น (default) เพื่อย้ายข้อมูลไปแทน
 // 8.  **Slug Uniqueness**: การสร้าง slug ให้ unique ภายใน `categoryType` เดียวกัน เป็นสิ่งสำคัญ
 // 9.  **MongoDB Versioning**: โค้ดนี้พยายามใช้ Mongoose features ที่เข้ากันได้กับ MongoDB version ใหม่ๆ (ต้นปี 2025)
 //     เช่น text index options, virtual populate, และการจัดการ subdocuments

@@ -1,691 +1,597 @@
 // src/backend/models/Notification.ts
 // โมเดลการแจ้งเตือน (Notification Model)
 // จัดการการแจ้งเตือนต่างๆ ที่ส่งไปยังผู้ใช้, รองรับหลายช่องทาง, และสามารถปรับแต่งได้
-// อัปเดตล่าสุด: ปรับปรุง NotificationType และ Context สำหรับ Gamification ให้ครอบคลุมยิ่งขึ้น, เพิ่ม Severity โดยอิงจาก Type
+// อัปเดตล่าสุด: เพิ่มการรองรับการแจ้งเตือนจากระบบกระทู้ (Board), การรีวิว, และการกระทำของ Moderator
 
-import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import { IUser } from "./User"; // สำหรับ recipient และ sourceUserId (อ้างอิง User.ts ที่อัปเดตแล้ว)
+import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
+import { IUser } from "./User"; // สำหรับ recipientId และ sourceUserId
 import { INovel } from "./Novel"; // สำหรับ novelId
 import { IEpisode } from "./Episode"; // สำหรับ episodeId
 import { IComment } from "./Comment"; // สำหรับ commentId
-import { IAchievement } from "./Achievement"; // สำหรับ achievementId (อ้างอิง Achievement.ts ต้นแบบ)
-import { IBadge } from "./Badge"; // สำหรับ badgeId (อ้างอิง Badge.ts ต้นแบบ)
+import { IAchievement } from "./Achievement"; // สำหรับ achievementId
+import { IBadge } from "./Badge"; // สำหรับ badgeId
 import { IPurchase } from "./Purchase"; // สำหรับ purchaseId
-// UserAchievement ไม่จำเป็นต้อง import โดยตรง แต่ INotificationContext.userEarnedItemId จะอ้างอิงถึง _id ของ UserEarnedItem ในนั้น
+import { IBoard } from "./Board"; // **ใหม่**: Import IBoard เพื่อเชื่อมโยงข้อมูลกระทู้
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Notification
 // ==================================================================================================
 
 /**
- * @enum {string} NotificationType
- * @description ประเภทของการแจ้งเตือน (สามารถขยายเพิ่มเติมได้ตามความต้องการของ DivWy)
- * SOCIAL: เกี่ยวกับกิจกรรมทางสังคม
- * CONTENT: เกี่ยวกับเนื้อหา (นิยาย, ตอน, ความคิดเห็น)
- * GAMIFICATION: เกี่ยวกับความสำเร็จ รางวัล เควส และ Leaderboards
- * SYSTEM: เกี่ยวกับระบบและบัญชีผู้ใช้
- * MONETIZATION: เกี่ยวกับการเงินและการซื้อขาย
- * PROMOTION: เกี่ยวกับโปรโมชั่นและข่าวสาร
- */
-export enum NotificationType {
-  // Social & Community
-  NEW_FOLLOWER = "social.new_follower", // มีผู้ติดตามใหม่
-  USER_MENTION = "social.user_mention", // ถูกกล่าวถึง
-
-  // Content Interaction
-  REPLY_TO_COMMENT = "content.reply_to_comment", // มีการตอบกลับความคิดเห็นของคุณ
-  COMMENT_ON_NOVEL = "content.comment_on_novel", // มีความคิดเห็นใหม่ในนิยายของคุณ
-  COMMENT_ON_EPISODE = "content.comment_on_episode", // มีความคิดเห็นใหม่ในตอนของคุณ
-  LIKE_ON_COMMENT = "content.like_on_comment", // มีคนถูกใจความคิดเห็นของคุณ
-  LIKE_ON_NOVEL = "content.like_on_novel", // มีคนถูกใจนิยายของคุณ
-  LIKE_ON_EPISODE = "content.like_on_episode", // มีคนถูกใจตอนของคุณ
-
-  // Novel Updates
-  NEW_EPISODE_RELEASE = "content.new_episode_release", // ตอนใหม่ของนิยายที่คุณติดตามถูกเผยแพร่
-  NOVEL_UPDATE_ANNOUNCEMENT = "content.novel_update_announcement", // ประกาศอัปเดตจากผู้เขียนนิยาย
-  FOLLOWED_AUTHOR_NEW_NOVEL = "content.followed_author_new_novel", // นักเขียนที่คุณติดตามเผยแพร่นิยายเรื่องใหม่
-
-  // Gamification (Achievements & Rewards)
-  ACHIEVEMENT_UNLOCKED = "gamification.achievement_unlocked", // ปลดล็อก Achievement ใหม่
-  BADGE_AWARDED = "gamification.badge_awarded", // ได้รับ Badge ใหม่
-  LEVEL_UP = "gamification.level_up", // ระดับผู้ใช้เพิ่มขึ้น
-  REWARD_RECEIVED = "gamification.reward_received", // ได้รับรางวัล (XP, Coins จากแหล่งอื่นๆ)
-  DAILY_REWARD_AVAILABLE = "gamification.daily_reward_available", // รางวัลรายวันพร้อมให้รับ
-
-  // Gamification (Quests - สำหรับอนาคต)
-  QUEST_ASSIGNED = "gamification.quest_assigned", // ได้รับเควสใหม่
-  QUEST_COMPLETED = "gamification.quest_completed", // ทำเควสสำเร็จ
-  QUEST_PROGRESS_UPDATE = "gamification.quest_progress_update", // ความคืบหน้าเควส
-  QUEST_REWARD_CLAIMED = "gamification.quest_reward_claimed", // รับรางวัลจากเควสสำเร็จ
-
-  // Gamification (Leaderboards - สำหรับอนาคต)
-  LEADERBOARD_RANK_UP = "gamification.leaderboard_rank_up", // อันดับใน Leaderboard สูงขึ้น
-  LEADERBOARD_RANK_DOWN = "gamification.leaderboard_rank_down", // อันดับใน Leaderboard ลดลง
-  LEADERBOARD_NEW_CHALLENGER = "gamification.leaderboard_new_challenger", // มีผู้ท้าชิงใหม่ใน Leaderboard
-  LEADERBOARD_SEASON_START = "gamification.leaderboard_season_start", // เริ่มฤดูกาล Leaderboard ใหม่
-  LEADERBOARD_SEASON_END_RESULTS = "gamification.leaderboard_season_end_results", // สรุปผลและรางวัลสิ้นสุดฤดูกาล Leaderboard
-
-  // System & Account
-  PLATFORM_ANNOUNCEMENT = "system.platform_announcement", // ประกาศจากแพลตฟอร์ม
-  ACCOUNT_SECURITY_ALERT = "system.account_security_alert", // การแจ้งเตือนความปลอดภัยบัญชี
-  CONTENT_MODERATION_UPDATE = "system.content_moderation_update", // การอัปเดตสถานะการตรวจสอบเนื้อหา
-  TERMS_OF_SERVICE_UPDATE = "system.terms_of_service_update", // อัปเดตข้อกำหนดการให้บริการ
-  CONTENT_REPORT_STATUS_UPDATE = "system.content_report_status_update", // อัปเดตสถานะการรายงานเนื้อหา
-  CONTENT_POLICY_VIOLATION = "system.content_policy_violation", // การละเมิดนโยบายเนื้อหา
-
-  // Monetization & Support
-  DONATION_RECEIVED = "monetization.donation_received", // ได้รับการบริจาค
-  PURCHASE_COMPLETED = "monetization.purchase_completed", // การซื้อสำเร็จ
-  PAYMENT_SUCCEEDED = "monetization.payment_succeeded", // การชำระเงินสำเร็จ
-  PAYMENT_FAILED = "monetization.payment_failed", // การชำระเงินล้มเหลว
-  SUBSCRIPTION_UPDATE = "monetization.subscription_update", // อัปเดตสถานะการสมัครสมาชิก
-  EARNING_SUMMARY_READY = "monetization.earning_summary_ready", // สรุปรายได้พร้อมให้ตรวจสอบ
-
-  // Promotional & Engagement
-  FEATURE_HIGHLIGHT = "promotion.feature_highlight", // แนะนำฟีเจอร์ใหม่หรือน่าสนใจ
-  RECOMMENDED_NOVEL = "promotion.recommended_novel", // แนะนำนิยายที่อาจสนใจ
-  EVENT_REMINDER = "promotion.event_reminder", // การแจ้งเตือนกิจกรรม
-  SURVEY_INVITATION = "promotion.survey_invitation", // เชิญชวนทำแบบสำรวจ
-
-  OTHER = "other", // ประเภทอื่นๆ (ควรใช้ให้น้อยที่สุด)
-}
-
-/**
  * @enum {string} NotificationChannel
- * @description ช่องทางที่ส่งการแจ้งเตือน
- * - `IN_APP`: การแจ้งเตือนภายในแอปพลิเคชัน/เว็บไซต์ (Bell icon)
- * - `EMAIL`: การแจ้งเตือนผ่านอีเมล
- * - `PUSH_NOTIFICATION`: การแจ้งเตือนแบบ Push (Mobile/Web Push)
- * - `SMS`: การแจ้งเตือนผ่าน SMS (สำหรับกรณีสำคัญมาก)
+ * @description ช่องทางในการส่งการแจ้งเตือน
  */
 export enum NotificationChannel {
-  IN_APP = "in_app",
-  EMAIL = "email",
-  PUSH_NOTIFICATION = "push_notification",
-  SMS = "sms", // ใช้งานอย่างระมัดระวังเรื่องค่าใช้จ่ายและความถี่
+  IN_APP = "in-app", // การแจ้งเตือนภายในแอปพลิเคชัน (Bell Icon)
+  EMAIL = "email", // การแจ้งเตือนผ่านอีเมล
+  PUSH = "push", // Push Notification บนมือถือหรือเบราว์เซอร์
 }
 
 /**
- * @enum {string} NotificationPriority
- * @description ระดับความสำคัญของการแจ้งเตือน
- * - `LOW`: ต่ำ
- * - `MEDIUM`: ปานกลาง
- * - `HIGH`: สูง
- * - `CRITICAL`: วิกฤต (เช่น การแจ้งเตือนความปลอดภัย)
+ * @enum {string} NotificationStatus
+ * @description สถานะของการแจ้งเตือนแต่ละรายการสำหรับผู้ใช้
  */
-export enum NotificationPriority {
-  LOW = "low",
-  MEDIUM = "medium",
-  HIGH = "high",
-  CRITICAL = "critical",
+export enum NotificationStatus {
+  SENT = "sent",       // ส่งแล้ว แต่ยังไม่อ่าน
+  READ = "read",       // ผู้ใช้เปิดอ่านแล้ว
+  ARCHIVED = "archived", // ผู้ใช้เก็บเข้าคลัง
+  FAILED = "failed",     // การส่งล้มเหลว (เช่น อีเมลส่งไม่ออก)
 }
+
+/**
+ * @enum {string} NotificationType
+ * @description ประเภทของการแจ้งเตือน, ขยายเพิ่มเติมเพื่อรองรับระบบ Board และระบบอื่นๆ
+ */
+export enum NotificationType {
+    // --- Social & Community (เดิม) ---
+    NEW_FOLLOWER = "NEW_FOLLOWER",
+    COMMENT_REPLY = "COMMENT_REPLY", // ตอบกลับความคิดเห็นของคุณ (ในนิยาย, ตอน)
+    USER_MENTION = "USER_MENTION",   // มีคน @mention คุณในความคิดเห็นของเนื้อหาทั่วไป
+
+    // --- Content Related (เดิม) ---
+    NOVEL_NEW_EPISODE = "NOVEL_NEW_EPISODE", // นิยายที่คุณติดตามมีตอนใหม่
+    NOVEL_UPDATE = "NOVEL_UPDATE", // นิยายที่คุณติดตามมีการอัปเดตข้อมูลสำคัญ
+    NOVEL_COMPLETED = "NOVEL_COMPLETED", // นิยายที่คุณติดตามได้จบลงแล้ว
+
+    // --- Gamification (เดิม) ---
+    ACHIEVEMENT_UNLOCKED = "ACHIEVEMENT_UNLOCKED",
+    BADGE_EARNED = "BADGE_EARNED",
+    LEVEL_UP = "LEVEL_UP",
+    REWARD_GRANTED = "REWARD_GRANTED", // ได้รับรางวัลพิเศษ (เช่น ไอเทม, Coins)
+
+    // --- Monetization & Author (เดิม) ---
+    NEW_DONATION = "NEW_DONATION", // มีคนโดเนทให้คุณ
+    CONTENT_PURCHASED = "CONTENT_PURCHASED", // มีคนซื้อตอนนิยายของคุณ
+    PURCHASE_COMPLETED = "PURCHASE_COMPLETED", // การซื้อของคุณสำเร็จ (แจ้งเตือนผู้ซื้อ)
+    WRITER_APPLICATION_STATUS_CHANGE = "WRITER_APPLICATION_STATUS_CHANGE", // สถานะใบสมัครนักเขียนเปลี่ยนแปลง
+
+    // --- Account & System (เดิม) ---
+    WELCOME_MESSAGE = "WELCOME_MESSAGE",
+    SECURITY_ALERT = "SECURITY_ALERT", // เช่น การล็อกอินจากอุปกรณ์ใหม่
+    SYSTEM_ANNOUNCEMENT = "SYSTEM_ANNOUNCEMENT", // ประกาศจากระบบ
+
+    // ================================================================
+    // **ใหม่**: ประเภทการแจ้งเตือนที่เกี่ยวข้องกับระบบ Board/Community
+    // ================================================================
+
+    /** มีคนตอบกลับในกระทู้ที่คุณสร้าง หรือกระทู้ที่คุณติดตาม */
+    BOARD_NEW_REPLY = "BOARD_NEW_REPLY",
+
+    /** มีคน @mention คุณในกระทู้หรือในความคิดเห็นของกระทู้ */
+    BOARD_USER_MENTION = "BOARD_USER_MENTION",
+
+    /** ความคิดเห็นของคุณถูกเลือกให้เป็น "คำตอบที่ดีที่สุด" (Best Answer) */
+    BOARD_BEST_ANSWER = "BOARD_BEST_ANSWER",
+
+    /** กระทู้ของคุณถูกดำเนินการโดย Moderator (เช่น ล็อก, ซ่อน, ขอให้แก้ไข) */
+    BOARD_MODERATION_ACTION = "BOARD_MODERATION_ACTION",
+
+    /** นิยายของคุณได้รับการรีวิวใหม่ (จากกระทู้ประเภท Review) */
+    NOVEL_NEW_REVIEW = "NOVEL_NEW_REVIEW",
+}
+
 
 /**
  * @enum {string} NotificationSeverity
- * @description ระดับความรุนแรงของการแจ้งเตือน (ใช้สำหรับระบุผลกระทบหรือความเร่งด่วนของเหตุการณ์)
- * - `INFO`: ข้อมูลทั่วไป ไม่เร่งด่วน
- * - `WARNING`: คำเตือน ควรให้ความสนใจ
- * - `SUCCESS`: การดำเนินการสำเร็จ ผลลัพธ์เป็นบวก (เช่น ปลดล็อก Achievement)
- * - `ERROR`: ข้อผิดพลาดหรือปัญหาที่ต้องแก้ไขทันที
- * - `CRITICAL`: วิกฤตอย่างยิ่ง, ต้องการการดำเนินการทันที (อาจจะซ้อนกับ Priority)
+ * @description ระดับความสำคัญของการแจ้งเตือน เพื่อกำหนดการแสดงผล (เช่น สี, ไอคอน)
  */
 export enum NotificationSeverity {
-  INFO = "info",
-  WARNING = "warning",
-  SUCCESS = "success",
-  ERROR = "error",
-  CRITICAL = "critical", // เพิ่มเข้ามาเพื่อความชัดเจนยิ่งขึ้น
+  LOW = "low",       // ข้อมูลทั่วไป (เช่น Level up, ผู้ติดตามใหม่)
+  DEFAULT = "default", // ปกติ (เช่น ตอนใหม่, คอมเมนต์)
+  INFO = "info",      // ข้อมูลสำคัญ (เช่น ประกาศ, รีวิวใหม่)
+  SUCCESS = "success", // สำเร็จ (เช่น ได้รับรางวัล, ได้รับ Best Answer)
+  WARNING = "warning", // แจ้งเตือน (เช่น ขอให้แก้ไขกระทู้, กระทู้ถูกล็อก)
+  CRITICAL = "critical", // วิกฤต (เช่น Security Alert)
 }
 
-/**
- * @interface INotificationAction
- * @description การกระทำที่ผู้ใช้สามารถทำได้กับการแจ้งเตือน
- * @property {string} label - ข้อความที่แสดงบนปุ่มหรือลิงก์ (เช่น "ดูเลย", "ตอบกลับ")
- * @property {string} url - URL ที่จะนำผู้ใช้ไปเมื่อคลิก
- * @property {string} [actionType] - ประเภทของการกระทำ (เช่น "navigate", "api_call", "claim_reward")
- * @property {string} [icon] - (ใหม่) ไอคอนสำหรับ Action (ชื่อไอคอนจาก library หรือ URL)
- */
-export interface INotificationAction {
-  label: string;
-  url: string;
-  actionType?: string;
-  icon?: string;
-}
-const NotificationActionSchema = new Schema<INotificationAction>(
-  {
-    label: { type: String, required: true, trim: true, maxlength: [50, "ข้อความบนปุ่มต้องไม่เกิน 50 ตัวอักษร"] },
-    url: { type: String, required: true, trim: true, maxlength: [2048, "URL ของ Action ยาวเกินไป"] },
-    actionType: { type: String, trim: true, default: "navigate", maxlength: [50, "ประเภท Action ยาวเกินไป"] },
-    icon: {type: String, trim: true, maxlength: [100, "ชื่อ/URL ไอคอน Action ยาวเกินไป"]},
-  },
-  { _id: false }
-);
 
 /**
  * @interface INotificationContext
- * @description ข้อมูลเพิ่มเติมที่เกี่ยวข้องกับการแจ้งเตือน (Contextual Data)
- * ใช้สำหรับสร้างข้อความแจ้งเตือนแบบ Dynamic และสำหรับการเชื่อมโยงไปยังเนื้อหา
- * @property {Types.ObjectId | IUser} [sourceUserId] - ID ผู้ใช้ที่เป็นต้นเหตุ (เช่น คนที่ follow, comment)
- * @property {string} [sourceUsername] - (Denormalized) ชื่อผู้ใช้ต้นเหตุ
- * @property {string} [sourceUserAvatar] - (Denormalized) URL รูปโปรไฟล์ผู้ใช้ต้นเหตุ
- * @property {Types.ObjectId | INovel} [novelId] - ID นิยายที่เกี่ยวข้อง
- * @property {string} [novelTitle] - (Denormalized) ชื่อนิยาย
- * @property {Types.ObjectId | IEpisode} [episodeId] - ID ตอนที่เกี่ยวข้อง
- * @property {string} [episodeTitle] - (Denormalized) ชื่อตอน
- * @property {Types.ObjectId | IComment} [commentId] - ID ความคิดเห็นที่เกี่ยวข้อง
- * @property {string} [commentSnippet] - (Denormalized) ส่วนหนึ่งของความคิดเห็น
- * @property {Types.ObjectId | IAchievement} [achievementId] - ID ของ Achievement ต้นแบบที่ปลดล็อก
- * @property {string} [achievementCode] - (Denormalized) รหัสของ Achievement
- * @property {string} [achievementName] - (Denormalized) ชื่อ Achievement
- * @property {string} [achievementIconUrl] - (Denormalized, ใหม่) URL ไอคอนของ Achievement
- * @property {Types.ObjectId | IBadge} [badgeId] - ID ของ Badge ต้นแบบที่ได้รับ
- * @property {string} [badgeKey] - (Denormalized) Key ของ Badge
- * @property {string} [badgeName] - (Denormalized) ชื่อ Badge
- * @property {string} [badgeIconUrl] - (Denormalized, ใหม่) URL ไอคอนของ Badge
- * @property {Types.ObjectId} [userEarnedItemId] - ID ของ UserEarnedItem (ใน UserAchievement) ที่บันทึกการได้รับนี้
- * @property {number} [xpEarned] - จำนวน XP ที่ได้รับ
- * @property {number} [coinsEarned] - จำนวน Coins ที่ได้รับ
- * @property {string} [itemRewardType] - ประเภทของไอเท็มพิเศษที่ได้รับ (เช่น "PROFILE_FRAME", "EXCLUSIVE_CONTENT_ACCESS")
- * @property {string} [itemRewardName] - ชื่อของไอเท็มพิเศษที่ได้รับ
- * @property {string} [itemRewardIconUrl] - (ใหม่) URL ไอคอนของไอเท็มพิเศษที่ได้รับ
- * @property {number} [newLevel] - เลเวลใหม่ที่ผู้ใช้ขึ้นถึง (สำหรับ NotificationType.LEVEL_UP)
- * @property {string} [levelTitle] - (Denormalized, ใหม่) ชื่อ/ฉายาของเลเวลใหม่
- * @property {string} [questId] - (ใหม่) ID ของเควส
- * @property {string} [questName] - (ใหม่) ชื่อเควส
- * @property {string} [questObjective] - (ใหม่, Denormalized) เป้าหมายของเควส (สั้นๆ)
- * @property {string} [leaderboardId] - (ใหม่) ID ของ Leaderboard
- * @property {string} [leaderboardName] - (ใหม่) ชื่อ Leaderboard
- * @property {number} [rankAchieved] - (ใหม่) อันดับที่ได้ใน Leaderboard
- * @property {number} [previousRank] - (ใหม่) อันดับก่อนหน้าใน Leaderboard
- * @property {Types.ObjectId | IPurchase} [purchaseId] - ID การซื้อที่เกี่ยวข้อง
- * @property {string} [moderationAction] - (ใหม่) การดำเนินการของ Moderator (เช่น "comment_removed", "warning_issued")
- * @property {string} [reportedContentSnippet] - (ใหม่) ส่วนหนึ่งของเนื้อหาที่ถูกรายงาน (ถ้าเกี่ยวข้อง)
- * @property {any} [customData] - ข้อมูลอื่นๆ ที่อาจจำเป็นตามประเภทการแจ้งเตือน
+ * @description ข้อมูลเพิ่มเติมที่เกี่ยวข้องกับการแจ้งเตือนแต่ละประเภท เพื่อใช้สร้างข้อความและลิงก์
  */
 export interface INotificationContext {
-  sourceUserId?: Types.ObjectId | IUser;
-  sourceUsername?: string;
-  sourceUserAvatar?: string;
-  novelId?: Types.ObjectId | INovel;
-  novelTitle?: string;
-  episodeId?: Types.ObjectId | IEpisode;
-  episodeTitle?: string;
-  commentId?: Types.ObjectId | IComment;
-  commentSnippet?: string;
-  achievementId?: Types.ObjectId | IAchievement;
-  achievementCode?: string;
-  achievementName?: string;
-  achievementIconUrl?: string;
-  badgeId?: Types.ObjectId | IBadge;
-  badgeKey?: string;
-  badgeName?: string;
-  badgeIconUrl?: string;
-  userEarnedItemId?: Types.ObjectId; // สำคัญ: ID ของ UserEarnedItem จาก UserAchievement.ts
-  xpEarned?: number;
-  coinsEarned?: number;
-  itemRewardType?: string;
-  itemRewardName?: string;
-  itemRewardIconUrl?: string;
-  newLevel?: number;
-  levelTitle?: string;
-  questId?: string;
-  questName?: string;
-  questObjective?: string;
-  leaderboardId?: string;
-  leaderboardName?: string;
-  rankAchieved?: number;
-  previousRank?: number;
-  purchaseId?: Types.ObjectId | IPurchase;
-  moderationAction?: string;
-  reportedContentSnippet?: string;
-  customData?: any;
+    // === Context Fields เดิม ===
+    sourceUserId?: string;
+    sourceUsername?: string; // (Denormalized)
+    novelId?: string;
+    novelTitle?: string; // (Denormalized)
+    episodeId?: string;
+    episodeTitle?: string; // (Denormalized)
+    commentId?: string;
+    commentSnippet?: string; // (Denormalized)
+    achievementId?: string;
+    achievementName?: string; // (Denormalized)
+    badgeId?: string;
+    badgeName?: string; // (Denormalized)
+    level?: number;
+    purchaseId?: string;
+    purchaseReadableId?: string; // (Denormalized)
+    // ... และ fields เดิมอื่นๆ ที่อาจมี
+
+    // ================================================================
+    // **ใหม่**: Context Fields สำหรับการแจ้งเตือนของ Board
+    // ================================================================
+    boardId?: string;
+    boardTitle?: string; // (Denormalized) หัวข้อกระทู้
+    boardSlug?: string; // (Denormalized) Slug สำหรับสร้าง URL
+
+    /**
+     * @description การกระทำของ Moderator ที่เกิดขึ้นกับกระทู้
+     * ใช้ร่วมกับ NotificationType.BOARD_MODERATION_ACTION
+     */
+    moderationAction?: 'LOCKED' | 'HIDDEN' | 'ACTION_REQUIRED' | 'UNLOCKED' | 'RESTORED' | 'DELETED';
+    moderationReason?: string; // เหตุผลที่ Moderator ระบุ
 }
 
-const NotificationContextSchema = new Schema<INotificationContext>(
-  {
-    sourceUserId: { type: Schema.Types.ObjectId, ref: "User" },
-    sourceUsername: { type: String, trim: true, maxlength: [100, "ชื่อผู้ใช้ต้นเหตุยาวเกินไป"] },
-    sourceUserAvatar: { type: String, trim: true, maxlength: [2048, "URL รูป Avatar ยาวเกินไป"] },
-    novelId: { type: Schema.Types.ObjectId, ref: "Novel" },
-    novelTitle: { type: String, trim: true, maxlength: [255, "ชื่อนิยายยาวเกินไป"] },
-    episodeId: { type: Schema.Types.ObjectId, ref: "Episode" },
-    episodeTitle: { type: String, trim: true, maxlength: [255, "ชื่อตอนยาวเกินไป"] },
-    commentId: { type: Schema.Types.ObjectId, ref: "Comment" },
-    commentSnippet: { type: String, trim: true, maxlength: [150, "ส่วนของความคิดเห็นยาวเกินไป"] },
-    achievementId: { type: Schema.Types.ObjectId, ref: "Achievement", comment: "ID ของ Achievement ต้นแบบ" },
-    achievementCode: { type: String, trim: true, maxlength: [100, "รหัส Achievement ยาวเกินไป"] },
-    achievementName: { type: String, trim: true, maxlength: [200, "ชื่อ Achievement ยาวเกินไป"] },
-    achievementIconUrl: { type: String, trim: true, maxlength: [2048, "URL ไอคอน Achievement ยาวเกินไป"]},
-    badgeId: { type: Schema.Types.ObjectId, ref: "Badge", comment: "ID ของ Badge ต้นแบบ" },
-    badgeKey: { type: String, trim: true, maxlength: [100, "Key ของ Badge ยาวเกินไป"] },
-    badgeName: { type: String, trim: true, maxlength: [150, "ชื่อ Badge ยาวเกินไป"] },
-    badgeIconUrl: { type: String, trim: true, maxlength: [2048, "URL ไอคอน Badge ยาวเกินไป"]},
-    userEarnedItemId: { type: Schema.Types.ObjectId, comment: "ID ของ UserEarnedItem ใน UserAchievement" },
-    xpEarned: { type: Number, min: 0 },
-    coinsEarned: { type: Number, min: 0 },
-    itemRewardType: { type: String, trim: true, maxlength: [100, "ประเภท Item Reward ยาวเกินไป"] },
-    itemRewardName: { type: String, trim: true, maxlength: [150, "ชื่อ Item Reward ยาวเกินไป"] },
-    itemRewardIconUrl: { type: String, trim: true, maxlength: [2048, "URL ไอคอน Item Reward ยาวเกินไป"]},
-    newLevel: { type: Number, min: 1 },
-    levelTitle: { type: String, trim: true, maxlength: [100, "ชื่อ/ฉายา Level ยาวเกินไป"]},
-    questId: { type: String, trim: true, maxlength: [100, "ID ของ Quest ยาวเกินไป"]},
-    questName: { type: String, trim: true, maxlength: [200, "ชื่อ Quest ยาวเกินไป"] },
-    questObjective: { type: String, trim: true, maxlength: [255, "เป้าหมาย Quest ยาวเกินไป"] },
-    leaderboardId: { type: String, trim: true, maxlength: [100, "ID ของ Leaderboard ยาวเกินไป"]},
-    leaderboardName: { type: String, trim: true, maxlength: [150, "ชื่อ Leaderboard ยาวเกินไป"] },
-    rankAchieved: { type: Number, min: 1 },
-    previousRank: { type: Number, min: 0 }, // 0 อาจหมายถึงยังไม่เคยมีอันดับ
-    purchaseId: { type: Schema.Types.ObjectId, ref: "Purchase" },
-    moderationAction: { type: String, trim: true, maxlength: [100, "Moderation Action ยาวเกินไป"]},
-    reportedContentSnippet: { type: String, trim: true, maxlength: [200, "ส่วนเนื้อหาที่ถูกรายงานยาวเกินไป"]},
-    customData: { type: Schema.Types.Mixed },
-  },
-  { _id: false }
-);
 
 // ==================================================================================================
 // SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Notification (INotification Document Interface)
 // ==================================================================================================
 
-/**
- * @interface INotification
- * @extends Document (Mongoose Document)
- * @description อินเทอร์เฟซหลักสำหรับเอกสารการแจ้งเตือนใน Collection "notifications"
- * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร
- * @property {Types.ObjectId | IUser} recipientId - ID ของผู้ใช้ที่รับการแจ้งเตือน (**จำเป็น**, อ้างอิง User model)
- * @property {NotificationType} type - ประเภทของการแจ้งเตือน (**จำเป็น**)
- * @property {NotificationSeverity} severity - ระดับความรุนแรงของการแจ้งเตือน (default: INFO, หรือ SUCCESS สำหรับ gamification)
- * @property {string} title - หัวข้อการแจ้งเตือน (อาจจะ generate หรือกำหนดเอง, **จำเป็น**)
- * @property {string} message - เนื้อหาหลักของการแจ้งเตือน (ควรสั้นกระชับ, **จำเป็น**)
- * @property {string} [iconUrl] - URL ไอคอนสำหรับการแจ้งเตือน (อาจเป็น default ตาม type หรือ custom)
- * @property {INotificationContext} context - ข้อมูลเพิ่มเติมที่เกี่ยวข้อง (**จำเป็น**)
- * @property {Types.DocumentArray<INotificationAction>} [actions] - รายการการกระทำที่ผู้ใช้สามารถทำได้ (เช่น ปุ่ม "ดูเลย")
- * @property {string} [primaryActionUrl] - URL หลักที่จะนำผู้ใช้ไปเมื่อคลิกการแจ้งเตือน (ถ้าไม่มี actions หรือเป็น default action)
- * @property {boolean} isRead - สถานะการอ่าน (true = อ่านแล้ว, false = ยังไม่อ่าน, **จำเป็น**)
- * @property {Date} [readAt] - วันที่อ่านการแจ้งเตือน
- * @property {boolean} isArchived - สถานะการจัดเก็บ (true = เก็บแล้ว, false = ยังไม่เก็บ)
- * @property {Date} [archivedAt] - วันที่จัดเก็บการแจ้งเตือน
- * @property {NotificationChannel[]} channels - ช่องทางที่ส่งการแจ้งเตือนนี้ (**จำเป็น**)
- * @property {NotificationPriority} priority - ระดับความสำคัญของการแจ้งเตือน (**จำเป็น**)
- * @property {Date} [expiresAt] - วันหมดอายุของการแจ้งเตือน (ถ้ามี, เช่น โปรโมชั่น)
- * @property {string} [correlationId] - ID สำหรับเชื่อมโยงการแจ้งเตือนที่เกี่ยวข้อง (เช่น การแจ้งเตือนหลายขั้นตอน)
- * @property {number} schemaVersion - เวอร์ชันของ schema
- * @property {Date} createdAt - วันที่สร้างการแจ้งเตือน (Mongoose `timestamps`)
- * @property {Date} updatedAt - วันที่อัปเดตล่าสุด (Mongoose `timestamps`)
- */
 export interface INotification extends Document {
   _id: Types.ObjectId;
-  recipientId: Types.ObjectId | IUser; // ID ผู้รับ
-  type: NotificationType; // ประเภทการแจ้งเตือน
-  severity: NotificationSeverity; // ระดับความรุนแรง
-  title: string; // หัวข้อ
-  message: string; // เนื้อหา
-  iconUrl?: string; // URL ไอคอน
-  context: INotificationContext; // ข้อมูลบริบท
-  actions?: Types.DocumentArray<INotificationAction>; // การกระทำที่เป็นไปได้
-  primaryActionUrl?: string; // URL หลักเมื่อคลิก
-  isRead: boolean; // อ่านแล้วหรือยัง
-  readAt?: Date; // วันที่อ่าน
-  isArchived: boolean; // เก็บเข้าคลังแล้วหรือยัง
+  recipientId: Types.ObjectId | IUser; // ผู้รับการแจ้งเตือน
+  type: NotificationType;
+  channels: NotificationChannel[]; // ช่องทางที่จะส่ง
+  status: Map<NotificationChannel, NotificationStatus>; // สถานะการส่งในแต่ละช่องทาง
+  readAt?: Date; // วันที่อ่าน (สำหรับ In-App)
   archivedAt?: Date; // วันที่เก็บเข้าคลัง
-  channels: NotificationChannel[]; // ช่องทางที่ส่ง
-  priority: NotificationPriority; // ระดับความสำคัญ
-  expiresAt?: Date; // วันหมดอายุ (ถ้ามี)
-  correlationId?: string; // ID เชื่อมโยง
-  schemaVersion: number; // เวอร์ชัน Schema
-  createdAt: Date; // วันที่สร้าง (Mongoose)
-  updatedAt: Date; // วันที่อัปเดต (Mongoose)
+
+  // -- Content --
+  message: string; // ข้อความที่สร้างขึ้นและพร้อมแสดงผล (อาจเป็นภาษาของผู้รับ)
+  messageKey?: string; // Key สำหรับ i18n (optional)
+  title?: string; // หัวข้อ (สำหรับ Email/Push)
+  ctaUrl: string; // Call-to-Action URL เมื่อคลิกการแจ้งเตือน
+  iconUrl?: string; // URL ของไอคอน (อาจเป็นรูปโปรไฟล์ผู้ส่ง หรือไอคอนตามประเภท)
+  severity: NotificationSeverity;
+
+  // -- Context --
+  context: INotificationContext;
+
+  // -- Timestamps & Expiry --
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt?: Date; // วันหมดอายุของการแจ้งเตือน (ถ้ามี)
+
+  // -- Schema Version --
+  schemaVersion: number;
 }
+
 
 // ==================================================================================================
 // SECTION: Schema หลักสำหรับ Notification (NotificationSchema)
 // ==================================================================================================
-const NotificationSchema = new Schema<INotification>(
-  {
-    recipientId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "กรุณาระบุ ID ผู้รับการแจ้งเตือน (Recipient ID is required)"],
-      index: true,
+
+const NotificationSchema = new Schema<INotification>({
+    recipientId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    type: { type: String, enum: Object.values(NotificationType), required: true, index: true },
+    channels: [{ type: String, enum: Object.values(NotificationChannel), required: true }],
+    status: {
+        type: Map,
+        of: { type: String, enum: Object.values(NotificationStatus) },
+        default: () => new Map([[NotificationChannel.IN_APP, NotificationStatus.SENT]]),
     },
-    type: {
-      type: String,
-      enum: Object.values(NotificationType),
-      required: [true, "กรุณาระบุประเภทการแจ้งเตือน (Notification type is required)"],
-      index: true,
-    },
-    severity: { // Default severity กำหนดโดยอิงตาม type
-      type: String,
-      enum: Object.values(NotificationSeverity),
-      default: function(this: INotification) {
-          switch (this.type) {
-            case NotificationType.ACHIEVEMENT_UNLOCKED:
-            case NotificationType.BADGE_AWARDED:
-            case NotificationType.LEVEL_UP:
-            case NotificationType.REWARD_RECEIVED:
-            case NotificationType.QUEST_COMPLETED:
-            case NotificationType.QUEST_REWARD_CLAIMED:
-            case NotificationType.LEADERBOARD_SEASON_END_RESULTS:
-            case NotificationType.PAYMENT_SUCCEEDED:
-            case NotificationType.PURCHASE_COMPLETED:
-            case NotificationType.DONATION_RECEIVED:
-              return NotificationSeverity.SUCCESS;
-            case NotificationType.ACCOUNT_SECURITY_ALERT:
-            case NotificationType.CONTENT_POLICY_VIOLATION:
-            case NotificationType.TERMS_OF_SERVICE_UPDATE: // อาจจะเป็น WARNING หรือ INFO
-              return NotificationSeverity.WARNING;
-            case NotificationType.PAYMENT_FAILED:
-              return NotificationSeverity.ERROR;
-            // กรณีอื่นๆ สามารถเพิ่มได้ตามความเหมาะสม
-            default:
-              return NotificationSeverity.INFO;
-          }
-      }
-    },
-    title: {
-      type: String,
-      required: [true, "กรุณาระบุหัวข้อการแจ้งเตือน (Title is required)"],
-      trim: true,
-      maxlength: [150, "หัวข้อการแจ้งเตือนต้องไม่เกิน 150 ตัวอักษร"],
-    },
-    message: {
-      type: String,
-      required: [true, "กรุณาระบุเนื้อหาการแจ้งเตือน (Message is required)"],
-      trim: true,
-      maxlength: [500, "เนื้อหาการแจ้งเตือนต้องไม่เกิน 500 ตัวอักษร"],
-    },
-    iconUrl: { type: String, trim: true, maxlength: [2048, "URL ไอคอนยาวเกินไป"] },
+    readAt: { type: Date },
+    archivedAt: { type: Date },
+    message: { type: String, required: true, trim: true, maxlength: 500 },
+    messageKey: { type: String, trim: true, maxlength: 100 },
+    title: { type: String, trim: true, maxlength: 150 },
+    ctaUrl: { type: String, required: true, trim: true, maxlength: 2048 },
+    iconUrl: { type: String, trim: true, maxlength: 2048 },
+    severity: { type: String, enum: Object.values(NotificationSeverity), default: NotificationSeverity.DEFAULT },
     context: {
-      type: NotificationContextSchema,
-      required: [true, "กรุณาระบุข้อมูลบริบท (Context is required)"],
-      default: () => ({}) // Default เป็น object ว่าง
+        // === Context Fields เดิม ===
+        sourceUserId: { type: String },
+        sourceUsername: { type: String },
+        novelId: { type: String },
+        novelTitle: { type: String },
+        episodeId: { type: String },
+        episodeTitle: { type: String },
+        commentId: { type: String },
+        commentSnippet: { type: String },
+        achievementId: { type: String },
+        achievementName: { type: String },
+        badgeId: { type: String },
+        badgeName: { type: String },
+        level: { type: Number },
+        purchaseId: { type: String },
+        purchaseReadableId: { type: String },
+
+        // **ใหม่**: เพิ่มฟิลด์สำหรับ Board Context
+        boardId: { type: String },
+        boardTitle: { type: String },
+        boardSlug: { type: String },
+        moderationAction: { type: String, enum: ['LOCKED', 'HIDDEN', 'ACTION_REQUIRED', 'UNLOCKED', 'RESTORED', 'DELETED'] },
+        moderationReason: { type: String },
     },
-    actions: { type: [NotificationActionSchema], default: [] },
-    primaryActionUrl: { type: String, trim: true, maxlength: [2048, "URL หลักยาวเกินไป"] },
-    isRead: { type: Boolean, default: false, required: true, index: true },
-    readAt: { type: Date, index: true },
-    isArchived: { type: Boolean, default: false, index: true },
-    archivedAt: { type: Date, index: true },
-    channels: {
-      type: [String],
-      enum: Object.values(NotificationChannel),
-      required: [true, "กรุณาระบุช่องทางการส่ง (Channels are required)"],
-      validate: [
-        (v: NotificationChannel[]) => Array.isArray(v) && v.length > 0,
-        "ต้องมีอย่างน้อย 1 ช่องทางการส่ง (At least one channel is required)",
-      ],
-    },
-    priority: {
-      type: String,
-      enum: Object.values(NotificationPriority),
-      default: NotificationPriority.MEDIUM,
-      required: [true, "กรุณาระบุระดับความสำคัญ (Priority is required)"],
-    },
-    expiresAt: { type: Date, index: true }, // วันหมดอายุ, เหมาะสำหรับโปรโมชั่น
-    correlationId: { type: String, trim: true, index: true, maxlength: [100, "Correlation ID ยาวเกินไป"] }, // ID เชื่อมโยงการแจ้งเตือนชุดเดียวกัน
-    schemaVersion: { type: Number, default: 2, min: 1 }, // ปรับเวอร์ชัน Schema
-  },
-  {
-    timestamps: true, // createdAt, updatedAt
+    expiresAt: { type: Date, index: { expires: '90d' } }, // TTL index (ลบการแจ้งเตือนที่เก่ากว่า 90 วันอัตโนมัติ)
+    schemaVersion: { type: Number, default: 3, required: true },
+}, {
+    timestamps: true,
     collection: "notifications",
-    toObject: { virtuals: true },
     toJSON: { virtuals: true },
-  }
-);
+    toObject: { virtuals: true },
+});
+
 
 // ==================================================================================================
-// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
+// SECTION: Indexes (ดัชนี)
 // ==================================================================================================
-NotificationSchema.index({ recipientId: 1, isArchived: 1, isRead: 1, createdAt: -1 }, { name: "UserNotificationsQueryIndex" });
+NotificationSchema.index({ recipientId: 1, 'status.in-app': 1, createdAt: -1 }, { name: "InAppNotificationListingIndex" });
 NotificationSchema.index({ recipientId: 1, type: 1, createdAt: -1 }, { name: "UserNotificationsByTypeIndex" });
-NotificationSchema.index({ channels: 1, createdAt: 1 }, { name: "NotificationQueueProcessingIndex" }); // อาจใช้สำหรับ Background Job ที่ส่ง Notification
-NotificationSchema.index({ expiresAt: 1 }, { name: "NotificationExpiryIndex", sparse: true }); // Sparse index สำหรับ field ที่อาจไม่มีค่า
+NotificationSchema.index({ "context.boardId": 1 }, { sparse: true, name: "NotificationsByBoardContextIndex" });
+
 
 // ==================================================================================================
-// SECTION: Middleware (Mongoose Hooks)
+// SECTION: Static Methods (เมธอดสำหรับสร้าง Notification)
 // ==================================================================================================
 
 /**
- * @function updateUserUnreadNotificationCount
- * @description อัปเดตจำนวนการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้ใน User model
- * @param {Types.ObjectId} recipientId - ID ของผู้ใช้ที่รับการแจ้งเตือน
- *
- * **ข้อควรระวัง:** ฟังก์ชันนี้คาดหวังว่า User model จะมี field สำหรับเก็บจำนวนการแจ้งเตือนที่ยังไม่อ่าน
- * ใน User.ts ที่ให้มา ยังไม่มี field นี้โดยตรง (เช่น `user.preferences.notifications.unreadInAppCount`)
- * ผู้พัฒนาจำเป็นต้อง:
- * 1. เพิ่ม field ดังกล่าวใน User.ts (แนะนำให้อยู่ใน `IUserPreferencesNotifications`)
- * 2. หรือ ปรับ logic การอัปเดตนี้ให้ไปเรียก Service Layer ที่จัดการ User Stats โดยเฉพาะ
- * 3. หรือ Comment out ส่วนที่อัปเดต User model หากยังไม่พร้อม
+ * @interface CreateNotificationParams
+ * @description พารามิเตอร์สำหรับฟังก์ชัน createNotification
  */
-async function updateUserUnreadNotificationCount(recipientId: Types.ObjectId) {
-  const UserModel = models.User as mongoose.Model<IUser> | undefined; // ตรวจสอบว่า UserModel ถูก initialize
-  const NotificationModelInstance = models.Notification as mongoose.Model<INotification>;
-
-  if (!UserModel) {
-      console.warn(`[Notification Middleware] UserModel not found. Skipping unread count update for user ${recipientId}.`);
-      return;
-  }
-
-  try {
-    const unreadCount = await NotificationModelInstance.countDocuments({
-      recipientId: recipientId,
-      channels: NotificationChannel.IN_APP, // นับเฉพาะ In-App notifications ที่ยังไม่อ่าน
-      isRead: false,
-      isArchived: false, // ไม่นับที่เก็บเข้าคลังแล้ว
-    });
-
-    // สมมติว่า User model มี field: user.preferences.notifications.unreadInAppCount
-    // โปรดตรวจสอบและปรับปรุง path นี้ให้ตรงกับโครงสร้าง User.ts ของคุณ
-    const updatePath = "preferences.notifications.unreadInAppCount"; // << ตรวจสอบ PATH นี้ใน User.ts!
-
-    await UserModel.findByIdAndUpdate(recipientId, { $set: { [updatePath]: unreadCount } });
-    console.log(`[Notification Middleware] User ${recipientId} unread In-App notification count updated to ${unreadCount}.`);
-
-  } catch (error) {
-    console.error(`[Notification Middleware Error] Failed to update unread notification count for user ${recipientId}:`, error);
-  }
+interface CreateNotificationParams {
+    recipientId: Types.ObjectId;
+    type: NotificationType;
+    context: INotificationContext;
+    channels?: NotificationChannel[]; // Optional, default เป็น IN_APP
+    // สามารถเพิ่มพารามิเตอร์อื่นๆ ได้ เช่น userPreferences
 }
 
-// Hook: หลังจากการบันทึก (save)
-NotificationSchema.post<INotification>("save", async function (doc) {
-  // อัปเดต unread count ถ้าเป็น notification ใหม่, หรือสถานะ isRead/isArchived ของ In-App notification เปลี่ยนไป
-  if (doc.channels.includes(NotificationChannel.IN_APP) && (doc.isNew || doc.isModified("isRead") || doc.isModified("isArchived"))) {
-    await updateUserUnreadNotificationCount(doc.recipientId as Types.ObjectId);
-  }
-});
+/**
+ * @static createNotification
+ * @description เมธอดสำหรับสร้างและบันทึกการแจ้งเตือนใหม่ลงในฐานข้อมูล
+ * @param {CreateNotificationParams} params - พารามิเตอร์ที่จำเป็นสำหรับการสร้างการแจ้งเตือน
+ * @returns {Promise<HydratedDocument<INotification> | null>} - เอกสาร Notification ที่สร้างขึ้น หรือ null หากมีข้อผิดพลาด
+ */
+NotificationSchema.statics.createNotification = async function(params: CreateNotificationParams): Promise<HydratedDocument<INotification> | null> {
+    const { recipientId, type, context, channels = [NotificationChannel.IN_APP] } = params;
 
-// Hook: หลังจากการอัปเดต (findOneAndUpdate)
-NotificationSchema.post<mongoose.Query<INotification | null, INotification>>("findOneAndUpdate", async function (result) {
-  const update = this.getUpdate() as any;
-  const filter = this.getFilter();
+    // ตรวจสอบว่าผู้รับมีอยู่จริง (อาจไม่จำเป็นถ้า business logic จัดการแล้ว)
+    const UserModel = models.User as mongoose.Model<IUser> || model<IUser>("User");
+    const recipient = await UserModel.findById(recipientId).select('preferences.notifications').lean();
+    if (!recipient) {
+        console.warn(`[Notification] Recipient user with ID ${recipientId} not found. Creation aborted.`);
+        return null;
+    }
+    
+    // TODO: ตรวจสอบ user preferences ว่าต้องการรับการแจ้งเตือนประเภทนี้หรือไม่
+    // if (!recipient.preferences?.notifications?.masterNotificationsEnabled || !recipient.preferences?.notifications?.inApp?.[type]) { 
+    //     console.log(`[Notification] User ${recipientId} has disabled notifications of type ${type}.`);
+    //     return null; 
+    // }
 
-  // ตรวจสอบว่ามีการแก้ไข isRead หรือ isArchived
-  const fieldsModified = (update?.$set?.isRead !== undefined || update?.$set?.isArchived !== undefined || update?.isRead !== undefined || update?.isArchived !== undefined);
+    let message = "";
+    let title = "";
+    let ctaUrl = "/dashboard"; // Default URL
+    // Default icon, จะถูก override ใน switch-case
+    let iconUrl = context.sourceUsername ? `/api/users/${context.sourceUsername}/avatar` : '/icons/default-notification.png';
+    let severity = NotificationSeverity.DEFAULT;
 
-  if (fieldsModified) {
-    let recipientToUpdate: Types.ObjectId | null = null;
-    let channelsInvolved: NotificationChannel[] | undefined;
+    // --- สร้าง content ตามประเภทของการแจ้งเตือน ---
+    switch (type) {
+        // === กรณีเดิม: Social & Community ===
+        case NotificationType.NEW_FOLLOWER:
+            message = `${context.sourceUsername} ได้เริ่มติดตามคุณ`;
+            title = "คุณมีผู้ติดตามใหม่!";
+            ctaUrl = `/u/${context.sourceUsername}`;
+            severity = NotificationSeverity.LOW;
+            break;
+        
+        case NotificationType.COMMENT_REPLY:
+            message = `${context.sourceUsername} ได้ตอบกลับความคิดเห็นของคุณในเรื่อง "${context.novelTitle}"`;
+            title = `มีการตอบกลับความคิดเห็น`;
+            ctaUrl = `/n/${context.novelId}/e/${context.episodeId}#comment-${context.commentId}`;
+            break;
 
-    // พยายามหา recipientId และ channels จากผลลัพธ์หรือ filter
-    if (result && "recipientId" in result && !("modifiedCount" in result)) { // กรณี findOneAndUpdate trả về document
-      recipientToUpdate = result.recipientId as Types.ObjectId;
-      channelsInvolved = result.channels;
-    } else if (filter.recipientId) { // กรณีมี recipientId ใน filter โดยตรง
-      recipientToUpdate = filter.recipientId as Types.ObjectId;
-      // ถ้า filter มี channels ด้วยก็ใช้, หรือ query มาอีกที (แต่จะซับซ้อน)
-      // เพื่อความง่าย หากมีการ update isRead/isArchived และมี recipientId ก็จะพยายาม update count
-      // โดยไม่สน channel ก่อน แล้วให้ updateUserUnreadNotificationCount กรอง channel เอง
-    } else if (filter._id) { // กรณี update ด้วย _id
-      const doc = await (models.Notification as mongoose.Model<INotification>).findById(filter._id).select("recipientId channels").lean();
-      if (doc) {
-        recipientToUpdate = doc.recipientId as Types.ObjectId;
-        channelsInvolved = doc.channels;
-      }
+        case NotificationType.USER_MENTION:
+            message = `${context.sourceUsername} ได้กล่าวถึงคุณในความคิดเห็น`;
+            title = `มีคนกล่าวถึงคุณ`;
+            // URL ควรจะชี้ไปยัง context ของ comment นั้นๆ (เช่น ตอนนิยาย)
+            ctaUrl = context.novelId && context.episodeId
+                ? `/n/${context.novelId}/e/${context.episodeId}#comment-${context.commentId}`
+                : `/dashboard`; // Fallback
+            severity = NotificationSeverity.INFO;
+            break;
+
+        // === กรณีเดิม: Content Related ===
+        case NotificationType.NOVEL_NEW_EPISODE:
+            message = `ตอนใหม่! "${context.episodeTitle}" ในนิยายเรื่อง "${context.novelTitle}" พร้อมให้อ่านแล้ว`;
+            title = `ตอนใหม่: ${context.novelTitle}`;
+            ctaUrl = `/n/${context.novelId}/e/${context.episodeId}`;
+            severity = NotificationSeverity.INFO;
+            iconUrl = `/icons/new-episode.png`;
+            break;
+
+        case NotificationType.NOVEL_COMPLETED:
+            message = `นิยายเรื่อง "${context.novelTitle}" ที่คุณติดตามได้เดินทางมาถึงตอนจบแล้ว!`;
+            title = `นิยายจบแล้ว: ${context.novelTitle}`;
+            ctaUrl = `/n/${context.novelId}`;
+            severity = NotificationSeverity.INFO;
+            iconUrl = `/icons/novel-completed.png`;
+            break;
+        
+        // === กรณีเดิม: Gamification ===
+        case NotificationType.ACHIEVEMENT_UNLOCKED:
+            message = `คุณปลดล็อกความสำเร็จใหม่: "${context.achievementName}"`;
+            title = `ปลดล็อกความสำเร็จ!`;
+            ctaUrl = `/u/${recipient.username}/achievements#${context.achievementId}`;
+            severity = NotificationSeverity.SUCCESS;
+            iconUrl = `/icons/achievement-unlocked.png`;
+            break;
+
+        case NotificationType.BADGE_EARNED:
+            message = `คุณได้รับเหรียญตราใหม่: "${context.badgeName}"`;
+            title = `ได้รับเหรียญตราใหม่!`;
+            ctaUrl = `/u/${recipient.username}/badges#${context.badgeId}`;
+            severity = NotificationSeverity.SUCCESS;
+            iconUrl = `/icons/badge-earned.png`;
+            break;
+
+        case NotificationType.LEVEL_UP:
+            message = `ยินดีด้วย! คุณได้เลื่อนระดับเป็น Level ${context.level}!`;
+            title = `Level Up!`;
+            ctaUrl = `/u/${recipient.username}/gamification`;
+            severity = NotificationSeverity.SUCCESS;
+            iconUrl = `/icons/level-up.png`;
+            break;
+        
+        // === กรณีเดิม: Monetization & System ===
+        case NotificationType.PURCHASE_COMPLETED:
+            message = `การซื้อหมายเลข #${context.purchaseReadableId} ของคุณสำเร็จแล้ว`;
+            title = `การซื้อสำเร็จ`;
+            ctaUrl = `/user/purchases/${context.purchaseId}`;
+            severity = NotificationSeverity.SUCCESS;
+            iconUrl = `/icons/purchase-success.png`;
+            break;
+
+        case NotificationType.SYSTEM_ANNOUNCEMENT:
+            message = context.commentSnippet || "มีประกาศใหม่จากทีมงาน DivWy"; // ใช้ commentSnippet สำหรับเนื้อหาประกาศ
+            title = context.novelTitle || "ประกาศจากระบบ"; // ใช้ novelTitle สำหรับหัวข้อประกาศ
+            ctaUrl = `/announcements/${context.commentId}`; // สมมติว่าใช้ ID เป็นตัวอ้างอิง
+            severity = NotificationSeverity.INFO;
+            iconUrl = `/icons/system-announcement.png`;
+            break;
+
+        case NotificationType.SECURITY_ALERT:
+            message = `ตรวจพบกิจกรรมที่น่าสงสัยในบัญชีของคุณ กรุณาตรวจสอบและเปลี่ยนรหัสผ่าน`;
+            title = `แจ้งเตือนความปลอดภัย`;
+            ctaUrl = `/user/security`;
+            severity = NotificationSeverity.CRITICAL;
+            iconUrl = `/icons/security-alert.png`;
+            break;
+
+        // ================================================================
+        // **ใหม่**: Logic สำหรับสร้างการแจ้งเตือนของ Board
+        // ================================================================
+        
+        case NotificationType.BOARD_NEW_REPLY:
+            message = `${context.sourceUsername} ได้แสดงความคิดเห็นในกระทู้ "${context.boardTitle}"`;
+            title = "มีการตอบกลับใหม่ในกระทู้";
+            ctaUrl = `/community/boards/${context.boardSlug}#comment-${context.commentId}`; 
+            // iconUrl จะใช้รูปโปรไฟล์ของผู้คอมเมนต์ (ซึ่งเป็น default อยู่แล้ว)
+            severity = NotificationSeverity.DEFAULT;
+            break;
+
+        case NotificationType.BOARD_USER_MENTION:
+            message = `${context.sourceUsername} ได้กล่าวถึงคุณในกระทู้ "${context.boardTitle}"`;
+            title = "มีคนกล่าวถึงคุณในกระทู้";
+            ctaUrl = `/community/boards/${context.boardSlug}#comment-${context.commentId}`;
+            severity = NotificationSeverity.INFO;
+            break;
+
+        case NotificationType.BOARD_BEST_ANSWER:
+            message = `ความคิดเห็นของคุณในกระทู้ "${context.boardTitle}" ถูกเลือกเป็นคำตอบที่ดีที่สุด!`;
+            title = "ยินดีด้วย! คุณได้รับเลือกเป็น Best Answer";
+            ctaUrl = `/community/boards/${context.boardSlug}#comment-${context.commentId}`;
+            iconUrl = '/icons/best-answer.png'; // ไอคอนพิเศษ
+            severity = NotificationSeverity.SUCCESS;
+            break;
+
+        case NotificationType.NOVEL_NEW_REVIEW:
+            message = `${context.sourceUsername} ได้เขียนรีวิวใหม่สำหรับนิยายของคุณ: "${context.novelTitle}"`;
+            title = "นิยายของคุณได้รับการรีวิวใหม่";
+            ctaUrl = `/community/boards/${context.boardSlug}`;
+            severity = NotificationSeverity.INFO;
+            break;
+
+        case NotificationType.BOARD_MODERATION_ACTION:
+            iconUrl = '/icons/moderator-action.png'; // ไอคอนทีมงาน
+            switch (context.moderationAction) {
+                case 'LOCKED':
+                    message = `กระทู้ของคุณ "${context.boardTitle}" ถูกล็อกโดยผู้ดูแลระบบ`;
+                    title = "กระทู้ถูกล็อก";
+                    severity = NotificationSeverity.WARNING;
+                    break;
+                case 'HIDDEN':
+                    message = `กระทู้ของคุณ "${context.boardTitle}" ถูกซ่อนโดยผู้ดูแลระบบ`;
+                    title = "กระทู้ถูกซ่อน";
+                    severity = NotificationSeverity.WARNING;
+                    break;
+                case 'ACTION_REQUIRED':
+                    message = `กระทู้ของคุณ "${context.boardTitle}" จำเป็นต้องได้รับการแก้ไขตามที่ผู้ดูแลระบบแนะนำ`;
+                    title = "จำเป็นต้องแก้ไขกระทู้";
+                    severity = NotificationSeverity.CRITICAL;
+                    break;
+                default:
+                    message = `มีการดำเนินการกับกระทู้ "${context.boardTitle}" โดยผู้ดูแล`;
+                    title = "แจ้งเตือนจากผู้ดูแล";
+                    severity = NotificationSeverity.WARNING;
+            }
+            // เพิ่มเหตุผลถ้ามี
+            if (context.moderationReason) {
+                message += `\nเหตุผล: ${context.moderationReason}`;
+            }
+            ctaUrl = `/community/boards/${context.boardSlug}`;
+            break;
+
+        default:
+            console.warn(`[Notification] Notification type "${type}" is not handled in createNotification switch-case.`);
+            return null; // ไม่สร้างการแจ้งเตือนสำหรับประเภทที่ไม่รู้จัก
     }
 
-    // อัปเดต unread count ถ้าหา recipientId ได้ และเกี่ยวข้องกับ In-App channel
-    if (recipientToUpdate && (!channelsInvolved || channelsInvolved.includes(NotificationChannel.IN_APP))) {
-      await updateUserUnreadNotificationCount(recipientToUpdate);
-    }
-  }
-});
+    // สร้าง Map สำหรับสถานะเริ่มต้นของแต่ละช่องทาง
+    const initialStatus = channels.reduce((acc, channel) => {
+        acc[channel] = NotificationStatus.SENT;
+        return acc;
+    }, {} as Record<NotificationChannel, NotificationStatus>);
 
+    // สร้าง instance ของ Notification
+    const notification = new this({
+        recipientId,
+        type,
+        channels,
+        status: initialStatus,
+        message,
+        title,
+        ctaUrl,
+        iconUrl,
+        severity,
+        context,
+    });
 
-// Hook: หลังจากการลบ (findOneAndDelete, deleteOne)
-NotificationSchema.post<mongoose.Query<INotification, INotification>>(["findOneAndDelete", "deleteOne"], async function (doc) {
-    // doc ที่ได้จาก hook นี้คือ document ที่ถูกลบ
-    if (doc && "recipientId" in doc && "channels" in doc) {
-        const notification = doc as INotification;
-        if (notification.channels.includes(NotificationChannel.IN_APP)) {
-             await updateUserUnreadNotificationCount(notification.recipientId as Types.ObjectId);
-        }
-    }
-});
+    await notification.save();
 
-// Hook: หลังจากการลบหลายรายการ (deleteMany)
-NotificationSchema.post<mongoose.Query<any, any>>("deleteMany", async function (result) {
-  const filter = this.getFilter();
-  // หากการลบมีเงื่อนไข recipientId, ให้อัปเดต unread count ของ user นั้น
-  if (filter.recipientId) {
-    // เราไม่รู้ว่าที่ลบไปมี in_app channel หรือไม่ จึงต้องคำนวณใหม่ทั้งหมด
-    await updateUserUnreadNotificationCount(filter.recipientId as Types.ObjectId);
-  } else {
-    // หากลบโดยไม่มี recipientId เฉพาะเจาะจง (เช่น ลบ Notification เก่าทั้งหมด)
-    // การอัปเดต unread count จะซับซ้อน อาจจะต้อง re-calculate ของ user ทุกคนที่มีผลกระทบ
-    // หรือ Service Layer จะต้องจัดการกรณีนี้เป็นพิเศษ
-    console.warn("[Notification Middleware] deleteMany without specific recipientId. Unread counts might need broader recalculation or handling by a dedicated service.");
-  }
-});
+    // Trigger การส่งผ่านช่องทางอื่นๆ (Email, Push) ที่นี่
+    // เพื่อให้ Service ที่รับผิดชอบจัดการการส่ง Email/Push โดยเฉพาะ
+    // console.log(`[Notification] Created notification ${notification._id} for user ${recipientId}. Triggering channels: ${channels.join(', ')}`);
+    // if (channels.includes(NotificationChannel.EMAIL)) { /* await EmailService.send(notification) */ }
+    // if (channels.includes(NotificationChannel.PUSH)) { /* await PushService.send(notification) */ }
 
-
-// ==================================================================================================
-// SECTION: Static Methods (เมธอดสำหรับ Model Notification)
-// ==================================================================================================
-
-/**
- * @static markAsRead
- * @description ทำเครื่องหมายการแจ้งเตือนเดียวว่าอ่านแล้ว
- * @param {Types.ObjectId} notificationId - ID ของการแจ้งเตือน
- * @returns {Promise<INotification | null>} - เอกสารการแจ้งเตือนที่อัปเดตแล้ว หรือ null ถ้าไม่พบ
- */
-NotificationSchema.statics.markAsRead = async function (notificationId: Types.ObjectId): Promise<INotification | null> {
-  return this.findByIdAndUpdate(notificationId, { $set: { isRead: true, readAt: new Date() } }, { new: true });
-};
-
-/**
- * @static markAllAsRead
- * @description ทำเครื่องหมายการแจ้งเตือน In-App ทั้งหมดของผู้ใช้ว่าอ่านแล้ว
- * @param {Types.ObjectId} recipientId - ID ของผู้ใช้
- * @returns {Promise<mongoose.UpdateWriteOpResult>} - ผลลัพธ์การอัปเดตจาก Mongoose
- */
-NotificationSchema.statics.markAllAsRead = async function (recipientId: Types.ObjectId): Promise<mongoose.UpdateWriteOpResult> {
-  const result = await this.updateMany(
-    { recipientId: recipientId, channels: NotificationChannel.IN_APP, isRead: false, isArchived: false },
-    { $set: { isRead: true, readAt: new Date() } }
-  );
-  // ไม่จำเป็นต้องเรียก updateUserUnreadNotificationCount ซ้ำที่นี่ เพราะ post("updateMany") จะไม่ถูก trigger โดยตรง
-  // แต่การ updateMany จะทำให้ count เป็น 0 อย่างถูกต้องในครั้งถัดไปที่นับ
-  // หรือถ้าต้องการให้ update ทันที ต้องเรียกเอง:
-  if (result.modifiedCount > 0) {
-     await updateUserUnreadNotificationCount(recipientId);
-  }
-  return result;
-};
-
-
-/**
- * @static archiveNotification
- * @description เก็บการแจ้งเตือนเข้าคลัง
- * @param {Types.ObjectId} notificationId - ID ของการแจ้งเตือน
- * @returns {Promise<INotification | null>}
- */
-NotificationSchema.statics.archiveNotification = async function (notificationId: Types.ObjectId): Promise<INotification | null> {
-  return this.findByIdAndUpdate(notificationId, { $set: { isArchived: true, archivedAt: new Date() } }, { new: true });
-};
-
-/**
- * @static unarchiveNotification
- * @description นำการแจ้งเตือนออกจากคลัง
- * @param {Types.ObjectId} notificationId - ID ของการแจ้งเตือน
- * @returns {Promise<INotification | null>}
- */
-NotificationSchema.statics.unarchiveNotification = async function (notificationId: Types.ObjectId): Promise<INotification | null> {
-  return this.findByIdAndUpdate(notificationId, { $set: { isArchived: false, $unset: { archivedAt: "" } } }, { new: true });
+    return notification;
 };
 
 
 // ==================================================================================================
-// SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
+// SECTION: Model Export
 // ==================================================================================================
-const NotificationModel =
-  (models.Notification as mongoose.Model<INotification>) ||
-  model<INotification>("Notification", NotificationSchema);
 
-export default NotificationModel;
+// Type assertion เพื่อให้ TypeScript รู้จัก static method ที่เราสร้างขึ้น
+export interface NotificationModel extends mongoose.Model<INotification> {
+    createNotification(params: CreateNotificationParams): Promise<HydratedDocument<INotification> | null>;
+}
+
+export default (models.Notification as NotificationModel) || model<INotification, NotificationModel>("Notification", NotificationSchema);
+
 
 // ==================================================================================================
-// SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements) - ปรับปรุงล่าสุด
+// SECTION: หมายเหตุและการเชื่อมต่อกับ Board.ts (Notes and Integration with Board.ts)
 // ==================================================================================================
-// 1.  **การทำงานร่วมกับ Gamification Service (ยืนยันและขยายความ)**:
-//     -   เมื่อ Gamification Service ตรวจพบการปลดล็อก Achievement/Badge, Level Up, หรือการได้รับรางวัล:
-//         -   Service จะสร้าง Notification document ใหม่.
-//         -   `recipientId` คือ User ID.
-//         -   `type` จะเป็น `ACHIEVEMENT_UNLOCKED`, `BADGE_AWARDED`, `LEVEL_UP`, `REWARD_RECEIVED`, `QUEST_COMPLETED` ฯลฯ.
-//         -   `context` จะถูก populate อย่างละเอียด:
-//             -   `sourceUserId`: (ถ้ามี) เช่น ผู้ดูแลระบบที่มอบรางวัลพิเศษ.
-//             -   `achievementId`, `badgeId`: ID ของ *Achievement/Badge ต้นแบบ* (จาก collection `achievements` หรือ `badges`).
-//             -   `achievementName`, `badgeName`, `achievementCode`, `badgeKey`: Denormalized data จากต้นแบบ.
-//             -   `achievementIconUrl`, `badgeIconUrl`: (ใหม่) Denormalized icon URLs จากต้นแบบ Achievement/Badge.
-//             -   `userEarnedItemId`: (สำคัญมาก) ID ของ `UserEarnedItem` (จาก `UserAchievement.earnedItems._id`) ที่บันทึกการได้รับครั้งนี้.
-//                  นี่คือ link โดยตรงไปยัง "อินสแตนซ์" ของรางวัลที่ผู้ใช้ได้รับ.
-//             -   `xpEarned`, `coinsEarned`: จำนวนที่ผู้ใช้ได้รับจากการปลดล็อกนี้.
-//             -   `itemRewardType`, `itemRewardName`, `itemRewardIconUrl`: (ใหม่) หากรางวัลเป็นไอเท็มพิเศษ (เช่น กรอบโปรไฟล์, จาก `Achievement.rewards.grantedFeatureUnlockKey` หรือ `grantedCosmeticItemKey`).
-//             -   `newLevel`: Level ใหม่ของผู้ใช้.
-//             -   `levelTitle`: (ใหม่) ชื่อ/ฉายาของ Level ใหม่ (จาก `Level.levelTitle`).
-//             -   `questId`, `questName`, `questObjective`: สำหรับการแจ้งเตือนเควส.
-//             -   `leaderboardId`, `leaderboardName`, `rankAchieved`, `previousRank`: สำหรับการแจ้งเตือน Leaderboard.
-//     -   `title` และ `message` ของ Notification ควรสั้นและน่าสนใจ, UI อาจจะใช้ข้อมูลจาก `context` มาประกอบการแสดงผลให้ phong phú มากขึ้น.
-// 2.  **Gamification Notification Types (ยืนยัน)**:
-//     -   `ACHIEVEMENT_UNLOCKED`, `BADGE_AWARDED`, `LEVEL_UP`, `REWARD_RECEIVED` (สำหรับ XP/Coins ทั่วไป).
-//     -   `QUEST_ASSIGNED`, `QUEST_COMPLETED`, `QUEST_PROGRESS_UPDATE`, `QUEST_REWARD_CLAIMED`.
-//     -   `LEADERBOARD_RANK_UP`, `LEADERBOARD_RANK_DOWN`, `LEADERBOARD_NEW_CHALLENGER`, `LEADERBOARD_SEASON_START`, `LEADERBOARD_SEASON_END_RESULTS`.
-//     -   `DAILY_REWARD_AVAILABLE`.
-// 3.  **User Preferences for Notifications (ยืนยัน)**:
-//     -   `User.preferences.notifications.achievementUnlocks` ควรครอบคลุม Achievements, Badges, Level Up, Rewards.
-//     -   พิจารณาเพิ่ม categories ใหม่ใน `User.preferences.notifications` สำหรับ `questNotificationsEnabled`, `leaderboardNotificationsEnabled`
-//         เพื่อให้ผู้ใช้ควบคุมได้ละเอียดยิ่งขึ้น. Gamification Service ต้องตรวจสอบ preferences เหล่านี้.
-// 4.  **Notification Actions for Gamification (ขยายความ)**:
-//     -   `ACHIEVEMENT_UNLOCKED`/`BADGE_AWARDED`:
-//         -   Action 1: "ดูรายละเอียด" (URL ไปยังหน้าแสดง Achievement/Badge นั้น, อาจใช้ `context.achievementCode` หรือ `context.badgeKey`).
-//         -   Action 2: "ไปยังคลังของฉัน" (URL ไปยังหน้าคลัง Achievement/Badge ของผู้ใช้).
-//         -   Action 3: (ถ้า Badge) "ตั้งเป็น Badge หลัก/รอง" (URL ไปยังหน้าตั้งค่าโปรไฟล์).
-//     -   `LEVEL_UP`: "ดูสิทธิประโยชน์ของเลเวล [newLevel]" (URL ไปยังหน้าข้อมูล Level).
-//     -   `REWARD_RECEIVED`: "ดูประวัติรางวัล" (URL ไปยังหน้าประวัติการเงิน/รางวัล).
-//     -   `QUEST_COMPLETED`: "รับรางวัลเควส" (ถ้าต้อง claim) หรือ "ดูเควสถัดไป".
-// 5.  **Notification Severity (ยืนยัน)**: Default logic ใน Schema ช่วยกำหนด `severity` ที่เหมาะสม (ส่วนใหญ่เป็น `SUCCESS` สำหรับ Gamification).
-// 6.  **Denormalized Data in Context (ยืนยันและเพิ่มเติม)**:
-//     -   การเก็บ `achievementName`, `badgeName`, `levelTitle`, `questName`, `leaderboardName` รวมถึง Icon URLs (`achievementIconUrl`, `badgeIconUrl`, `itemRewardIconUrl`)
-//         เป็นสิ่งที่ดีมากเพื่อลดการ query ซ้ำซ้อนในฝั่ง Client เมื่อแสดงรายการ Notifications.
-//     -   Service ที่สร้าง Notification ต้องรับผิดชอบในการดึงข้อมูลเหล่านี้มาใส่ใน `context`.
-// 7.  **Notification Batching/Throttling**:
-//     -   สำหรับ events ที่อาจเกิดถี่ๆ (เช่น XP จากการอ่านหลายๆ ครั้งติดกัน) อาจจะไม่สร้าง Notification ทุกครั้ง แต่รวมเป็น "คุณได้รับ X XP จากการอ่านล่าสุด".
-//     -   Leaderboard rank changes อาจจะแจ้งเตือนเมื่อมีการเปลี่ยนแปลงที่สำคัญ หรือสรุปรายวัน/สัปดาห์ แทนที่จะแจ้งทุกครั้งที่อันดับขยับเล็กน้อย.
-// 8.  **User Unread Notification Count (สำคัญมาก - ต้องดำเนินการ)**:
-//     -   Middleware `updateUserUnreadNotificationCount` ในปัจจุบันมีการ `console.warn` เรื่อง UserModel และ path สำหรับ unread count.
-//     -   **สิ่งที่ต้องทำ**:
-//         1.  ตัดสินใจว่าจะเก็บ unread In-App notification count ที่ใดใน `User.ts`. ตัวเลือกที่แนะนำ:
-//             `User.preferences.notifications.unreadInAppCount: number` (เพิ่ม field นี้ใน `IUserPreferencesNotifications`).
-//         2.  อัปเดต `updatePath` ใน `updateUserUnreadNotificationCount` ของ `Notification.ts` ให้ตรงกับ field ที่เลือก.
-//         3.  ตรวจสอบว่า `UserPreferencesNotificationsSchema` ใน `User.ts` มี default value สำหรับ field ใหม่นี้ (เช่น 0).
-//     -   การนับควรมุ่งเน้นไปที่ `channels: NotificationChannel.IN_APP` ที่ `isRead: false` และ `isArchived: false`.
-// 9.  **Real-time Updates (ยืนยัน)**: การใช้ WebSockets (เช่น Socket.IO) ร่วมกับการสร้าง Notification ใน Backend
-//     จะช่วยให้ผู้ใช้ได้รับประสบการณ์ In-App ที่ดีและทันท่วงที, โดยเฉพาะสำหรับ Gamification events.
-// 10. **Schema Version**: ปรับ `schemaVersion` เป็น 2 เพื่อบ่งบอกว่ามีการเปลี่ยนแปลงโครงสร้าง.
-// 11. **Contextual Icons**: `iconUrl` ใน `INotification` ควรเป็นไอคอนทั่วไปของการแจ้งเตือน.
-//     ไอคอนเฉพาะของ Achievement, Badge, Item Reward ควรอยู่ใน `context` (`achievementIconUrl`, `badgeIconUrl`, `itemRewardIconUrl`).
-//     UI สามารถเลือกใช้ไอคอนที่เหมาะสมจาก `context` หากมี, หรือ fallback ไปใช้ `iconUrl` หลัก.
-// 12. **Clarity of IDs in Context**:
-//      - `achievementId` / `badgeId` ใน context คือ ID ของ *Definition* (จาก `AchievementModel`, `BadgeModel`).
-//      - `userEarnedItemId` คือ ID ของ *Instance* (จาก `UserAchievementModel.earnedItems`).
-//      การแยกสองสิ่งนี้ชัดเจนเป็นสิ่งสำคัญ.
+//
+// การจะทำให้ระบบแจ้งเตือนนี้ทำงานกับ Board.ts ได้อย่างสมบูรณ์ ต้องมีการเรียกใช้ `NotificationModel.createNotification`
+// จาก Service หรือ Middleware ที่เกี่ยวข้องกับเหตุการณ์ต่างๆ ในระบบกระทู้ ดังนี้:
+//
+// 1. **การตอบกลับกระทู้ (BOARD_NEW_REPLY)**
+//    - **ที่ไหน**: ใน Service ที่จัดการการสร้าง Comment (เช่น `CommentService.createComment`) หรือใน `post('save')` hook ของ `Comment.ts`
+//    - **เมื่อไหร่**: หลังจากสร้าง Comment สำเร็จ และ Comment นั้นมี `targetType: 'Board'`.
+//    - **Logic**:
+//      1. ดึงข้อมูลกระทู้ (Board) จาก `targetId` ของ Comment.
+//      2. ดึงรายชื่อผู้รับการแจ้งเตือน ซึ่งคือ `board.authorId` และ `board.subscribers` ทั้งหมด (ยกเว้นคนสร้าง Comment เอง).
+//      3. วนลูปสร้าง Notification สำหรับผู้รับแต่ละคน:
+//         `await NotificationModel.createNotification({
+//              recipientId: subscriberId, // ID ของเจ้าของกระทู้ หรือผู้ติดตาม
+//              type: NotificationType.BOARD_NEW_REPLY,
+//              context: {
+//                  sourceUserId: newComment.userId,
+//                  sourceUsername: newComment.author.username, // ต้อง populate author
+//                  boardId: board._id,
+//                  boardTitle: board.title,
+//                  boardSlug: board.slug,
+//                  commentId: newComment._id,
+//              }
+//          })`
+//
+// 2. **การกล่าวถึงผู้ใช้ (@mention) (BOARD_USER_MENTION)**
+//    - **ที่ไหน**: ใน Service ที่จัดการการสร้าง Comment (เช่น `CommentService.createComment`).
+//    - **เมื่อไหร่**: หลังจากบันทึกเนื้อหา (content) ของคอมเมนต์แล้ว.
+//    - **Logic**:
+//      1. สแกน `content` ของคอมเมนต์เพื่อหา @mentions (เช่น ใช้ regex `/(@\w+)/g`).
+//      2. ค้นหา User ID จาก username ที่ mention ได้.
+//      3. วนลูปสร้าง Notification ไปยัง User ที่ถูก mention แต่ละคน.
+//         `await NotificationModel.createNotification({
+//              recipientId: mentionedUserId,
+//              type: NotificationType.BOARD_USER_MENTION,
+//              context: { /* ... context เหมือน BOARD_NEW_REPLY ... */ }
+//          })`
+//
+// 3. **การเลือกคำตอบที่ดีที่สุด (BOARD_BEST_ANSWER)**
+//    - **ที่ไหน**: ใน Service ที่จัดการการตั้งค่า Best Answer (เช่น `BoardService.setBestAnswer`).
+//    - **เมื่อไหร่**: หลังจากอัปเดต field `bestAnswer` บน Board document สำเร็จ.
+//    - **Logic**:
+//      1. ดึงข้อมูล Comment ที่ถูกเลือกเป็น Best Answer เพื่อหา `authorId` ของคอมเมนต์นั้น.
+//      2. สร้าง Notification ไปยัง `comment.userId`:
+//         `await NotificationModel.createNotification({
+//              recipientId: bestAnswerComment.userId,
+//              type: NotificationType.BOARD_BEST_ANSWER,
+//              context: {
+//                  sourceUserId: board.authorId, // คนที่เลือกอาจเป็นเจ้าของกระทู้
+//                  sourceUsername: board.authorUsername,
+//                  boardId: board._id,
+//                  boardTitle: board.title,
+//                  boardSlug: board.slug,
+//                  commentId: bestAnswerComment._id,
+//              }
+//          })`
+//
+// 4. **การดำเนินการโดย Moderator (BOARD_MODERATION_ACTION)**
+//    - **ที่ไหน**: ใน Service ของ Moderator ที่ใช้เปลี่ยนสถานะกระทู้ (เช่น `ModerationService.changeBoardStatus`).
+//    - **เมื่อไหร่**: หลังจากเปลี่ยน `status` ของ Board เป็น `LOCKED`, `HIDDEN_BY_MODERATOR`, `REQUIRES_AUTHOR_EDIT`.
+//    - **Logic**:
+//      1. สร้าง Notification ไปยัง `board.authorId`.
+//         `await NotificationModel.createNotification({
+//              recipientId: board.authorId,
+//              type: NotificationType.BOARD_MODERATION_ACTION,
+//              context: {
+//                  sourceUserId: moderator.userId, // ID ของ Moderator ที่กระทำ
+//                  sourceUsername: 'ทีมงาน DivWy',
+//                  boardId: board._id,
+//                  boardTitle: board.title,
+//                  boardSlug: board.slug,
+//                  moderationAction: 'LOCKED', // หรือ 'HIDDEN', 'ACTION_REQUIRED'
+//                  moderationReason: reason, // เหตุผลจากฟอร์มของ Moderator
+//              }
+//          })`
+//
+// 5. **การรีวิวนิยายใหม่ (NOVEL_NEW_REVIEW)**
+//    - **ที่ไหน**: ใน Middleware `post("save")` ของ `BoardSchema` หรือใน `BoardService.createBoard`.
+//    - **เมื่อไหร่**: เมื่อมีการสร้าง Board ใหม่ (`isNew: true`) และมีเงื่อนไข `board.boardType === BoardType.REVIEW` และ `board.novelAssociated` ไม่ใช่ null.
+//    - **Logic**:
+//      1. ดึงข้อมูล Novel จาก `board.novelAssociated` เพื่อหา `author` ของนิยาย.
+//      2. สร้าง Notification ไปยังผู้เขียนนิยาย (`novel.author`).
+//         `await NotificationModel.createNotification({
+//              recipientId: novel.author._id,
+//              type: NotificationType.NOVEL_NEW_REVIEW,
+//              context: {
+//                  sourceUserId: board.authorId,
+//                  sourceUsername: board.authorUsername,
+//                  boardId: board._id,
+//                  boardTitle: board.title, // หัวข้อรีวิว
+//                  boardSlug: board.slug,
+//                  novelId: novel._id,
+//                  novelTitle: novel.title,
+//              }
+//          })`
+//
+// การแยก Logic การสร้าง Notification ออกจาก Model แล้วไปเรียกใช้ใน Service Layer เป็นแนวทางปฏิบัติที่ดี
+// ช่วยให้โค้ดสะอาดและจัดการได้ง่ายขึ้นในระยะยาว
 // ==================================================================================================

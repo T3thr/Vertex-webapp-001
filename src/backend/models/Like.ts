@@ -1,11 +1,14 @@
 // src/backend/models/Like.ts
 // โมเดลการถูกใจ (Like Model)
-// จัดการการกดถูกใจ (หรือปฏิกิริยาอื่นๆ) สำหรับเนื้อหาต่างๆ เช่น นิยาย, ตอน, ความคิดเห็น, สื่อ, ฯลฯ
+// จัดการการกดถูกใจและปฏิกิริยาอื่นๆ สำหรับเนื้อหาต่างๆ เช่น นิยาย, ตอน, ความคิดเห็น, กระทู้, ฯลฯ
+// เวอร์ชันปรับปรุง: เพิ่มการรองรับกระทู้ (Board) และระบบ Upvote/Downvote
 
-import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import { IUser } from "./User"; // สำหรับ userId
-// ไม่จำเป็นต้อง import target models (Novel, Episode, Comment) โดยตรงใน schema นี้
-// แต่ middleware จะต้องสามารถ resolve model name ไปยัง model instance ที่ถูกต้องได้
+import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
+import { IUser } from "./User";
+import { INovel } from "./Novel";
+import { IEpisode } from "./Episode";
+import { IComment } from "./Comment";
+import { IBoard } from "./Board"; // [ใหม่] Import โมเดล Board ที่เพิ่มเข้ามา
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Like
@@ -13,230 +16,250 @@ import { IUser } from "./User"; // สำหรับ userId
 
 /**
  * @enum {string} LikeableType
- * @description ประเภทของเนื้อหาที่สามารถแสดงปฏิกิริยา (เช่น ถูกใจ) ได้
+ * @description ประเภทของเนื้อหาที่สามารถแสดงปฏิกิริยาได้
  * - `NOVEL`: นิยายทั้งหมด
  * - `EPISODE`: ตอนใดตอนหนึ่งของนิยาย
  * - `COMMENT`: ความคิดเห็นของผู้ใช้
+ * - `BOARD`: กระทู้ในเว็บบอร์ด [ใหม่]
  * - `CHARACTER`: (อนาคต) ตัวละครในนิยาย
- * - `MEDIA`: (อนาคต) สื่อที่ผู้ใช้อัปโหลดหรือสื่อทางการ
- * - `USER_POST`: (อนาคต) โพสต์ของผู้ใช้ในส่วนโซเชียล
+ * - `MEDIA`: (อนาคต) สื่อที่ผู้ใช้อัปโหลด
  * - `REVIEW`: (อนาคต) รีวิวที่ผู้ใช้เขียน
  * - `WRITER_PROFILE`: (อนาคต) โปรไฟล์นักเขียน
- * - `OFFICIAL_MEDIA`: สื่อทางการจากคลัง DivWy
  */
 export enum LikeableType {
-  NOVEL = "Novel",
-  EPISODE = "Episode",
-  COMMENT = "Comment",
-  CHARACTER = "Character",
-  MEDIA = "Media",
-  USER_POST = "UserPost",
-  REVIEW = "Review",
-  WRITER_PROFILE = "WriterProfile",
-  OFFICIAL_MEDIA = "OfficialMedia",
+    NOVEL = "NOVEL",
+    EPISODE = "EPISODE",
+    COMMENT = "COMMENT",
+    BOARD = "BOARD", // [ใหม่] เพิ่มประเภทสำหรับกระทู้
+    CHARACTER = "CHARACTER",
+    MEDIA = "MEDIA",
+    REVIEW = "REVIEW",
+    WRITER_PROFILE = "WRITER_PROFILE",
 }
 
 /**
  * @enum {string} ReactionType
- * @description ประเภทของปฏิกิริยา (ถ้าต้องการขยายมากกว่าแค่ "like")
- * - `LIKE`: ถูกใจ (ค่า default)
+ * @description ประเภทของปฏิกิริยาที่ผู้ใช้สามารถแสดงออกได้
+ * - `LIKE`: ถูกใจ (ค่าเริ่มต้น)
  * - `LOVE`: รักเลย
  * - `HAHA`: ฮา
- * - `WOW`: ว้าว
  * - `SAD`: เศร้า
+ * - `WOW`: ว้าว
  * - `ANGRY`: โกรธ
+ * - `UPVOTE`: โหวตขึ้น (สำหรับกระทู้) [ใหม่]
+ * - `DOWNVOTE`: โหวตลง (สำหรับกระทู้) [ใหม่]
  */
 export enum ReactionType {
-  LIKE = "like",
-  LOVE = "love",
-  HAHA = "haha",
-  WOW = "wow",
-  SAD = "sad",
-  ANGRY = "angry",
+    LIKE = "LIKE",
+    LOVE = "LOVE",
+    HAHA = "HAHA",
+    SAD = "SAD",
+    WOW = "WOW",
+    ANGRY = "ANGRY",
+    UPVOTE = "UPVOTE",       // [ใหม่] สำหรับระบบกระทู้ Q&A หรือ Discussion
+    DOWNVOTE = "DOWNVOTE",   // [ใหม่] สำหรับระบบกระทู้ Q&A หรือ Discussion
 }
 
 // ==================================================================================================
 // SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Like (ILike Document Interface)
 // ==================================================================================================
 
-/**
- * @interface ILike
- * @extends Document (Mongoose Document)
- * @description อินเทอร์เฟซหลักสำหรับเอกสารการถูกใจ/ปฏิกิริยาใน Collection "likes"
- * @property {Types.ObjectId} _id - รหัส ObjectId ของเอกสาร
- * @property {Types.ObjectId | IUser} userId - ID ของผู้ใช้ที่แสดงปฏิกิริยา (**จำเป็น**, อ้างอิง User model)
- * @property {Types.ObjectId} targetId - ID ของเนื้อหาที่ถูกแสดงปฏิกิริยา (Novel, Episode, Comment, etc., **จำเป็น**)
- * @property {LikeableType} targetType - ประเภทของเนื้อหาที่ถูกแสดงปฏิกิริยา (**จำเป็น**)
- * @property {ReactionType} reactionType - ประเภทของปฏิกิริยา (default: `LIKE`)
- * @property {Types.ObjectId} [novelIdContext] - (Context) ID ของนิยายที่เกี่ยวข้อง (ถ้า target เป็น Episode หรือ Comment ในนิยาย)
- * @property {Types.ObjectId} [episodeIdContext] - (Context) ID ของตอนที่เกี่ยวข้อง (ถ้า target เป็น Comment ในตอน)
- * @property {Date} createdAt - วันที่สร้างปฏิกิริยา (Mongoose `timestamps`)
- * @property {Date} updatedAt - วันที่อัปเดตปฏิกิริยา (ถ้ามีการเปลี่ยน reactionType)
- */
 export interface ILike extends Document {
-  [x: string]: any;
-  _id: Types.ObjectId;
-  userId: Types.ObjectId | IUser;
-  targetId: Types.ObjectId;
-  targetType: LikeableType;
-  reactionType: ReactionType;
-  novelIdContext?: Types.ObjectId;
-  episodeIdContext?: Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
+    _id: Types.ObjectId;
+    userId: Types.ObjectId | IUser;          // ผู้ใช้ที่กด
+    targetId: Types.ObjectId;                // ID ของเนื้อหาที่ถูกกด (Novel, Episode, Comment, Board)
+    targetType: LikeableType;                // ประเภทของเนื้อหาที่ถูกกด
+    reactionType: ReactionType;              // ประเภทของปฏิกิริยา (LIKE, LOVE, UPVOTE, etc.)
+
+    // Contextual Fields เพื่อลดความซับซ้อนในการ query
+    novelIdContext?: Types.ObjectId | INovel;     // ID นิยาย (ถ้า target คือ Episode หรือ Comment ใน Episode)
+    episodeIdContext?: Types.ObjectId | IEpisode; // ID ตอน (ถ้า target คือ Comment ใน Episode)
+    boardIdContext?: Types.ObjectId | IBoard;     // ID กระทู้ (ถ้า target คือ Comment ใน Board) [แนวทางในอนาคต]
+
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 // ==================================================================================================
 // SECTION: Schema หลักสำหรับ Like (LikeSchema)
 // ==================================================================================================
+
 const LikeSchema = new Schema<ILike>(
-  {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "กรุณาระบุ ID ของผู้ใช้ (User ID is required)"],
-      index: true,
+    {
+        userId: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+            index: true,
+        },
+        targetId: {
+            type: Schema.Types.ObjectId,
+            required: true,
+            index: true,
+        },
+        targetType: {
+            type: String,
+            enum: Object.values(LikeableType),
+            required: true,
+            index: true,
+        },
+        reactionType: {
+            type: String,
+            enum: Object.values(ReactionType),
+            required: true,
+            default: ReactionType.LIKE,
+        },
+        novelIdContext: {
+            type: Schema.Types.ObjectId,
+            ref: "Novel",
+            index: true,
+            sparse: true,
+        },
+        episodeIdContext: {
+            type: Schema.Types.ObjectId,
+            ref: "Episode",
+            index: true,
+            sparse: true,
+        },
+        boardIdContext: {
+            type: Schema.Types.ObjectId,
+            ref: "Board",
+            index: true,
+            sparse: true,
+        },
     },
-    targetId: {
-      type: Schema.Types.ObjectId,
-      required: [true, "กรุณาระบุ ID ของเนื้อหาที่ถูกใจ (Target ID is required)"],
-      index: true,
-    },
-    targetType: {
-      type: String,
-      enum: Object.values(LikeableType),
-      required: [true, "กรุณาระบุประเภทของเนื้อหาที่ถูกใจ (Target type is required)"],
-      index: true,
-    },
-    reactionType: {
-      type: String,
-      enum: Object.values(ReactionType),
-      default: ReactionType.LIKE,
-      required: [true, "กรุณาระบุประเภทของปฏิกิริยา (Reaction type is required)"],
-    },
-    novelIdContext: { type: Schema.Types.ObjectId, ref: "Novel", index: true, sparse: true },
-    episodeIdContext: { type: Schema.Types.ObjectId, ref: "Episode", index: true, sparse: true },
-  },
-  {
-    timestamps: true, // เพิ่ม createdAt และ updatedAt โดยอัตโนมัติ
-    collection: "likes", // ชื่อ collection ใน MongoDB
-  }
+    {
+        timestamps: true,
+        collection: "likes",
+    }
 );
 
-// ==================================================================================================
-// SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
-// ==================================================================================================
-
-// Unique index เพื่อป้องกันการแสดงปฏิกิริยาซ้ำจากผู้ใช้คนเดียวกันไปยัง target เดียวกัน
-// ผู้ใช้สามารถมี reaction ได้เพียง 1 ประเภทต่อ 1 target (เช่น like หรือ love แต่ไม่ทั้งสอง)
-LikeSchema.index(
-  { userId: 1, targetId: 1, targetType: 1 },
-  { unique: true, name: "UserTargetReactionUniqueIndex" }
-);
-
-// Index สำหรับ query ปฏิกิริยาทั้งหมดของ target หนึ่งๆ (เช่น จำนวน like, love ของนิยาย)
-LikeSchema.index(
-  { targetId: 1, targetType: 1, reactionType: 1 },
-  { name: "TargetReactionsQueryIndex" }
-);
-
-// Index สำหรับ query ปฏิกิริยาทั้งหมดที่ผู้ใช้คนหนึ่งได้ทำไว้ (เช่น ประวัติการกด like)
-LikeSchema.index(
-  { userId: 1, reactionType: 1, createdAt: -1 },
-  { name: "UserReactionsQueryIndex" }
-);
+// Define the unique index separately
+LikeSchema.index({ userId: 1, targetId: 1, targetType: 1 }, { unique: true });
 
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)
 // ==================================================================================================
 
 /**
- * @function updateTargetReactionCounts
- * @description Helper function เพื่ออัปเดตจำนวนปฏิกิริยาใน target model
- * @param {ILike} doc - เอกสาร Like ที่ถูก save หรือ delete
- * @param {"increment" | "decrement"} operation - การดำเนินการ (เพิ่มหรือลด)
- * @param {ReactionType} [previousReactionType] - (Optional) ประเภทปฏิกิริยาเดิม (กรณีเปลี่ยน reaction)
+ * Middleware: 'post save'
+ * - ทำงานหลังจากบันทึก Like document ใหม่
+ * - อัปเดตค่าสถิติ (เช่น likesCount) ใน target model (Novel, Episode, Comment, Board)
  */
-async function updateTargetReactionCounts(
-  doc: ILike,
-  operation: "increment" | "decrement",
-  previousReactionType?: ReactionType
-) {
-  if (!doc || !doc.targetId || !doc.targetType) return;
+LikeSchema.post<HydratedDocument<ILike>>("save", async function (doc, next) {
+    if (!doc) return next();
 
-  const modelName = doc.targetType;
-  const TargetModel = models[modelName] as mongoose.Model<any>;
+    const modelMap: { [key in LikeableType]?: mongoose.Model<any> } = {
+        [LikeableType.NOVEL]: models.Novel,
+        [LikeableType.EPISODE]: models.Episode,
+        [LikeableType.COMMENT]: models.Comment,
+        [LikeableType.BOARD]: models.Board, // [ใหม่] เพิ่ม Board model เข้าไปใน map
+    };
 
-  if (!TargetModel) {
-    console.warn(`[LikeMiddleware] Target model "${modelName}" not found for reaction count update.`);
-    return;
-  }
+    const TargetModel = modelMap[(doc as ILike).targetType];
+    if (!TargetModel) return next();
 
-  try {
-    const updateValue = operation === "increment" ? 1 : -1;
-    const currentReactionField = `${doc.reactionType}sCount`; // เช่น "likesCount", "lovesCount"
-    const updateQuery: any = { $inc: {} };
-    updateQuery.$inc[`stats.${currentReactionField}`] = updateValue;
+    let updateQuery: mongoose.UpdateQuery<any> = {};
 
-    // ถ้ามีการเปลี่ยน reaction (เช่น จาก like เป็น love)
-    if (previousReactionType && previousReactionType !== doc.reactionType) {
-      const previousReactionField = `${previousReactionType}sCount`;
-      updateQuery.$inc[`stats.${previousReactionField}`] = -1;
+    switch ((doc as ILike).targetType) {
+        case LikeableType.NOVEL:
+        case LikeableType.EPISODE:
+        case LikeableType.COMMENT:
+            // สำหรับ Novel, Episode, Comment จะนับแยกตาม reactionType
+            const countField = `stats.reactionCounts.${(doc as ILike).reactionType.toLowerCase()}`;
+            const generalLikesField = 'stats.likesCount'; // field รวมสำหรับทุก reactions
+            updateQuery = { $inc: { [countField]: 1, [generalLikesField]: 1 } };
+            break;
+
+        case LikeableType.BOARD:
+            // [ใหม่] สำหรับ Board จะมีการนับที่แตกต่างออกไป
+            // - UPVOTE และ DOWNVOTE มี counter ของตัวเอง
+            // - Reaction อื่นๆ (LIKE, LOVE, HAHA) จะถูกนับรวมใน likesCount
+            switch ((doc as ILike).reactionType) {
+                case ReactionType.UPVOTE:
+                    updateQuery = { $inc: { "stats.upvotesCount": 1 } };
+                    break;
+                case ReactionType.DOWNVOTE:
+                    updateQuery = { $inc: { "stats.downvotesCount": 1 } };
+                    break;
+                default:
+                    // Reaction อื่นๆ ทั้งหมดนับเป็น "likes"
+                    updateQuery = { $inc: { "stats.likesCount": 1 } };
+                    break;
+            }
+            break;
     }
 
-    await TargetModel.findByIdAndUpdate(doc.targetId, updateQuery);
-    console.log(`[LikeMiddleware] Updated ${currentReactionField} for ${modelName} ID ${doc.targetId} by ${updateValue}`);
-  } catch (error) {
-    console.error(`[LikeMiddleware] Error updating reaction counts for ${modelName} ID ${doc.targetId}:`, error);
-    // TODO: เพิ่ม error handling เช่น retry, logging, หรือแจ้งเตือน admin
-  }
-}
-
-// Middleware: หลังจากการบันทึก (save) - สร้าง like/reaction ใหม่ หรืออัปเดต reaction
-LikeSchema.post<ILike>("save", async function (doc: ILike & mongoose.Document, next) {
-  let previousReactionType: ReactionType | undefined = undefined;
-
-  // ตรวจสอบว่าเป็นการอัปเดต reactionType หรือไม่
-  if (!doc.isNew && doc.isModified("reactionType")) {
-    // Query เอกสารเดิมเพื่อหา reactionType เดิม (ควรย้ายไป service layer ใน production)
-    const originalDoc = await LikeModel.findOne({
-      _id: doc._id,
-      createdAt: { $lt: doc.updatedAt },
-    }).lean();
-    if (originalDoc && originalDoc.reactionType !== doc.reactionType) {
-      previousReactionType = originalDoc.reactionType as ReactionType;
+    try {
+        await TargetModel.findByIdAndUpdate(doc._id, updateQuery);
+    } catch (error) {
+        console.error(`Failed to update count for ${doc.targetType} [${doc.targetId}] on save:`, error);
+        // ควรมีระบบ logging ที่ดีกว่านี้ เช่น Winston
     }
-  }
 
-  if (doc.isNew) {
-    // สร้าง reaction ใหม่
-    await updateTargetReactionCounts(doc, "increment");
-  } else if (previousReactionType) {
-    // เปลี่ยน reaction type (เช่น จาก like เป็น love)
-    await updateTargetReactionCounts(doc, "increment", previousReactionType);
-  }
-  // ถ้าเป็นการอัปเดตอื่น (เช่น timestamps) ไม่ต้องเปลี่ยน counts
-  next();
+    next();
 });
 
-// Middleware: หลังจากการลบ (findOneAndDelete) - unlike/remove reaction
-// ใช้สำหรับ hard delete ซึ่งควรเป็นกรณีพิเศษ (ปกติใช้การลบแบบ soft delete หรือ update reaction)
-LikeSchema.post<mongoose.ModifyResult<ILike>>("findOneAndDelete", async function (doc, next) {
-  // doc เป็น ModifyResult<ILike>, เอกสารที่ถูกลบจะอยู่ใน doc.value
-  if (doc && doc.value) {
-    const deletedDoc = doc.value as ILike;
-    await updateTargetReactionCounts(deletedDoc, "decrement");
-  } else {
-    console.warn("[Like findOneAndDelete Hook] No document found in ModifyResult.");
-  }
-  next();
+
+/**
+ * Middleware: 'deleteOne'
+ * - ใช้ 'deleteOne' hook แทน 'remove' เนื่องจาก findOneAndDelete จะ trigger hook นี้
+ * - ทำงานหลังจากลบ Like document
+ * - ลดค่าสถิติ (เช่น likesCount) ใน target model
+ */
+LikeSchema.post<HydratedDocument<ILike>>("deleteOne", async function (doc, next) {
+    if (!doc) return next();
+    
+    const modelMap: { [key in LikeableType]?: mongoose.Model<any> } = {
+        [LikeableType.NOVEL]: models.Novel,
+        [LikeableType.EPISODE]: models.Episode,
+        [LikeableType.COMMENT]: models.Comment,
+        [LikeableType.BOARD]: models.Board, // [ใหม่] เพิ่ม Board model เข้าไปใน map
+    };
+
+    const TargetModel = modelMap[(doc as ILike).targetType];
+    if (!TargetModel) return next();
+
+    let updateQuery: mongoose.UpdateQuery<any> = {};
+
+    switch ((doc as ILike).targetType) {
+        case LikeableType.NOVEL:
+        case LikeableType.EPISODE:
+        case LikeableType.COMMENT:
+            const countField = `stats.reactionCounts.${(doc as ILike).reactionType.toLowerCase()}`;
+            const generalLikesField = 'stats.likesCount';
+            updateQuery = { $inc: { [countField]: -1, [generalLikesField]: -1 } };
+            break;
+            
+        case LikeableType.BOARD:
+            // [ใหม่] ลดค่า counter ใน Board ให้สอดคล้องกับตอนที่เพิ่ม
+            switch ((doc as ILike).reactionType) {
+                case ReactionType.UPVOTE:
+                    updateQuery = { $inc: { "stats.upvotesCount": -1 } };
+                    break;
+                case ReactionType.DOWNVOTE:
+                    updateQuery = { $inc: { "stats.downvotesCount": -1 } };
+                    break;
+                default:
+                    updateQuery = { $inc: { "stats.likesCount": -1 } };
+                    break;
+            }
+            break;
+    }
+    try {
+        await TargetModel.findByIdAndUpdate((doc as ILike).targetId, updateQuery);
+    } catch (error) {
+        console.error(`Failed to update count for ${(doc as ILike).targetType} [${(doc as ILike).targetId}] on delete:`, error);
+    }
+
+    next();
 });
 
-// ==================================================================================================
+
+// = a================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-// ตรวจสอบว่า Model "Like" ถูกสร้างไปแล้วหรือยัง ถ้ายัง ให้สร้าง Model ใหม่
 const LikeModel = (models.Like as mongoose.Model<ILike>) || model<ILike>("Like", LikeSchema);
 
 export default LikeModel;
@@ -244,22 +267,17 @@ export default LikeModel;
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
 // ==================================================================================================
-// 1.  **Dynamic Ref for `targetId`**: ใช้ `refPath: "targetType"` เพื่อให้ Mongoose populate targetId
-//     ได้แบบ dynamic แต่ต้อง import และ register ทุก model ใน LikeableType
-// 2.  **Denormalization of Reaction Counts**: ใช้ `stats.likesCount`, `stats.lovesCount` ใน target models
-//     เพื่อ performance ควรตรวจสอบว่า field เหล่านี้มีอยู่ในทุก model
-// 3.  **Contextual Fields**: `novelIdContext` และ `episodeIdContext` ช่วยลดความซับซ้อนในการ query
-//     เช่น หา user ที่ like episode ในนิยายนี้
-// 4.  **MongoDB Transactions**: การอัปเดต reaction และ counts ใน target model ควรอยู่ใน transaction
-//     เพื่อความสอดคล้องของข้อมูล (ถ้า MongoDB รองรับ replica set)
-// 5.  **Scalability**: การอัปเดต counts แบบ real-time อาจเป็น bottleneck ในระบบขนาดใหญ่
-//     พิจารณาใช้ background jobs หรือ message queues (เช่น RabbitMQ, Kafka) เพื่อ aggregate counts
-// 6.  **User Interface**: UI ควรมี optimistic updates และป้องกันการกด like รัวๆ
-// 7.  **Notifications**: การ like เนื้อหาสำคัญ (เช่น ตอนใหม่) ควร trigger notification
-//     โดยใช้ NotificationModel จาก Notification.ts
+// 1.  **Dynamic Population**: ใช้ `targetType` เพื่อให้ Mongoose populate `targetId` ได้แบบ dynamic แต่ต้อง import และ register ทุก model ใน LikeableType
+// 2.  **Denormalization of Reaction Counts**: การใช้ `stats` ใน target models เพื่อ performance เป็นสิ่งที่ดี
+//     - สำหรับ **Board**: จะมีการนับ `upvotesCount` และ `downvotesCount` แยกต่างหาก ส่วน reaction อื่นๆ จะรวมอยู่ใน `likesCount`
+//     - สำหรับ **Novel/Episode/Comment**: จะนับ `reactionCounts` แยกตามแต่ละประเภท และมี `likesCount` เป็นผลรวม
+// 3.  **Contextual Fields**: `novelIdContext`, `episodeIdContext`, และ `boardIdContext` ช่วยลดความซับซ้อนในการ query ที่ต้องการบริบท
+//     เช่น "หา user ที่ like comment ในกระทู้นี้"
+// 4.  **MongoDB Transactions**: การอัปเดต reaction และ counts ใน target model ควรอยู่ใน transaction เพื่อความสอดคล้องของข้อมูล (ถ้า MongoDB รองรับ replica set)
+// 5.  **Scalability**: การอัปเดต counts แบบ real-time อาจเป็น bottleneck ในระบบขนาดใหญ่ พิจารณาใช้ background jobs หรือ message queues (เช่น RabbitMQ, Kafka) เพื่อ aggregate counts
+// 6.  **User Interface**: UI ควรมี optimistic updates และป้องกันการกด reaction รัวๆ
+// 7.  **Notifications**: การ like เนื้อหาสำคัญ (เช่น กระทู้, ตอนใหม่) ควร trigger notification โดยใช้ NotificationModel
 // 8.  **Error Handling**: ใช้ logging library (เช่น Winston) และเพิ่ม retry mechanism ใน middleware
-// 9.  **Changing Reactions**: การเปลี่ยน reaction (เช่น จาก like เป็น love) ควรย้าย logic
-//     ไป service layer เพื่อลดการ query ใน middleware
-// 10. **Index Optimization**: ตรวจสอบประสิทธิภาพของ indexes ด้วย `explain()` ใน MongoDB
-//     และปรับถ้าจำเป็น
+// 9.  **Changing Reactions**: การเปลี่ยน reaction (เช่น จาก like เป็น love) ควรย้าย logic ไป service layer เพื่อลดการ query ใน middleware โดยอาจจะเป็นการ `findOneAndUpdate` เพียงครั้งเดียวแทนการ `deleteOne` แล้ว `save` ใหม่
+// 10. **Index Optimization**: ตรวจสอบประสิทธิภาพของ indexes ด้วย `explain()` ใน MongoDB และปรับถ้าจำเป็น โดยเฉพาะ index ที่ใช้ `userId`, `targetId`, และ `targetType` ร่วมกัน
 // ==================================================================================================

@@ -536,15 +536,15 @@ WriterApplicationSchema.post<IWriterApplication>("save", async function (this: I
 
     // 3. อัปเดตนามปากกา (penName) จาก displayName ในใบสมัคร
     // และอัปเดต bio ถ้ามีการกรอกในใบสมัครและ bio เดิมใน profile ว่าง
-    if (this.displayName && user.profile.penName !== this.displayName) {
+    if (this.displayName && (!user.profile.penNames || user.profile.penNames[0] !== this.displayName)) {
         // ตรวจสอบความซ้ำซ้อนของ penName ก่อนตั้งค่า
         const existingUserWithPenName = await UserModel.findOne({
-            "profile.penName": this.displayName,
+            "profile.penNames": this.displayName, // Check against the array
             _id: { $ne: this.applicantId }, // ไม่นับ user คนปัจจุบัน
         });
 
         if (!existingUserWithPenName) {
-            user.profile.penName = this.displayName;
+            user.profile.penNames = [this.displayName];
             console.log(`[WriterApp Post-Save] อัปเดตนามปากกา (penName) ของผู้ใช้ ${user.username} เป็น "${this.displayName}"`);
             userNeedsSave = true;
         } else {
