@@ -20,7 +20,7 @@ interface LibraryItem {
   addedAt: string;
 }
 
-const FALLBACK_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTYiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgOTYgMTI4IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cmVjdCB3aWR0aD0iOTYiIGhlaWdodD0iMTI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0zMiA0OEg2NFY2NEgzMlY0OFoiIGZpbGw9IiNEMUQ1REIiLz4KPC9zdmc+Cg==';
+const FALLBACK_IMAGE = '/images/placeholder-cover.webp';
 
 const HistoryItem = ({ item }: { item: LibraryItem }) => {
   const lastReadDate = new Date(item.readingProgress.lastReadAt).toLocaleDateString('th-TH', {
