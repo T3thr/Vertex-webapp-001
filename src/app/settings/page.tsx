@@ -14,7 +14,7 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { Loader2, Monitor, Gamepad2, Bell, Shield, Moon, Sun, BookOpen, Volume2, Image, Text, Rss, Layers } from 'lucide-react';
 
-// Types for settings
+
 interface IUserAccessibilityDisplayPreferences {
   highContrastMode: boolean;
   dyslexiaFriendlyFont: boolean;
