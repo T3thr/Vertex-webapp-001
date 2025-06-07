@@ -1,18 +1,19 @@
 // src/app/layout.tsx
+import dbConnect from "@/backend/lib/mongodb";
+import UserModel from "@/backend/models/User";
+import Footer from "@/components/layouts/Footer";
+import NavBarWrapper from "@/components/layouts/NavBarWrapper";
+import { GlobalProvider } from "@/context/GlobalContext";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { GlobalProvider } from "@/context/GlobalContext";
-import NavBarWrapper from "@/components/layouts/NavBarWrapper";
-import Footer from "@/components/layouts/Footer";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
 
-import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import type { Theme } from "@/context/ThemeContext";
+import { getServerSession } from "next-auth/next";
+import { Providers } from './providers';
 
 // --- การตั้งค่า Font ---
 const geistSans = Geist({
@@ -212,13 +213,15 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary flex flex-col`}
       >
-        <GlobalProvider>
-          <NavBarWrapper />
-          <main className="flex-grow w-full">
-            {children}
-          </main>
-          <Footer />
-        </GlobalProvider>
+        <Providers>
+          <GlobalProvider>
+            <NavBarWrapper />
+            <main className="flex-grow w-full">
+              {children}
+            </main>
+            <Footer />
+          </GlobalProvider>
+        </Providers>
         <Analytics />
         <SpeedInsights />
       </body>
