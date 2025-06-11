@@ -119,9 +119,8 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
       </div>
     );
   }
-
   // เตรียมข้อมูลที่จะแสดง
-  const authorName = novel.author?.profile?.penName || 
+  const authorName = novel.author?.profile?.penNames?.join(', ') || 
                     novel.author?.profile?.displayName || 
                     novel.author?.username || 
                     'นักเขียนนิรนาม';

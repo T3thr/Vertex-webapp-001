@@ -484,7 +484,7 @@ export default function NovelDetailsTab({novel}:NovelDetailsTabProps) {
                   href={`/u/${novel.author.username || ''}`}
                   className="text-lg font-semibold text-primary hover:text-primary/80 transition-colors"
                 >
-                  {novel.author.profile?.penName || novel.author.profile?.displayName || novel.author.username}
+                  {novel.author.profile?.penNames?.join(', ') || novel.author.profile?.displayName || novel.author.username}
                 </Link>
                 {novel.author.profile?.bio && (
                   <p className="text-muted-foreground mt-2 leading-relaxed">
