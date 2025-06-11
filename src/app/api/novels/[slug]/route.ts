@@ -31,12 +31,7 @@ import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType
 interface PopulatedAuthorForDetailPage {
   _id: string;
   username?: string;
-  profile: {
-    displayName?: string;
-    penName?: string;
-    avatarUrl?: string;
-    bio?: string;
-  };
+  profile: IUserProfile; // Changed to IUserProfile
   writerStats?: {
     totalNovelsPublished: number;
     totalViewsAcrossAllNovels: number;
@@ -325,7 +320,7 @@ export async function GET(request: NextRequest) {
         username: populatedAuthor.username,
         profile: {
           displayName: populatedAuthor.profile.displayName,
-          penName: populatedAuthor.profile.penName,
+          penNames: populatedAuthor.profile.penNames,
           avatarUrl: populatedAuthor.profile.avatarUrl,
           bio: populatedAuthor.profile.bio,
         },
