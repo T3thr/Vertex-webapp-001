@@ -1532,11 +1532,11 @@ UserSchema.index(
 // --- Writer-specific Indexes ---
 UserSchema.index(
   { "writerStats.activeNovelPromotions.novelId": 1 },
-  { sparse: true, name: "UserWriterActivePromotionsIndex" }
+    { sparse: true, name: "UserWriterActivePromotionsIndex" }
 );
 UserSchema.index(
   { "writerStats.trendingNovels.novelId": 1 },
-  { sparse: true, name: "UserWriterTrendingNovelsIndex" }
+    { sparse: true, name: "UserWriterTrendingNovelsIndex" }
 );
 
 // ==================================================================================================
@@ -1544,93 +1544,93 @@ UserSchema.index(
 // ==================================================================================================
 
 UserSchema.pre<IUser>("save", async function (next) {
-if (this.isModified("password") && this.password) {
-  const hasCredentialsAccount = this.accounts.some(acc => acc.type === "credentials" && acc.provider === "credentials");
-  if (hasCredentialsAccount) {
-    try {
-      const salt = await bcrypt.genSalt(10);
-      this.password = await bcrypt.hash(this.password, salt);
-    } catch (error: any) {
-      return next(new Error("เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน: " + error.message));
+  if (this.isModified("password") && this.password) {
+    const hasCredentialsAccount = this.accounts.some(acc => acc.type === "credentials" && acc.provider === "credentials");
+    if (hasCredentialsAccount) {
+      try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+      } catch (error: any) {
+        return next(new Error("เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน: " + error.message));
+      }
+    } else {
+      this.password = undefined;
     }
-  } else {
-    this.password = undefined;
-  }
-} else if (this.isNew && !this.password && this.accounts.some(acc => acc.type === "credentials")) {
-  // return next(new Error("ต้องระบุรหัสผ่านสำหรับบัญชีประเภท credentials"));
-}
-
-if (this.isNew && !this.username && this.email) {
-  let baseUsername = this.email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").toLowerCase();
-  if (!baseUsername || baseUsername.length < 3) baseUsername = "user";
-  while(baseUsername.length < 3) {
-    baseUsername += Math.floor(Math.random() * 10);
-  }
-  let potentialUsername = baseUsername.substring(0, 40);
-  let count = 0;
-  const UserModelInstance = models.User || model<IUser>("User");
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const existingUser = await UserModelInstance.findOne({ username: potentialUsername });
-    if (!existingUser) break;
-    count++;
-    potentialUsername = `${baseUsername.substring(0, 40 - String(count).length)}${count}`;
-    if (potentialUsername.length > 50) {
-       return next(new Error("ไม่สามารถสร้างชื่อผู้ใช้ที่ไม่ซ้ำกันได้ กรุณาลองใช้อีเมลอื่นหรือตั้งชื่อผู้ใช้ด้วยตนเอง"));
-    }
-  }
-  this.username = potentialUsername;
-}
-
-if (this.isModified("email") && this.email) {
-  this.email = this.email.toLowerCase();
-}
-
-if (this.isNew && this.accounts.some(acc => acc.type === "oauth") && this.email) {
-  this.isEmailVerified = true;
-  this.emailVerifiedAt = new Date();
-}
-
-// ตรวจสอบและสร้าง writerStats เมื่อ role "Writer" ถูกเพิ่ม หรือเป็น User ใหม่ที่เป็น Writer
-const isNowWriter = this.roles.includes("Writer");
-const wasPreviouslyWriter = this.$__.priorValid ? this.$__.priorValid.roles.includes("Writer") : false;
-
-if (isNowWriter && (!this.writerStats || !wasPreviouslyWriter)) {
-  if (!this.writerStats) { // ถ้า writerStats ยังไม่มี ให้สร้างใหม่ทั้งหมด
-    this.writerStats = {
-      totalViewsReceived: 0,
-      totalNovelsPublished: 0,
-      totalEpisodesPublished: 0,
-      totalViewsAcrossAllNovels: 0,
-      totalReadsAcrossAllNovels: 0,
-      totalLikesReceivedOnNovels: 0,
-      totalCommentsReceivedOnNovels: 0,
-      totalEarningsToDate: 0,
-      totalCoinsReceived: 0,
-      totalRealMoneyReceived: 0,
-      totalDonationsReceived: 0,
-      novelPerformanceSummaries: new mongoose.Types.DocumentArray<INovelPerformanceStats>([]),
-      writerSince: new Date(),
-      activeNovelPromotions: new mongoose.Types.DocumentArray<IActiveNovelPromotionSummary>([]), // **เพิ่มใหม่**
-      trendingNovels: new mongoose.Types.DocumentArray<ITrendingNovelSummary>([]), // **เพิ่มใหม่**
-    };
-  } else { // ถ้า writerStats มีอยู่แล้ว (เช่นถูกเพิ่ม role Writer ทีหลัง)
-    if (!this.writerStats.writerSince) {
-      this.writerStats.writerSince = new Date();
-    }
-    if (!this.writerStats.novelPerformanceSummaries) {
-      this.writerStats.novelPerformanceSummaries = new mongoose.Types.DocumentArray<INovelPerformanceStats>([]);
-    }
-    // ตรวจสอบและเพิ่ม field ใหม่ถ้ายังไม่มี (สำคัญสำหรับการ migrate schema เก่า)
-    if (!this.writerStats.activeNovelPromotions) {
-      this.writerStats.activeNovelPromotions = new mongoose.Types.DocumentArray<IActiveNovelPromotionSummary>([]);
-    }
-    if (!this.writerStats.trendingNovels) {
-      this.writerStats.trendingNovels = new mongoose.Types.DocumentArray<ITrendingNovelSummary>([]);
-    }
+  } else if (this.isNew && !this.password && this.accounts.some(acc => acc.type === "credentials")) {
+    // return next(new Error("ต้องระบุรหัสผ่านสำหรับบัญชีประเภท credentials"));
   }
 
-  // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง ยังคงเดิม)
+  if (this.isNew && !this.username && this.email) {
+    let baseUsername = this.email.split("@")[0].replace(/[^a-zA-Z0-9_.]/g, "").toLowerCase();
+    if (!baseUsername || baseUsername.length < 3) baseUsername = "user";
+    while(baseUsername.length < 3) {
+      baseUsername += Math.floor(Math.random() * 10);
+    }
+    let potentialUsername = baseUsername.substring(0, 40);
+    let count = 0;
+    const UserModelInstance = models.User || model<IUser>("User");
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const existingUser = await UserModelInstance.findOne({ username: potentialUsername });
+      if (!existingUser) break;
+      count++;
+      potentialUsername = `${baseUsername.substring(0, 40 - String(count).length)}${count}`;
+      if (potentialUsername.length > 50) {
+         return next(new Error("ไม่สามารถสร้างชื่อผู้ใช้ที่ไม่ซ้ำกันได้ กรุณาลองใช้อีเมลอื่นหรือตั้งชื่อผู้ใช้ด้วยตนเอง"));
+      }
+    }
+    this.username = potentialUsername;
+  }
+
+  if (this.isModified("email") && this.email) {
+    this.email = this.email.toLowerCase();
+  }
+
+  if (this.isNew && this.accounts.some(acc => acc.type === "oauth") && this.email) {
+    this.isEmailVerified = true;
+    this.emailVerifiedAt = new Date();
+  }
+  
+  // ตรวจสอบและสร้าง writerStats เมื่อ role "Writer" ถูกเพิ่ม หรือเป็น User ใหม่ที่เป็น Writer
+  const isNowWriter = this.roles.includes("Writer");
+  const wasPreviouslyWriter = this.$__.priorValid ? this.$__.priorValid.roles.includes("Writer") : false;
+
+  if (isNowWriter && (!this.writerStats || !wasPreviouslyWriter)) {
+    if (!this.writerStats) { // ถ้า writerStats ยังไม่มี ให้สร้างใหม่ทั้งหมด
+      this.writerStats = {
+        totalViewsReceived: 0,
+        totalNovelsPublished: 0,
+        totalEpisodesPublished: 0,
+        totalViewsAcrossAllNovels: 0,
+        totalReadsAcrossAllNovels: 0,
+        totalLikesReceivedOnNovels: 0,
+        totalCommentsReceivedOnNovels: 0,
+        totalEarningsToDate: 0,
+        totalCoinsReceived: 0,
+        totalRealMoneyReceived: 0,
+        totalDonationsReceived: 0,
+        novelPerformanceSummaries: new mongoose.Types.DocumentArray<INovelPerformanceStats>([]),
+        writerSince: new Date(),
+        activeNovelPromotions: new mongoose.Types.DocumentArray<IActiveNovelPromotionSummary>([]), // **เพิ่มใหม่**
+        trendingNovels: new mongoose.Types.DocumentArray<ITrendingNovelSummary>([]), // **เพิ่มใหม่**
+      };
+    } else { // ถ้า writerStats มีอยู่แล้ว (เช่นถูกเพิ่ม role Writer ทีหลัง)
+      if (!this.writerStats.writerSince) {
+        this.writerStats.writerSince = new Date();
+      }
+      if (!this.writerStats.novelPerformanceSummaries) {
+        this.writerStats.novelPerformanceSummaries = new mongoose.Types.DocumentArray<INovelPerformanceStats>([]);
+      }
+      // ตรวจสอบและเพิ่ม field ใหม่ถ้ายังไม่มี (สำคัญสำหรับการ migrate schema เก่า)
+      if (!this.writerStats.activeNovelPromotions) {
+        this.writerStats.activeNovelPromotions = new mongoose.Types.DocumentArray<IActiveNovelPromotionSummary>([]);
+      }
+      if (!this.writerStats.trendingNovels) {
+        this.writerStats.trendingNovels = new mongoose.Types.DocumentArray<ITrendingNovelSummary>([]);
+      }
+    }
+
+    // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง ยังคงเดิม)
   if (this.profile?.displayName && !this.profile.penName) {
       const UserModelInstance = models.User || model<IUser>("User");
       try {
@@ -1646,32 +1646,32 @@ if (isNowWriter && (!this.writerStats || !wasPreviouslyWriter)) {
           // ไม่ควร block การ save หลัก แค่ log error
       }
   }
-} else if (!isNowWriter && wasPreviouslyWriter) {
-  // ถ้าถูกถอด role Writer อาจจะล้าง writerStats หรือเก็บไว้เป็นประวัติ (ขึ้นอยู่กับนโยบาย)
-  // this.writerStats = undefined; // ตัวอย่างการล้าง
-}
-
-// << ใหม่: ตั้งค่า currentLevelObject และ nextLevelXPThreshold สำหรับผู้ใช้ใหม่ หรือเมื่อ level เปลี่ยน
-if (this.isNew || this.isModified("gamification.level")) {
-  // const LevelModel = models.Level as mongoose.Model<ILevel> || model<ILevel>("Level"); // บรรทัดนี้ไม่จำเป็นแล้วถ้า import ด้านบน
-  try {
-    const currentLevelDoc = await LevelModel.findOne({ levelNumber: this.gamification.level }).lean();
-    if (currentLevelDoc) {
-      this.gamification.currentLevelObject = currentLevelDoc._id;
-      this.gamification.nextLevelXPThreshold = currentLevelDoc.xpToNextLevelFromThis || this.gamification.nextLevelXPThreshold;
-    } else if (this.gamification.level === 1 && !currentLevelDoc) {
-       console.warn(`[User Pre-Save Hook] Level ${this.gamification.level} document not found in Levels collection for user ${this.username}. Attempting to set default nextLevelXPThreshold.`);
-       // หาก Level 1 ไม่มีใน DB จริงๆ อาจจะต้องมีค่า default ที่เหมาะสมสำหรับ nextLevelXPThreshold
-       this.gamification.nextLevelXPThreshold = this.gamification.nextLevelXPThreshold || 100; // หรือค่า default อื่นๆ
-       this.gamification.currentLevelObject = null; // หรือจัดการตามความเหมาะสม
-    }
-  } catch (levelError) {
-      console.error(`❌ [User Pre-Save Hook] Error fetching Level ${this.gamification.level} for user ${this.username}:`, levelError);
-      // พิจารณาว่าจะให้ throw error หรือไม่ หรือจะให้ user สร้างต่อไปโดยไม่มีข้อมูล level
-      // หาก Level เป็นส่วนสำคัญ อาจจะต้อง next(levelError);
+  } else if (!isNowWriter && wasPreviouslyWriter) {
+    // ถ้าถูกถอด role Writer อาจจะล้าง writerStats หรือเก็บไว้เป็นประวัติ (ขึ้นอยู่กับนโยบาย)
+    // this.writerStats = undefined; // ตัวอย่างการล้าง
   }
-}
-next();
+
+  // << ใหม่: ตั้งค่า currentLevelObject และ nextLevelXPThreshold สำหรับผู้ใช้ใหม่ หรือเมื่อ level เปลี่ยน
+  if (this.isNew || this.isModified("gamification.level")) {
+    // const LevelModel = models.Level as mongoose.Model<ILevel> || model<ILevel>("Level"); // บรรทัดนี้ไม่จำเป็นแล้วถ้า import ด้านบน
+    try {
+      const currentLevelDoc = await LevelModel.findOne({ levelNumber: this.gamification.level }).lean();
+      if (currentLevelDoc) {
+        this.gamification.currentLevelObject = currentLevelDoc._id;
+        this.gamification.nextLevelXPThreshold = currentLevelDoc.xpToNextLevelFromThis || this.gamification.nextLevelXPThreshold;
+      } else if (this.gamification.level === 1 && !currentLevelDoc) {
+         console.warn(`[User Pre-Save Hook] Level ${this.gamification.level} document not found in Levels collection for user ${this.username}. Attempting to set default nextLevelXPThreshold.`);
+         // หาก Level 1 ไม่มีใน DB จริงๆ อาจจะต้องมีค่า default ที่เหมาะสมสำหรับ nextLevelXPThreshold
+         this.gamification.nextLevelXPThreshold = this.gamification.nextLevelXPThreshold || 100; // หรือค่า default อื่นๆ
+         this.gamification.currentLevelObject = null; // หรือจัดการตามความเหมาะสม
+      }
+    } catch (levelError) {
+        console.error(`❌ [User Pre-Save Hook] Error fetching Level ${this.gamification.level} for user ${this.username}:`, levelError);
+        // พิจารณาว่าจะให้ throw error หรือไม่ หรือจะให้ user สร้างต่อไปโดยไม่มีข้อมูล level
+        // หาก Level เป็นส่วนสำคัญ อาจจะต้อง next(levelError);
+    }
+  }
+  next();
 });
 
 // ==================================================================================================
@@ -1679,33 +1679,33 @@ next();
 // ==================================================================================================
 
 UserSchema.methods.matchPassword = async function (enteredPassword: string): Promise<boolean> {
-// console.log(`[matchPassword] Comparing: '${enteredPassword}' with stored hash: '${this.password ? this.password.substring(0,10)+'...' : 'NO_PASSWORD'}'`);
-if (!this.password) {
-  return false;
-}
-const isMatch = await bcrypt.compare(enteredPassword, this.password);
-// console.log(`[matchPassword] Comparison result: ${isMatch}`);
-return isMatch;
+  // console.log(`[matchPassword] Comparing: '${enteredPassword}' with stored hash: '${this.password ? this.password.substring(0,10)+'...' : 'NO_PASSWORD'}'`);
+  if (!this.password) {
+    return false;
+  }
+  const isMatch = await bcrypt.compare(enteredPassword, this.password);
+  // console.log(`[matchPassword] Comparison result: ${isMatch}`);
+  return isMatch;
 };
 
 UserSchema.methods.generateEmailVerificationToken = function (): string {
-const token = crypto.randomBytes(32).toString("hex");
-this.emailVerificationToken = crypto
-  .createHash("sha256")
-  .update(token)
-  .digest("hex");
-this.emailVerificationTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
-return token;
+  const token = crypto.randomBytes(32).toString("hex");
+  this.emailVerificationToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+  this.emailVerificationTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+  return token;
 };
 
 UserSchema.methods.generatePasswordResetToken = function (): string {
-const token = crypto.randomBytes(32).toString("hex");
-this.passwordResetToken = crypto
-  .createHash("sha256")
-  .update(token)
-  .digest("hex");
-this.passwordResetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
-return token;
+  const token = crypto.randomBytes(32).toString("hex");
+  this.passwordResetToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+  this.passwordResetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+  return token;
 };
 
 // ==================================================================================================
@@ -1713,24 +1713,24 @@ return token;
 // ==================================================================================================
 
 UserSchema.virtual("profileUrl").get(function (this: IUser) {
-if (this.username) {
-  return `/u/${this.username}`;
-}
-return `/users/${this._id}`;
+  if (this.username) {
+    return `/u/${this.username}`;
+  }
+  return `/users/${this._id}`;
 });
 
 UserSchema.virtual("age").get(function (this: IUser): number | undefined {
-if (this.profile && this.profile.dateOfBirth) {
-  const today = new Date();
-  const birthDate = new Date(this.profile.dateOfBirth);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
+  if (this.profile && this.profile.dateOfBirth) {
+    const today = new Date();
+    const birthDate = new Date(this.profile.dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : undefined;
   }
-  return age >= 0 ? age : undefined;
-}
-return undefined;
+  return undefined;
 });
 
 // ==================================================================================================

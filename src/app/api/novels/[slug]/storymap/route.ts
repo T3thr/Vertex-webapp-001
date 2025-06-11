@@ -11,14 +11,21 @@ import StoryMapModel, { StoryMapNodeType } from '@/backend/models/StoryMap';
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
+// Define the context type for route handlers to ensure correctness.
+type RouteContext = {
+  params: Promise<{
+    slug: string;
+  }>;
+};
+
 /**
  * GET - ดึงข้อมูล StoryMap ของนิยาย
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  context: RouteContext
 ) {
-  const { slug } = params;
+  const { slug } = await context.params; // Await the params promise
   try {
     console.log(`🔍 [StoryMap API] GET request for novel slug: ${slug}`);
 
@@ -104,9 +111,9 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  context: RouteContext
 ) {
-  const { slug } = params;
+  const { slug } = await context.params; // Await the params promise
   try {
     console.log(`📝 [StoryMap API] POST request for novel slug: ${slug}`);
 
@@ -204,7 +211,7 @@ export async function POST(
           nodeSpecificData: {},
         }
       ];
-
+      
       const newStoryMap = new StoryMapModel({
         novelId: novel._id,
         title: `แผนผังเรื่อง - ${novel.title}`,
@@ -259,9 +266,9 @@ export async function POST(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  context: RouteContext
 ) {
-  const { slug } = params;
+  const { slug } = await context.params; // Await the params promise
   try {
     console.log(`🔄 [StoryMap API] PUT request for novel slug: ${slug}`);
 
@@ -366,11 +373,11 @@ export async function PUT(
       case 'update_nodes_positions':
         if (data.nodes && Array.isArray(data.nodes)) {
           // อัปเดตตำแหน่ง Node แบบ debounce
-          const updatedNodes = data.nodes;
+          const updatedNodes = data.nodes as { nodeId: string, position: { x: number, y: number }}[];
           
           // อัปเดตเฉพาะตำแหน่งของ Node ที่มีอยู่แล้ว
           storyMap.nodes = storyMap.nodes.map(existingNode => {
-            const updatedNode = updatedNodes.find((n: { nodeId: string; }) => n.nodeId === existingNode.nodeId);
+            const updatedNode = updatedNodes.find(n => n.nodeId === existingNode.nodeId);
             if (updatedNode && updatedNode.position) {
               return {
                 ...existingNode,
@@ -418,9 +425,9 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { slug: string } }
+  context: RouteContext
 ) {
-  const { slug } = params;
+  const { slug } = await context.params; // Await the params promise
   try {
     console.log(`🗑️ [StoryMap API] DELETE request for novel slug: ${slug}`);
 
@@ -484,4 +491,3 @@ export async function DELETE(
     );
   }
 }
-
