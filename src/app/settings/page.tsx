@@ -13,109 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { Loader2, Monitor, Gamepad2, Bell, Shield, Moon, Sun, BookOpen, Volume2, Image, Text, Rss, Layers } from 'lucide-react';
+import type { IUserPreferences } from '@/backend/models/User';
 
-
-interface IUserAccessibilityDisplayPreferences {
-  highContrastMode: boolean;
-  dyslexiaFriendlyFont: boolean;
-  epilepsySafeMode: boolean;
-}
-
-interface IUserDisplayPreferences {
-  theme: string;
-  accessibility: IUserAccessibilityDisplayPreferences;
-  uiVisibility: {
-    textBoxOpacity: number;
-    backgroundBrightness: number;
-    textBoxBorder: boolean;
-  };
-  fontSettings: {
-    fontSize: number;
-    fontFamily: string;
-    textContrastMode: boolean;
-  };
-  visualEffects: {
-    sceneTransitionAnimations: boolean;
-    actionSceneEffects: boolean;
-  };
-  characterDisplay: {
-    showCharacters: boolean;
-    characterMovementAnimations: boolean;
-    hideCharactersDuringText: boolean;
-  };
-  characterVoiceDisplay: {
-    voiceIndicatorIcon: boolean;
-  };
-  backgroundDisplay: {
-    backgroundQuality: string;
-    showCGs: boolean;
-    backgroundEffects: boolean;
-  };
-  voiceSubtitles: {
-    enabled: boolean;
-  };
-}
-
-interface IUserReadingPreferences {
-  textSpeed: number;
-  instantText: boolean;
-  skipRead: boolean;
-  skipAll: boolean;
-  skipHold: boolean;
-  autoSpeed: number;
-  autoPlay: boolean;
-  enableHistory: boolean;
-  historyVoice: boolean;
-  historyBack: boolean;
-  choiceTimer: boolean;
-  highlightChoices: boolean;
-  routePreview: boolean;
-  autoSave: boolean;
-  saveFrequency: string;
-  decisionWarning: boolean;
-  importantMark: boolean;
-  routeProgress: boolean;
-  showUnvisited: boolean;
-  secretHints: boolean;
-}
-
-interface IUserNotificationPreferences {
-  email: {
-    enabled: boolean;
-  };
-  push: {
-    enabled: boolean;
-  };
-  saveLoad: {
-    autoSaveNotification: boolean;
-    noSaveSpaceWarning: boolean;
-  };
-  newContent: {
-    contentUpdates: boolean;
-    promotionEvent: boolean;
-  };
-  outOfGame: {
-    type: string;
-  };
-  optional: {
-    statChange: boolean;
-    statDetailLevel: string;
-  };
-}
-
-interface IUserPrivacyPreferences {
-  profileVisibility: boolean;
-  readingHistory: boolean;
-  activityStatus: boolean;
-  dataCollection: boolean;
-}
-
-interface IUserPreferences {
-  display: IUserDisplayPreferences;
-  reading: IUserReadingPreferences;
-  notifications: IUserNotificationPreferences;
-  privacy: IUserPrivacyPreferences;
-}
 
 interface SettingsProps {
   preferences: IUserPreferences;
@@ -440,13 +339,13 @@ export default function SettingsPage() {
                     <div className="w-[200px]">
                       <Slider
                         id="font-size"
-                        defaultValue={[session?.user?.preferences?.display?.fontSettings?.fontSize || 16]}
+                        defaultValue={[session?.user?.preferences?.display?.readingDisplay?.fontSize || 16]}
                         min={10}
                         max={24}
                         step={1}
                         onValueChange={(value) => {
                           handleSettingsUpdate('display', {
-                            fontSettings: { ...session?.user?.preferences?.display?.fontSettings, fontSize: value[0] }
+                            readingDisplay: { ...session?.user?.preferences?.display?.readingDisplay, fontSize: value[0] }
                           });
                         }}
                       />
@@ -459,8 +358,8 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <Label htmlFor="font-family">รูปแบบฟอนต์</Label>
                     <Select
-                      defaultValue={session?.user?.preferences?.display?.fontSettings?.fontFamily || 'sans-serif'}
-                      onValueChange={(value) => handleSettingsUpdate('display', { fontSettings: { ...session?.user?.preferences?.display?.fontSettings, fontFamily: value } })}
+                      defaultValue={session?.user?.preferences?.display?.readingDisplay?.fontFamily || 'sans-serif'}
+                      onValueChange={(value) => handleSettingsUpdate('display', { readingDisplay: { ...session?.user?.preferences?.display?.readingDisplay, fontFamily: value } })}
                     >
                       <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="เลือกฟอนต์" />
@@ -476,10 +375,10 @@ export default function SettingsPage() {
                     <Label htmlFor="text-contrast-mode">โหมดปรับ Contrast ตัวอักษร</Label>
                     <Switch
                       id="text-contrast-mode"
-                      defaultChecked={session?.user?.preferences?.display?.fontSettings?.textContrastMode}
+                      defaultChecked={session?.user?.preferences?.display?.readingDisplay?.textContrastMode}
                       onCheckedChange={(checked) => {
                         handleSettingsUpdate('display', {
-                          fontSettings: { ...session?.user?.preferences?.display?.fontSettings, textContrastMode: checked }
+                          readingDisplay: { ...session?.user?.preferences?.display?.readingDisplay, textContrastMode: checked }
                         });
                       }}
                     />
@@ -656,12 +555,12 @@ export default function SettingsPage() {
                       <div className="w-[200px]">
                         <Slider
                           id="text-speed"
-                          defaultValue={[session?.user?.preferences?.reading?.textSpeed || 50]}
+                          defaultValue={[session?.user?.preferences?.visualNovelGameplay?.textSpeed || 50]}
                           min={0}
                           max={100}
                           step={1}
                           onValueChange={(value) => {
-                            handleSettingsUpdate('reading', {
+                            handleSettingsUpdate('visualNovelGameplay', {
                               textSpeed: value[0]
                             });
                           }}
@@ -676,9 +575,9 @@ export default function SettingsPage() {
                       <Label htmlFor="instant-text">แสดงข้อความทั้งหมดทันที</Label>
                       <Switch
                         id="instant-text"
-                        defaultChecked={session?.user?.preferences?.reading?.instantText}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.instantText}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             instantText: checked
                           });
                         }}
@@ -695,9 +594,9 @@ export default function SettingsPage() {
                       <Label htmlFor="skip-read">ข้ามเฉพาะข้อความที่เคยอ่านแล้ว</Label>
                       <Switch
                         id="skip-read"
-                        defaultChecked={session?.user?.preferences?.reading?.skipRead}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.skipRead}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             skipRead: checked
                           });
                         }}
@@ -707,9 +606,9 @@ export default function SettingsPage() {
                       <Label htmlFor="skip-all">ข้ามทุกข้อความ (รวมที่ยังไม่เคยอ่าน)</Label>
                       <Switch
                         id="skip-all"
-                        defaultChecked={session?.user?.preferences?.reading?.skipAll}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.skipAll}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             skipAll: checked
                           });
                         }}
@@ -719,9 +618,9 @@ export default function SettingsPage() {
                       <Label htmlFor="skip-hold">ข้ามโดยกดค้าง / อัตโนมัติ</Label>
                       <Switch
                         id="skip-hold"
-                        defaultChecked={session?.user?.preferences?.reading?.skipHold}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.skipHold}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             skipHold: checked
                           });
                         }}
@@ -739,12 +638,12 @@ export default function SettingsPage() {
                       <div className="w-[200px]">
                         <Slider
                           id="auto-speed"
-                          defaultValue={[session?.user?.preferences?.reading?.autoSpeed || 50]}
+                          defaultValue={[session?.user?.preferences?.visualNovelGameplay?.autoSpeed || 50]}
                           min={0}
                           max={100}
                           step={1}
                           onValueChange={(value) => {
-                            handleSettingsUpdate('reading', {
+                            handleSettingsUpdate('visualNovelGameplay', {
                               autoSpeed: value[0]
                             });
                           }}
@@ -759,9 +658,9 @@ export default function SettingsPage() {
                       <Label htmlFor="auto-play">เล่นอัตโนมัติหลังข้อความจบ</Label>
                       <Switch
                         id="auto-play"
-                        defaultChecked={session?.user?.preferences?.reading?.autoPlay}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.autoPlay}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             autoPlay: checked
                           });
                         }}
@@ -778,9 +677,9 @@ export default function SettingsPage() {
                       <Label htmlFor="enable-history">เปิดใช้งานประวัติข้อความ</Label>
                       <Switch
                         id="enable-history"
-                        defaultChecked={session?.user?.preferences?.reading?.enableHistory}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.enableHistory}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             enableHistory: checked
                           });
                         }}
@@ -790,9 +689,9 @@ export default function SettingsPage() {
                       <Label htmlFor="history-voice">เปิดเสียงพากย์เมื่อกดดูข้อความเก่า</Label>
                       <Switch
                         id="history-voice"
-                        defaultChecked={session?.user?.preferences?.reading?.historyVoice}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.historyVoice}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             historyVoice: checked
                           });
                         }}
@@ -802,9 +701,9 @@ export default function SettingsPage() {
                       <Label htmlFor="history-back">กดย้อนเพื่อกลับไปยังตัวเลือกก่อนหน้า</Label>
                       <Switch
                         id="history-back"
-                        defaultChecked={session?.user?.preferences?.reading?.historyBack}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.historyBack}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             historyBack: checked
                           });
                         }}
@@ -821,9 +720,9 @@ export default function SettingsPage() {
                       <Label htmlFor="choice-timer">แสดงตัวจับเวลาในการเลือก</Label>
                       <Switch
                         id="choice-timer"
-                        defaultChecked={session?.user?.preferences?.reading?.choiceTimer}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.choiceTimer}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             choiceTimer: checked
                           });
                         }}
@@ -833,9 +732,9 @@ export default function SettingsPage() {
                       <Label htmlFor="highlight-choices">ไฮไลต์ตัวเลือกที่เคยเลือกแล้ว</Label>
                       <Switch
                         id="highlight-choices"
-                        defaultChecked={session?.user?.preferences?.reading?.highlightChoices}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.highlightChoices}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             highlightChoices: checked
                           });
                         }}
@@ -845,9 +744,9 @@ export default function SettingsPage() {
                       <Label htmlFor="route-preview">แสดงผลลัพธ์เบื้องต้น</Label>
                       <Switch
                         id="route-preview"
-                        defaultChecked={session?.user?.preferences?.reading?.routePreview}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.routePreview}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             routePreview: checked
                           });
                         }}
@@ -864,9 +763,9 @@ export default function SettingsPage() {
                       <Label htmlFor="auto-save">เปิด/ปิดเซฟอัตโนมัติ</Label>
                       <Switch
                         id="auto-save"
-                        defaultChecked={session?.user?.preferences?.reading?.autoSave}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.autoSave}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             autoSave: checked
                           });
                         }}
@@ -875,9 +774,9 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between">
                       <Label htmlFor="save-frequency">ความถี่ในการเซฟ</Label>
                       <Select
-                        defaultValue={session?.user?.preferences?.reading?.saveFrequency || 'scene'}
+                        defaultValue={session?.user?.preferences?.visualNovelGameplay?.saveFrequency || 'scene'}
                         onValueChange={(value) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             saveFrequency: value
                           });
                         }}
@@ -903,9 +802,9 @@ export default function SettingsPage() {
                       <Label htmlFor="decision-warning">เปิดแจ้งเตือนเมื่อกำลังจะเลือกตัวเลือกสำคัญ</Label>
                       <Switch
                         id="decision-warning"
-                        defaultChecked={session?.user?.preferences?.reading?.decisionWarning}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.decisionWarning}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             decisionWarning: checked
                           });
                         }}
@@ -915,9 +814,9 @@ export default function SettingsPage() {
                       <Label htmlFor="important-mark">เปิด/ปิดเครื่องหมาย &quot;สำคัญ&quot; บนตัวเลือก</Label>
                       <Switch
                         id="important-mark"
-                        defaultChecked={session?.user?.preferences?.reading?.importantMark}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.importantMark}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             importantMark: checked
                           });
                         }}
@@ -934,9 +833,9 @@ export default function SettingsPage() {
                       <Label htmlFor="route-progress">แสดงเปอร์เซ็นต์ความคืบหน้าใน route ปัจจุบัน</Label>
                       <Switch
                         id="route-progress"
-                        defaultChecked={session?.user?.preferences?.reading?.routeProgress}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.routeProgress}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             routeProgress: checked
                           });
                         }}
@@ -946,9 +845,9 @@ export default function SettingsPage() {
                       <Label htmlFor="show-unvisited">แสดงเส้นทางที่ยังไม่เคยเข้า</Label>
                       <Switch
                         id="show-unvisited"
-                        defaultChecked={session?.user?.preferences?.reading?.showUnvisited}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.showUnvisited}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             showUnvisited: checked
                           });
                         }}
@@ -958,9 +857,9 @@ export default function SettingsPage() {
                       <Label htmlFor="secret-hints">แสดงคำใบ้สำหรับการปลดเส้นทางลับ</Label>
                       <Switch
                         id="secret-hints"
-                        defaultChecked={session?.user?.preferences?.reading?.secretHints}
+                        defaultChecked={session?.user?.preferences?.visualNovelGameplay?.secretHints}
                         onCheckedChange={(checked) => {
-                          handleSettingsUpdate('reading', {
+                          handleSettingsUpdate('visualNovelGameplay', {
                             secretHints: checked
                           });
                         }}

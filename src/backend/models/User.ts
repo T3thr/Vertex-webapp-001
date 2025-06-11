@@ -4,7 +4,8 @@
 // เพิ่มการรวม WriterStats และการรองรับ Mental Wellbeing Insights
 // อัปเดตล่าสุด: เพิ่ม VisualNovelGameplayPreferences สำหรับการตั้งค่าเฉพาะของ Visual Novel
 // อัปเดตล่าสุด (Gamification): ปรับปรุง IUserGamification, เพิ่ม totalExperiencePointsEverEarned, currentLevelObject, showcasedItems, displayBadges
-// อัปเดตล่าสุด (Visual Novel Settings): ปรับปรุงให้ตรงกับ Frontend Settings Page
+// อัปเดตล่าสุด (Board Integration): เพิ่ม boardPostsCreatedCount ใน socialStats เพื่อทำงานร่วมกับ Board.ts
+
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -17,327 +18,185 @@ import { IPromotionDetails as INovelPromotionDetails } from "./Novel";
 // SECTION: อินเทอร์เฟซย่อย (Sub-Interfaces) สำหรับการตั้งค่าและข้อมูลเฉพาะส่วน
 // ==================================================================================================
 
-/**
- * @interface IUserAccessibilityDisplayPreferences
- * @description การตั้งค่าการเข้าถึงเพื่อช่วยเหลือผู้ใช้ (Accessibility) - อัปเดตให้ตรงกับ Frontend
- * @property {boolean} [dyslexiaFriendlyFont] - เปิด/ปิดการใช้ฟอนต์ที่เหมาะสำหรับผู้มีภาวะ Dyslexia
- * @property {boolean} [highContrastMode] - เปิด/ปิดโหมดความคมชัดสูง
- * @property {boolean} [epilepsySafeMode] - เปิด/ปิดโหมดลดแสงกระพริบสำหรับโรคลมชัก (เพิ่มใหม่)
- */
+// #region --- PREFERENCES INTERFACES ---
+
+// #region Display Preferences
 export interface IUserAccessibilityDisplayPreferences {
-  dyslexiaFriendlyFont?: boolean; // ใช้ฟอนต์สำหรับผู้มีภาวะดิสเล็กเซีย
-  highContrastMode?: boolean; // โหมดความคมชัดสูง
-  epilepsySafeMode?: boolean; // โหมดลดแสงกระพริบสำหรับโรคลมชัก
+  dyslexiaFriendlyFont?: boolean; 
+  highContrastMode?: boolean; 
+  epilepsySafeMode?: boolean; 
 }
 
-/**
- * @interface IUIVisibilitySettings
- * @description การตั้งค่าความโปร่งใสและการแสดงผล UI (เพิ่มใหม่)
- * @property {number} [textBoxOpacity] - ความโปร่งใสของกล่องข้อความ (0-100)
- * @property {number} [backgroundBrightness] - ความสว่างของฉากหลัง (0-100)
- * @property {boolean} [textBoxBorder] - เปิด/ปิดกรอบข้อความ
- */
-export interface IUIVisibilitySettings {
-  textBoxOpacity?: number; // ความโปร่งใสของกล่องข้อความ (0-100)
-  backgroundBrightness?: number; // ความสว่างของฉากหลัง (0-100)
-  textBoxBorder?: boolean; // เปิด/ปิดกรอบข้อความ
+export interface IVisualNovelUIVisibilityPreferences {
+  textBoxOpacity: number;
+  backgroundBrightness: number;
+  textBoxBorder: boolean;
 }
 
-/**
- * @interface IFontSettings
- * @description การตั้งค่าฟอนต์และข้อความ (เพิ่มใหม่)
- * @property {number} [fontSize] - ขนาดตัวอักษร (10-24)
- * @property {string} [fontFamily] - รูปแบบฟอนต์ (sans-serif, serif, monospace)
- * @property {boolean} [textContrastMode] - โหมดปรับ Contrast ตัวอักษร
- */
-export interface IFontSettings {
-  fontSize?: number; // ขนาดตัวอักษร (10-24)
-  fontFamily?: string; // รูปแบบฟอนต์
-  textContrastMode?: boolean; // โหมดปรับ Contrast ตัวอักษร
+export interface IUserReadingDisplayPreferences {
+  fontSize: number;
+  fontFamily: string;
+  textContrastMode: boolean;
 }
 
-/**
- * @interface IVisualEffectsSettings
- * @description การตั้งค่าเอฟเฟกต์ภาพ (เพิ่มใหม่)
- * @property {boolean} [sceneTransitionAnimations] - เปิด/ปิดแอนิเมชันเวลาเปลี่ยนฉาก
- * @property {boolean} [actionSceneEffects] - เปิด/ปิด Screen Shake / Flash
- */
-export interface IVisualEffectsSettings {
-  sceneTransitionAnimations?: boolean; // เปิด/ปิดแอนิเมชันเวลาเปลี่ยนฉาก
-  actionSceneEffects?: boolean; // เปิด/ปิด Screen Shake / Flash
+export interface IVisualNovelVisualEffects {
+  sceneTransitionAnimations: boolean;
+  actionSceneEffects: boolean;
 }
 
-/**
- * @interface ICharacterDisplaySettings
- * @description การตั้งค่าการแสดงผลตัวละคร (เพิ่มใหม่)
- * @property {boolean} [showCharacters] - แสดง/ไม่แสดงตัวละครบนหน้าจอ
- * @property {boolean} [characterMovementAnimations] - เปิด/ปิดแอนิเมชันการขยับตัวละคร
- * @property {boolean} [hideCharactersDuringText] - ซ่อนตัวละครเมื่ออ่านข้อความ
- */
-export interface ICharacterDisplaySettings {
-  showCharacters?: boolean; // แสดง/ไม่แสดงตัวละครบนหน้าจอ
-  characterMovementAnimations?: boolean; // เปิด/ปิดแอนิเมชันการขยับตัวละคร
-  hideCharactersDuringText?: boolean; // ซ่อนตัวละครเมื่ออ่านข้อความ
+export interface IVisualNovelCharacterDisplay {
+  showCharacters: boolean;
+  characterMovementAnimations: boolean;
+  hideCharactersDuringText: boolean;
 }
 
-/**
- * @interface ICharacterVoiceDisplaySettings
- * @description การตั้งค่าการแสดงชื่อ/เสียงตัวละคร (เพิ่มใหม่)
- * @property {boolean} [voiceIndicatorIcon] - เปิดไอคอนหรือสัญลักษณ์บอกว่ามีเสียงพากย์
- */
-export interface ICharacterVoiceDisplaySettings {
-  voiceIndicatorIcon?: boolean; // เปิดไอคอนหรือสัญลักษณ์บอกว่ามีเสียงพากย์
+export interface IVisualNovelCharacterVoiceDisplay {
+  voiceIndicatorIcon: boolean;
 }
 
-/**
- * @interface IBackgroundDisplaySettings
- * @description การตั้งค่าการแสดงภาพพื้นหลัง/CG (เพิ่มใหม่)
- * @property {string} [backgroundQuality] - ความคมชัดภาพพื้นหลัง (low, mid, high)
- * @property {boolean} [showCGs] - เปิด/ปิดภาพ CG ในฉาก
- * @property {boolean} [backgroundEffects] - เปิด/ปิดเอฟเฟกต์พื้นหลัง (เช่น ฝนตก, หิมะ)
- */
-export interface IBackgroundDisplaySettings {
-  backgroundQuality?: string; // ความคมชัดภาพพื้นหลัง (low, mid, high)
-  showCGs?: boolean; // เปิด/ปิดภาพ CG ในฉาก
-  backgroundEffects?: boolean; // เปิด/ปิดเอฟเฟกต์พื้นหลัง
+export interface IVisualNovelBackgroundDisplay {
+  backgroundQuality: 'low' | 'mid' | 'high';
+  showCGs: boolean;
+  backgroundEffects: boolean;
 }
 
-/**
- * @interface IVoiceSubtitlesSettings
- * @description การตั้งค่าซับไตเติลเสียงพากย์ (เพิ่มใหม่)
- * @property {boolean} [enabled] - เปิด/ปิดคำบรรยายเสียงพากย์
- */
-export interface IVoiceSubtitlesSettings {
-  enabled?: boolean; // เปิด/ปิดคำบรรยายเสียงพากย์
+export interface IVisualNovelVoiceSubtitles {
+  enabled: boolean;
 }
 
-/**
- * @interface IUserDisplayPreferences
- * @description การตั้งค่าการแสดงผลโดยรวมของผู้ใช้ - อัปเดตให้ตรงกับ Frontend
- * @property {"light" | "dark" | "system" | "sepia"} theme - ธีม UI ที่ผู้ใช้เลือก
- * @property {IUserAccessibilityDisplayPreferences} accessibility - การตั้งค่าการเข้าถึง
- * @property {IUIVisibilitySettings} [uiVisibility] - การตั้งค่าความโปร่งใส/ความสว่าง UI (เพิ่มใหม่)
- * @property {IFontSettings} [fontSettings] - การตั้งค่าฟอนต์และข้อความ (เพิ่มใหม่)
- * @property {IVisualEffectsSettings} [visualEffects] - การตั้งค่าเอฟเฟกต์ภาพ (เพิ่มใหม่)
- * @property {ICharacterDisplaySettings} [characterDisplay] - การตั้งค่าการแสดงผลตัวละคร (เพิ่มใหม่)
- * @property {ICharacterVoiceDisplaySettings} [characterVoiceDisplay] - การตั้งค่าการแสดงชื่อ/เสียง (เพิ่มใหม่)
- * @property {IBackgroundDisplaySettings} [backgroundDisplay] - การตั้งค่าการแสดงภาพพื้นหลัง/CG (เพิ่มใหม่)
- * @property {IVoiceSubtitlesSettings} [voiceSubtitles] - การตั้งค่าซับไตเติลเสียงพากย์ (เพิ่มใหม่)
- */
 export interface IUserDisplayPreferences {
-  theme: "light" | "dark" | "system" | "sepia"; // ธีมที่ผู้ใช้เลือก (สว่าง, มืด, ตามระบบ, ซีเปีย)
-  accessibility: IUserAccessibilityDisplayPreferences; // การตั้งค่าการเข้าถึง
-  uiVisibility?: IUIVisibilitySettings; // การตั้งค่าความโปร่งใส/ความสว่าง UI
-  fontSettings?: IFontSettings; // การตั้งค่าฟอนต์และข้อความ
-  visualEffects?: IVisualEffectsSettings; // การตั้งค่าเอฟเฟกต์ภาพ
-  characterDisplay?: ICharacterDisplaySettings; // การตั้งค่าการแสดงผลตัวละคร
-  characterVoiceDisplay?: ICharacterVoiceDisplaySettings; // การตั้งค่าการแสดงชื่อ/เสียง
-  backgroundDisplay?: IBackgroundDisplaySettings; // การตั้งค่าการแสดงภาพพื้นหลัง/CG
-  voiceSubtitles?: IVoiceSubtitlesSettings; // การตั้งค่าซับไตเติลเสียงพากย์
+  theme: "light" | "dark" | "system" | "sepia";
+  accessibility: IUserAccessibilityDisplayPreferences;
+  uiVisibility: IVisualNovelUIVisibilityPreferences;
+  readingDisplay: IUserReadingDisplayPreferences;
+  visualEffects: IVisualNovelVisualEffects;
+  characterDisplay: IVisualNovelCharacterDisplay;
+  characterVoiceDisplay: IVisualNovelCharacterVoiceDisplay;
+  backgroundDisplay: IVisualNovelBackgroundDisplay;
+  voiceSubtitles: IVisualNovelVoiceSubtitles;
+}
+// #endregion Display Preferences
+
+// #region Notification Preferences
+export interface INotificationChannelSettings {
+    enabled: boolean;
+    newsletter?: boolean;
+    novelUpdatesFromFollowing: boolean;
+    newFollowers: boolean;
+    commentsOnMyNovels: boolean;
+    repliesToMyComments: boolean;
+    donationAlerts: boolean;
+    systemAnnouncements: boolean;
+    securityAlerts?: boolean;
+    promotionalOffers: boolean;
+    achievementUnlocks: boolean;
 }
 
-/**
- * @interface IUserReadingPreferences
- * @description การตั้งค่าการอ่านและการเล่น Visual Novel (อัปเดตให้ตรงกับ Frontend)
- * @property {number} [textSpeed] - ความเร็วที่ข้อความปรากฏทีละตัวอักษร (0-100)
- * @property {boolean} [instantText] - แสดงข้อความทั้งหมดทันที
- * @property {boolean} [skipRead] - ข้ามเฉพาะข้อความที่เคยอ่านแล้ว
- * @property {boolean} [skipAll] - ข้ามทุกข้อความ (รวมที่ยังไม่เคยอ่าน)
- * @property {boolean} [skipHold] - ข้ามโดยกดค้าง / อัตโนมัติ
- * @property {number} [autoSpeed] - ความเร็วในการเปลี่ยนบทสนทนา (0-100)
- * @property {boolean} [autoPlay] - เล่นอัตโนมัติหลังข้อความจบ
- * @property {boolean} [enableHistory] - เปิดใช้งานประวัติข้อความ
- * @property {boolean} [historyVoice] - เปิดเสียงพากย์เมื่อกดดูข้อความเก่า
- * @property {boolean} [historyBack] - กดย้อนเพื่อกลับไปยังตัวเลือกก่อนหน้า
- * @property {boolean} [choiceTimer] - แสดงตัวจับเวลาในการเลือก
- * @property {boolean} [highlightChoices] - ไฮไลต์ตัวเลือกที่เคยเลือกแล้ว
- * @property {boolean} [routePreview] - แสดงผลลัพธ์เบื้องต้น
- * @property {boolean} [autoSave] - เปิด/ปิดเซฟอัตโนมัติ
- * @property {string} [saveFrequency] - ความถี่ในการเซฟ (5min, 10min, scene)
- * @property {boolean} [decisionWarning] - เปิดแจ้งเตือนเมื่อกำลังจะเลือกตัวเลือกสำคัญ
- * @property {boolean} [importantMark] - เปิด/ปิดเครื่องหมาย "สำคัญ" บนตัวเลือก
- * @property {boolean} [routeProgress] - แสดงเปอร์เซ็นต์ความคืบหน้าใน route ปัจจุบัน
- * @property {boolean} [showUnvisited] - แสดงเส้นทางที่ยังไม่เคยเข้า
- * @property {boolean} [secretHints] - แสดงคำใบ้สำหรับการปลดเส้นทางลับ
- */
-export interface IUserReadingPreferences {
-  textSpeed?: number; // ความเร็วที่ข้อความปรากฏทีละตัวอักษร (0-100)
-  instantText?: boolean; // แสดงข้อความทั้งหมดทันที
-  skipRead?: boolean; // ข้ามเฉพาะข้อความที่เคยอ่านแล้ว
-  skipAll?: boolean; // ข้ามทุกข้อความ (รวมที่ยังไม่เคยอ่าน)
-  skipHold?: boolean; // ข้ามโดยกดค้าง / อัตโนมัติ
-  autoSpeed?: number; // ความเร็วในการเปลี่ยนบทสนทนา (0-100)
-  autoPlay?: boolean; // เล่นอัตโนมัติหลังข้อความจบ
-  enableHistory?: boolean; // เปิดใช้งานประวัติข้อความ
-  historyVoice?: boolean; // เปิดเสียงพากย์เมื่อกดดูข้อความเก่า
-  historyBack?: boolean; // กดย้อนเพื่อกลับไปยังตัวเลือกก่อนหน้า
-  choiceTimer?: boolean; // แสดงตัวจับเวลาในการเลือก
-  highlightChoices?: boolean; // ไฮไลต์ตัวเลือกที่เคยเลือกแล้ว
-  routePreview?: boolean; // แสดงผลลัพธ์เบื้องต้น
-  autoSave?: boolean; // เปิด/ปิดเซฟอัตโนมัติ
-  saveFrequency?: string; // ความถี่ในการเซฟ (5min, 10min, scene)
-  decisionWarning?: boolean; // เปิดแจ้งเตือนเมื่อกำลังจะเลือกตัวเลือกสำคัญ
-  importantMark?: boolean; // เปิด/ปิดเครื่องหมาย "สำคัญ" บนตัวเลือก
-  routeProgress?: boolean; // แสดงเปอร์เซ็นต์ความคืบหน้าใน route ปัจจุบัน
-  showUnvisited?: boolean; // แสดงเส้นทางที่ยังไม่เคยเข้า
-  secretHints?: boolean; // แสดงคำใบ้สำหรับการปลดเส้นทางลับ
+export interface INotificationSaveLoadSettings {
+  autoSaveNotification: boolean;
+  noSaveSpaceWarning: boolean;
 }
 
-/**
- * @interface IEmailNotificationSettings
- * @description การตั้งค่าการแจ้งเตือนทางอีเมล (เพิ่มใหม่)
- * @property {boolean} enabled - เปิด/ปิดการแจ้งเตือนทางอีเมล
- */
-export interface IEmailNotificationSettings {
-  enabled: boolean; // เปิด/ปิดการแจ้งเตือนทางอีเมล
+export interface INotificationNewContentSettings {
+  contentUpdates: boolean;
+  promotionEvent: boolean;
 }
 
-/**
- * @interface IPushNotificationSettings
- * @description การตั้งค่าการแจ้งเตือนแบบพุช (เพิ่มใหม่)
- * @property {boolean} enabled - เปิด/ปิดการแจ้งเตือนแบบพุช
- */
-export interface IPushNotificationSettings {
-  enabled: boolean; // เปิด/ปิดการแจ้งเตือนแบบพุช
+export interface INotificationOutOfGameSettings {
+  type: 'all' | 'new-episode' | 'daily-gift' | 'stat-progress';
 }
 
-/**
- * @interface ISaveLoadNotificationSettings
- * @description การตั้งค่าแจ้งเตือนเกี่ยวกับการเซฟ/โหลด (เพิ่มใหม่)
- * @property {boolean} [autoSaveNotification] - แจ้งเตือนเมื่อบันทึกอัตโนมัติสำเร็จ
- * @property {boolean} [noSaveSpaceWarning] - เตือนเมื่อไม่มีที่ว่างในการเซฟ
- */
-export interface ISaveLoadNotificationSettings {
-  autoSaveNotification?: boolean; // แจ้งเตือนเมื่อบันทึกอัตโนมัติสำเร็จ
-  noSaveSpaceWarning?: boolean; // เตือนเมื่อไม่มีที่ว่างในการเซฟ
+export interface INotificationOptionalSettings {
+  statChange: boolean;
+  statDetailLevel: 'detail' | 'summary';
 }
 
-/**
- * @interface INewContentNotificationSettings
- * @description การตั้งค่าแจ้งเตือนกิจกรรม/เนื้อหาใหม่ (เพิ่มใหม่)
- * @property {boolean} [contentUpdates] - เปิด/ปิดแจ้งเตือนเมื่อมีเนื้อหาใหม่, ตอนใหม่, หรือกิจกรรมพิเศษ
- * @property {boolean} [promotionEvent] - เปิด/ปิดการแจ้งเตือนโปรโมชั่น หรืออีเวนต์ในเกม
- */
-export interface INewContentNotificationSettings {
-  contentUpdates?: boolean; // เปิด/ปิดแจ้งเตือนเมื่อมีเนื้อหาใหม่
-  promotionEvent?: boolean; // เปิด/ปิดการแจ้งเตือนโปรโมชั่น
+export interface IUserPreferencesNotifications {
+  masterNotificationsEnabled: boolean;
+  email: INotificationChannelSettings;
+  push: INotificationChannelSettings;
+  inApp: INotificationChannelSettings;
+  saveLoad: INotificationSaveLoadSettings;
+  newContent: INotificationNewContentSettings;
+  outOfGame: INotificationOutOfGameSettings;
+  optional: INotificationOptionalSettings;
 }
+// #endregion Notification Preferences
 
-/**
- * @interface IOutOfGameNotificationSettings
- * @description การตั้งค่าแจ้งเตือนนอกเกม (เพิ่มใหม่)
- * @property {string} [type] - ประเภทการแจ้งเตือนนอกเกมที่ต้องการ (all, new-episode, daily-gift, stat-progress)
- */
-export interface IOutOfGameNotificationSettings {
-  type?: string; // ประเภทการแจ้งเตือนนอกเกมที่ต้องการ
+// #region Reading (VN Gameplay) Preferences
+export interface IVisualNovelGameplayPreferences {
+  textSpeed: number; // 0-100
+  instantText: boolean;
+
+  autoPlay: boolean;
+  autoSpeed: number; // 0-100
+
+  skipRead: boolean;
+  skipAll: boolean;
+  skipHold: boolean;
+
+  enableHistory: boolean;
+  historyVoice: boolean;
+  historyBack: boolean;
+
+  choiceTimer: boolean;
+  highlightChoices: boolean;
+  routePreview: boolean;
+
+  autoSave: boolean;
+  saveFrequency: '5min' | '10min' | 'scene';
+
+  decisionWarning: boolean;
+  importantMark: boolean;
+
+  routeProgress: boolean;
+  showUnvisited: boolean;
+  secretHints: boolean;
 }
+// #endregion Reading (VN Gameplay) Preferences
 
-/**
- * @interface IOptionalNotificationSettings
- * @description การตั้งค่าแจ้งเตือนเสริม (เพิ่มใหม่)
- * @property {boolean} [statChange] - เปิด/ปิดแจ้งเตือนเมื่อค่าพลังเปลี่ยน
- * @property {string} [statDetailLevel] - ระดับความละเอียดของข้อมูลค่าพลัง (detail, summary)
- */
-export interface IOptionalNotificationSettings {
-  statChange?: boolean; // เปิด/ปิดแจ้งเตือนเมื่อค่าพลังเปลี่ยน
-  statDetailLevel?: string; // ระดับความละเอียดของข้อมูลค่าพลัง
-}
-
-/**
- * @interface IUserNotificationPreferences
- * @description การตั้งค่าการแจ้งเตือนโดยรวม - อัปเดตให้ตรงกับ Frontend
- * @property {IEmailNotificationSettings} [email] - การตั้งค่าการแจ้งเตือนทางอีเมล
- * @property {IPushNotificationSettings} [push] - การตั้งค่าการแจ้งเตือนแบบพุช
- * @property {ISaveLoadNotificationSettings} [saveLoad] - การตั้งค่าแจ้งเตือนเกี่ยวกับการเซฟ/โหลด
- * @property {INewContentNotificationSettings} [newContent] - การตั้งค่าแจ้งเตือนกิจกรรม/เนื้อหาใหม่
- * @property {IOutOfGameNotificationSettings} [outOfGame] - การตั้งค่าแจ้งเตือนนอกเกม
- * @property {IOptionalNotificationSettings} [optional] - การตั้งค่าแจ้งเตือนเสริม
- */
-export interface IUserNotificationPreferences {
-  email?: IEmailNotificationSettings; // การตั้งค่าการแจ้งเตือนทางอีเมล
-  push?: IPushNotificationSettings; // การตั้งค่าการแจ้งเตือนแบบพุช
-  saveLoad?: ISaveLoadNotificationSettings; // การตั้งค่าแจ้งเตือนเกี่ยวกับการเซฟ/โหลด
-  newContent?: INewContentNotificationSettings; // การตั้งค่าแจ้งเตือนกิจกรรม/เนื้อหาใหม่
-  outOfGame?: IOutOfGameNotificationSettings; // การตั้งค่าแจ้งเตือนนอกเกม
-  optional?: IOptionalNotificationSettings; // การตั้งค่าแจ้งเตือนเสริม
-}
-
-/**
- * @interface IUserPrivacyPreferences
- * @description การตั้งค่าความเป็นส่วนตัว - อัปเดตให้ตรงกับ Frontend
- * @property {boolean} [profileVisibility] - การแสดงโปรไฟล์
- * @property {boolean} [readingHistory] - ประวัติการอ่าน
- * @property {boolean} [activityStatus] - สถานะการใช้งาน
- * @property {boolean} [dataCollection] - การเก็บข้อมูล
- */
-export interface IUserPrivacyPreferences {
-  profileVisibility?: boolean; // การแสดงโปรไฟล์
-  readingHistory?: boolean; // ประวัติการอ่าน
-  activityStatus?: boolean; // สถานะการใช้งาน
-  dataCollection?: boolean; // การเก็บข้อมูล
-}
-
-/**
- * @interface IUserAnalyticsConsent
- * @description การตั้งค่าความยินยอมเกี่ยวกับการวิเคราะห์ข้อมูลเพื่อฟีเจอร์สุขภาพจิตและอารมณ์
- * สอดคล้องกับ ReadingAnalytic_EventStream_Schema.txt (source 8)
- * @property {boolean} allowPsychologicalAnalysis - อนุญาตให้ระบบวิเคราะห์ข้อมูลการอ่าน/การเลือกเพื่อประเมินแนวโน้มทางอารมณ์/จิตใจ (จำเป็นสำหรับการทำงานของฟีเจอร์)
- * @property {boolean} [allowPersonalizedFeedback] - อนุญาตให้ระบบให้คำแนะนำ/ข้อเสนอแนะส่วนบุคคลเกี่ยวกับสุขภาพจิต (ต้อง Opt-in อย่างระมัดระวัง และผู้ใช้ต้องยินยอมเพิ่มเติม)
- * @property {Date} [lastConsentReviewDate] - วันที่ผู้ใช้ตรวจสอบ/อัปเดตการตั้งค่าความยินยอมล่าสุด
- */
+// #region Privacy & Content Preferences
 export interface IUserAnalyticsConsent {
-  allowPsychologicalAnalysis: boolean; // อนุญาตการวิเคราะห์ทางจิตวิทยา
-  allowPersonalizedFeedback?: boolean; // อนุญาตการให้ผลตอบรับส่วนบุคคล
-  lastConsentReviewDate?: Date; // วันที่ตรวจสอบความยินยอมล่าสุด
+  allowPsychologicalAnalysis: boolean;
+  allowPersonalizedFeedback?: boolean;
+  lastConsentReviewDate?: Date;
 }
 
-/**
- * @interface IUserContentPrivacyPreferences
- * @description การตั้งค่าเนื้อหาและความเป็นส่วนตัวของผู้ใช้
- * @property {boolean} showMatureContent - แสดงเนื้อหาสำหรับผู้ใหญ่
- * @property {Types.ObjectId[]} preferredGenres - ID ของหมวดหมู่นิยายที่ชื่นชอบ (อ้างอิง Category model)
- * @property {Types.ObjectId[]} [blockedGenres] - ID ของหมวดหมู่นิยายที่ไม่ต้องการเห็น (อ้างอิง Category model)
- * @property {string[]} [blockedTags] - Tags ที่ไม่ต้องการเห็น
- * @property {Types.ObjectId[]} [blockedAuthors] - ID ของผู้เขียนที่ไม่ต้องการเห็นเนื้อหา (อ้างอิง User model)
- * @property {Types.ObjectId[]} [blockedNovels] - ID ของนิยายที่ไม่ต้องการเห็น (อ้างอิง Novel model)
- * @property {"public" | "followers_only" | "private"} profileVisibility - การตั้งค่าการมองเห็นโปรไฟล์
- * @property {"public" | "followers_only" | "private"} readingHistoryVisibility - การตั้งค่าการมองเห็นประวัติการอ่าน
- * @property {boolean} showActivityStatus - แสดงสถานะออนไลน์/กิจกรรมล่าสุด
- * @property {"everyone" | "followers" | "no_one"} allowDirectMessagesFrom - ใครสามารถส่งข้อความส่วนตัวหาผู้ใช้ได้
- * @property {IUserAnalyticsConsent} analyticsConsent - การตั้งค่าความยินยอมเกี่ยวกับการวิเคราะห์ข้อมูล
- */
 export interface IUserContentPrivacyPreferences {
-  showMatureContent: boolean; // แสดงเนื้อหาสำหรับผู้ใหญ่
-  preferredGenres: Types.ObjectId[]; // หมวดหมู่นิยายที่ชื่นชอบ
-  blockedGenres?: Types.ObjectId[]; // หมวดหมู่นิยายที่บล็อก
-  blockedTags?: string[]; // แท็กที่บล็อก
-  blockedAuthors?: Types.ObjectId[]; // ผู้เขียนที่บล็อก
-  blockedNovels?: Types.ObjectId[]; // นิยายที่บล็อก
-  profileVisibility: "public" | "followers_only" | "private"; // การมองเห็นโปรไฟล์
-  readingHistoryVisibility: "public" | "followers_only" | "private"; // การมองเห็นประวัติการอ่าน
-  showActivityStatus: boolean; // แสดงสถานะกิจกรรม
-  allowDirectMessagesFrom: "everyone" | "followers" | "no_one"; // อนุญาตข้อความส่วนตัวจาก
-  analyticsConsent: IUserAnalyticsConsent; // การยินยอมในการวิเคราะห์ข้อมูล
+  showMatureContent: boolean;
+  preferredGenres: Types.ObjectId[];
+  blockedGenres?: Types.ObjectId[];
+  blockedTags?: string[];
+  blockedAuthors?: Types.ObjectId[];
+  blockedNovels?: Types.ObjectId[];
+  profileVisibility: "public" | "followers_only" | "private";
+  readingHistoryVisibility: "public" | "followers_only" | "private";
+  showActivityStatus: boolean;
+  allowDirectMessagesFrom: "everyone" | "followers" | "no_one";
+  analyticsConsent: IUserAnalyticsConsent;
 }
 
-/**
- * @interface IUserPreferences
- * @description อินเทอร์เฟซหลักสำหรับการตั้งค่าผู้ใช้ - อัปเดตให้ตรงกับ Frontend
- * @property {string} language - ภาษาที่ผู้ใช้เลือกสำหรับ UI (เช่น "th", "en")
- * @property {IUserDisplayPreferences} display - การตั้งค่าการแสดงผล
- * @property {IUserReadingPreferences} [reading] - การตั้งค่าการอ่านและการเล่น Visual Novel
- * @property {IUserNotificationPreferences} [notifications] - การตั้งค่าการแจ้งเตือน
- * @property {IUserPrivacyPreferences} [privacy] - การตั้งค่าความเป็นส่วนตัว (แบบง่าย)
- * @property {IUserContentPrivacyPreferences} [contentAndPrivacy] - การตั้งค่าเนื้อหาและความเป็นส่วนตัว (แบบละเอียด)
- */
-export interface IUserPreferences {
-  language: string; // ภาษาที่ใช้
-  display: IUserDisplayPreferences; // การตั้งค่าการแสดงผล
-  reading?: IUserReadingPreferences; // การตั้งค่าการอ่านและการเล่น Visual Novel
-  notifications?: IUserNotificationPreferences; // การตั้งค่าการแจ้งเตือน
-  privacy?: IUserPrivacyPreferences; // การตั้งค่าความเป็นส่วนตัว (แบบง่าย)
-  contentAndPrivacy?: IUserContentPrivacyPreferences; // การตั้งค่าเนื้อหาและความเป็นส่วนตัว (แบบละเอียด)
+export interface IUserPrivacyPreferences {
+  profileVisibility: boolean;
+  readingHistory: boolean;
+  activityStatus: boolean;
+  dataCollection: boolean;
 }
+// #endregion Privacy & Content Preferences
+
+// #region Main Preferences Interface
+export interface IUserPreferences {
+  language: string;
+  display: IUserDisplayPreferences;
+  notifications: IUserPreferencesNotifications;
+  contentAndPrivacy: IUserContentPrivacyPreferences;
+  visualNovelGameplay: IVisualNovelGameplayPreferences;
+  privacy: IUserPrivacyPreferences;
+}
+// #endregion Main Preferences Interface
+
+// #endregion --- PREFERENCES INTERFACES ---
+
 
 /**
  * @interface IAccount
@@ -372,7 +231,8 @@ export interface IAccount extends Document {
  * @interface IUserProfile
  * @description ข้อมูลโปรไฟล์สาธารณะของผู้ใช้
  * @property {string} [displayName] - ชื่อที่แสดง (อาจซ้ำกับผู้อื่นได้)
- * @property {string} [penName] - นามปากกาสำหรับนักเขียน (อาจซ้ำกับ displayName หรือตั้งใหม่, ควร unique ถ้าเป็นนักเขียน)
+ * @property {string} [penNames] - นามปากกาสำหรับนักเขียน (อาจซ้ำกับ displayName หรือตั้งใหม่, ควร unique ถ้าเป็นนักเขียน)
+ * @property {string} [primaryPenName] - นามปากกาสำหรับนักเขียนหลัก
  * @property {string} [avatarUrl] - URL รูปโปรไฟล์ (อ้างอิง Media model หรือ URL ภายนอก)
  * @property {string} [coverImageUrl] - URL รูปปกโปรไฟล์ (อ้างอิง Media model หรือ URL ภายนอก)
  * @property {string} [bio] - คำอธิบายตัวตนสั้นๆ
@@ -385,7 +245,8 @@ export interface IAccount extends Document {
  */
 export interface IUserProfile {
   displayName?: string; // ชื่อที่แสดงทั่วไป
-  penName?: string; // นามปากกาสำหรับนักเขียน
+  penNames?: string[]; // นามปากกาสำหรับนักเขียน
+  primaryPenName?: string; // นามปากกาหลักที่ใช้แสดง
   avatarUrl?: string; // URL รูปโปรไฟล์
   coverImageUrl?: string; // URL รูปปกโปรไฟล์
   bio?: string; // คำอธิบายตัวตน
@@ -415,7 +276,7 @@ export interface IUserTrackingStats {
   totalLoginDays: number; // จำนวนวันล็อกอินทั้งหมด
   totalNovelsRead: number; // จำนวนนิยายที่อ่านจบ
   totalEpisodesRead: number; // จำนวนตอนที่อ่านทั้งหมด
-  totalTimeSpentReadingSeconds: number; // เวลารวมที่ใช้ในการอ่าน (หน่วยเป็นวินาที)
+  totalTimeSpentReadingSeconds: number; // เวลารวมที่ใช้อ่าน (วินาที)
   totalCoinSpent: number; // เหรียญทั้งหมดที่ใช้จ่าย
   totalRealMoneySpent: number; // เงินจริงทั้งหมดที่ใช้จ่าย
   lastNovelReadId?: Types.ObjectId; // ID นิยายที่อ่านล่าสุด
@@ -430,7 +291,8 @@ export interface IUserTrackingStats {
  * @property {number} followersCount - จำนวนผู้ติดตาม
  * @property {number} followingCount - จำนวนที่กำลังติดตาม
  * @property {number} novelsCreatedCount - จำนวนนิยายที่ผู้ใช้สร้าง
- * @property {number} commentsMadeCount - จำนวนความคิดเห็นที่ผู้ใช้สร้าง
+ * @property {number} boardPostsCreatedCount - (เพิ่มใหม่) จำนวนกระทู้ที่ผู้ใช้สร้างในเว็บบอร์ด
+ * @property {number} commentsMadeCount - จำนวนความคิดเห็นที่ผู้ใช้สร้าง (ในนิยายและกระทู้)
  * @property {number} ratingsGivenCount - จำนวนการให้คะแนนนิยายที่ผู้ใช้ทำ
  * @property {number} likesGivenCount - จำนวนการกดถูกใจที่ผู้ใช้ทำ (นิยาย, ตอน, ความคิดเห็น)
  */
@@ -438,6 +300,7 @@ export interface IUserSocialStats {
   followersCount: number; // จำนวนผู้ติดตาม
   followingCount: number; // จำนวนที่กำลังติดตาม
   novelsCreatedCount: number; // จำนวนนิยายที่สร้าง
+  boardPostsCreatedCount: number; // << เพิ่มใหม่: จำนวนกระทู้ที่สร้าง
   commentsMadeCount: number; // จำนวนความคิดเห็นที่สร้าง
   ratingsGivenCount: number; // จำนวนการให้คะแนน
   likesGivenCount: number; // จำนวนการกดถูกใจ
@@ -485,7 +348,7 @@ export interface IUserDisplayBadge {
  * @property {number} totalExperiencePointsEverEarned - (ใหม่) คะแนนประสบการณ์ทั้งหมดที่เคยได้รับ
  * @property {number} nextLevelXPThreshold - คะแนนประสบการณ์ที่ต้องใช้เพื่อขึ้นระดับถัดไป (อาจจะดึงมาจาก `currentLevelObject.xpToNextLevelFromThis`)
  * @property {Types.ObjectId[]} achievements - รายการ ID ของ **UserEarnedItem** (ที่มี itemType='Achievement') ที่ผู้ใช้ปลดล็อก
- * @property {IShowcasedGamificationItem[]} [showcasedItems] - (ใหม่) รายการ Achievements/Badges ที่ผู้ใช้เลือกแสดงบนโปรไฟล์ [cite: 5]
+ * @property {IShowcasedGamificationItem[]} [showcasedItems] - (ใหม่) รายการ Achievements/Badges ที่ผู้ใช้เลือกแสดงบนโปรไฟล์
  * @property {IUserDisplayBadge} [primaryDisplayBadge] - (ใหม่) Badge หลักที่ผู้ใช้เลือกแสดง
  * @property {IUserDisplayBadge[]} [secondaryDisplayBadges] - (ใหม่) Badge รองที่ผู้ใช้เลือกแสดง (จำกัด 2 อัน)
  * @property {object} loginStreaks - ข้อมูลสตรีคการล็อกอิน
@@ -657,7 +520,7 @@ export interface INovelPerformanceStats {
   totalFollowers: number; // ผู้ติดตามนิยายนี้
   averageRating?: number; // คะแนนเฉลี่ย
   totalEarningsFromNovel?: number; // รายได้จากนิยายนี้
-  totalChapters?: number; // จำนวนตอนทั้งหมด
+  totalChapters?: number; // <-- Add this line
 }
 
 /**
@@ -907,220 +770,235 @@ const WriterStatsSchema = new Schema<IWriterStats>(
   { _id: false }
 );
 
-// แยก Schemas ย่อยสำหรับ Visual Novel Settings ตาม Frontend Interface
+// #region --- PREFERENCES SCHEMAS ---
 
-const UIVisibilitySettingsSchema = new Schema<IUIVisibilitySettings>(
-  {
-    textBoxOpacity: { type: Number, min: 0, max: 100, default: 80, comment: "ความโปร่งใสของกล่องข้อความ (0-100)" },
-    backgroundBrightness: { type: Number, min: 0, max: 100, default: 100, comment: "ความสว่างของฉากหลัง (0-100)" },
-    textBoxBorder: { type: Boolean, default: true, comment: "เปิด/ปิดกรอบข้อความ" },
-  },
-  { _id: false }
-);
-
-const FontSettingsSchema = new Schema<IFontSettings>(
-  {
-    fontSize: { type: Number, min: 10, max: 24, default: 16, comment: "ขนาดตัวอักษร (10-24)" },
-    fontFamily: { type: String, enum: ["sans-serif", "serif", "monospace"], default: "sans-serif", comment: "รูปแบบฟอนต์" },
-    textContrastMode: { type: Boolean, default: false, comment: "โหมดปรับ Contrast ตัวอักษร" },
-  },
-  { _id: false }
-);
-
-const VisualEffectsSettingsSchema = new Schema<IVisualEffectsSettings>(
-  {
-    sceneTransitionAnimations: { type: Boolean, default: true, comment: "เปิด/ปิดแอนิเมชันเวลาเปลี่ยนฉาก" },
-    actionSceneEffects: { type: Boolean, default: true, comment: "เปิด/ปิด Screen Shake / Flash" },
-  },
-  { _id: false }
-);
-
-const CharacterDisplaySettingsSchema = new Schema<ICharacterDisplaySettings>(
-  {
-    showCharacters: { type: Boolean, default: true, comment: "แสดง/ไม่แสดงตัวละครบนหน้าจอ" },
-    characterMovementAnimations: { type: Boolean, default: true, comment: "เปิด/ปิดแอนิเมชันการขยับตัวละคร" },
-    hideCharactersDuringText: { type: Boolean, default: false, comment: "ซ่อนตัวละครเมื่ออ่านข้อความ" },
-  },
-  { _id: false }
-);
-
-const CharacterVoiceDisplaySettingsSchema = new Schema<ICharacterVoiceDisplaySettings>(
-  {
-    voiceIndicatorIcon: { type: Boolean, default: true, comment: "เปิดไอคอนหรือสัญลักษณ์บอกว่ามีเสียงพากย์" },
-  },
-  { _id: false }
-);
-
-const BackgroundDisplaySettingsSchema = new Schema<IBackgroundDisplaySettings>(
-  {
-    backgroundQuality: { type: String, enum: ["low", "mid", "high"], default: "mid", comment: "ความคมชัดภาพพื้นหลัง" },
-    showCGs: { type: Boolean, default: true, comment: "เปิด/ปิดภาพ CG ในฉาก" },
-    backgroundEffects: { type: Boolean, default: true, comment: "เปิด/ปิดเอฟเฟกต์พื้นหลัง (เช่น ฝนตก, หิมะ)" },
-  },
-  { _id: false }
-);
-
-const VoiceSubtitlesSettingsSchema = new Schema<IVoiceSubtitlesSettings>(
-  {
-    enabled: { type: Boolean, default: false, comment: "เปิด/ปิดคำบรรยายเสียงพากย์" },
-  },
-  { _id: false }
-);
-
+// #region Display Schemas
 const UserAccessibilityDisplayPreferencesSchema = new Schema<IUserAccessibilityDisplayPreferences>(
   {
-    dyslexiaFriendlyFont: { type: Boolean, default: false, comment: "ใช้ฟอนต์สำหรับผู้มีภาวะดิสเล็กเซีย" },
-    highContrastMode: { type: Boolean, default: false, comment: "โหมดความคมชัดสูง" },
-    epilepsySafeMode: { type: Boolean, default: false, comment: "โหมดลดแสงกระพริบสำหรับโรคลมชัก" },
+    dyslexiaFriendlyFont: { type: Boolean, default: false },
+    highContrastMode: { type: Boolean, default: false },
+    epilepsySafeMode: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const VisualNovelUIVisibilityPreferencesSchema = new Schema<IVisualNovelUIVisibilityPreferences>(
+  {
+    textBoxOpacity: { type: Number, default: 80, min: 0, max: 100 },
+    backgroundBrightness: { type: Number, default: 50, min: 0, max: 100 },
+    textBoxBorder: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+const UserReadingDisplayPreferencesSchema = new Schema<IUserReadingDisplayPreferences>(
+  {
+    fontSize: { type: Number, default: 16, min: 8, max: 48 },
+    fontFamily: { type: String, default: 'inherit' },
+    textContrastMode: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+const VisualNovelVisualEffectsSchema = new Schema<IVisualNovelVisualEffects>(
+  {
+    sceneTransitionAnimations: { type: Boolean, default: true },
+    actionSceneEffects: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+const VisualNovelCharacterDisplaySchema = new Schema<IVisualNovelCharacterDisplay>(
+  {
+    showCharacters: { type: Boolean, default: true },
+    characterMovementAnimations: { type: Boolean, default: true },
+    hideCharactersDuringText: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const VisualNovelCharacterVoiceDisplaySchema = new Schema<IVisualNovelCharacterVoiceDisplay>(
+  {
+    voiceIndicatorIcon: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+const VisualNovelBackgroundDisplaySchema = new Schema<IVisualNovelBackgroundDisplay>(
+  {
+    backgroundQuality: { type: String, enum: ['low', 'mid', 'high'], default: 'mid' },
+    showCGs: { type: Boolean, default: true },
+    backgroundEffects: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
+const VisualNovelVoiceSubtitlesSchema = new Schema<IVisualNovelVoiceSubtitles>(
+  {
+    enabled: { type: Boolean, default: true },
   },
   { _id: false }
 );
 
 const UserDisplayPreferencesSchema = new Schema<IUserDisplayPreferences>(
   {
-    theme: { type: String, enum: ["light", "dark", "system", "sepia"], required: [true, "กรุณาระบุธีม"], default: "system", comment: "ธีมที่ใช้ (สว่าง, มืด, ตามระบบ, ซีเปีย)" },
-    accessibility: { type: UserAccessibilityDisplayPreferencesSchema, default: () => ({ dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false }), comment: "การตั้งค่าการเข้าถึง" },
-    uiVisibility: { type: UIVisibilitySettingsSchema, default: () => ({ textBoxOpacity: 80, backgroundBrightness: 100, textBoxBorder: true }), comment: "การตั้งค่าความโปร่งใส/ความสว่าง UI" },
-    fontSettings: { type: FontSettingsSchema, default: () => ({ fontSize: 16, fontFamily: "sans-serif", textContrastMode: false }), comment: "การตั้งค่าฟอนต์และข้อความ" },
-    visualEffects: { type: VisualEffectsSettingsSchema, default: () => ({ sceneTransitionAnimations: true, actionSceneEffects: true }), comment: "การตั้งค่าเอฟเฟกต์ภาพ" },
-    characterDisplay: { type: CharacterDisplaySettingsSchema, default: () => ({ showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false }), comment: "การตั้งค่าการแสดงผลตัวละคร" },
-    characterVoiceDisplay: { type: CharacterVoiceDisplaySettingsSchema, default: () => ({ voiceIndicatorIcon: true }), comment: "การตั้งค่าการแสดงชื่อ/เสียง" },
-    backgroundDisplay: { type: BackgroundDisplaySettingsSchema, default: () => ({ backgroundQuality: "mid", showCGs: true, backgroundEffects: true }), comment: "การตั้งค่าการแสดงภาพพื้นหลัง/CG" },
-    voiceSubtitles: { type: VoiceSubtitlesSettingsSchema, default: () => ({ enabled: false }), comment: "การตั้งค่าซับไตเติลเสียงพากย์" },
+    theme: { type: String, enum: ["light", "dark", "system", "sepia"], default: "system" },
+    accessibility: { type: UserAccessibilityDisplayPreferencesSchema, default: () => ({}) },
+    uiVisibility: { type: VisualNovelUIVisibilityPreferencesSchema, default: () => ({}) },
+    readingDisplay: { type: UserReadingDisplayPreferencesSchema, default: () => ({}) },
+    visualEffects: { type: VisualNovelVisualEffectsSchema, default: () => ({}) },
+    characterDisplay: { type: VisualNovelCharacterDisplaySchema, default: () => ({}) },
+    characterVoiceDisplay: { type: VisualNovelCharacterVoiceDisplaySchema, default: () => ({}) },
+    backgroundDisplay: { type: VisualNovelBackgroundDisplaySchema, default: () => ({}) },
+    voiceSubtitles: { type: VisualNovelVoiceSubtitlesSchema, default: () => ({}) },
   },
   { _id: false }
 );
+// #endregion Display Schemas
 
-const UserReadingPreferencesSchema = new Schema<IUserReadingPreferences>(
+// #region Notification Schemas
+const NotificationChannelSettingsSchema = new Schema<INotificationChannelSettings>(
+    {
+      enabled: { type: Boolean, default: true },
+      newsletter: { type: Boolean, default: true },
+      novelUpdatesFromFollowing: { type: Boolean, default: true },
+      newFollowers: { type: Boolean, default: true },
+      commentsOnMyNovels: { type: Boolean, default: true },
+      repliesToMyComments: { type: Boolean, default: true },
+      donationAlerts: { type: Boolean, default: true },
+      systemAnnouncements: { type: Boolean, default: true },
+      securityAlerts: { type: Boolean, default: true },
+      promotionalOffers: { type: Boolean, default: false },
+      achievementUnlocks: { type: Boolean, default: true },
+    },
+    { _id: false }
+);
+
+const NotificationSaveLoadSettingsSchema = new Schema<INotificationSaveLoadSettings>(
   {
-    textSpeed: { type: Number, min: 0, max: 100, default: 50, comment: "ความเร็วที่ข้อความปรากฏทีละตัวอักษร (0-100)" },
-    instantText: { type: Boolean, default: false, comment: "แสดงข้อความทั้งหมดทันที" },
-    skipRead: { type: Boolean, default: true, comment: "ข้ามเฉพาะข้อความที่เคยอ่านแล้ว" },
-    skipAll: { type: Boolean, default: false, comment: "ข้ามทุกข้อความ (รวมที่ยังไม่เคยอ่าน)" },
-    skipHold: { type: Boolean, default: false, comment: "ข้ามโดยกดค้าง / อัตโนมัติ" },
-    autoSpeed: { type: Number, min: 0, max: 100, default: 50, comment: "ความเร็วในการเปลี่ยนบทสนทนา (0-100)" },
-    autoPlay: { type: Boolean, default: false, comment: "เล่นอัตโนมัติหลังข้อความจบ" },
-    enableHistory: { type: Boolean, default: true, comment: "เปิดใช้งานประวัติข้อความ" },
-    historyVoice: { type: Boolean, default: false, comment: "เปิดเสียงพากย์เมื่อกดดูข้อความเก่า" },
-    historyBack: { type: Boolean, default: true, comment: "กดย้อนเพื่อกลับไปยังตัวเลือกก่อนหน้า" },
-    choiceTimer: { type: Boolean, default: true, comment: "แสดงตัวจับเวลาในการเลือก" },
-    highlightChoices: { type: Boolean, default: true, comment: "ไฮไลต์ตัวเลือกที่เคยเลือกแล้ว" },
-    routePreview: { type: Boolean, default: false, comment: "แสดงผลลัพธ์เบื้องต้น" },
-    autoSave: { type: Boolean, default: true, comment: "เปิด/ปิดเซฟอัตโนมัติ" },
-    saveFrequency: { type: String, enum: ["5min", "10min", "scene"], default: "scene", comment: "ความถี่ในการเซฟ" },
-    decisionWarning: { type: Boolean, default: true, comment: "เปิดแจ้งเตือนเมื่อกำลังจะเลือกตัวเลือกสำคัญ" },
-    importantMark: { type: Boolean, default: true, comment: "เปิด/ปิดเครื่องหมาย 'สำคัญ' บนตัวเลือก" },
-    routeProgress: { type: Boolean, default: true, comment: "แสดงเปอร์เซ็นต์ความคืบหน้าใน route ปัจจุบัน" },
-    showUnvisited: { type: Boolean, default: true, comment: "แสดงเส้นทางที่ยังไม่เคยเข้า" },
-    secretHints: { type: Boolean, default: false, comment: "แสดงคำใบ้สำหรับการปลดเส้นทางลับ" },
+    autoSaveNotification: { type: Boolean, default: true },
+    noSaveSpaceWarning: { type: Boolean, default: true },
   },
   { _id: false }
 );
 
-const EmailNotificationSettingsSchema = new Schema<IEmailNotificationSettings>(
+const NotificationNewContentSettingsSchema = new Schema<INotificationNewContentSettings>(
   {
-    enabled: { type: Boolean, default: true, comment: "เปิด/ปิดการแจ้งเตือนทางอีเมล" },
+    contentUpdates: { type: Boolean, default: true },
+    promotionEvent: { type: Boolean, default: true },
   },
   { _id: false }
 );
 
-const PushNotificationSettingsSchema = new Schema<IPushNotificationSettings>(
+const NotificationOutOfGameSettingsSchema = new Schema<INotificationOutOfGameSettings>(
   {
-    enabled: { type: Boolean, default: true, comment: "เปิด/ปิดการแจ้งเตือนแบบพุช" },
+    type: { type: String, enum: ['all', 'new-episode', 'daily-gift', 'stat-progress'], default: 'all' },
   },
   { _id: false }
 );
 
-const SaveLoadNotificationSettingsSchema = new Schema<ISaveLoadNotificationSettings>(
+const NotificationOptionalSettingsSchema = new Schema<INotificationOptionalSettings>(
   {
-    autoSaveNotification: { type: Boolean, default: false, comment: "แจ้งเตือนเมื่อบันทึกอัตโนมัติสำเร็จ" },
-    noSaveSpaceWarning: { type: Boolean, default: true, comment: "เตือนเมื่อไม่มีที่ว่างในการเซฟ" },
+    statChange: { type: Boolean, default: true },
+    statDetailLevel: { type: String, enum: ['detail', 'summary'], default: 'summary' },
   },
   { _id: false }
 );
 
-const NewContentNotificationSettingsSchema = new Schema<INewContentNotificationSettings>(
+const UserPreferencesNotificationsSchema = new Schema<IUserPreferencesNotifications>(
   {
-    contentUpdates: { type: Boolean, default: true, comment: "เปิด/ปิดแจ้งเตือนเมื่อมีเนื้อหาใหม่" },
-    promotionEvent: { type: Boolean, default: false, comment: "เปิด/ปิดการแจ้งเตือนโปรโมชั่น" },
+    masterNotificationsEnabled: { type: Boolean, default: true },
+    email: { type: NotificationChannelSettingsSchema, default: () => ({}) },
+    push: { type: NotificationChannelSettingsSchema, default: () => ({}) },
+    inApp: { type: NotificationChannelSettingsSchema, default: () => ({}) },
+    saveLoad: { type: NotificationSaveLoadSettingsSchema, default: () => ({}) },
+    newContent: { type: NotificationNewContentSettingsSchema, default: () => ({}) },
+    outOfGame: { type: NotificationOutOfGameSettingsSchema, default: () => ({}) },
+    optional: { type: NotificationOptionalSettingsSchema, default: () => ({}) },
   },
   { _id: false }
 );
+// #endregion Notification Schemas
 
-const OutOfGameNotificationSettingsSchema = new Schema<IOutOfGameNotificationSettings>(
+// #region Reading (VN Gameplay) Schema
+const VisualNovelGameplayPreferencesSchema = new Schema<IVisualNovelGameplayPreferences>(
   {
-    type: { type: String, enum: ["all", "new-episode", "daily-gift", "stat-progress"], default: "all", comment: "ประเภทการแจ้งเตือนนอกเกมที่ต้องการ" },
+    textSpeed: { type: Number, default: 50, min: 0, max: 100 },
+    instantText: { type: Boolean, default: false },
+    autoPlay: { type: Boolean, default: false },
+    autoSpeed: { type: Number, default: 50, min: 0, max: 100 },
+    skipRead: { type: Boolean, default: false },
+    skipAll: { type: Boolean, default: false },
+    skipHold: { type: Boolean, default: false },
+    enableHistory: { type: Boolean, default: true },
+    historyVoice: { type: Boolean, default: true },
+    historyBack: { type: Boolean, default: true },
+    choiceTimer: { type: Boolean, default: true },
+    highlightChoices: { type: Boolean, default: true },
+    routePreview: { type: Boolean, default: true },
+    autoSave: { type: Boolean, default: true },
+    saveFrequency: { type: String, enum: ["5min", "10min", "scene"], default: "5min" },
+    decisionWarning: { type: Boolean, default: true },
+    importantMark: { type: Boolean, default: true },
+    routeProgress: { type: Boolean, default: true },
+    showUnvisited: { type: Boolean, default: true },
+    secretHints: { type: Boolean, default: true },
   },
   { _id: false }
 );
+// #endregion Reading (VN Gameplay) Schema
 
-const OptionalNotificationSettingsSchema = new Schema<IOptionalNotificationSettings>(
-  {
-    statChange: { type: Boolean, default: false, comment: "เปิด/ปิดแจ้งเตือนเมื่อค่าพลังเปลี่ยน" },
-    statDetailLevel: { type: String, enum: ["detail", "summary"], default: "summary", comment: "ระดับความละเอียดของข้อมูลค่าพลัง" },
-  },
-  { _id: false }
-);
-
-const UserNotificationPreferencesSchema = new Schema<IUserNotificationPreferences>(
-  {
-    email: { type: EmailNotificationSettingsSchema, default: () => ({ enabled: true }), comment: "การตั้งค่าการแจ้งเตือนทางอีเมล" },
-    push: { type: PushNotificationSettingsSchema, default: () => ({ enabled: true }), comment: "การตั้งค่าการแจ้งเตือนแบบพุช" },
-    saveLoad: { type: SaveLoadNotificationSettingsSchema, default: () => ({ autoSaveNotification: false, noSaveSpaceWarning: true }), comment: "การตั้งค่าแจ้งเตือนเกี่ยวกับการเซฟ/โหลด" },
-    newContent: { type: NewContentNotificationSettingsSchema, default: () => ({ contentUpdates: true, promotionEvent: false }), comment: "การตั้งค่าแจ้งเตือนกิจกรรม/เนื้อหาใหม่" },
-    outOfGame: { type: OutOfGameNotificationSettingsSchema, default: () => ({ type: "all" }), comment: "การตั้งค่าแจ้งเตือนนอกเกม" },
-    optional: { type: OptionalNotificationSettingsSchema, default: () => ({ statChange: false, statDetailLevel: "summary" }), comment: "การตั้งค่าแจ้งเตือนเสริม" },
-  },
-  { _id: false }
-);
-
-const UserPrivacyPreferencesSchema = new Schema<IUserPrivacyPreferences>(
-  {
-    profileVisibility: { type: Boolean, default: true, comment: "การแสดงโปรไฟล์" },
-    readingHistory: { type: Boolean, default: false, comment: "ประวัติการอ่าน" },
-    activityStatus: { type: Boolean, default: true, comment: "สถานะการใช้งาน" },
-    dataCollection: { type: Boolean, default: false, comment: "การเก็บข้อมูล" },
-  },
-  { _id: false }
-);
-
+// #region Privacy & Content Schemas
 const UserAnalyticsConsentSchema = new Schema<IUserAnalyticsConsent>(
   {
-    allowPsychologicalAnalysis: { type: Boolean, default: false, required: [true, "กรุณาระบุความยินยอมในการวิเคราะห์ทางจิตวิทยา"], comment: "อนุญาตการวิเคราะห์ทางจิตวิทยา" },
-    allowPersonalizedFeedback: { type: Boolean, default: false, comment: "อนุญาตการให้ผลตอบรับส่วนบุคคล" },
-    lastConsentReviewDate: { type: Date, comment: "วันที่ตรวจสอบความยินยอมล่าสุด" },
+    allowPsychologicalAnalysis: { type: Boolean, default: false, required: true },
+    allowPersonalizedFeedback: { type: Boolean, default: false },
+    lastConsentReviewDate: { type: Date },
   },
   { _id: false }
 );
 
 const UserContentPrivacyPreferencesSchema = new Schema<IUserContentPrivacyPreferences>(
   {
-    showMatureContent: { type: Boolean, default: false, comment: "แสดงเนื้อหาสำหรับผู้ใหญ่" },
-    preferredGenres: [{ type: Schema.Types.ObjectId, ref: "Category", comment: "หมวดหมู่นิยายที่ชื่นชอบ" }],
-    blockedGenres: [{ type: Schema.Types.ObjectId, ref: "Category", comment: "หมวดหมู่นิยายที่บล็อก" }],
-    blockedTags: [{ type: String, trim: true, lowercase: true, maxlength: 100, comment: "แท็กที่บล็อก" }],
-    blockedAuthors: [{ type: Schema.Types.ObjectId, ref: "User", comment: "ผู้เขียนที่บล็อก" }],
-    blockedNovels: [{ type: Schema.Types.ObjectId, ref: "Novel", comment: "นิยายที่บล็อก" }],
-    profileVisibility: { type: String, enum: ["public", "followers_only", "private"], default: "public", comment: "การมองเห็นโปรไฟล์" },
-    readingHistoryVisibility: { type: String, enum: ["public", "followers_only", "private"], default: "followers_only", comment: "การมองเห็นประวัติการอ่าน" },
-    showActivityStatus: { type: Boolean, default: true, comment: "แสดงสถานะกิจกรรม" },
-    allowDirectMessagesFrom: { type: String, enum: ["everyone", "followers", "no_one"], default: "followers", comment: "อนุญาตข้อความส่วนตัวจาก" },
-    analyticsConsent: { type: UserAnalyticsConsentSchema, default: () => ({ allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false }), required: [true, "การตั้งค่าความยินยอมในการวิเคราะห์ข้อมูลเป็นสิ่งจำเป็น"], comment: "การยินยอมในการวิเคราะห์ข้อมูล" },
+    showMatureContent: { type: Boolean, default: false },
+    preferredGenres: [{ type: Schema.Types.ObjectId, ref: "Category" }],
+    blockedGenres: [{ type: Schema.Types.ObjectId, ref: "Category" }],
+    blockedTags: [{ type: String, trim: true, lowercase: true, maxlength: 100 }],
+    blockedAuthors: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    blockedNovels: [{ type: Schema.Types.ObjectId, ref: "Novel" }],
+    profileVisibility: { type: String, enum: ["public", "followers_only", "private"], default: "public" },
+    readingHistoryVisibility: { type: String, enum: ["public", "followers_only", "private"], default: "followers_only" },
+    showActivityStatus: { type: Boolean, default: true },
+    allowDirectMessagesFrom: { type: String, enum: ["everyone", "followers", "no_one"], default: "followers" },
+    analyticsConsent: { type: UserAnalyticsConsentSchema, required: true, default: () => ({ allowPsychologicalAnalysis: false }) },
   },
   { _id: false }
 );
 
+const UserPrivacyPreferencesSchema = new Schema<IUserPrivacyPreferences>({
+  profileVisibility: { type: Boolean, default: true },
+  readingHistory: { type: Boolean, default: true },
+  activityStatus: { type: Boolean, default: true },
+  dataCollection: { type: Boolean, default: true },
+}, { _id: false });
+// #endregion Privacy & Content Schemas
+
+// #region Main Preferences Schema
 const UserPreferencesSchema = new Schema<IUserPreferences>(
   {
-    language: { type: String, default: "th", enum: ["th", "en", "ja", "ko", "zh"], required: [true, "กรุณาระบุภาษา"], comment: "ภาษาที่ใช้ใน UI" },
-    display: { type: UserDisplayPreferencesSchema, default: () => ({ theme: "system", accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false } }), comment: "การตั้งค่าการแสดงผล" },
-    reading: { type: UserReadingPreferencesSchema, default: () => ({ textSpeed: 50, instantText: false, skipRead: true, autoPlay: false }), comment: "การตั้งค่าการอ่านและการเล่น Visual Novel" },
-    notifications: { type: UserNotificationPreferencesSchema, default: () => ({}), comment: "การตั้งค่าการแจ้งเตือน" },
-    privacy: { type: UserPrivacyPreferencesSchema, default: () => ({ profileVisibility: true, readingHistory: false, activityStatus: true, dataCollection: false }), comment: "การตั้งค่าความเป็นส่วนตัว (แบบง่าย)" },
-    contentAndPrivacy: { type: UserContentPrivacyPreferencesSchema, default: () => ({ showMatureContent: false, preferredGenres: [], profileVisibility: "public", readingHistoryVisibility: "followers_only", showActivityStatus: true, allowDirectMessagesFrom: "followers", analyticsConsent: { allowPsychologicalAnalysis: false } }), comment: "การตั้งค่าเนื้อหาและความเป็นส่วนตัว (แบบละเอียด)" },
+    language: { type: String, default: "th", enum: ["th", "en", "ja", "ko", "zh"], required: true },
+    display: { type: UserDisplayPreferencesSchema, default: () => ({}) },
+    notifications: { type: UserPreferencesNotificationsSchema, default: () => ({}) },
+    contentAndPrivacy: { type: UserContentPrivacyPreferencesSchema, default: () => ({}) },
+    visualNovelGameplay: { type: VisualNovelGameplayPreferencesSchema, default: () => ({}) },
+    privacy: { type: UserPrivacyPreferencesSchema, default: () => ({}) },
   },
   { _id: false }
 );
+// #endregion Main Preferences Schema
+
+// #endregion --- PREFERENCES SCHEMAS ---
+
 
 const AccountSchema = new Schema<IAccount>(
   {
@@ -1142,8 +1020,31 @@ const AccountSchema = new Schema<IAccount>(
 const UserProfileSchema = new Schema<IUserProfile>(
   {
     displayName: { type: String, trim: true, minlength: [1, "ชื่อที่แสดงต้องมีอย่างน้อย 1 ตัวอักษร"], maxlength: [100, "ชื่อที่แสดงต้องไม่เกิน 100 ตัวอักษร"], comment: "ชื่อที่แสดงทั่วไป" },
-    penName: { type: String, trim: true, unique: true, sparse: true, minlength: [2, "นามปากกาต้องมีอย่างน้อย 2 ตัวอักษร"], maxlength: [50, "นามปากกาต้องไม่เกิน 50 ตัวอักษร"], validate: { validator: function (v: string) { return v === null || v === undefined || v === '' || /^[ก-๙a-zA-Z0-9\s\-_.'()&]+$/.test(v); }, message: "นามปากกาต้องประกอบด้วยอักขระที่อนุญาตเท่านั้น" }, comment: "นามปากกา (สำหรับนักเขียน)" },
-    avatarUrl: { type: String, trim: true, maxlength: [2048, "URL รูปโปรไฟล์ยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปโปรไฟล์ไม่ถูกต้อง" }, comment: "URL รูปโปรไฟล์" },
+    penNames: {
+      type: [String], // <<<< เปลี่ยนเป็น Array of String
+      trim: true,
+      sparse: true,
+      // Validator จะต้องปรับให้ทำงานกับ Array โดยตรวจสอบทุก element
+      validate: {
+          validator: function(arr: string[]) {
+              if (!arr) return true;
+              // ตรวจสอบแต่ละ pen name ใน array
+              return arr.every(v => 
+                  v.length >= 2 && 
+                  v.length <= 50 && 
+                  /^[ก-๙a-zA-Z0-9\s\-_.'()&]+$/.test(v)
+              );
+          },
+          message: "นามปากกาแต่ละชื่อต้องมีความยาว 2-50 ตัวอักษร และประกอบด้วยอักขระที่อนุญาตเท่านั้น"
+      },
+      comment: "รายการนามปากกาของนักเขียน (แต่ละชื่อต้องไม่ซ้ำกันทั่วทั้งระบบ)" 
+  },
+  primaryPenName: { // <<<< เพิ่มฟิลด์สำหรับนามปากกาหลัก
+      type: String,
+      trim: true,
+      maxlength: [50, "นามปากกาหลักต้องไม่เกิน 50 ตัวอักษร"],
+      comment: "นามปากกาหลักที่ใช้แสดงผล (ควรเป็นหนึ่งในชื่อที่มีอยู่ใน penNames)"
+  },    avatarUrl: { type: String, trim: true, maxlength: [2048, "URL รูปโปรไฟล์ยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปโปรไฟล์ไม่ถูกต้อง" }, comment: "URL รูปโปรไฟล์" },
     coverImageUrl: { type: String, trim: true, maxlength: [2048, "URL รูปปกยาวเกินไป"], validate: { validator: (v: string) => !v || /^https?:\/\/|^\//.test(v) || /^data:image\/(png|jpeg|gif|webp);base64,/.test(v), message: "รูปแบบ URL รูปปกไม่ถูกต้อง" }, comment: "URL รูปปกโปรไฟล์" },
     bio: { type: String, trim: true, maxlength: [500, "คำอธิบายตัวตนต้องไม่เกิน 500 ตัวอักษร"], comment: "คำอธิบายตัวตน" },
     gender: { type: String, enum: ["male", "female", "lgbtq+", "other", "prefer_not_to_say"], comment: "เพศ" },
@@ -1177,7 +1078,8 @@ const UserSocialStatsSchema = new Schema<IUserSocialStats>(
     followersCount: { type: Number, default: 0, min: 0, comment: "จำนวนผู้ติดตาม" },
     followingCount: { type: Number, default: 0, min: 0, comment: "จำนวนที่กำลังติดตาม" },
     novelsCreatedCount: { type: Number, default: 0, min: 0, comment: "จำนวนนิยายที่สร้าง" },
-    commentsMadeCount: { type: Number, default: 0, min: 0, comment: "จำนวนความคิดเห็นที่สร้าง" },
+    boardPostsCreatedCount: { type: Number, default: 0, min: 0, comment: "จำนวนกระทู้ที่สร้าง" }, // << เพิ่มใหม่
+    commentsMadeCount: { type: Number, default: 0, min: 0, comment: "จำนวนความคิดเห็นที่สร้าง (ในนิยายและกระทู้)" },
     ratingsGivenCount: { type: Number, default: 0, min: 0, comment: "จำนวนการให้คะแนน" },
     likesGivenCount: { type: Number, default: 0, min: 0, comment: "จำนวนการกดถูกใจ" },
   },
@@ -1186,7 +1088,7 @@ const UserSocialStatsSchema = new Schema<IUserSocialStats>(
 
 const UserWalletSchema = new Schema<IUserWallet>(
   {
-    coinBalance: { type: Number, default: 0, min: 0, required: true, comment: "ยอดเหรียญคงเหลือ, พร้อมให้ Service อัปเดต" },
+    coinBalance: { type: Number, default: 0, min: 0, required: true, comment: "ยอดเหรียญคงเหลือ, พร้อมให้ Service อัปเดตเมื่อมีการมอบรางวัล Coin." },
     lastCoinTransactionAt: { type: Date, comment: "วันที่ทำธุรกรรมเหรียญล่าสุด" },
   },
   { _id: false }
@@ -1377,39 +1279,18 @@ const UserSchema = new Schema<IUser>(
     },
     socialStats: {
         type: UserSocialStatsSchema,
-        default: () => ({ followersCount: 0, followingCount: 0, novelsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0 }),
+        default: () => ({ followersCount: 0, followingCount: 0, novelsCreatedCount: 0, boardPostsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0 }), // << เพิ่ม boardPostsCreatedCount
         comment: "สถิติทางสังคม",
     },
     preferences: {
       type: UserPreferencesSchema,
       default: () => ({
         language: "th",
-        display: { 
-          theme: "system", 
-          accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false },
-          uiVisibility: { textBoxOpacity: 80, backgroundBrightness: 100, textBoxBorder: true },
-          fontSettings: { fontSize: 16, fontFamily: "sans-serif", textContrastMode: false },
-          visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true },
-          characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
-          characterVoiceDisplay: { voiceIndicatorIcon: true },
-          backgroundDisplay: { backgroundQuality: "mid", showCGs: true, backgroundEffects: true },
-          voiceSubtitles: { enabled: false }
-        },
-        reading: { textSpeed: 50, instantText: false, skipRead: true, autoPlay: false },
-        notifications: { 
-          email: { enabled: true },
-          push: { enabled: true }
-        },
-        privacy: { profileVisibility: true, readingHistory: false, activityStatus: true, dataCollection: false },
-        contentAndPrivacy: { 
-          showMatureContent: false, 
-          preferredGenres: [], 
-          profileVisibility: "public", 
-          readingHistoryVisibility: "followers_only", 
-          showActivityStatus: true, 
-          allowDirectMessagesFrom: "followers", 
-          analyticsConsent: { allowPsychologicalAnalysis: false } 
-        }
+        display: {},
+        notifications: {},
+        contentAndPrivacy: {},
+        visualNovelGameplay: {},
+        privacy: {},
       }),
       comment: "การตั้งค่าส่วนตัวของผู้ใช้",
     },
@@ -1496,46 +1377,33 @@ const UserSchema = new Schema<IUser>(
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
-
-// --- Core and Account Indexes ---
 UserSchema.index({ email: 1 }, { unique: true, sparse: true, name: "UserEmailIndex" });
 UserSchema.index({ username: 1 }, { unique: true, sparse: true, name: "UserUsernameIndex" });
 UserSchema.index({ "accounts.provider": 1, "accounts.providerAccountId": 1 }, { unique: true, sparse: true, name: "UserAccountsProviderIndex" });
-UserSchema.index({ "profile.primaryPenName": 1 }, { unique: true, sparse: true, name: "UserProfilePrimaryPenNameIndex" }); // Corrected from penName
-
-// --- Status and Role Indexes ---
 UserSchema.index({ roles: 1 }, { name: "UserRolesIndex" });
-UserSchema.index({ isBanned: 1 }, { sparse: true, name: "UserBannedStatusIndex" }); // New: For finding banned users
-UserSchema.index({ "verification.kycStatus": 1 }, { sparse: true, name: "UserKycStatusIndex" }); // New: For writer/verification queries
-
-// --- Gamification and Social Indexes ---
+UserSchema.index({ "preferences.language": 1 }, { name: "UserLanguagePreferenceIndex" });
 UserSchema.index({ "gamification.level": -1 }, { name: "UserGamificationLevelIndex" });
-UserSchema.index({ "gamification.totalExperiencePointsEverEarned": -1 }, { name: "UserGamificationXPIndex" }); // New: For leaderboards
 UserSchema.index({ "gamification.achievements": 1 }, { name: "UserGamificationAchievementsRefIndex" });
-UserSchema.index({ "socialStats.followersCount": -1 }, { name: "UserFollowersCountIndex" }); // New: For leaderboards/sorting
-
-// --- Activity and Deletion Indexes ---
 UserSchema.index({ lastLoginAt: -1 }, { name: "UserLastLoginIndex" });
 UserSchema.index({ isDeleted: 1, deletedAt: 1 }, { name: "UserSoftDeleteIndex" });
-
-// --- Preferences and Consent Indexes ---
-UserSchema.index({ "preferences.language": 1 }, { name: "UserLanguagePreferenceIndex" });
 UserSchema.index(
-  { "preferences.privacy.analyticsConsent.allowPsychologicalAnalysis": 1 }, // Corrected path
-  { name: "UserAnalyticsConsentIndex", sparse: true }
+  { "preferences.contentAndPrivacy.analyticsConsent.allowPsychologicalAnalysis": 1 },
+  { name: "UserAnalyticsConsentIndex" }
 );
 UserSchema.index(
   { "mentalWellbeingInsights.lastAssessedAt": -1 },
-  { name: "UserMentalWellbeingAssessmentDateIndex", sparse: true }
+  { name: "UserMentalWellbeingAssessmentDateIndex" }
 );
-
-// --- Writer-specific Indexes ---
 UserSchema.index(
-  { "writerStats.activeNovelPromotions.novelId": 1 },
+  { "profile.penNames": 1 }, // <<<< แก้ไขจาก "profile.penName" เป็น "profile.penNames"
+  { unique: true, sparse: true, name: "UserProfilePenNamesIndex" } // ชื่อ Index อาจจะเปลี่ยนเพื่อความชัดเจน (optional)
+);
+UserSchema.index(
+    { "writerStats.activeNovelPromotions.novelId": 1 }, // **เพิ่มใหม่** (ถ้าต้องการ query user จาก novel ที่มี promotion)
     { sparse: true, name: "UserWriterActivePromotionsIndex" }
 );
 UserSchema.index(
-  { "writerStats.trendingNovels.novelId": 1 },
+    { "writerStats.trendingNovels.novelId": 1 }, // **เพิ่มใหม่** (ถ้าต้องการ query user จาก novel ที่ trending)
     { sparse: true, name: "UserWriterTrendingNovelsIndex" }
 );
 
@@ -1631,15 +1499,23 @@ UserSchema.pre<IUser>("save", async function (next) {
     }
 
     // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง ยังคงเดิม)
-  if (this.profile?.displayName && !this.profile.penName) {
+  // (ส่วน logic การตั้ง penName จาก displayName ถ้า penName ว่าง)
+  // <<<< ปรับปรุง Logic สำหรับ penNames ที่เป็น Array
+  if (isNowWriter && this.profile?.displayName && (!this.profile.penNames || this.profile.penNames.length === 0)) {
       const UserModelInstance = models.User || model<IUser>("User");
       try {
+          // ตรวจสอบว่า displayName นี้ถูกใช้เป็น penName ของคนอื่นแล้วหรือยัง
           const existingUserWithPenName = await UserModelInstance.findOne({
-              "profile.penName": this.profile.displayName,
-               _id: { $ne: this._id } // ตรวจสอบว่าไม่ใช่ user คนปัจจุบัน
+              "profile.penNames": this.profile.displayName, // <<<< ค้นหาใน array
+              _id: { $ne: this._id }
           });
+
+          // ถ้ายังไม่มีใครใช้ และ penNames ของ user คนนี้ยังว่างอยู่
           if (!existingUserWithPenName) {
-              this.profile.penName = this.profile.displayName;
+              // เพิ่ม displayName เข้าไปเป็น penName แรกใน array
+              this.profile.penNames = [this.profile.displayName];
+              // และตั้งเป็นนามปากกาหลักโดยอัตโนมัติ
+              this.profile.primaryPenName = this.profile.displayName;
           }
       } catch(penNameError) {
           console.error(`[User Pre-Save Hook] Error checking existing penName for user ${this.username}:`, penNameError);
@@ -1743,24 +1619,66 @@ export default UserModel;
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements) - ปรับปรุงล่าสุด
 // ==================================================================================================
-// 1.  **Visual Novel Settings Integration**: อัปเดต User model ให้ตรงกับ Frontend Settings Page โดยเพิ่ม:
-//     - IUserDisplayPreferences: เพิ่ม uiVisibility, fontSettings, visualEffects, characterDisplay, characterVoiceDisplay, backgroundDisplay, voiceSubtitles
-//     - IUserReadingPreferences: เพิ่ม properties ใหม่ทั้งหมดตาม Frontend (textSpeed, instantText, skipRead, skipAll, skipHold, autoSpeed, autoPlay, enableHistory, historyVoice, historyBack, choiceTimer, highlightChoices, routePreview, autoSave, saveFrequency, decisionWarning, importantMark, routeProgress, showUnvisited, secretHints)
-//     - IUserNotificationPreferences: เพิ่ม email, push, saveLoad, newContent, outOfGame, optional settings
-//     - IUserPrivacyPreferences: เพิ่ม profileVisibility, readingHistory, activityStatus, dataCollection (แบบง่าย)
-//     - IUserAnalyticsConsent: ยังคงเดิม (สำหรับระบบ Mental Wellbeing)
-//     - IUserContentPrivacyPreferences: ยังคงเดิม (แบบละเอียด, รวม analyticsConsent)
-// 2.  **Interface Compatibility**: เพิ่ม interface ย่อยใหม่เพื่อรองรับทุก properties ที่ใช้ใน Frontend:
-//     - IUIVisibilitySettings, IFontSettings, IVisualEffectsSettings
-//     - ICharacterDisplaySettings, ICharacterVoiceDisplaySettings, IBackgroundDisplaySettings, IVoiceSubtitlesSettings
-//     - IEmailNotificationSettings, IPushNotificationSettings, ISaveLoadNotificationSettings
-//     - INewContentNotificationSettings, IOutOfGameNotificationSettings, IOptionalNotificationSettings
-// 3.  **Schema Completeness**: สร้าง Schema ย่อยครบถ้วนสำหรับทุก interface ใหม่ พร้อม default values และ validation ที่เหมาะสม
-// 4.  **Default Values**: ตั้งค่า default ที่สมเหตุสมผลสำหรับ Visual Novel platform
-// 5.  **Backwards Compatibility**: โครงสร้างเดิมยังคงอยู่ ไม่กระทบกับ code ที่มีอยู่
-// 6.  **Performance**: เพิ่ม indexes สำหรับ field ใหม่ที่อาจจะถูก query บ่อย
-// 7.  **Validation**: เพิ่ม enum values และ range validation สำหรับ field ใหม่
-// 8.  **Comments**: เพิ่มคอมเมนต์ภาษาไทยอธิบาย field ใหม่ทั้งหมด
-// 9.  **Error Prevention**: ตรวจสอบให้แน่ใจว่าไม่มี property conflicts ระหว่าง Frontend และ Backend
-// 10. **Future-Proof**: โครงสร้างนี้รองรับการขยายเพิ่มเติมในอนาคตได้ง่าย.ts
-
+// 1.  **WriterStats Integration**: (คงเดิม) `writerStats` ถูก Embed และจัดการผ่าน middleware
+// 2.  **Mental Wellbeing**: (คงเดิม) `mentalWellbeingInsights` และ `analyticsConsent` ยังคงอยู่
+// 3.  **Security and Privacy**: (คงเดิม) `select: false` ถูกใช้กับ field ที่ละเอียดอ่อน.
+// 4.  **Modularity**: (คงเดิม) การใช้ Sub-Schemas ช่วยให้โค้ดเป็นระเบียบ.
+// 5.  **VisualNovelGameplayPreferences**: (คงเดิม) เพิ่มส่วนนี้เข้ามา.
+// 6.  **Gamification Fields Update**: (ปรับปรุงแล้ว)
+//     -   `User.gamification.level`: ระดับปัจจุบันของผู้ใช้
+//     -   `User.gamification.currentLevelObject`: (ใหม่) ObjectId อ้างอิงไปยังเอกสาร Level ปัจจุบันใน `levels` collection
+//         ช่วยให้ดึงข้อมูล Level (เช่น `levelTitle`, `xpToNextLevelFromThis`) ได้ง่ายขึ้น
+//     -   `User.gamification.experiencePoints`: XP สะสมของผู้ใช้
+//     -   `User.gamification.totalExperiencePointsEverEarned`: (ใหม่) XP ทั้งหมดที่เคยได้รับ
+//     -   `User.gamification.nextLevelXPThreshold`: XP ที่ต้องใช้เพื่อขึ้นระดับถัดไป
+//         ค่านี้ควรถูกอัปเดตโดยอัตโนมัติเมื่อ `currentLevelObject` เปลี่ยน (เช่น ผ่าน pre-save hook หรือ service layer)
+//         โดยดึงมาจาก `Level.xpToNextLevelFromThis`
+//     -   `User.gamification.achievements`: ยังคงเป็น Array ของ `Types.ObjectId` แต่ตอนนี้จะอ้างอิงไปยัง `_id` ของ `UserEarnedItem`
+//         ภายใน `UserAchievement` collection (เฉพาะ item ที่มี `itemType: 'Achievement'`)
+//         ไม่ใช่ ObjectId ของ `Achievement` ต้นแบบโดยตรง เพื่อให้ติดตามการได้รับแต่ละครั้งได้ (ถ้า Achievement นั้น repeatable)
+//         และเพื่อให้สามารถเก็บข้อมูล snapshot ของ Achievement ณ ตอนที่ได้รับได้
+//     -   `User.gamification.showcasedItems`: (ใหม่) Array ของ Object ที่มี `{ earnedItemId: Types.ObjectId, itemType: "Achievement" | "Badge" }`
+//         `earnedItemId` อ้างอิง `_id` ของ `UserEarnedItem` ใน `UserAchievement` collection
+//         เพื่อให้ผู้ใช้เลือกแสดง Achievement หรือ Badge ที่ตนเองได้รับบนโปรไฟล์
+//     -   `User.gamification.primaryDisplayBadge` และ `secondaryDisplayBadges`: (ใหม่) Object และ Array ของ Object ตามลำดับ
+//         สำหรับเก็บ `earnedBadgeId` (จาก `UserAchievement.earnedItems._id` ที่เป็น Badge)
+//         เพื่อแสดงผล Badge ในส่วนต่างๆ ของแพลตฟอร์มตามที่ผู้ใช้ตั้งค่า.
+// 7.  **Service Layer Responsibility**: (คงเดิมและเน้นย้ำ) การอัปเดต `gamification.experiencePoints`, `gamification.level`,
+//     `gamification.currentLevelObject`, `gamification.nextLevelXPThreshold`, `wallet.coinBalance`,
+//     และการเพิ่ม/อัปเดตข้อมูลใน `UserAchievement` (ซึ่งจะ trigger การอัปเดต `gamification.achievements`)
+//     ควรเป็นความรับผิดชอบของ Gamification Service/Event Listener.
+//     User model เตรียม field เหล่านี้ให้พร้อมใช้งาน.
+// 8.  **Synchronization of Level Data**: `nextLevelXPThreshold` ใน `User.gamification` ควรจะซิงค์กับ
+//     `xpToNextLevelFromThis` (หรือการคำนวณที่เทียบเท่า) จาก `Level.ts` model.
+//     เมื่อผู้ใช้ level up, `currentLevelObject` ใน `User.gamification` ควรอัปเดต และ `nextLevelXPThreshold` ก็ควรดึงค่าใหม่
+//     จาก `Level` document ใหม่นั้น. การทำเช่นนี้ใน pre-save hook ของ `User.ts` อาจซับซ้อน
+//     การจัดการผ่าน Service Layer ตอนที่ผู้ใช้ได้รับ XP และมีการ Level up จะเหมาะสมกว่า.
+//     แต่ใน pre-save hook ปัจจุบัน ได้มีการเพิ่ม logic เบื้องต้นในการพยายามตั้งค่า `currentLevelObject` และ `nextLevelXPThreshold`
+//     เมื่อ `level` เปลี่ยน หรือเมื่อสร้าง user ใหม่ (ซึ่ง `level` คือ 1).
+// 9.  **Writer Dashboard Enhancements**:
+//     -   **`activeNovelPromotions`**: (เพิ่มใหม่) field นี้ใน `writerStats` จะเก็บข้อมูลสรุปของนิยายที่กำลังจัดโปรโมชัน
+//         การอัปเดต field นี้:
+//         -   **วิธีที่ 1 (Trigger จาก NovelModel)**: เมื่อ `NovelModel.monetizationSettings.activePromotion` มีการเปลี่ยนแปลง (เปิด/ปิด, แก้ไข)
+//             `NovelModel` post-save hook สามารถ trigger การอัปเดต `UserModel.writerStats.activeNovelPromotions` ของผู้เขียนได้
+//             โดยการ query นิยายทั้งหมดของผู้เขียนที่มีโปรโมชัน active แล้วสร้าง array ใหม่ใส่เข้าไป.
+//         -   **วิธีที่ 2 (Background Job)**: มี Background Job ที่ทำงานเป็นระยะ (เช่น ทุกชั่วโมง) เพื่อ query นิยายที่มีโปรโมชัน active
+//             แล้วอัปเดต `UserModel.writerStats.activeNovelPromotions` ให้กับนักเขียนทุกคน. วิธีนี้ลดภาระของ hook แต่ข้อมูลอาจจะไม่ Realtime.
+//     -   **`trendingNovels`**: (เพิ่มใหม่) field นี้ใน `writerStats` จะเก็บข้อมูลสรุปของนิยายที่กำลังเป็นที่นิยม
+//         การอัปเดต field นี้:
+//         -   ควรทำผ่าน Background Job ที่คำนวณ `trendingScore` ใน `NovelModel.stats.trendingStats` เป็นระยะ
+//         -   หลังจาก `trendingScore` ใน `NovelModel` ถูกอัปเดต, Job เดียวกันหรือ Job อีกตัวสามารถ query นิยาย Top N ของนักเขียนแต่ละคน
+//             ตาม `trendingScore` แล้วนำมา denormalize เก็บไว้ใน `UserModel.writerStats.trendingNovels`.
+//             การเก็บ `coverImageUrl` และสถิติบางส่วน (viewsLast24h, likesLast24h) จะช่วยลดการ populate เมื่อแสดงผลใน Dashboard.
+// 10. **Denormalization Strategy**: การเพิ่ม `activeNovelPromotions` และ `trendingNovels` เป็นการ denormalize ข้อมูล
+//     เพื่อเพิ่มประสิทธิภาพในการ query สำหรับ Writer Dashboard. ต้องแน่ใจว่ามีกลไกการอัปเดตที่สอดคล้องกัน.
+// 11. **Performance**: การมี array ย่อยใน `writerStats` ควรพิจารณาถึงขนาดของ array ด้วย. หากมีจำนวนมาก (เช่น นักเขียนมีนิยายเป็นร้อยเรื่องที่มีโปรโมชัน)
+//     อาจจะต้องพิจารณาการ query แบบ on-demand สำหรับบางกรณี หรือจำกัดจำนวนรายการที่ denormalize.
+// 12. **Board Model Integration**: (เพิ่มใหม่)
+//     -   **เพิ่ม `socialStats.boardPostsCreatedCount`**: ได้เพิ่ม field นี้เพื่อแยกการนับจำนวนกระทู้ที่สร้างออกจากจำนวนนิยายที่สร้าง (`novelsCreatedCount`) ให้ชัดเจน
+//         ซึ่งเป็นแนวทางปฏิบัติที่ดีกว่าในการจัดการสถิติ
+//     -   **คำแนะนำสำหรับ `Board.ts`**: ใน Middleware `post-save` ของ `Board.ts`, ควรเปลี่ยนจากการ `$inc: { "socialStats.novelsCreatedCount": 1 }`
+//         ไปเป็นการใช้ `$inc: { "socialStats.boardPostsCreatedCount": 1 }` แทนเพื่อให้ข้อมูลถูกบันทึกใน field ที่ถูกต้อง
+//     -   **ข้อมูลที่เกี่ยวข้องอื่นๆ**: ข้อมูลอื่นๆ เช่น กระทู้ที่ผู้ใช้ติดตาม (subscribers) หรือกระทู้ทั้งหมดที่ผู้ใช้สร้าง สามารถ Query ได้โดยตรงจาก `BoardModel`
+//         (เช่น `BoardModel.find({ authorId: userId })`) การเก็บข้อมูลเหล่านี้ซ้ำซ้อนใน `UserModel` อาจทำให้ข้อมูลไม่ตรงกันและเพิ่มขนาดของเอกสารโดยไม่จำเป็น
+//         ดังนั้นการมี field สำหรับนับจำนวน (`count`) จึงเป็นวิธีที่สมดุลที่สุด
+// ==================================================================================================

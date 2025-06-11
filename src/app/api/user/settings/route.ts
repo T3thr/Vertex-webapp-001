@@ -6,99 +6,130 @@ import UserModel, { IUserPreferences } from "@/backend/models/User";
 import { z } from "zod";
 import mongoose from "mongoose";
 
-// Zod schema for validating settings updates
+// Zod schema for validating settings updates, aligned with User.ts
+const accessibilityDisplaySchema = z.object({
+  dyslexiaFriendlyFont: z.boolean().optional(),
+  highContrastMode: z.boolean().optional(),
+  epilepsySafeMode: z.boolean().optional(),
+}).optional();
+
+const uiVisibilitySchema = z.object({
+  textBoxOpacity: z.number().min(0).max(100).optional(),
+  backgroundBrightness: z.number().min(0).max(100).optional(),
+  textBoxBorder: z.boolean().optional(),
+}).optional();
+
+const fontSettingsSchema = z.object({
+  fontSize: z.number().min(10).max(24).optional(),
+  fontFamily: z.enum(['sans-serif', 'serif', 'monospace']).optional(),
+  textContrastMode: z.boolean().optional(),
+}).optional();
+
+const visualEffectsSchema = z.object({
+  sceneTransitionAnimations: z.boolean().optional(),
+  actionSceneEffects: z.boolean().optional(),
+}).optional();
+
+const characterDisplaySchema = z.object({
+  showCharacters: z.boolean().optional(),
+  characterMovementAnimations: z.boolean().optional(),
+  hideCharactersDuringText: z.boolean().optional(),
+}).optional();
+
+const characterVoiceDisplaySchema = z.object({
+  voiceIndicatorIcon: z.boolean().optional(),
+}).optional();
+
+const backgroundDisplaySchema = z.object({
+  backgroundQuality: z.enum(['low', 'mid', 'high']).optional(),
+  showCGs: z.boolean().optional(),
+  backgroundEffects: z.boolean().optional(),
+}).optional();
+
+const voiceSubtitlesSchema = z.object({
+  enabled: z.boolean().optional(),
+}).optional();
+
+const displayPreferencesSchema = z.object({
+  theme: z.enum(["light", "dark", "system", "sepia"]).optional(),
+  accessibility: accessibilityDisplaySchema,
+  uiVisibility: uiVisibilitySchema,
+  fontSettings: fontSettingsSchema,
+  visualEffects: visualEffectsSchema,
+  characterDisplay: characterDisplaySchema,
+  characterVoiceDisplay: characterVoiceDisplaySchema,
+  backgroundDisplay: backgroundDisplaySchema,
+  voiceSubtitles: voiceSubtitlesSchema,
+}).optional();
+
+const readingPreferencesSchema = z.object({
+  textSpeed: z.number().min(0).max(100).optional(),
+  instantText: z.boolean().optional(),
+  skipRead: z.boolean().optional(),
+  skipAll: z.boolean().optional(),
+  skipHold: z.boolean().optional(),
+  autoSpeed: z.number().min(0).max(100).optional(),
+  autoPlay: z.boolean().optional(),
+  enableHistory: z.boolean().optional(),
+  historyVoice: z.boolean().optional(),
+  historyBack: z.boolean().optional(),
+  choiceTimer: z.boolean().optional(),
+  highlightChoices: z.boolean().optional(),
+  routePreview: z.boolean().optional(),
+  autoSave: z.boolean().optional(),
+  saveFrequency: z.enum(['5min', '10min', 'scene']).optional(),
+  decisionWarning: z.boolean().optional(),
+  importantMark: z.boolean().optional(),
+  routeProgress: z.boolean().optional(),
+  showUnvisited: z.boolean().optional(),
+  secretHints: z.boolean().optional(),
+}).optional();
+
+const emailNotificationSchema = z.object({ enabled: z.boolean().optional() }).optional();
+const pushNotificationSchema = z.object({ enabled: z.boolean().optional() }).optional();
+
+const saveLoadNotificationSchema = z.object({
+  autoSaveNotification: z.boolean().optional(),
+  noSaveSpaceWarning: z.boolean().optional(),
+}).optional();
+
+const newContentNotificationSchema = z.object({
+  contentUpdates: z.boolean().optional(),
+  promotionEvent: z.boolean().optional(),
+}).optional();
+
+const outOfGameNotificationSchema = z.object({
+  type: z.enum(['all', 'new-episode', 'daily-gift', 'stat-progress']).optional(),
+}).optional();
+
+const optionalNotificationSchema = z.object({
+  statChange: z.boolean().optional(),
+  statDetailLevel: z.enum(['detail', 'summary']).optional(),
+}).optional();
+
+const notificationPreferencesSchema = z.object({
+  email: emailNotificationSchema,
+  push: pushNotificationSchema,
+  saveLoad: saveLoadNotificationSchema,
+  newContent: newContentNotificationSchema,
+  outOfGame: outOfGameNotificationSchema,
+  optional: optionalNotificationSchema,
+}).optional();
+
+const privacyPreferencesSchema = z.object({
+  profileVisibility: z.boolean().optional(),
+  readingHistory: z.boolean().optional(),
+  activityStatus: z.boolean().optional(),
+  dataCollection: z.boolean().optional(),
+}).optional();
+
 const updateSettingsSchema = z.object({
   preferences: z.object({
-    display: z.object({
-      theme: z.enum(["light", "dark", "system", "sepia"]).optional(),
-      reading: z.object({
-        fontSize: z.enum(["small", "medium", "large"]).optional(),
-        readingModeLayout: z.enum(["paginated", "scrolling"]).optional(),
-        fontFamily: z.string().optional(),
-        lineHeight: z.number().optional(),
-        textAlignment: z.enum(["left", "justify"]).optional(),
-      }).optional(),
-      accessibility: z.object({
-        dyslexiaFriendlyFont: z.boolean().optional(),
-        highContrastMode: z.boolean().optional(),
-      }).optional(),
-    }).optional(),
-    notifications: z.object({
-      masterNotificationsEnabled: z.boolean().optional(),
-      email: z.object({
-        enabled: z.boolean().optional(),
-        newsletter: z.boolean().optional(),
-        novelUpdatesFromFollowing: z.boolean().optional(),
-        newFollowers: z.boolean().optional(),
-        commentsOnMyNovels: z.boolean().optional(),
-        repliesToMyComments: z.boolean().optional(),
-        donationAlerts: z.boolean().optional(),
-        systemAnnouncements: z.boolean().optional(),
-        securityAlerts: z.boolean().optional(),
-        promotionalOffers: z.boolean().optional(),
-        achievementUnlocks: z.boolean().optional(),
-      }).optional(),
-      push: z.object({
-        enabled: z.boolean().optional(),
-        novelUpdatesFromFollowing: z.boolean().optional(),
-        newFollowers: z.boolean().optional(),
-        commentsOnMyNovels: z.boolean().optional(),
-        repliesToMyComments: z.boolean().optional(),
-        donationAlerts: z.boolean().optional(),
-        systemAnnouncements: z.boolean().optional(),
-        securityAlerts: z.boolean().optional(),
-        promotionalOffers: z.boolean().optional(),
-        achievementUnlocks: z.boolean().optional(),
-      }).optional(),
-      inApp: z.object({
-        enabled: z.boolean().optional(),
-        novelUpdatesFromFollowing: z.boolean().optional(),
-        newFollowers: z.boolean().optional(),
-        commentsOnMyNovels: z.boolean().optional(),
-        repliesToMyComments: z.boolean().optional(),
-        donationAlerts: z.boolean().optional(),
-        systemAnnouncements: z.boolean().optional(),
-        securityAlerts: z.boolean().optional(),
-        promotionalOffers: z.boolean().optional(),
-        achievementUnlocks: z.boolean().optional(),
-      }).optional(),
-    }).optional(),
-    contentAndPrivacy: z.object({
-      showMatureContent: z.boolean().optional(),
-      preferredGenres: z.array(z.string()).optional(),
-      blockedGenres: z.array(z.string()).optional(),
-      blockedTags: z.array(z.string()).optional(),
-      blockedAuthors: z.array(z.string()).optional(),
-      blockedNovels: z.array(z.string()).optional(),
-      profileVisibility: z.enum(["public", "followers_only", "private"]).optional(),
-      readingHistoryVisibility: z.enum(["public", "followers_only", "private"]).optional(),
-      showActivityStatus: z.boolean().optional(),
-      allowDirectMessagesFrom: z.enum(["everyone", "followers", "no_one"]).optional(),
-      analyticsConsent: z.object({
-        allowPsychologicalAnalysis: z.boolean().optional(),
-        allowPersonalizedFeedback: z.boolean().optional(),
-      }).optional(),
-    }).optional(),
-    visualNovelGameplay: z.object({
-      textSpeed: z.enum(["slow", "normal", "fast", "instant"]).optional(),
-      autoPlayMode: z.enum(["click", "auto_text", "auto_voice"]).optional(),
-      autoPlayDelayMs: z.number().optional(),
-      skipUnreadText: z.boolean().optional(),
-      transitionsEnabled: z.boolean().optional(),
-      screenEffectsEnabled: z.boolean().optional(),
-      textWindowOpacity: z.number().optional(),
-      masterVolume: z.number().optional(),
-      bgmVolume: z.number().optional(),
-      sfxVolume: z.number().optional(),
-      voiceVolume: z.number().optional(),
-      voicesEnabled: z.boolean().optional(),
-      preferredVoiceLanguage: z.string().optional(),
-      showChoiceTimer: z.boolean().optional(),
-      blurThumbnailsOfMatureContent: z.boolean().optional(),
-      assetPreloading: z.enum(["none", "essential", "full", "wifi_only"]).optional(),
-      characterAnimationLevel: z.enum(["none", "simple", "full"]).optional(),
-    }).optional(),
-  }).optional(),
+    display: displayPreferencesSchema,
+    reading: readingPreferencesSchema,
+    notifications: notificationPreferencesSchema,
+    privacy: privacyPreferencesSchema,
+  }),
 });
 
 export async function PUT(req: NextRequest) {

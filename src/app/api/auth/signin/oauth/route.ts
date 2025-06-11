@@ -1,14 +1,11 @@
 // src/app/api/auth/signin/oauth/route.ts
 // API สำหรับการจัดการการเข้าสู่ระบบ/ลงทะเบียนผ่าน OAuth providers (Google, Twitter, etc.)
-// อัปเดต: ทำงานกับ UserModel ที่รวมแล้ว และสร้าง/อัปเดตผู้ใช้ใน User collection เดียว
-// ปรับปรุงการจัดการ Type ของ Subdocument และ Default values สำหรับ Nested Objects
+// อัปเดตล่าสุด: ปรับปรุงให้เรียบง่ายขึ้นโดยอาศัย Mongoose Schema Defaults และ pre-save hook
+// จาก User Model เพื่อสร้าง/อัปเดตผู้ใช้ใหม่ที่สอดคล้องกับโครงสร้างข้อมูลล่าสุด
 
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel, {
-  IUser,
-  IAccount,
-} from "@/backend/models/User";
+import UserModel, { IUser, IAccount } from "@/backend/models/User"; // << ลดการ import ที่ไม่จำเป็น
 import { Types, Document } from "mongoose";
 
 interface OAuthSignInRequestBody {
@@ -18,6 +15,7 @@ interface OAuthSignInRequestBody {
   name?: string | null;
   usernameSuggestion?: string | null;
   picture?: string | null;
+  "error-codes"?: string[];
 }
 
 type PlainUserObjectData = Omit<
@@ -208,45 +206,48 @@ export async function POST(request: Request): Promise<NextResponse> {
 
       if (!userDocument) {
         wasNewlyCreated = true;
-        console.log(`✨ [API:OAuthSignIn] ไม่พบผู้ใช้, กำลังสร้างบัญชีใหม่จาก ${provider} ด้วย email: ${email}, name: ${name}`);
+        console.log(
+          `✨ [API:OAuthSignIn] ไม่พบผู้ใช้, กำลังสร้างบัญชีใหม่จาก ${provider} ด้วย email: ${email}, name: ${name}`
+        );
 
-        const newUsernameBase = usernameSuggestion || (email ? email.split("@")[0] : "") || name?.replace(/\s+/g, "") || `user${Date.now().toString().slice(-6)}`;
+        const newUsernameBase =
+          usernameSuggestion ||
+          (email ? email.split("@")[0] : "") ||
+          name?.replace(/\s+/g, "") ||
+          `user${Date.now().toString().slice(-6)}`;
         const finalUsername = await generateUniqueUsername(newUsernameBase);
-        
-        // Constructing a minimal input object for the new user.
-        // Mongoose will apply the extensive defaults from the UserSchema for fields not provided here.
+
+        // สร้างผู้ใช้ใหม่โดยใช้ข้อมูลที่จำเป็นเท่านั้น
+        // Schema defaults และ pre-save hook ใน User.ts จะจัดการส่วนที่เหลือทั้งหมด
+        // รวมถึงการสร้าง sub-documents, ตั้งค่า default, และดึงข้อมูล Level 1
         const newUserInput = {
           username: finalUsername,
           email: email ? email.toLowerCase() : undefined,
           isEmailVerified: !!email,
           emailVerifiedAt: email ? new Date() : undefined,
           accounts: [{ provider, providerAccountId, type: "oauth" } as IAccount],
+          profile: {
+            displayName: name || finalUsername,
+            avatarUrl: picture || undefined,
+          },
           lastLoginAt: new Date(),
+          // Mongoose จะใช้ค่า default จาก UserSchema สำหรับ field ที่เหลือทั้งหมด
         };
 
         if (newUserInput.email) {
-            const existingEmailUser = await UserModel.findOne({ email: newUserInput.email });
-            if (existingEmailUser) {
-                console.error(`❌ [API:OAuthSignIn] ขณะสร้างผู้ใช้ใหม่ อีเมล ${newUserInput.email} ถูกใช้งานแล้ว (race condition)`);
-                return NextResponse.json({ error: `อีเมล ${newUserInput.email} นี้ถูกใช้งานแล้วโดยบัญชีอื่น.` }, { status: 409 });
-            }
+          const existingEmailUser = await UserModel.findOne({
+            email: newUserInput.email,
+          });
+          if (existingEmailUser) {
+            console.error(`❌ [API:OAuthSignIn] ขณะสร้างผู้ใช้ใหม่ อีเมล ${newUserInput.email} ถูกใช้งานแล้ว (race condition)`);
+            return NextResponse.json({ error: `อีเมล ${newUserInput.email} นี้ถูกใช้งานแล้วโดยบัญชีอื่น.` }, { status: 409 });
+          }
         }
 
+        // UserModel constructor expects a type compatible with IUser's schema definition.
+        // The 'as IUser' cast might be needed if newUserInput isn't perfectly matching or if strict type checking is very high.
+        // However, Mongoose is generally flexible.
         userDocument = new UserModel(newUserInput);
-        
-        // Now apply specific initial values or overrides to the default objects
-        userDocument.profile.displayName = name || finalUsername;
-        userDocument.profile.avatarUrl = picture || undefined;
-        
-        // Set initial stats that are relevant for a new user's first login.
-        userDocument.trackingStats.totalLoginDays = 1;
-        userDocument.trackingStats.firstLoginAt = new Date();
-
-        userDocument.gamification.loginStreaks.currentStreakDays = 1;
-        userDocument.gamification.loginStreaks.longestStreakDays = 1;
-        userDocument.gamification.loginStreaks.lastLoginDate = new Date();
-        userDocument.gamification.lastActivityAt = new Date();
-        
         await userDocument.save();
         console.log(`✅ [API:OAuthSignIn] สร้างผู้ใช้ใหม่ ${userDocument.username} จาก ${provider} สำเร็จ`);
       }
