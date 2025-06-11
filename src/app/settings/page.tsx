@@ -912,7 +912,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="important-mark">เปิด/ปิดเครื่องหมาย "สำคัญ" บนตัวเลือก</Label>
+                      <Label htmlFor="important-mark">เปิด/ปิดเครื่องหมาย &quot;สำคัญ&quot; บนตัวเลือก</Label>
                       <Switch
                         id="important-mark"
                         defaultChecked={session?.user?.preferences?.reading?.importantMark}
