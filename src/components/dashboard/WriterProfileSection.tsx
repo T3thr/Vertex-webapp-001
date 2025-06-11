@@ -421,7 +421,7 @@ export default function WriterProfileSection({
                 <InfoItem
                   icon={PenTool}
                   label="นามปากกา"
-                  value={user.profile?.penName}
+                  value={user.profile?.penNames}
                   delay={0.2}
                 />
                 
