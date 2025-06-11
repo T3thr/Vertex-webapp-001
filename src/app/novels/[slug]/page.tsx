@@ -109,9 +109,8 @@ export async function generateMetadata(
       robots: { index: false, follow: false }
     };
   }
-
   const siteName = (await parent).openGraph?.siteName || process.env.NEXT_PUBLIC_SITE_NAME || "DivWy";
-  const authorName = novel.author?.profile?.penName || novel.author?.profile?.displayName || novel.author?.username || 'ผู้เขียนนิรนาม';
+  const authorName = novel.author?.profile?.penNames?.[0] || novel.author?.profile?.displayName || novel.author?.username || 'ผู้เขียนนิรนาม';
   const pageTitle = `${novel.title} - โดย ${authorName} | ${siteName}`;
   const description = novel.synopsis
     ? novel.synopsis.substring(0, 160).trim() + (novel.synopsis.length > 160 ? "..." : "")
