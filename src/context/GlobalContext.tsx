@@ -77,8 +77,6 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
         <ThemeProvider storageKey="divwy-theme" defaultTheme="system"> {/* defaultTheme here is the *preference* */}
           <AuthProvider>
             <AppContent>{children}</AppContent>
-            <Analytics />
-            <SpeedInsights />
           </AuthProvider>
         </ThemeProvider>
       </SessionProvider>

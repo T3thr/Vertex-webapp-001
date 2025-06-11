@@ -221,6 +221,8 @@ export default async function RootLayout({
           </main>
           <Footer />
         </GlobalProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
