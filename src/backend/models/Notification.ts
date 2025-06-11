@@ -43,29 +43,29 @@ export enum NotificationStatus {
  * @description ประเภทของการแจ้งเตือน, ขยายเพิ่มเติมเพื่อรองรับระบบ Board และระบบอื่นๆ
  */
 export enum NotificationType {
-    // --- Social & Community (เดิม) ---
+    // --- Social & Community ---
     NEW_FOLLOWER = "NEW_FOLLOWER",
     COMMENT_REPLY = "COMMENT_REPLY", // ตอบกลับความคิดเห็นของคุณ (ในนิยาย, ตอน)
     USER_MENTION = "USER_MENTION",   // มีคน @mention คุณในความคิดเห็นของเนื้อหาทั่วไป
 
-    // --- Content Related (เดิม) ---
+    // --- Content Related ---
     NOVEL_NEW_EPISODE = "NOVEL_NEW_EPISODE", // นิยายที่คุณติดตามมีตอนใหม่
     NOVEL_UPDATE = "NOVEL_UPDATE", // นิยายที่คุณติดตามมีการอัปเดตข้อมูลสำคัญ
     NOVEL_COMPLETED = "NOVEL_COMPLETED", // นิยายที่คุณติดตามได้จบลงแล้ว
 
-    // --- Gamification (เดิม) ---
+    // --- Gamification ---
     ACHIEVEMENT_UNLOCKED = "ACHIEVEMENT_UNLOCKED",
     BADGE_EARNED = "BADGE_EARNED",
     LEVEL_UP = "LEVEL_UP",
     REWARD_GRANTED = "REWARD_GRANTED", // ได้รับรางวัลพิเศษ (เช่น ไอเทม, Coins)
 
-    // --- Monetization & Author (เดิม) ---
+    // --- Monetization & Author ---
     NEW_DONATION = "NEW_DONATION", // มีคนโดเนทให้คุณ
     CONTENT_PURCHASED = "CONTENT_PURCHASED", // มีคนซื้อตอนนิยายของคุณ
     PURCHASE_COMPLETED = "PURCHASE_COMPLETED", // การซื้อของคุณสำเร็จ (แจ้งเตือนผู้ซื้อ)
     WRITER_APPLICATION_STATUS_CHANGE = "WRITER_APPLICATION_STATUS_CHANGE", // สถานะใบสมัครนักเขียนเปลี่ยนแปลง
 
-    // --- Account & System (เดิม) ---
+    // --- Account & System ---
     WELCOME_MESSAGE = "WELCOME_MESSAGE",
     SECURITY_ALERT = "SECURITY_ALERT", // เช่น การล็อกอินจากอุปกรณ์ใหม่
     SYSTEM_ANNOUNCEMENT = "SYSTEM_ANNOUNCEMENT", // ประกาศจากระบบ
@@ -88,6 +88,8 @@ export enum NotificationType {
 
     /** นิยายของคุณได้รับการรีวิวใหม่ (จากกระทู้ประเภท Review) */
     NOVEL_NEW_REVIEW = "NOVEL_NEW_REVIEW",
+    CONTENT_REPORT_STATUS_UPDATE = "CONTENT_REPORT_STATUS_UPDATE",
+    CONTENT_POLICY_VIOLATION = "CONTENT_POLICY_VIOLATION",
 }
 
 
@@ -101,7 +103,8 @@ export enum NotificationSeverity {
   INFO = "info",      // ข้อมูลสำคัญ (เช่น ประกาศ, รีวิวใหม่)
   SUCCESS = "success", // สำเร็จ (เช่น ได้รับรางวัล, ได้รับ Best Answer)
   WARNING = "warning", // แจ้งเตือน (เช่น ขอให้แก้ไขกระทู้, กระทู้ถูกล็อก)
-  CRITICAL = "critical", // วิกฤต (เช่น Security Alert)
+  CRITICAL = "critical",
+  ERROR = "ERROR", // วิกฤต (เช่น Security Alert)
 }
 
 

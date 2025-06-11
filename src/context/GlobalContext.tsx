@@ -4,10 +4,11 @@
 import { SessionProvider } from "next-auth/react";
 import { AuthProvider } from "@/context/AuthContext"; // ตรวจสอบ path
 import { ThemeProvider, useTheme } from "@/context/ThemeContext"; // ตรวจสอบ path และ import useTheme
-import { ToastContainer } from "react-toastify";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import "react-toastify/dist/ReactToastify.css";
-import { useEffect, useState, ReactNode, useMemo } from "react";
+import { useEffect, useState, ReactNode } from "react";
+import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,12 +40,6 @@ const AppContent = ({ children }: { children: ReactNode }) => {
     }
   }, [themeContextMounted]);
 
-  const toastThemeMode = useMemo(() => {
-    if (!themeContextMounted) return "light"; // Default if theme context not ready
-    if (resolvedTheme === "sepia") return "light";
-    return resolvedTheme || "light"; // 'light' or 'dark', fallback to 'light'
-  }, [themeContextMounted, resolvedTheme]);
-
   // Render children hidden initially to prevent FOUC, or a proper skeleton/loader
   if (!isAppContentReady) {
     // Option 1: Render children but visually hidden (helps with layout stability)
@@ -62,21 +57,14 @@ const AppContent = ({ children }: { children: ReactNode }) => {
   return (
     <>
       {children}
-      <ToastContainer
-        position="bottom-right"
-        autoClose={3500}
-        // ... other props
-        theme={toastThemeMode}
-        toastClassName={(context) => {
-          const baseClass = "font-sans text-sm rounded-lg shadow-md";
-          if (context?.type === "error") {
-            return `${baseClass} bg-alert-error text-alert-error-foreground border border-alert-error-border`;
-          }
-          if (context?.type === "success") {
-            return `${baseClass} bg-alert-success text-alert-success-foreground border border-alert-success-border`;
-          }
-          return `${baseClass} bg-card text-card-foreground border border-border`;
-        }}
+      <Toaster
+        richColors
+        position="top-center"
+        theme={
+          resolvedTheme === "sepia"
+            ? "light"
+            : (resolvedTheme as "light" | "dark" | "system" | undefined)
+        }
       />
     </>
   );
@@ -89,6 +77,8 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
         <ThemeProvider storageKey="divwy-theme" defaultTheme="system"> {/* defaultTheme here is the *preference* */}
           <AuthProvider>
             <AppContent>{children}</AppContent>
+            <Analytics />
+            <SpeedInsights />
           </AuthProvider>
         </ThemeProvider>
       </SessionProvider>

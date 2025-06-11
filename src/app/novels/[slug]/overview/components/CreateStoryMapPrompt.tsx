@@ -8,10 +8,10 @@ import { GitBranch, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast'; // สมมติว่าใช้ react-hot-toast
 
 interface CreateStoryMapPromptProps {
-  novelId: string;
+  novelSlug: string;
 }
 
-export default function CreateStoryMapPrompt({ novelId }: CreateStoryMapPromptProps) {
+export default function CreateStoryMapPrompt({ novelSlug }: CreateStoryMapPromptProps) {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
 
@@ -20,11 +20,12 @@ export default function CreateStoryMapPrompt({ novelId }: CreateStoryMapPromptPr
     toast.loading('กำลังสร้างแผนผังเรื่องราว...', { id: 'create-storymap' });
 
     try {
-      const response = await fetch(`/api/novels/${novelId}/storymap`, {
+      const response = await fetch(`/api/novels/${novelSlug}/storymap`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {

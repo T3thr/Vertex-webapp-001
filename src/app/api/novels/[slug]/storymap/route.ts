@@ -7,8 +7,9 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
-import StoryMapModel from '@/backend/models/StoryMap';
+import StoryMapModel, { StoryMapNodeType } from '@/backend/models/StoryMap';
 import mongoose from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * GET - ดึงข้อมูล StoryMap ของนิยาย
@@ -17,8 +18,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
+  const { slug } = params;
   try {
-    console.log(`🔍 [StoryMap API] GET request for novel slug: ${params.slug}`);
+    console.log(`🔍 [StoryMap API] GET request for novel slug: ${slug}`);
 
     // ตรวจสอบ session
     const session = await getServerSession(authOptions);
@@ -34,12 +36,12 @@ export async function GET(
 
     // ค้นหานิยายจาก slug
     const novel = await NovelModel.findOne({ 
-      slug: params.slug,
+      slug: slug,
       isDeleted: { $ne: true }
     }).lean();
 
     if (!novel) {
-      console.log(`❌ [StoryMap API] Novel not found for slug: ${params.slug}`);
+      console.log(`❌ [StoryMap API] Novel not found for slug: ${slug}`);
       return NextResponse.json(
         { error: 'ไม่พบนิยายที่ระบุ' },
         { status: 404 }
@@ -104,10 +106,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
+  const { slug } = params;
   try {
-    console.log(`📝 [StoryMap API] POST request for novel slug: ${params.slug}`);
+    console.log(`📝 [StoryMap API] POST request for novel slug: ${slug}`);
 
-    // ตรวจสอบ session
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       console.log('❌ [StoryMap API] Unauthorized - No session');
@@ -117,28 +119,38 @@ export async function POST(
       );
     }
 
-    const body = await request.json();
-    const { nodes, edges, storyVariables, startNodeId } = body;
+    // Body can be empty for creation, so we handle it gracefully.
+    let body;
+    try {
+        body = await request.json();
+    } catch (e) {
+        body = {}; // Default to an empty object if body is missing or malformed
+    }
+    
+    const { 
+      nodes: customNodes, 
+      edges: customEdges, 
+      storyVariables: customStoryVariables, 
+      startNodeId: customStartNodeId 
+    } = body || {};
 
-    console.log(`📊 [StoryMap API] Received data: ${nodes?.length || 0} nodes, ${edges?.length || 0} edges`);
+    console.log(`📊 [StoryMap API] Received data: ${customNodes?.length || 0} nodes, ${customEdges?.length || 0} edges`);
 
     await dbConnect();
 
-    // ค้นหานิยายจาก slug
     const novel = await NovelModel.findOne({ 
-      slug: params.slug,
+      slug: slug,
       isDeleted: { $ne: true }
-    }).lean();
+    }); // Use full model instance to get title
 
     if (!novel) {
-      console.log(`❌ [StoryMap API] Novel not found for slug: ${params.slug}`);
+      console.log(`❌ [StoryMap API] Novel not found for slug: ${slug}`);
       return NextResponse.json(
         { error: 'ไม่พบนิยายที่ระบุ' },
         { status: 404 }
       );
     }
 
-    // ตรวจสอบสิทธิ์
     if (novel.author.toString() !== session.user.id) {
       console.log(`❌ [StoryMap API] Access denied for user ${session.user.id} on novel ${novel._id}`);
       return NextResponse.json(
@@ -147,30 +159,25 @@ export async function POST(
       );
     }
 
-    // ตรวจสอบข้อมูลที่ส่งมา
-    if (!Array.isArray(nodes) || !Array.isArray(edges)) {
-      return NextResponse.json(
-        { error: 'ข้อมูลไม่ถูกต้อง - nodes และ edges ต้องเป็น array' },
-        { status: 400 }
-      );
-    }
-
-    // หา StoryMap ที่มีอยู่แล้ว
-    let existingStoryMap = await StoryMapModel.findOne({
+    const existingStoryMap = await StoryMapModel.findOne({
       novelId: novel._id,
       isActive: true
     });
 
     if (existingStoryMap) {
-      // อัปเดต StoryMap ที่มีอยู่
+      // Logic for updating an existing StoryMap
       console.log(`🔄 [StoryMap API] Updating existing StoryMap ${existingStoryMap._id}`);
       
-      existingStoryMap.nodes = nodes;
-      existingStoryMap.edges = edges;
-      existingStoryMap.storyVariables = storyVariables || [];
-      existingStoryMap.startNodeId = startNodeId || null;
+      existingStoryMap.nodes = customNodes ?? existingStoryMap.nodes;
+      existingStoryMap.edges = customEdges ?? existingStoryMap.edges;
+      existingStoryMap.storyVariables = customStoryVariables ?? existingStoryMap.storyVariables;
+      existingStoryMap.startNodeId = customStartNodeId ?? existingStoryMap.startNodeId;
       existingStoryMap.lastModifiedByUserId = new mongoose.Types.ObjectId(session.user.id);
-      existingStoryMap.version = (existingStoryMap.version || 1) + 1;
+      
+      // Only increment version if there are actual changes
+      if (customNodes || customEdges || customStoryVariables || customStartNodeId) {
+        existingStoryMap.version = (existingStoryMap.version || 1) + 1;
+      }
 
       await existingStoryMap.save();
       
@@ -179,25 +186,33 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: 'อัปเดตแผนผังเรื่องสำเร็จ',
-        data: {
-          _id: existingStoryMap._id,
-          version: existingStoryMap.version,
-          nodes: existingStoryMap.nodes,
-          edges: existingStoryMap.edges
-        }
+        data: existingStoryMap,
       });
+
     } else {
-      // สร้าง StoryMap ใหม่
+      // Logic for creating a new StoryMap
       console.log(`🆕 [StoryMap API] Creating new StoryMap for novel ${novel._id}`);
       
+      // Create a default start node to ensure the storymap is valid
+      const startNodeId = uuidv4();
+      const defaultNodes = [
+        {
+          nodeId: startNodeId,
+          nodeType: StoryMapNodeType.START_NODE,
+          title: 'จุดเริ่มต้น',
+          position: { x: 250, y: 150 },
+          nodeSpecificData: {},
+        }
+      ];
+
       const newStoryMap = new StoryMapModel({
         novelId: novel._id,
         title: `แผนผังเรื่อง - ${novel.title}`,
         version: 1,
-        nodes: nodes,
-        edges: edges,
-        storyVariables: storyVariables || [],
-        startNodeId: startNodeId || null,
+        nodes: defaultNodes,
+        edges: [],
+        storyVariables: [],
+        startNodeId: startNodeId, // Set the ID of the created start node
         lastModifiedByUserId: new mongoose.Types.ObjectId(session.user.id),
         isActive: true,
         editorMetadata: {
@@ -216,12 +231,7 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: 'สร้างแผนผังเรื่องสำเร็จ',
-        data: {
-          _id: newStoryMap._id,
-          version: newStoryMap.version,
-          nodes: newStoryMap.nodes,
-          edges: newStoryMap.edges
-        }
+        data: newStoryMap,
       }, { status: 201 });
     }
 
@@ -251,8 +261,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
+  const { slug } = params;
   try {
-    console.log(`🔄 [StoryMap API] PUT request for novel slug: ${params.slug}`);
+    console.log(`🔄 [StoryMap API] PUT request for novel slug: ${slug}`);
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -269,7 +280,7 @@ export async function PUT(
 
     // ค้นหานิยาย
     const novel = await NovelModel.findOne({ 
-      slug: params.slug,
+      slug: slug,
       isDeleted: { $ne: true }
     }).lean();
 
@@ -409,8 +420,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { slug: string } }
 ) {
+  const { slug } = params;
   try {
-    console.log(`🗑️ [StoryMap API] DELETE request for novel slug: ${params.slug}`);
+    console.log(`🗑️ [StoryMap API] DELETE request for novel slug: ${slug}`);
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -424,7 +436,7 @@ export async function DELETE(
 
     // ค้นหานิยาย
     const novel = await NovelModel.findOne({ 
-      slug: params.slug,
+      slug: slug,
       isDeleted: { $ne: true }
     }).lean();
 

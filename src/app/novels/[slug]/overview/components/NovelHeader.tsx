@@ -119,7 +119,7 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
               className="flex items-center gap-3 text-muted-foreground"
             >
               <div className="flex items-center gap-2">
-                {novel.author.profile.avatarUrl ? (
+                {novel.author && novel.author.profile.avatarUrl ? (
                   <img
                     src={novel.author.profile.avatarUrl}
                     alt={novel.author.profile.displayName || 'ผู้เขียน'}
@@ -131,9 +131,11 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
                   </div>
                 )}
                 <span className="text-sm">
-                  {(novel.author.profile.penNames && novel.author.profile.penNames.length > 0 
-                    ? novel.author.profile.penNames[0] 
-                    : novel.author.profile.displayName) || 'ไม่ระบุชื่อ'}
+                  {novel.author ? 
+                    (novel.author.profile.penNames && novel.author.profile.penNames.length > 0 
+                      ? novel.author.profile.penNames[0] 
+                      : novel.author.profile.displayName) 
+                    : 'ไม่ระบุชื่อ'}
                 </span>
               </div>
             </motion.div>

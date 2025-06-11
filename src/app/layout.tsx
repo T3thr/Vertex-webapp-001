@@ -211,7 +211,8 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning={true}
       >
         <GlobalProvider>
           <NavBarWrapper />
@@ -220,9 +221,6 @@ export default async function RootLayout({
           </main>
           <Footer />
         </GlobalProvider>
-        <Analytics />
-        <SpeedInsights />
-        <Toaster richColors position="top-center" />
       </body>
     </html>
   );

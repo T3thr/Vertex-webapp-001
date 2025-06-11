@@ -21,7 +21,7 @@ const tabs: Tab[] = [
 
 const TabNavigation = () => {
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'recent'; // ค่าเริ่มต้นเป็น 'recent'
+  const activeTab = searchParams?.get('tab') || 'recent'; // ค่าเริ่มต้นเป็น 'recent'
 
   return (
     <div className="flex space-x-1 mb-8">
