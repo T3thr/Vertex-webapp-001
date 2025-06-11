@@ -8,25 +8,6 @@ import dbConnect from "@/backend/lib/mongodb";
 import UserModel, {
   IUser,
   IAccount,
-  IUserProfile,
-  IUserTrackingStats,
-  IUserSocialStats,
-  IUserPreferences,
-  IUserWallet,
-  IUserGamification,
-  IUserVerification,
-  IUserDonationSettings,
-  IUserSecuritySettings,
-  IMentalWellbeingInsights,
-  INotificationChannelSettings,
-  IUserDisplayPreferences,
-  IUserContentPrivacyPreferences,
-  IVisualNovelGameplayPreferences,
-  IUserAnalyticsConsent,
-  IUserReadingDisplayPreferences,
-  IUserAccessibilityDisplayPreferences,
-  IShowcasedGamificationItem,
-  IUserDisplayBadge,
 } from "@/backend/models/User";
 import { Types, Document } from "mongoose";
 
@@ -81,22 +62,6 @@ async function generateUniqueUsername(baseUsername: string): Promise<string> {
     }
   }
   return uniqueUsername;
-}
-
-function createDefaultNotificationChannelSettings(): INotificationChannelSettings {
-    return {
-        enabled: true,
-        newsletter: true,
-        novelUpdatesFromFollowing: true,
-        newFollowers: true,
-        commentsOnMyNovels: true,
-        repliesToMyComments: true,
-        donationAlerts: true,
-        systemAnnouncements: true,
-        securityAlerts: true,
-        promotionalOffers: false,
-        achievementUnlocks: true,
-    };
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -247,93 +212,16 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         const newUsernameBase = usernameSuggestion || (email ? email.split("@")[0] : "") || name?.replace(/\s+/g, "") || `user${Date.now().toString().slice(-6)}`;
         const finalUsername = await generateUniqueUsername(newUsernameBase);
-
-        const defaultReadingPrefs: IUserReadingDisplayPreferences = {
-            fontSize: "medium", readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left",
-        };
-        const defaultAccessibilityPrefs: IUserAccessibilityDisplayPreferences = {
-            dyslexiaFriendlyFont: false, highContrastMode: false,
-        };
-        const defaultDisplayPrefs: IUserDisplayPreferences = {
-            theme: "system", reading: defaultReadingPrefs, accessibility: defaultAccessibilityPrefs,
-        };
-        const defaultAnalyticsConsent: IUserAnalyticsConsent = {
-            allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false, lastConsentReviewDate: new Date(),
-        };
-        const defaultContentPrivacyPrefs: IUserContentPrivacyPreferences = {
-            showMatureContent: false, preferredGenres: [], blockedGenres: [], blockedTags: [], blockedAuthors: [], blockedNovels: [],
-            profileVisibility: "public", readingHistoryVisibility: "followers_only", showActivityStatus: true,
-            allowDirectMessagesFrom: "followers", analyticsConsent: defaultAnalyticsConsent,
-        };
-        const defaultVisualNovelGameplayPrefs: IVisualNovelGameplayPreferences = {
-            textSpeed: "normal", autoPlayMode: "click", autoPlayDelayMs: 1500, skipUnreadText: false,
-            transitionsEnabled: true, screenEffectsEnabled: true, textWindowOpacity: 0.8, masterVolume: 1.0,
-            bgmVolume: 0.7, sfxVolume: 0.8, voiceVolume: 1.0, voicesEnabled: true, preferredVoiceLanguage: "original",
-            showChoiceTimer: true, blurThumbnailsOfMatureContent: true, preferredArtStyles: [], preferredGameplayMechanics: [],
-            assetPreloading: "essential", characterAnimationLevel: "full",
-        };
-        const defaultProfile: IUserProfile = {
-            displayName: name || finalUsername, avatarUrl: picture || undefined,
-            penName: undefined, bio: undefined, coverImageUrl: undefined, gender: "prefer_not_to_say",
-            dateOfBirth: undefined, country: undefined, timezone: undefined, location: undefined, websiteUrl: undefined,
-        };
-        const defaultTrackingStats: IUserTrackingStats = {
-            joinDate: new Date(), totalLoginDays: 1, totalNovelsRead: 0, totalEpisodesRead: 0,
-            totalTimeSpentReadingSeconds: 0, totalCoinSpent: 0, totalRealMoneySpent: 0, firstLoginAt: new Date(),
-            lastNovelReadAt: undefined, lastNovelReadId: undefined,
-        };
-        const defaultSocialStats: IUserSocialStats = {
-            followersCount: 0, followingCount: 0, novelsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0,
-        };
-        const defaultPreferences: IUserPreferences = {
-            language: "th", display: defaultDisplayPrefs,
-            notifications: {
-                masterNotificationsEnabled: true, email: createDefaultNotificationChannelSettings(),
-                push: createDefaultNotificationChannelSettings(), inApp: createDefaultNotificationChannelSettings(),
-            },
-            contentAndPrivacy: defaultContentPrivacyPrefs, visualNovelGameplay: defaultVisualNovelGameplayPrefs,
-        };
-        const defaultWallet: IUserWallet = { coinBalance: 0, lastCoinTransactionAt: undefined };
-        const defaultGamification: IUserGamification = {
-            level: 1, currentLevelObject: null, experiencePoints: 0, totalExperiencePointsEverEarned: 0,
-            nextLevelXPThreshold: 100, achievements: [], showcasedItems: [] as IShowcasedGamificationItem[],
-            primaryDisplayBadge: undefined as IUserDisplayBadge | undefined,
-            secondaryDisplayBadges: [] as IUserDisplayBadge[],
-            loginStreaks: { currentStreakDays: 1, longestStreakDays: 1, lastLoginDate: new Date() },
-            dailyCheckIn: { currentStreakDays: 0, lastCheckInDate: undefined }, lastActivityAt: new Date(),
-        };
-        const defaultVerification: IUserVerification = { kycStatus: "none" };
-        const defaultDonationSettings: IUserDonationSettings = { isEligibleForDonation: false };
-        const defaultSecuritySettings: IUserSecuritySettings = {
-            twoFactorAuthentication: { isEnabled: false }, loginAttempts: { count: 0 }, activeSessions: [],
-        };
-        const defaultMentalWellbeingInsights: IMentalWellbeingInsights = {
-            overallEmotionalTrend: "unknown", consultationRecommended: false,
-        };
-
-        const newUserInput = { // This structure should match the schema for UserModel
+        
+        // Constructing a minimal input object for the new user.
+        // Mongoose will apply the extensive defaults from the UserSchema for fields not provided here.
+        const newUserInput = {
           username: finalUsername,
           email: email ? email.toLowerCase() : undefined,
-          isEmailVerified: !!email, // True if email exists
+          isEmailVerified: !!email,
           emailVerifiedAt: email ? new Date() : undefined,
-          roles: ["Reader"],
-          profile: defaultProfile,
           accounts: [{ provider, providerAccountId, type: "oauth" } as IAccount],
-          trackingStats: defaultTrackingStats,
-          socialStats: defaultSocialStats,
-          preferences: defaultPreferences,
-          wallet: defaultWallet,
-          gamification: defaultGamification,
-          isActive: true,
-          isBanned: false,
           lastLoginAt: new Date(),
-          // writerStats: undefined, // Schema default will handle this
-          verifiedBadges: [],
-          verification: defaultVerification,
-          donationSettings: defaultDonationSettings,
-          securitySettings: defaultSecuritySettings,
-          mentalWellbeingInsights: defaultMentalWellbeingInsights, // schema default will take care if not selected
-          isDeleted: false,
         };
 
         if (newUserInput.email) {
@@ -344,10 +232,21 @@ export async function POST(request: Request): Promise<NextResponse> {
             }
         }
 
-        // UserModel constructor expects a type compatible with IUser's schema definition.
-        // The 'as IUser' cast might be needed if newUserInput isn't perfectly matching or if strict type checking is very high.
-        // However, Mongoose is generally flexible.
         userDocument = new UserModel(newUserInput);
+        
+        // Now apply specific initial values or overrides to the default objects
+        userDocument.profile.displayName = name || finalUsername;
+        userDocument.profile.avatarUrl = picture || undefined;
+        
+        // Set initial stats that are relevant for a new user's first login.
+        userDocument.trackingStats.totalLoginDays = 1;
+        userDocument.trackingStats.firstLoginAt = new Date();
+
+        userDocument.gamification.loginStreaks.currentStreakDays = 1;
+        userDocument.gamification.loginStreaks.longestStreakDays = 1;
+        userDocument.gamification.loginStreaks.lastLoginDate = new Date();
+        userDocument.gamification.lastActivityAt = new Date();
+        
         await userDocument.save();
         console.log(`✅ [API:OAuthSignIn] สร้างผู้ใช้ใหม่ ${userDocument.username} จาก ${provider} สำเร็จ`);
       }

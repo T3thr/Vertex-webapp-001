@@ -160,7 +160,16 @@ function safePlainObject<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
+// SECTION: ปรับปรุง Interface สำหรับ Next.js 15+ ที่ params เป็น Promise
+// =================================================================
+interface PageProps {
+  params: Promise<{
+    slug: string;
+  }>;
+}
+
 export default async function NovelOverviewPage({ params }: PageProps) {
+  // รอให้ params resolve ก่อนใช้งาน (สำหรับ Next.js 15+)
   const { slug } = await params;
   const decodedSlug = decodeURIComponent(slug);
 
@@ -253,10 +262,4 @@ export default async function NovelOverviewPage({ params }: PageProps) {
       </Suspense>
     </div>
   );
-}
-
-interface PageProps {
-  params: {
-    slug: string;
-  };
 }
