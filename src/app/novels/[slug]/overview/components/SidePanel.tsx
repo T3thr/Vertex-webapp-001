@@ -131,7 +131,7 @@ export default function SidePanel() {
               
               {/* ข้อมูลผู้เขียน */}
               <div className="flex items-center gap-3 mt-2">
-                {novel.author.profile.avatarUrl ? (
+                {novel.author?.profile?.avatarUrl ? (
                   <img 
                     src={novel.author.profile.avatarUrl} 
                     alt={novel.author.profile.displayName || 'Author'}
@@ -140,16 +140,18 @@ export default function SidePanel() {
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                     <span className="text-xs font-medium text-muted-foreground">
-                      {novel.author.profile.displayName?.charAt(0) || 'A'}
+                      {novel.author?.profile?.displayName?.charAt(0) || 'A'}
                     </span>
                   </div>
                 )}
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {novel.author.profile.displayName || 'ไม่ระบุชื่อ'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">ผู้เขียน</p>
-                </div>
+                {novel.author && novel.author.profile && (
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {novel.author.profile.displayName || 'ไม่ระบุชื่อ'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">ผู้เขียน</p>
+                  </div>
+                )}
               </div>
               
               {/* หมวดหมู่ */}
@@ -160,12 +162,12 @@ export default function SidePanel() {
                 </h3>
                 <div className="flex flex-wrap gap-1">
                   {novel.categories && novel.categories.length > 0 ? (
-                    novel.categories.map((category, index) => (
+                    novel.categories.map((category: string, index: number) => (
                       <span 
                         key={index}
                         className="px-2 py-1 bg-accent text-accent-foreground rounded-full text-xs"
                       >
-                        {category.name}
+                        {category}
                       </span>
                     ))
                   ) : (
