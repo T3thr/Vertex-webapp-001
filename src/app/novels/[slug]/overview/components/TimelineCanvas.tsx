@@ -319,7 +319,9 @@ function TimelineCanvasInner() {
         setZoomLevel(reactFlowInstance.getZoom());
       };
       
-      reactFlowInstance.getViewport() && updateZoom();
+      if (reactFlowInstance.getViewport()) {
+        updateZoom();
+      }
       // Note: In a real app, you'd want to listen to zoom changes
     }
   }, [reactFlowInstance]);
