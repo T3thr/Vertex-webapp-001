@@ -386,7 +386,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                   variants={itemVariants}
                   whileHover={{ scale: 1.02 }}
                 >
-                  {user.profile?.penName || user.profile?.displayName || user.username}
+                  {user.profile?.displayName || user.username}
                 </motion.h1>
                 
                 <motion.div 
