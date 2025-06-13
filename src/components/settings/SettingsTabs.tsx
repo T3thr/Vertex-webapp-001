@@ -498,7 +498,7 @@ export default function SettingsTabs({ initialPreferences }: SettingsTabsProps) 
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.5 }}
-        className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border z-50"
+        className="fixed bottom-0 left-0 right-0 p-4 bg-background/70 border-t border-border z-50"
       >
         <div className="container mx-auto flex justify-end">
             <Button onClick={handleSaveSettings} size="lg" disabled={isLoading || Object.keys(pendingUpdates).length === 0} className="w-full sm:w-auto">

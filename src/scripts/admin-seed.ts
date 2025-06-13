@@ -21,29 +21,10 @@ import UserModelImport, { // เปลี่ยนชื่อ import เพื�
     IUserDonationSettings,
     IUserSecuritySettings,
     IMentalWellbeingInsights,
-    IUserDisplayPreferences,
-    IUserReadingDisplayPreferences,
-    IUserAccessibilityDisplayPreferences,
-    IUserPreferencesNotifications,
-    INotificationChannelSettings,
-    IUserContentPrivacyPreferences,
-    IUserAnalyticsConsent,
-    IVisualNovelGameplayPreferences,
     IWriterStats,
     INovelPerformanceStats,
     IActiveNovelPromotionSummary,
-    ITrendingNovelSummary,
-    IVisualNovelUIVisibilityPreferences,
-    IVisualNovelVisualEffects,
-    IVisualNovelCharacterDisplay,
-    IVisualNovelCharacterVoiceDisplay,
-    IVisualNovelBackgroundDisplay,
-    IVisualNovelVoiceSubtitles,
-    INotificationSaveLoadSettings,
-    INotificationNewContentSettings,
-    INotificationOutOfGameSettings,
-    INotificationOptionalSettings,
-    IUserPrivacyPreferences
+    ITrendingNovelSummary
 } from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
 
 config({ path: ".env" }); // โหลด environment variables จาก .env
@@ -55,110 +36,150 @@ const AUTHOR_EMAIL = process.env.AUTHOR_EMAIL;
 const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME;
 const AUTHOR_PASSWORD = process.env.AUTHOR_PASSWORD; // นี่คือรหัสผ่านแบบ Plain text
 
-// Helper function to create default notification settings (ครบถ้วนตาม IUser)
-function createDefaultNotificationChannelSettings(): INotificationChannelSettings {
-    return {
-        enabled: true,
-        newsletter: true,
-        novelUpdatesFromFollowing: true,
-        newFollowers: true,
-        commentsOnMyNovels: true,
-        repliesToMyComments: true,
-        donationAlerts: true,
-        systemAnnouncements: true,
-        securityAlerts: true,
-        promotionalOffers: false,
-        achievementUnlocks: true,
-    };
-}
-
-// Helper function to create default IUserPreferences (ครบถ้วนตาม IUser)
+/**
+ * @function createDefaultPreferences
+ * @description สร้าง Object การตั้งค่าเริ่มต้นสำหรับผู้ใช้ใหม่ (IUserPreferences)
+ * โดยอ้างอิงจากค่า default ใน UserSchema เพื่อให้มั่นใจว่าข้อมูลถูกต้องและครบถ้วน
+ * @returns {IUserPreferences} Object การตั้งค่าเริ่มต้น
+ */
 function createDefaultPreferences(): IUserPreferences {
-    const defaultReadingDisplayPrefs: IUserReadingDisplayPreferences = {
-        fontSize: 16,
-        fontFamily: "inherit",
-        textContrastMode: true,
-    };
-    const defaultAccessibilityPrefs: IUserAccessibilityDisplayPreferences = {
-        dyslexiaFriendlyFont: false,
-        highContrastMode: false,
-        epilepsySafeMode: false,
-    };
-    const defaultDisplayPrefs: IUserDisplayPreferences = {
-        theme: "system",
-        accessibility: defaultAccessibilityPrefs,
-        uiVisibility: { textBoxOpacity: 80, backgroundBrightness: 50, textBoxBorder: true },
-        readingDisplay: defaultReadingDisplayPrefs,
-        visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true },
-        characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
-        characterVoiceDisplay: { voiceIndicatorIcon: true },
-        backgroundDisplay: { backgroundQuality: 'mid', showCGs: true, backgroundEffects: true },
-        voiceSubtitles: { enabled: true },
-    };
-    const defaultAnalyticsConsent: IUserAnalyticsConsent = {
-        allowPsychologicalAnalysis: false,
-        allowPersonalizedFeedback: false,
-        lastConsentReviewDate: new Date(),
-    };
-    const defaultContentPrivacyPrefs: IUserContentPrivacyPreferences = {
-        showMatureContent: false,
-        preferredGenres: [],
-        blockedGenres: [],
-        blockedTags: [],
-        blockedAuthors: [],
-        blockedNovels: [],
-        profileVisibility: "public",
-        readingHistoryVisibility: "followers_only",
-        showActivityStatus: true,
-        allowDirectMessagesFrom: "followers",
-        analyticsConsent: defaultAnalyticsConsent,
-    };
-    const defaultVisualNovelGameplayPrefs: IVisualNovelGameplayPreferences = {
-        textSpeed: 50,
-        instantText: false,
-        autoPlay: true,
-        autoSpeed: 50,
-        skipRead: false,
-        skipAll: false,
-        skipHold: false,
-        enableHistory: true,
-        historyVoice: true,
-        historyBack: true,
-        choiceTimer: true,
-        highlightChoices: true,
-        routePreview: true,
-        autoSave: true,
-        saveFrequency: '5min',
-        decisionWarning: true,
-        importantMark: true,
-        routeProgress: true,
-        showUnvisited: true,
-        secretHints: true,
-    };
-    const defaultNotifications: IUserPreferencesNotifications = {
-        masterNotificationsEnabled: true,
-        email: createDefaultNotificationChannelSettings(),
-        push: createDefaultNotificationChannelSettings(),
-        inApp: createDefaultNotificationChannelSettings(),
-        saveLoad: { autoSaveNotification: true, noSaveSpaceWarning: true },
-        newContent: { contentUpdates: true, promotionEvent: true },
-        outOfGame: { type: 'all' },
-        optional: { statChange: true, statDetailLevel: 'summary' },
-    };
-    const defaultPrivacyPrefs: IUserPrivacyPreferences = {
-        profileVisibility: true,
-        readingHistory: true,
-        activityStatus: true,
-        dataCollection: true,
-    };
-
+    // ฟังก์ชันนี้ถูกสร้างขึ้นมาใหม่โดยอ้างอิงค่า Default จาก UserSchema.ts โดยตรง
     return {
         language: "th",
-        display: defaultDisplayPrefs,
-        notifications: defaultNotifications,
-        contentAndPrivacy: defaultContentPrivacyPrefs,
-        visualNovelGameplay: defaultVisualNovelGameplayPrefs,
-        privacy: defaultPrivacyPrefs,
+        display: {
+            theme: "system",
+            reading: {
+                fontFamily: "Sarabun", // หรือค่า default อื่นที่เหมาะสม
+                fontSize: "medium",
+                lineHeight: 1.6,
+                textAlignment: "left",
+                readingModeLayout: "scrolling",
+                textContrastMode: false
+            },
+            accessibility: {
+                dyslexiaFriendlyFont: false,
+                highContrastMode: false,
+                epilepsySafeMode: false
+            },
+            uiVisibility: {
+                textBoxOpacity: 80,
+                backgroundBrightness: 100,
+                textBoxBorder: true
+            },
+            visualEffects: {
+                sceneTransitionAnimations: true,
+                actionSceneEffects: true
+            },
+            characterDisplay: {
+                showCharacters: true,
+                characterMovementAnimations: true,
+                hideCharactersDuringText: false
+            },
+            characterVoiceDisplay: {
+                voiceIndicatorIcon: true
+            },
+            backgroundDisplay: {
+                backgroundQuality: "mid",
+                showCGs: true,
+                backgroundEffects: true
+            },
+            voiceSubtitles: {
+                enabled: true
+            }
+        },
+        notifications: {
+            masterNotificationsEnabled: true,
+            email: {
+                enabled: true, newsletter: true, novelUpdatesFromFollowing: true, newFollowers: true, commentsOnMyNovels: true, repliesToMyComments: true, donationAlerts: true, systemAnnouncements: true, securityAlerts: true, promotionalOffers: false, achievementUnlocks: true
+            },
+            push: {
+                enabled: true, newsletter: false, novelUpdatesFromFollowing: true, newFollowers: true, commentsOnMyNovels: true, repliesToMyComments: true, donationAlerts: true, systemAnnouncements: true, securityAlerts: true, promotionalOffers: false, achievementUnlocks: true
+            },
+            inApp: {
+                enabled: true, newsletter: false, novelUpdatesFromFollowing: true, newFollowers: true, commentsOnMyNovels: true, repliesToMyComments: true, donationAlerts: true, systemAnnouncements: true, securityAlerts: true, promotionalOffers: false, achievementUnlocks: true
+            },
+            saveLoad: {
+                autoSaveNotification: true,
+                noSaveSpaceWarning: true
+            },
+            newContent: {
+                contentUpdates: true,
+                promotionEvent: true
+            },
+            outOfGame: {
+                type: "all"
+            },
+            optional: {
+                statChange: false,
+                statDetailLevel: "summary"
+            }
+        },
+        contentAndPrivacy: {
+            showMatureContent: false,
+            preferredGenres: [],
+            blockedGenres: [],
+            blockedTags: [],
+            blockedAuthors: [],
+            blockedNovels: [],
+            profileVisibility: "public",
+            readingHistoryVisibility: "followers_only",
+            showActivityStatus: true,
+            allowDirectMessagesFrom: "followers",
+            analyticsConsent: {
+                allowPsychologicalAnalysis: false,
+                allowPersonalizedFeedback: false
+            }
+        },
+        visualNovelGameplay: {
+            textSpeed: "normal",
+            textSpeedNumeric: 50,
+            instantTextDisplay: false,
+            autoPlayMode: "click",
+            autoPlayDelayMs: 1500,
+            autoPlaySpeedNumeric: 50,
+            autoPlayEnabled: false,
+            skipUnreadText: false,
+            skipReadTextOnly: true,
+            skipAllText: false,
+            skipOnHold: true,
+            transitionsEnabled: true,
+            screenEffectsEnabled: true,
+            textWindowOpacity: 0.8,
+            masterVolume: 1.0,
+            bgmVolume: 0.7,
+            sfxVolume: 0.8,
+            voiceVolume: 1.0,
+            voicesEnabled: true,
+            preferredVoiceLanguage: "original",
+            showChoiceTimer: true,
+            blurThumbnailsOfMatureContent: true,
+            preferredArtStyles: [],
+            preferredGameplayMechanics: [],
+            assetPreloading: "essential",
+            characterAnimationLevel: "full",
+            backlog: {
+                enableHistory: true,
+                historyVoice: true,
+                historyBack: true
+            },
+            choices: {
+                highlightChoices: true,
+                routePreview: false
+            },
+            saveLoad: {
+                autoSave: true,
+                saveFrequency: "scene"
+            },
+            decisions: {
+                decisionWarning: true,
+                importantMark: true
+            },
+            routeManagement: {
+                routeProgress: true,
+                showUnvisited: true,
+                secretHints: false
+            }
+        },
     };
 }
 
@@ -172,10 +193,11 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
         // ไม่ต้อง hash password ที่นี่แล้ว UserModel pre-save hook จะจัดการเอง
         const existingAdmin = await User.findOne({ $or: [{ email: ADMIN_EMAIL.toLowerCase() }, { username: ADMIN_USERNAME }] });
 
-        // Data objects สำหรับ default values (คงโครงสร้างเดิมไว้ส่วนใหญ่)
+        // Data objects สำหรับ default values ที่สอดคล้องกับ Schema
         const adminProfileData: IUserProfile = {
             displayName: ADMIN_USERNAME,
             penNames: [ADMIN_USERNAME],
+            primaryPenName: ADMIN_USERNAME,
             bio: "ผู้ดูแลระบบของแพลตฟอร์มนิยายภาพ DivWy",
             gender: "prefer_not_to_say",
         };
@@ -223,7 +245,7 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
             lastActivityAt: new Date(),
         };
         const adminVerificationData: IUserVerification = {
-            kycStatus: existingAdmin?.verification?.kycStatus || "verified",
+            kycStatus: "verified",
             kycVerifiedAt: existingAdmin?.verification?.kycVerifiedAt || new Date(),
         };
         const adminDonationSettingsData: IUserDonationSettings = {
@@ -245,16 +267,17 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
             // ส่ง password แบบ plain text, pre-save hook จะ hash ให้
             existingAdmin.password = ADMIN_PASSWORD;
             existingAdmin.roles = ["Admin", "Writer", "Reader"];
-            existingAdmin.profile = { ...adminProfileData, ...existingAdmin.profile }; // ให้ค่าใหม่ทับค่าเก่าใน profile
-            existingAdmin.trackingStats = { ...adminTrackingStatsData, ...existingAdmin.trackingStats };
-            existingAdmin.socialStats = { ...adminSocialStatsData, ...existingAdmin.socialStats };
-            existingAdmin.preferences = existingAdmin.preferences ? { ...createDefaultPreferences(), ...existingAdmin.preferences } : createDefaultPreferences();
-            existingAdmin.wallet = { ...adminWalletData, ...existingAdmin.wallet };
-            existingAdmin.gamification = { ...adminGamificationData, ...existingAdmin.gamification };
-            existingAdmin.verification = { ...adminVerificationData, ...existingAdmin.verification };
-            existingAdmin.donationSettings = { ...adminDonationSettingsData, ...existingAdmin.donationSettings };
-            existingAdmin.securitySettings = existingAdmin.securitySettings ? { ...adminSecuritySettingsData, ...existingAdmin.securitySettings } : adminSecuritySettingsData;
-            existingAdmin.mentalWellbeingInsights = existingAdmin.mentalWellbeingInsights ? { ...adminMentalWellbeingData, ...existingAdmin.mentalWellbeingInsights } : adminMentalWellbeingData;
+            // การ merge ควรทำอย่างระมัดระวัง สำหรับ seed script การตั้งค่าใหม่จาก default อาจจะดีกว่า
+            existingAdmin.profile = { ...existingAdmin.profile, ...adminProfileData };
+            existingAdmin.trackingStats = { ...existingAdmin.trackingStats, ...adminTrackingStatsData };
+            existingAdmin.socialStats = { ...existingAdmin.socialStats, ...adminSocialStatsData };
+            existingAdmin.preferences = createDefaultPreferences(); // ใช้ default ที่ถูกต้องเสมอ
+            existingAdmin.wallet = { ...existingAdmin.wallet, ...adminWalletData };
+            existingAdmin.gamification = { ...existingAdmin.gamification, ...adminGamificationData };
+            existingAdmin.verification = { ...existingAdmin.verification, ...adminVerificationData };
+            existingAdmin.donationSettings = { ...existingAdmin.donationSettings, ...adminDonationSettingsData };
+            existingAdmin.securitySettings = existingAdmin.securitySettings ? { ...existingAdmin.securitySettings, ...adminSecuritySettingsData } : adminSecuritySettingsData;
+            existingAdmin.mentalWellbeingInsights = existingAdmin.mentalWellbeingInsights ? { ...existingAdmin.mentalWellbeingInsights, ...adminMentalWellbeingData } : adminMentalWellbeingData;
             existingAdmin.isEmailVerified = true;
             existingAdmin.isActive = true;
             existingAdmin.isBanned = false;
@@ -268,25 +291,22 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
                     type: "credentials",
                 } as IAccount);
             } else if (credAccount && credAccount.providerAccountId !== existingAdmin._id.toString()) {
-                console.warn(`⚠️ ProviderAccountId ของ Admin (${credAccount.providerAccountId}) ไม่ตรงกับ _id (${existingAdmin._id.toString()}). พิจารณาอัปเดต.`);
+                console.warn(`⚠️ ProviderAccountId ของ Admin (${credAccount.providerAccountId}) ไม่ตรงกับ _id (${existingAdmin._id.toString()}). กำลังอัปเดต...`);
+                credAccount.providerAccountId = existingAdmin._id.toString();
             }
-
 
             await existingAdmin.save(); // การ save() จะ trigger pre-save hook
             console.log(`✅ อัปเดตข้อมูลแอดมินสำเร็จ: ${ADMIN_EMAIL}`);
         } else {
             console.log("🌱 สร้างบัญชีผู้ใช้แอดมินใหม่...");
-            const newAdmin = await User.create({
+            // ใช้ new Model() และ save() เพื่อให้สามารถกำหนด providerAccountId จาก _id ได้
+            const newAdmin = new User({
                 email: ADMIN_EMAIL.toLowerCase(),
                 username: ADMIN_USERNAME,
                 password: ADMIN_PASSWORD, // ส่ง password แบบ plain text
                 roles: ["Admin", "Writer", "Reader"],
                 profile: adminProfileData,
-                accounts: [{
-                    provider: "credentials",
-                    providerAccountId: ADMIN_USERNAME, // ค่านี้อาจถูก override โดย logic ภายใน หรือใช้เป็นค่าเริ่มต้น
-                    type: "credentials",
-                } as IAccount],
+                accounts: [], // จะเพิ่มด้านล่าง
                 trackingStats: adminTrackingStatsData,
                 socialStats: adminSocialStatsData,
                 preferences: createDefaultPreferences(),
@@ -297,10 +317,20 @@ async function seedAdmin(User: mongoose.Model<IUser>) {
                 securitySettings: adminSecuritySettingsData,
                 mentalWellbeingInsights: adminMentalWellbeingData,
                 isEmailVerified: true,
+                emailVerifiedAt: new Date(),
                 isActive: true,
                 isBanned: false,
                 lastLoginAt: new Date(),
             });
+
+            // ตั้งค่า providerAccountId โดยอ้างอิงจาก _id ที่ Mongoose สร้างขึ้น
+            newAdmin.accounts.push({
+                provider: "credentials",
+                providerAccountId: newAdmin._id.toString(),
+                type: "credentials",
+            } as IAccount);
+
+            await newAdmin.save();
             console.log(`✅ สร้างผู้ใช้แอดมินสำเร็จ: ${newAdmin.email} (ID: ${newAdmin._id})`);
         }
     } catch (error: any) {
@@ -321,6 +351,7 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
         const authorProfileData: IUserProfile = {
             displayName: AUTHOR_USERNAME,
             penNames: [AUTHOR_USERNAME],
+            primaryPenName: AUTHOR_USERNAME,
             bio: "นักเขียนนิยายภาพ มากประสบการณ์ พร้อมแบ่งปันจินตนาการผ่านตัวอักษรและภาพ",
             gender: "prefer_not_to_say",
         };
@@ -328,9 +359,8 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
             joinDate: author?.trackingStats?.joinDate || new Date(),
             firstLoginAt: author?.trackingStats?.firstLoginAt || new Date(),
             totalLoginDays: author?.trackingStats?.totalLoginDays || 1,
-            totalNovelsRead: 0, totalEpisodesRead: 0, totalTimeSpentReadingSeconds:0, totalCoinSpent:0, totalRealMoneySpent:0,
+            totalNovelsRead: 0, totalEpisodesRead: 0, totalTimeSpentReadingSeconds: 0, totalCoinSpent: 0, totalRealMoneySpent: 0,
         };
-        // **ปรับปรุง**: เพิ่ม boardPostsCreatedCount
         const authorSocialStatsData: IUserSocialStats = {
             followersCount: 0, followingCount: 0, novelsCreatedCount: 0, boardPostsCreatedCount: 0, commentsMadeCount: 0, ratingsGivenCount: 0, likesGivenCount: 0
         };
@@ -363,10 +393,10 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
             totalRealMoneyReceived: 0,
             totalDonationsReceived: 0,
             writerSince: new Date(),
-            totalViewsReceived: 0,
-            novelPerformanceSummaries: [] as unknown as Types.DocumentArray<INovelPerformanceStats>,
-            activeNovelPromotions: [] as unknown as Types.DocumentArray<IActiveNovelPromotionSummary>,
-            trendingNovels: [] as unknown as Types.DocumentArray<ITrendingNovelSummary>,
+            novelPerformanceSummaries: new Types.DocumentArray<INovelPerformanceStats>([]),
+            activeNovelPromotions: new Types.DocumentArray<IActiveNovelPromotionSummary>([]),
+            trendingNovels: new Types.DocumentArray<ITrendingNovelSummary>([]),
+            totalViewsReceived: undefined
         };
 
         if (author) {
@@ -376,18 +406,18 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
             // ส่ง password แบบ plain text, pre-save hook จะ hash ให้
             author.password = AUTHOR_PASSWORD;
             author.roles = Array.from(new Set([...author.roles, "Writer", "Reader"]));
-            author.profile = { ...authorProfileData, ...author.profile };
-            author.trackingStats = { ...authorTrackingStatsData, ...author.trackingStats };
-            author.socialStats = { ...authorSocialStatsData, ...author.socialStats };
-            author.preferences = author.preferences ? { ...createDefaultPreferences(), ...author.preferences } : createDefaultPreferences();
-            author.wallet = { ...authorWalletData, ...author.wallet };
-            author.gamification = { ...authorGamificationData, ...author.gamification };
-            author.verification = { ...authorVerificationData, ...author.verification };
-            author.donationSettings = { ...authorDonationSettingsData, ...author.donationSettings };
-            author.securitySettings = author.securitySettings ? { ...authorSecuritySettingsData, ...author.securitySettings } : authorSecuritySettingsData;
-            author.mentalWellbeingInsights = author.mentalWellbeingInsights ? { ...authorMentalWellbeingData, ...author.mentalWellbeingInsights } : authorMentalWellbeingData;
+            author.profile = { ...author.profile, ...authorProfileData };
+            author.trackingStats = { ...author.trackingStats, ...authorTrackingStatsData };
+            author.socialStats = { ...author.socialStats, ...authorSocialStatsData };
+            author.preferences = createDefaultPreferences(); // ใช้ default ที่ถูกต้องเสมอ
+            author.wallet = { ...author.wallet, ...authorWalletData };
+            author.gamification = { ...author.gamification, ...authorGamificationData };
+            author.verification = { ...author.verification, ...authorVerificationData };
+            author.donationSettings = { ...author.donationSettings, ...authorDonationSettingsData };
+            author.securitySettings = author.securitySettings ? { ...author.securitySettings, ...authorSecuritySettingsData } : authorSecuritySettingsData;
+            author.mentalWellbeingInsights = author.mentalWellbeingInsights ? { ...author.mentalWellbeingInsights, ...authorMentalWellbeingData } : authorMentalWellbeingData;
             // ตรวจสอบและสร้าง writerStats โดยใช้ข้อมูลที่ถูกต้อง
-            author.writerStats = author.writerStats ? { ...authorWriterStatsData, ...author.writerStats } : authorWriterStatsData;
+            author.writerStats = author.writerStats ? { ...author.writerStats, ...authorWriterStatsData } : authorWriterStatsData;
             author.isEmailVerified = true;
             author.isActive = true;
             author.isBanned = false;
@@ -399,20 +429,22 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
                     provider: "credentials", providerAccountId: author._id.toString(), type: "credentials",
                 } as IAccount);
             } else if (credAccount && credAccount.providerAccountId !== author._id.toString()){
-                 console.warn(`⚠️ ProviderAccountId ของ Author (${credAccount.providerAccountId}) ไม่ตรงกับ _id (${author._id.toString()}). พิจารณาอัปเดต.`);
+                 console.warn(`⚠️ ProviderAccountId ของ Author (${credAccount.providerAccountId}) ไม่ตรงกับ _id (${author._id.toString()}). กำลังอัปเดต...`);
+                 credAccount.providerAccountId = author._id.toString();
             }
 
             await author.save(); // การ save() จะ trigger pre-save hook
             console.log(`✅ อัปเดตข้อมูลผู้เขียนสำเร็จ: ${AUTHOR_EMAIL}`);
         } else {
             console.log("🌱 สร้างบัญชีผู้ใช้สำหรับเป็นผู้เขียนนิยายใหม่...");
-            author = await User.create({
+            
+            const newAuthor = new User({
                 email: AUTHOR_EMAIL.toLowerCase(),
                 username: AUTHOR_USERNAME,
                 password: AUTHOR_PASSWORD, // ส่ง password แบบ plain text
                 roles: ["Writer", "Reader"],
                 profile: authorProfileData,
-                accounts: [{ provider: "credentials", providerAccountId: AUTHOR_USERNAME, type: "credentials" } as IAccount],
+                accounts: [], // จะเพิ่มด้านล่าง
                 trackingStats: authorTrackingStatsData,
                 socialStats: authorSocialStatsData,
                 preferences: createDefaultPreferences(),
@@ -424,10 +456,19 @@ async function ensureAuthorExists(User: mongoose.Model<IUser>) {
                 mentalWellbeingInsights: authorMentalWellbeingData,
                 writerStats: authorWriterStatsData,
                 isEmailVerified: true,
+                emailVerifiedAt: new Date(),
                 isActive: true,
                 isBanned: false,
                 lastLoginAt: new Date(),
             });
+
+            newAuthor.accounts.push({
+                provider: "credentials",
+                providerAccountId: newAuthor._id.toString(),
+                type: "credentials"
+            } as IAccount);
+            
+            author = await newAuthor.save();
             console.log(`✅ สร้างบัญชีผู้เขียนสำเร็จ: ${author.email} (ID: ${author._id})`);
         }
         return author._id;
@@ -450,7 +491,7 @@ async function main() {
 
         console.log("🎉 กระบวนการ seed สำเร็จ");
     } catch (err: any) {
-        console.error("❌ กระบวนการ seed ล้มเหลว:", err.message, err.stack);
+        console.error("❌ กระบวนการ seed ล้มเหลว:", err.message);
         process.exit(1); // ออกจาก process ด้วย error code
     } finally {
         try {
