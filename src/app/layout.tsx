@@ -219,10 +219,10 @@ export default async function RootLayout({
           <main className="flex-grow w-full">
             {children}
           </main>
-          <Footer />
-        </GlobalProvider>
+          <Footer />        
         <Analytics />
         <SpeedInsights />
+        </GlobalProvider>
       </body>
     </html>
   );

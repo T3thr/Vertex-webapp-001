@@ -27,13 +27,7 @@ import UserModel, {
     IUserReadingDisplayPreferences,
     IUserAccessibilityDisplayPreferences,
     IShowcasedGamificationItem,
-    IUserDisplayBadge,
-    IVisualNovelUIVisibilityPreferences,
-    IVisualNovelVisualEffects,
-    IVisualNovelCharacterDisplay,
-    IVisualNovelCharacterVoiceDisplay,
-    IVisualNovelBackgroundDisplay,
-    IVisualNovelVoiceSubtitles,
+    IUserDisplayBadge
 } from "@/backend/models/User";
 import { sendVerificationEmail } from "@/backend/services/sendemail";
 import { validateEmail, validatePassword, validateUsername } from "@/backend/utils/validation";
@@ -174,22 +168,14 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // Default values from User.ts will be applied by Mongoose for fields not explicitly set here
     // or for nested fields within objects if not fully specified.
-    const defaultReadingDisplayPrefs: IUserReadingDisplayPreferences = {
-        fontSize: 16, fontFamily: "inherit", textContrastMode: true,
+    const defaultReadingPrefs: IUserReadingDisplayPreferences = {
+        fontSize: "medium", readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left",
     };
     const defaultAccessibilityPrefs: IUserAccessibilityDisplayPreferences = {
-        dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false,
+        dyslexiaFriendlyFont: false, highContrastMode: false,
     };
     const defaultDisplayPrefs: IUserDisplayPreferences = {
-        theme: "system",
-        accessibility: defaultAccessibilityPrefs,
-        uiVisibility: { textBoxOpacity: 80, backgroundBrightness: 50, textBoxBorder: true },
-        readingDisplay: defaultReadingDisplayPrefs,
-        visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true },
-        characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
-        characterVoiceDisplay: { voiceIndicatorIcon: true },
-        backgroundDisplay: { backgroundQuality: 'mid', showCGs: true, backgroundEffects: true },
-        voiceSubtitles: { enabled: true },
+        theme: "system", reading: defaultReadingPrefs, accessibility: defaultAccessibilityPrefs,
     };
     const defaultAnalyticsConsent: IUserAnalyticsConsent = {
         allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false, // lastConsentReviewDate will be set by schema if needed
@@ -201,9 +187,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         // blocked fields will be default empty arrays by Mongoose
     };
     const defaultVisualNovelGameplayPrefs: IVisualNovelGameplayPreferences = {
-        textSpeed: 50, instantText: false, autoPlay: true, autoSpeed: 50, skipRead: false, skipAll: false, skipHold: false,
-        enableHistory: true, historyVoice: true, historyBack: true, choiceTimer: true, highlightChoices: true, routePreview: true,
-        autoSave: true, saveFrequency: '5min', decisionWarning: true, importantMark: true, routeProgress: true, showUnvisited: true, secretHints: true
+        textSpeed: "normal", autoPlayMode: "click", autoPlayDelayMs:1500, skipUnreadText: false,
+        transitionsEnabled: true, screenEffectsEnabled: true, textWindowOpacity: 0.8,
+        masterVolume: 1.0, bgmVolume: 0.7, sfxVolume: 0.8, voiceVolume: 1.0,
+        voicesEnabled: true, preferredVoiceLanguage: "original", showChoiceTimer: true,
+        blurThumbnailsOfMatureContent: true, preferredArtStyles: [], preferredGameplayMechanics: [],
+        assetPreloading: "essential", characterAnimationLevel: "full"
     };
 
     const newUser = new UserModel({
