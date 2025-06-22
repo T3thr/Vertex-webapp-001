@@ -4,7 +4,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel from "@/backend/models/User";
+import UserSettingsModel from "@/backend/models/UserSettings";
 import { redirect } from "next/navigation";
 import SettingsTabs from "@/components/settings/SettingsTabs";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -12,24 +12,35 @@ import { AlertTriangle } from "lucide-react";
 
 /**
  * @function getUserPreferences
- * @description ดึงข้อมูลการตั้งค่าของผู้ใช้ล่าสุดจากฐานข้อมูลโดยตรง
+ * @description ดึงข้อมูลการตั้งค่าของผู้ใช้ล่าสุดจากฐานข้อมูลโดยตรง (UserSettings)
  * @param userId - ID ของผู้ใช้
  * @returns {Promise<object | null>} - Object การตั้งค่าของผู้ใช้ หรือ null หากไม่พบ
  */
 async function getUserPreferences(userId: string) {
   try {
     await dbConnect();
-    const user = await UserModel.findById(userId)
-      .select('preferences') // เลือกเฉพาะ field 'preferences'
-      .lean(); // ใช้ .lean() เพื่อ performance ที่ดีขึ้น
-
-    // เราจะแปลง ObjectId เป็น string ในทุกระดับของ preferences object
-    // เพื่อให้สามารถส่งผ่านจาก Server Component ไปยัง Client Component ได้โดยไม่มีปัญหา
-    const preferencesStringified = JSON.parse(JSON.stringify(user?.preferences));
-
-    return preferencesStringified || null;
+    const settings = await UserSettingsModel.findOne({ userId }).lean();
+    if (!settings) return null;
+    // แปลง ObjectId/Date เป็น string ทั้งหมด (deep serialize)
+    const serialize = (obj: any): any => {
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj === 'object' && obj instanceof Date) return obj.toISOString();
+      if (typeof obj === 'object' && obj._bsontype === 'ObjectID') return obj.toString();
+      if (Array.isArray(obj)) return obj.map(serialize);
+      if (typeof obj === 'object') {
+        const res: any = {};
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            res[key] = serialize(obj[key]);
+          }
+        }
+        return res;
+      }
+      return obj;
+    };
+    return serialize(settings);
   } catch (error) {
-    console.error("❌ [SettingsPage SSR] ไม่สามารถดึงข้อมูล preferences จาก DB ได้:", error);
+    console.error("❌ [SettingsPage SSR] ไม่สามารถดึงข้อมูล settings จาก DB ได้:", error);
     return null;
   }
 }

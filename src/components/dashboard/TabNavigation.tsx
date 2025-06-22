@@ -84,6 +84,7 @@ interface TabNavigationProps {
   novels: SerializedNovelForTab[];
   totalStats: TotalStatsForTab;
   earningAnalytics: SerializedEarningAnalyticForTab[];
+  isWriter: boolean;
 }
 
 interface TabItem {
@@ -96,6 +97,7 @@ interface TabItem {
     count: number | string; // Allow string for things like averageRating
     label: string;
   };
+  disabled?: boolean;
 }
 
 interface QuickStatProps {
@@ -229,7 +231,7 @@ function FeatureCard({ icon: Icon, title, description, color, action, delay }: F
   );
 }
 
-export default function TabNavigation({ children, novels, totalStats, earningAnalytics }: TabNavigationProps) {
+export default function TabNavigation({ children, novels, totalStats, earningAnalytics, isWriter }: TabNavigationProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -257,7 +259,8 @@ export default function TabNavigation({ children, novels, totalStats, earningAna
       icon: BarChart3,
       description: 'วิเคราะห์ข้อมูลเชิงลึกและสถิติต่างๆ',
       color: 'from-purple-500 to-pink-500',
-      stats: { count: earningAnalytics.length, label: 'รายงานพร้อม' }
+      stats: { count: earningAnalytics.length, label: 'รายงานพร้อม' },
+      disabled: !isWriter
     }
   ];
 
@@ -323,6 +326,40 @@ export default function TabNavigation({ children, novels, totalStats, earningAna
       initial="hidden"
       animate="visible"
     >
+      {/* Sticky/scrollable tab bar for mobile */}
+      <div className="sticky top-0 z-20 bg-card border-b border-border md:static md:bg-transparent md:border-none">
+        <div className="flex overflow-x-auto no-scrollbar md:overflow-visible md:justify-start gap-2 px-2 py-2 md:p-0">
+          {tabs.map((tab, index) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === index;
+            const isDisabled = tab.disabled;
+            return (
+              <motion.button
+                key={tab.id}
+                className={`flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-300 relative overflow-hidden
+                  ${isActive ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-card-foreground hover:bg-secondary/70'}
+                  ${isDisabled ? 'opacity-50 pointer-events-none cursor-not-allowed' : ''}`}
+                onClick={() => !isDisabled && setActiveTab(index)}
+                variants={tabVariants}
+                animate={isActive ? 'active' : 'inactive'}
+                whileHover={!isActive && !isDisabled ? { scale: 1.02, y: -1 } : {}}
+                whileTap={{ scale: 0.98 }}
+                tabIndex={isDisabled ? -1 : 0}
+                aria-disabled={isDisabled}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                {isDisabled && (
+                  <span className="absolute left-1/2 top-full mt-2 -translate-x-1/2 bg-background text-xs text-muted-foreground px-2 py-1 rounded shadow-lg whitespace-nowrap z-30">
+                    สมัครเป็นนักเขียนเพื่อดูรายงาน
+                  </span>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Header */}
       <motion.div
         className="border-b border-border bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5"
@@ -347,8 +384,8 @@ export default function TabNavigation({ children, novels, totalStats, earningAna
               <p className="text-muted-foreground">ติดตามและวิเคราะห์ผลงานของคุณอย่างครบวงจร</p>
             </div>
 
+            {/* Quick Actions */}
             <div className="flex items-center gap-3">
-              {/* Quick Actions */}
               <motion.button
                 className="p-2 bg-secondary/50 hover:bg-secondary text-secondary-foreground rounded-xl transition-colors"
                 whileHover={{ scale: 1.1 }}
@@ -366,66 +403,6 @@ export default function TabNavigation({ children, novels, totalStats, earningAna
                 {isExpanded ? <ChevronDown className="w-5 h-5" /> : <MoreHorizontal className="w-5 h-5" />}
               </motion.button>
             </div>
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="flex space-x-2 bg-secondary/50 rounded-xl p-2">
-            {tabs.map((tab, index) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === index;
-
-              return (
-                <motion.button
-                  key={tab.id}
-                  className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-lg font-medium transition-all duration-300 relative overflow-hidden ${
-                    isActive
-                      ? 'text-primary-foreground shadow-lg'
-                      : 'text-muted-foreground hover:text-card-foreground hover:bg-secondary/70'
-                  }`}
-                  onClick={() => setActiveTab(index)}
-                  variants={tabVariants}
-                  animate={isActive ? 'active' : 'inactive'}
-                  whileHover={!isActive ? { scale: 1.02, y: -1 } : {}}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {/* Active Background */}
-                  {isActive && (
-                    <motion.div
-                      className="absolute inset-0 bg-primary rounded-lg"
-                      layoutId="activeTabBackground"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-
-                  {/* Content */}
-                  <div className="relative z-10 flex items-center gap-3">
-                    <motion.div
-                      whileHover={{ rotate: isActive ? 0 : 15 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Icon className="w-5 h-5" />
-                    </motion.div>
-                    <div className="hidden sm:block text-left">
-                      <div className="font-semibold">{tab.label}</div>
-                      {tab.stats && (
-                        <div className={`text-xs ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                          {typeof tab.stats.count === 'number' ? tab.stats.count.toLocaleString() : tab.stats.count} {tab.stats.label}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Active Indicator */}
-                  {isActive && (
-                    <motion.div
-                      className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-white rounded-full"
-                      layoutId="activeTabIndicator"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                </motion.button>
-              );
-            })}
           </div>
         </div>
 

@@ -9,6 +9,7 @@ import mongoose, { Schema, model, models, Types, Document } from "mongoose";
 import { IUser } from "./User";
 import { IAchievement, IAchievementReward } from "./Achievement"; // Import IAchievementReward
 import { IBadge, IBadgeReward } from "./Badge"; // Import IBadgeReward
+import UserGamificationModel from "./UserGamification";
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล UserAchievement
@@ -192,9 +193,6 @@ const UserEarnedItemSchema = new Schema<IUserEarnedItem>(
  * @property {Types.DocumentArray<IUserEarnedItem>} earnedItems - รายการ Achievement/Badge ที่ผู้ใช้ปลดล็อก.
  * @property {Map<string, IUserEarnedItemProgress>} ongoingProgress - ความคืบหน้าของ Achievement/Badge ที่ยังไม่ปลดล็อก.
  * Key คือ `achievementCode` หรือ `badgeKey`.
- * @property {number} [totalExperiencePointsFromGamification] - (เปลี่ยนชื่อ) สรุป XP ทั้งหมดที่ผู้ใช้ได้รับจากระบบ Gamification (Achievements, Badges, etc.).
- * ค่านี้ควรจะถูกซิงค์กับ `User.gamification.experiencePoints`.
- * @property {Types.ObjectId[]} [showcasedItemIds] - (เปลี่ยนชื่อ) Array ของ `UserEarnedItem._id` ที่ผู้ใช้เลือกแสดงบนโปรไฟล์.
  * @property {string} [featuredTitleKey] - (อนาคต) Key ของ Title ที่ผู้ใช้เลือกแสดง.
  */
 export interface IUserAchievement extends Document {
@@ -202,8 +200,6 @@ export interface IUserAchievement extends Document {
   user: Types.ObjectId | IUser;
   earnedItems: Types.DocumentArray<IUserEarnedItem>;
   ongoingProgress: Map<string, IUserEarnedItemProgress>; // Key: achievementCode หรือ badgeKey
-  totalExperiencePointsFromGamification?: number; // เปลี่ยนชื่อ
-  showcasedItemIds?: Types.ObjectId[]; // เปลี่ยนชื่อ, อ้างอิง UserEarnedItem._id
   featuredTitleKey?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -228,19 +224,13 @@ const UserAchievementSchema = new Schema<IUserAchievement>(
       default: () => new Map(),
       comment: "Key คือ achievementCode หรือ badgeKey, Value คือ IUserEarnedItemProgress"
     },
-    totalExperiencePointsFromGamification: { // เปลี่ยนชื่อ field
-      type: Number,
-      default: 0,
-      min: [0, "แต้มประสบการณ์ต้องไม่ติดลบ"]
-    },
-    showcasedItemIds: [{ type: Schema.Types.ObjectId }], // เปลี่ยนชื่อ, อ้างอิง UserEarnedItem._id โดยตรง
     featuredTitleKey: { type: String, trim: true, maxlength: 100 },
   },
   {
     timestamps: true,
     toObject: { virtuals: true },
     toJSON: { virtuals: true },
-    collection: "user_gamification_data" // เปลี่ยนชื่อ collection ให้สื่อความหมายมากขึ้น
+    collection: "user_achievements" // เปลี่ยนชื่อ collection ให้สื่อความหมายมากขึ้น
   }
 );
 
@@ -270,43 +260,51 @@ UserEarnedItemSchema.pre<IUserEarnedItem>("save", function (next) {
 });
 
 UserAchievementSchema.post<IUserAchievement>("save", async function (doc, next) {
-  // ตรวจสอบว่ามีการแก้ไข field ที่ควร trigger การอัปเดต User model หรือไม่
-  const relevantFieldsModified = doc.isModified("totalExperiencePointsFromGamification") || doc.isModified("earnedItems");
-
-  if (relevantFieldsModified) {
-    const UserModel = models.User as mongoose.Model<IUser>; // Type assertion
+  // ตรวจสอบว่ามีการแก้ไข field ที่ควร trigger การอัปเดตหรือไม่
+  // เราสนใจเฉพาะเมื่อมีการเปลี่ยนแปลงรายการที่ได้รับ (earnedItems) เพราะเป็นแหล่งข้อมูลหลัก
+  if (doc.isModified("earnedItems")) {
     try {
-      const achievementDocIds = doc.earnedItems
-        .filter(item => item.itemType === EarnedItemType.ACHIEVEMENT && item._id)
-        .map(item => item._id as Types.ObjectId); // Explicitly cast to Types.ObjectId
+      // 1. คำนวณค่าประสบการณ์ทั้งหมดจากทุกรายการที่ผู้ใช้ได้รับ
+      const totalXPFromItems = doc.earnedItems.reduce((acc, item) => {
+        if (item.rewardsGrantedSnapshot && item.rewardsGrantedSnapshot.length > 0) {
+          const itemXP = item.rewardsGrantedSnapshot.reduce((rewardAcc, reward) => {
+            return rewardAcc + (reward.experiencePointsAwarded || 0);
+          }, 0);
+          return acc + itemXP;
+        }
+        return acc;
+      }, 0);
 
-      const updatePayload: any = {
+      // 2. รวบรวม ID ของรายการที่เป็น 'ACHIEVEMENT' เท่านั้น
+      const achievementItemIds = doc.earnedItems
+        .filter(item => item.itemType === EarnedItemType.ACHIEVEMENT && item._id)
+        .map(item => item._id as Types.ObjectId);
+
+      // 3. เตรียมข้อมูลสำหรับอัปเดต UserGamification document
+      // เราจะอัปเดตค่า XP ทั้งหมด และรายการ ID ของ achievements
+      const updatePayload = {
+        $set: {
+          "gamification.totalExperiencePointsEverEarned": totalXPFromItems,
+          // การตั้งค่า experiencePoints โดยตรงที่นี่เป็นเพียงการซิงค์ข้อมูลเบื้องต้น
+          // ในระบบที่ซับซ้อน Service Layer ควรคำนวณค่า XP สำหรับ Level ปัจจุบันอีกที
+          "gamification.experiencePoints": totalXPFromItems, 
+          "gamification.achievements": achievementItemIds,
+        },
         $currentDate: { "gamification.lastActivityAt": true }
       };
 
-      if (doc.isModified("totalExperiencePointsFromGamification")) {
-        updatePayload.$set = {
-          ...updatePayload.$set,
-          "gamification.experiencePoints": doc.totalExperiencePointsFromGamification,
-        };
-      }
-      if (doc.isModified("earnedItems")) {
-        // This logic might be too simplistic if earnedItems can be removed.
-        // It assumes `gamification.achievements` should always reflect the current state of `earnedItems` of type ACHIEVEMENT.
-        updatePayload.$set = {
-          ...updatePayload.$set,
-          "gamification.achievements": achievementDocIds,
-        };
-      }
-
-      if (Object.keys(updatePayload.$set || {}).length > 0) {
-        await UserModel.findByIdAndUpdate(doc.user, updatePayload);
-        // console.log(`[UserAchievement Post-Save] Updated User ${doc.user} gamification stats.`);
-      }
+      // 4. ค้นหาและอัปเดต UserGamification document ที่เกี่ยวข้อง
+      // ใช้ findOneAndUpdate และ upsert: true เพื่อสร้างเอกสารใหม่หากยังไม่มี
+      await UserGamificationModel.findOneAndUpdate(
+        { userId: doc.user },
+        updatePayload,
+        { upsert: true, new: true } // สร้างใหม่ถ้ายังไม่มี, และคืนค่าเอกสารใหม่
+      );
+      // console.log(`[UserAchievement Post-Save] Synced gamification stats for User ${doc.user}. Total XP: ${totalXPFromItems}`);
 
     } catch (error) {
-      console.error(`[UserAchievement Post-Save Hook] Error updating User model for user ${doc.user}:`, error);
-      // Consider more robust error handling, like queuing a retry or logging to an error service.
+      console.error(`[UserAchievement Post-Save Hook] Error syncing gamification data for user ${doc.user}:`, error);
+      // ในระบบจริง ควรใช้ logger ที่มีประสิทธิภาพกว่านี้
     }
   }
   next();
@@ -316,7 +314,6 @@ UserAchievementSchema.post<IUserAchievement>("save", async function (doc, next) 
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
 UserAchievementSchema.index({ user: 1, "earnedItems.itemType": 1, "earnedItems.unlockedAt": -1 }, { name: "UserGamificationData_EarnedItems_TypeDate_Idx" });
-UserAchievementSchema.index({ user: 1, showcasedItemIds: 1 }, { name: "UserGamificationData_ShowcasedItems_Idx", sparse: true });
 UserAchievementSchema.index({ user: 1, "ongoingProgress.itemKey": 1 }, { name: "UserGamificationData_OngoingProgress_ItemKey_Idx", sparse: true });
 
 // ==================================================================================================
@@ -331,7 +328,7 @@ export default UserAchievementModel;
 // ==================================================================================================
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements) - ปรับปรุงล่าสุด
 // ==================================================================================================
-// 1.  **Collection Name**: เปลี่ยนชื่อ Collection เป็น `user_gamification_data` เพื่อให้สื่อความหมายครอบคลุมมากขึ้น.
+// 1.  **Collection Name**: เปลี่ยนชื่อ Collection เป็น `user_achievements` เพื่อให้สื่อความหมายครอบคลุมมากขึ้น.
 // 2.  **`itemTypeRef`**: ทำให้ `itemTypeRef` ใน `IUserEarnedItem` เข้มงวดขึ้นเป็น `"Achievement" | "Badge" | "Title"`.
 // 3.  **Snapshot Data**:
 //     -   เพิ่ม `itemRaritySnapshot` ใน `IUserEarnedItem` เพื่อเก็บ Rarity ณ ตอนที่ได้รับ.
@@ -339,22 +336,22 @@ export default UserAchievementModel;
 //     -   Service Layer ที่ grant item ควรรับผิดชอบในการ populate snapshot fields (name, description, icon, rarity, rewards) จาก Achievement/Badge ต้นแบบ.
 // 4.  **`ongoingProgress` Map Key**: Key ของ Map `ongoingProgress` ควรเป็น `achievementCode` หรือ `badgeKey` ที่ unique.
 //     `IUserEarnedItemProgress` ได้เพิ่ม `itemKey` และ `itemType` เพื่อให้ระบุ item ได้ชัดเจน.
-// 5.  **`totalExperiencePointsFromGamification`**: เปลี่ยนชื่อ field จาก `totalExperiencePointsEarned` เพื่อความชัดเจนว่ามาจากระบบ Gamification โดยรวม.
-// 6.  **`showcasedItemIds`**: เปลี่ยนชื่อ field จาก `showcasedItems` และยืนยันว่าเก็บ Array ของ `UserEarnedItem._id`.
-//     การอ้างอิง _id ของ subdocument `earnedItems` นั้นถูกต้อง เพราะ subdocuments ใน Mongoose จะมี _id ของตัวเองโดย default.
-// 7.  **Synchronization with `User.gamification`**:
-//     -   Post-save hook ได้รับการปรับปรุงเพื่ออัปเดต `User.gamification.experiencePoints` และ `User.gamification.achievements`
-//         (ซึ่งเก็บ `UserEarnedItem._id` ที่เป็น Achievement).
-//     -   Service Layer ควรเป็นผู้คำนวณ `totalExperiencePointsFromGamification` โดยรวม XP จาก `rewardsGrantedSnapshot` ของ `earnedItems` ทั้งหมด.
-// 8.  **Repeatable Items**: `timesEarned` ใน `IUserEarnedItem` ช่วยรองรับ. Logic การ grant item ใน Service Layer
+// 5.  **Synchronization with `UserGamification` (สำคัญ)**:
+//     -   โมเดลนี้เป็น "แหล่งข้อมูลจริง (Source of Truth)" สำหรับรายการที่ผู้ใช้ได้รับ.
+//     -   Post-save hook ที่แก้ไขใหม่จะทำหน้าที่ **ส่ง (Push)** ข้อมูลสรุป (เช่น total XP, list of achievement IDs) ไปยัง `UserGamification` model.
+//     -   วิธีนี้ทำให้ `UserGamification` เป็น "ภาพสะท้อน (Reflection)" หรือ "แคช (Cache)" ของสถานะปัจจุบันที่อ่านได้เร็ว,
+//       ในขณะที่ `UserAchievement` เก็บประวัติทั้งหมดอย่างละเอียด.
+// 6.  **Redundant Fields Removed**: ฟิลด์ `totalExperiencePointsFromGamification` และ `showcasedItemIds` ถูกลบออกจากโมเดลนี้
+//     เพราะข้อมูลสถานะปัจจุบัน (state) ควรอยู่ใน `UserGamification` ไม่ใช่ในโมเดลที่เก็บประวัติ (ledger).
+// 7.  **Repeatable Items**: `timesEarned` ใน `IUserEarnedItem` ช่วยรองรับ. Logic การ grant item ใน Service Layer
 //     จะต้องจัดการว่าจะ increment `timesEarned` หรือสร้าง `IUserEarnedItem` record ใหม่
 //     ขึ้นอยู่กับว่าการได้รับซ้ำแต่ละครั้งถือเป็น instance ใหม่หรือไม่ หรือแค่เป็นการนับจำนวน.
-// 9.  **Data Integrity & Denormalization**: การใช้ snapshot มีประโยชน์ถ้า Achievement/Badge ต้นแบบมีการเปลี่ยนแปลง
+// 8.  **Data Integrity & Denormalization**: การใช้ snapshot มีประโยชน์ถ้า Achievement/Badge ต้นแบบมีการเปลี่ยนแปลง
 //     แต่ข้อมูลที่ผู้ใช้ได้รับไปแล้วควรจะคงเดิม. อย่างไรก็ตาม, ต้องมีกระบวนการที่ชัดเจนในการ populate ข้อมูล snapshot เหล่านี้.
-// 10. **Consistency of Rewards**: `IEarnedItemRewardSnapshot` ควรมีโครงสร้างที่สามารถรองรับรางวัลจากทั้ง `Achievement` และ `Badge` ได้
+// 9.  **Consistency of Rewards**: `IEarnedItemRewardSnapshot` ควรมีโครงสร้างที่สามารถรองรับรางวัลจากทั้ง `Achievement` และ `Badge` ได้
 //     แม้ว่า Badge จะเน้นรางวัลน้อยกว่า.
-// 11. **Future `Title` System**: `EarnedItemType.TITLE` และ `featuredTitleKey` เป็น placeholders.
+// 10. **Future `Title` System**: `EarnedItemType.TITLE` และ `featuredTitleKey` เป็น placeholders.
 //     หากมีการ implement ระบบ Title, จะต้องสร้าง `Title.ts` model และปรับปรุง logic ที่เกี่ยวข้อง.
-// 12. **แก้ไขข้อผิดพลาด ESLint**: ลบ `IUserAchievementModel` ที่ว่างเปล่าออก เนื่องจากไม่มี static methods และไม่จำเป็นต้องกำหนด
+// 11. **แก้ไขข้อผิดพลาด ESLint**: ลบ `IUserAchievementModel` ที่ว่างเปล่าออก เนื่องจากไม่มี static methods และไม่จำเป็นต้องกำหนด
 //     ทำให้โค้ดสะอาดขึ้นและแก้ไขข้อผิดพลาด `@typescript-eslint/no-empty-object-type`.
 // ==================================================================================================

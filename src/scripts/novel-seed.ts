@@ -19,7 +19,13 @@ import CategoryModel, {
   CategoryType,
 } from "@/backend/models/Category";
 // ตรวจสอบ path และ import ที่จำเป็น (เพิ่ม IWriterStats, INovelPerformanceStats, IActiveNovelPromotionSummary, ITrendingNovelSummary เพื่อความสมบูรณ์)
-import UserModelImport, { IUser, IWriterStats, INovelPerformanceStats, IActiveNovelPromotionSummary, ITrendingNovelSummary } from "@/backend/models/User";
+import UserModel, { IUser } from "@/backend/models/User";
+import {
+  IWriterStatsDoc as IWriterStats,
+  INovelPerformanceStats,
+  IActiveNovelPromotionSummary,
+  ITrendingNovelSummary,
+} from "@/backend/models/WriterStats";
 import { config } from "dotenv";
 
 // โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
@@ -245,13 +251,14 @@ async function seedInitialCategories() {
 
 async function getAuthorId(): Promise<Types.ObjectId> {
   if (!AUTHOR_USERNAME) {
-    throw new Error("❌ ไม่ได้ตั้งค่า AUTHOR_USERNAME ในไฟล์ .env");
+    throw new Error(
+      "AUTHOR_USERNAME environment variable is not set. Please add it to your .env file."
+    );
   }
-  const UserModel = UserModelImport;
   const author = await UserModel.findOne({ username: AUTHOR_USERNAME });
   if (!author) {
     throw new Error(
-      `❌ ไม่พบผู้ใช้ที่เป็นผู้เขียนด้วย username: ${AUTHOR_USERNAME}. กรุณา seed ข้อมูลผู้ใช้ก่อน (admin-seed.ts)`
+      `Author with username "${AUTHOR_USERNAME}" not found. Please run the admin-seed script first.`
     );
   }
   if (!author.roles.includes("Writer")) {

@@ -4,7 +4,8 @@
 
 import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
 import { CategoryType, ICategory } from "./Category"; // Import CategoryType และ ICategory
-import UserModel, { IUser, IWriterStats, INovelPerformanceStats } from "./User";
+import UserModel, { IUser } from "./User";
+import { IWriterStatsDoc as IWriterStats, INovelPerformanceStats } from "./WriterStats";
 // Import BoardModel เพื่อใช้ในการคำนวณสถิติรีวิว
 // การ import นี้อาจทำให้เกิด circular dependency nếu BoardModel ก็ import NovelModel
 // วิธีแก้คือการใช้ models("Board") แทนการ import โดยตรงในฟังก์ชันที่จำเป็น

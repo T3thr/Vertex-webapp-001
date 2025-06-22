@@ -1,16 +1,17 @@
 // src/components/layouts/NavBarWrapper.tsx
-"use client";
-import { Suspense } from "react";
 import NavBar from "./NavBar";
-import NavBarSkeleton from "./NavBarSkeleton";
+import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
+
+interface NavBarWrapperProps {
+  user: SessionUser | null;
+}
 
 // NavBarWrapper - จัดการการแสดงผล NavBar และรองรับ Server Component
-export default function NavBarWrapper() {
+// Wrapper นี้ไม่จำเป็นต้องเป็น Client Component อีกต่อไป
+export default function NavBarWrapper({ user }: NavBarWrapperProps) {
   return (
     <header className="sticky top-0 z-40 w-full transition-all">
-      <Suspense>
-        <NavBar />
-      </Suspense>
+      <NavBar initialUser={user} />
     </header>
   );
 }

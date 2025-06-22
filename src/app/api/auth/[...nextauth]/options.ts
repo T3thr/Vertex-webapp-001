@@ -15,26 +15,34 @@ import { JWT } from "next-auth/jwt";
 import mongoose, { Types } from "mongoose";
 
 // Import original interfaces from Mongoose models
+import UserModel, { IUser } from "@/backend/models/User";
+import { IUserProfile, IUserSocialStats } from "@/backend/models/UserProfile";
+import { IUserTrackingStats } from "@/backend/models/UserTracking";
+import { IUserSettings as IUserPreferences } from "@/backend/models/UserSettings";
 import {
-  IUser,
-  IUserProfile,
-  IUserTrackingStats,
-  IUserSocialStats,
-  IUserPreferences,
-  IUserWallet,
-  IUserVerification,
+  IWriterStatsDoc as IWriterStats,
   IUserDonationSettings,
-  IWriterStats,
+} from "@/backend/models/WriterStats";
+import {
+  IUserGamification as OriginalUserGamification,
   IShowcasedGamificationItem as OriginalShowcasedItem,
   IUserDisplayBadge as OriginalDisplayBadge,
-  IUserGamification as OriginalUserGamification,
-} from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
-import UserModel from "@/backend/models/User"; // ตรวจสอบ path ให้ถูกต้อง
+  IUserWallet,
+} from "@/backend/models/UserGamification";
+import { IUserVerification } from "@/backend/models/UserSecurity";
 import {
   ILevelReward,
   ILevel as OriginalILevel,
-} from "@/backend/models/Level"; // ตรวจสอบ path ให้ถูกต้อง
-import dbConnect from "@/backend/lib/mongodb"; // ตรวจสอบ path ให้ถูกต้อง
+} from "@/backend/models/Level";
+import dbConnect from "@/backend/lib/mongodb";
+
+// Import Models for session population
+import UserProfileModel from "@/backend/models/UserProfile";
+import UserTrackingModel from "@/backend/models/UserTracking";
+import UserGamificationModel from "@/backend/models/UserGamification";
+import UserSecurityModel from "@/backend/models/UserSecurity";
+import WriterStatsModel from "@/backend/models/WriterStats";
+import UserSettingsModel from "@/backend/models/UserSettings";
 
 // SECTION: Session-Specific Plain Object Types (คงเดิมตามที่ผู้ใช้ให้มา)
 
@@ -145,7 +153,7 @@ function toSessionUserFormat(userDoc: any): SessionUser {
     preferences,
     wallet,
     gamification,
-    verification, // นี่คือ writerVerification ใน User model
+    writerVerification, // แก้ไข: เปลี่ยนจาก verification เป็น writerVerification เพื่อความชัดเจน
     donationSettings,
     writerStats,
     isActive,
@@ -212,7 +220,7 @@ function toSessionUserFormat(userDoc: any): SessionUser {
         formattedCurrentLevelObject = g.currentLevelObject.toString();
       }
     }
-
+    
     return {
       level: g.level,
       currentLevelObject: formattedCurrentLevelObject,
@@ -267,46 +275,56 @@ function toSessionUserFormat(userDoc: any): SessionUser {
     },
     socialStats: socialStats || {
       followersCount: 0,
-      followingCount: 0,
+      followingUsersCount: 0,
+      followingNovelsCount: 0,
       novelsCreatedCount: 0,
+      boardPostsCreatedCount: 0,
       commentsMadeCount: 0,
       ratingsGivenCount: 0,
       likesGivenCount: 0,
     },
     preferences: preferences || {
-      language: "th",
-      display: {
-        theme: "system",
-        reading: {
-          fontSize: "medium",
-          readingModeLayout: "scrolling",
-          lineHeight: 1.6,
-          textAlignment: "left",
+        settingsVersion: 1, // Add default for version
+        language: "th",
+        display: {
+            theme: "system",
+            reading: {} as any,
+            accessibility: {} as any,
+            uiVisibility: {} as any,
+            visualEffects: {} as any,
+            characterDisplay: {} as any,
+            characterVoiceDisplay: {} as any,
+            backgroundDisplay: {} as any,
+            voiceSubtitles: {} as any,
         },
-        accessibility: {
-          dyslexiaFriendlyFont: false,
-          highContrastMode: false,
+        notifications: {
+            masterNotificationsEnabled: true,
+            email: {} as any,
+            push: {} as any,
+            inApp: {} as any,
+            saveLoad: {} as any,
+            newContent: {} as any,
+            outOfGame: {} as any,
+            optional: {} as any,
         },
-      },
-      notifications: {
-        masterNotificationsEnabled: true,
-        email: { enabled: true } as any,
-        push: { enabled: true } as any,
-        inApp: { enabled: true } as any,
-      },
-      contentAndPrivacy: {
-        showMatureContent: false,
-        preferredGenres: [],
-        profileVisibility: "public",
-        readingHistoryVisibility: "followers_only",
-        showActivityStatus: true,
-        allowDirectMessagesFrom: "followers",
-        analyticsConsent: { allowPsychologicalAnalysis: false },
-      },
+        contentAndPrivacy: {
+            showMatureContent: false,
+            preferredGenres: [],
+            blockedGenres: [],
+            blockedTags: [],
+            blockedAuthors: [],
+            blockedNovels: [],
+            profileVisibility: "public",
+            readingHistoryVisibility: "followers_only",
+            showActivityStatus: true,
+            allowDirectMessagesFrom: "followers",
+            analyticsConsent: { allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false },
+        },
+        visualNovelGameplay: {} as any,
     },
     wallet: wallet || { coinBalance: 0 },
     gamification: formatGamification(gamification as OriginalUserGamification | undefined),
-    writerVerification: verification,
+    writerVerification: writerVerification,
     donationSettings: donationSettings,
     writerStats: writerStats,
     isActive: isActive !== undefined ? isActive : true,
@@ -315,6 +333,7 @@ function toSessionUserFormat(userDoc: any): SessionUser {
     bannedUntil: toISOStringOrUndefined(bannedUntil),
   };
 }
+
 
 // Provider Profile Interfaces (คงเดิม)
 interface GoogleProfile extends Profile {
@@ -427,7 +446,9 @@ export const authOptions: NextAuthOptions = {
           // toSessionUserFormat จะแปลง plain object นี้ให้เป็น SessionUser
           // และ authorize callback จะต้องคืนค่า object ที่มีโครงสร้างตรงกับ SessionUser หรืออย่างน้อยมี id
           console.log(`✅ [AuthOptions] CredentialsProvider สำเร็จสำหรับผู้ใช้ ${(responseData.user as IUser).email || (responseData.user as IUser).username}`);
-          return toSessionUserFormat(responseData.user as IUser & { _id: Types.ObjectId | string });
+          // ที่นี่ responseData.user เป็น full object ที่ได้มาจาก API ซึ่งมีข้อมูลครบถ้วนแล้ว
+          return toSessionUserFormat(responseData.user as any);
+
         } catch (error: any) {
           console.error(
             `❌ [AuthOptions] ข้อผิดพลาดใน authorize (CredentialsProvider): ${error.message}`
@@ -605,36 +626,74 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
-      // token ที่ได้จาก jwt callback จะมีเฉพาะ id, username, roles, provider
-      console.log(`⏳ [AuthOptions Session] Session callback for token.id=${token.id}`);
-      if (token && token.id) {
-        try {
-          await dbConnect();
-          const userFromDb = await UserModel.findById(token.id)
-            .populate({ // Populate currentLevelObject ถ้าจำเป็น
-                path: 'gamification.currentLevelObject',
-                model: 'Level' // ชื่อ model ของ Level
-            })
-            .lean(); // ใช้ lean() เพื่อ performance
+        // token ที่ได้จาก jwt callback จะมีเฉพาะ id, username, roles, provider
+        console.log(`⏳ [AuthOptions Session] Session callback for token.id=${token.id}`);
+        if (token && token.id) {
+            try {
+                await dbConnect();
 
-          if (userFromDb) {
-            // แปลง Mongoose document (หรือ lean object) เป็น SessionUser format
-            session.user = toSessionUserFormat(userFromDb);
-            console.log(`✅ [AuthOptions Session] Session created/updated for user: ${session.user.username}, Theme from DB: ${session.user.preferences?.display?.theme}`);
-          } else {
-            console.error(`❌ [AuthOptions Session] User with ID ${token.id} not found in DB. Session will be invalid.`);
-            // ทำให้ session.user เป็น null เพื่อให้ client จัดการการออกจากระบบ
-            (session as any).user = null;
-          }
-        } catch (error: any) {
-          console.error(`❌ [AuthOptions Session] Error fetching user from DB for session: ${error.message}`, error.stack);
-          (session as any).user = null; // ทำให้ session ไม่สมบูรณ์หากเกิด error
+                // ########## START: โค้ดที่แก้ไข ##########
+                
+                // Step 1: ดึงข้อมูลทั้งหมดที่เกี่ยวข้องกับผู้ใช้แบบขนาน (Parallel)
+                const [
+                    coreUser,
+                    userProfile,
+                    userGamification,
+                    userSettings,
+                    userTracking,
+                    userSecurity,
+                    writerStats,
+                ] = await Promise.all([
+                    UserModel.findById(token.id).lean(),
+                    UserProfileModel.findOne({ userId: token.id }).lean(),
+                    // Populate ที่ Model ที่ถูกต้อง (UserGamificationModel)
+                    UserGamificationModel.findOne({ userId: token.id })
+                        .populate({
+                            path: 'gamification.currentLevelObject',
+                            model: 'Level', // ชื่อ model ของ Level
+                        })
+                        .lean(),
+                    UserSettingsModel.findOne({ userId: token.id }).lean(),
+                    UserTrackingModel.findOne({ userId: token.id }).lean(),
+                    UserSecurityModel.findOne({ userId: token.id }).lean(),
+                    WriterStatsModel.findOne({ userId: token.id }).lean(),
+                ]);
+
+                // Step 2: ตรวจสอบว่ามีผู้ใช้หลัก (Core User) อยู่จริง
+                if (coreUser) {
+                    // Step 3: รวมข้อมูลทั้งหมดเป็น Object เดียวเพื่อส่งให้ toSessionUserFormat
+                    const combinedUserDoc = {
+                        ...coreUser,
+                        profile: userProfile,
+                        socialStats: userProfile?.socialStats,
+                        trackingStats: userTracking?.trackingStats,
+                        preferences: userSettings,
+                        wallet: userGamification?.wallet,
+                        gamification: userGamification?.gamification,
+                        writerVerification: userSecurity?.verification,
+                        donationSettings: writerStats?.donationSettings,
+                        writerStats: writerStats,
+                    };
+
+                    // Step 4: แปลง Mongoose document (หรือ lean object) เป็น SessionUser format
+                    session.user = toSessionUserFormat(combinedUserDoc);
+                    console.log(`✅ [AuthOptions Session] Session created/updated for user: ${session.user.username}`);
+                } else {
+                    console.error(`❌ [AuthOptions Session] User with ID ${token.id} not found in DB. Session will be invalid.`);
+                    session.user = null; // ทำให้ session.user เป็น null เพื่อให้ client จัดการการออกจากระบบ
+                }
+                
+                // ########## END: โค้ดที่แก้ไข ##########
+
+            } catch (error: any) {
+                console.error(`❌ [AuthOptions Session] Error fetching user from DB for session: ${error.message}`, error.stack);
+                session.user = null; // ทำให้ session ไม่สมบูรณ์หากเกิด error
+            }
+        } else {
+            console.warn(`⚠️ [AuthOptions Session] Token missing id, cannot create full user session.`);
+            session.user = null;
         }
-      } else {
-        console.warn(`⚠️ [AuthOptions Session] Token missing id, cannot create full user session.`);
-        (session as any).user = null;
-      }
-      return session;
+        return session;
     },
   },
 

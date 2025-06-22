@@ -3,6 +3,9 @@
 // รองรับ global.css theme system และมี interactive elements ที่สวยงาม
 'use client';
 
+// แหงภาพรวมข้อมูลและสร้างสรรค์สำหรับนักเขียน - อัพเกรดแล้ว
+// รองรับ global.css theme system และมี interactive elements ที่สวยงาม
+
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { 
   TrendingUp, 
@@ -40,7 +43,7 @@ import {
 import { SerializedUser , SerializedWriterApplication , SerializedDonationApplication , SerializedEarningTransaction , SerializedEarningAnalytic } from '@/app/dashboard/page';
 import { IEarningTransaction } from '@/backend/models/EarningTransaction';
 import { IEarningAnalytic } from '@/backend/models/EarningAnalytic';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 interface StatsOverviewProps {
   stats: {
@@ -106,6 +109,15 @@ function StatCard({ title, value, icon: Icon, trend, color, delay, gradient, for
       ? displayValue.toLocaleString() 
       : value;
 
+  // สร้าง particles คงที่สำหรับ StatCard เพื่อหลีกเลี่ยง hydration error
+  const statParticles = useMemo(() => [
+    { id: 1, left: '20%', top: '10%' },
+    { id: 2, left: '80%', top: '15%' },
+    { id: 3, left: '30%', top: '85%' },
+    { id: 4, left: '70%', top: '75%' },
+    { id: 5, left: '50%', top: '50%' }
+  ], []);
+
   return (
     <motion.div
       className={`bg-card border border-border rounded-2xl p-6 relative overflow-hidden group cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-500`}
@@ -134,13 +146,13 @@ function StatCard({ title, value, icon: Icon, trend, color, delay, gradient, for
 
       {/* Floating Particles Effect */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-        {[...Array(5)].map((_, i) => (
+        {statParticles.map((particle) => (
           <motion.div
-            key={i}
+            key={particle.id}
             className="absolute w-1 h-1 bg-primary/40 rounded-full"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: particle.left,
+              top: particle.top,
             }}
             animate={isHovered ? {
               y: [0, -20, -40],
@@ -150,7 +162,7 @@ function StatCard({ title, value, icon: Icon, trend, color, delay, gradient, for
             transition={{
               duration: 2,
               repeat: Infinity,
-              delay: i * 0.2
+              delay: particle.id * 0.2
             }}
           />
         ))}
@@ -258,6 +270,14 @@ function ActivityItem({ transaction, index }: ActivityItemProps) {
 
   const TransactionIcon = getTransactionIcon(transaction.transactionType);
 
+  const formattedDate = (date: Date) => {
+    return date.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
   return (
     <motion.div
       className="flex items-center justify-between p-4 bg-background rounded-xl border border-border hover:border-primary/30 hover:bg-secondary/30 transition-all duration-300 group"
@@ -280,7 +300,7 @@ function ActivityItem({ transaction, index }: ActivityItemProps) {
           <div className="flex items-center gap-3 mt-1">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {new Date(transaction.transactionDate).toLocaleDateString('th-TH')}
+              {formattedDate(new Date(transaction.transactionDate))}
             </p>
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
               transaction.status === 'completed' 
@@ -408,197 +428,199 @@ export default function StatsOverview({ stats, recentTransactions, earningAnalyt
       initial="hidden"
       animate="visible"
     >
-      {/* Header */}
-      <motion.div 
-        className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b border-border p-6 md:p-8"
-        variants={headerVariants}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <motion.h2 
-              className="text-2xl md:text-3xl font-bold text-card-foreground mb-2 flex items-center gap-3"
-              whileHover={{ scale: 1.02 }}
-            >
-              <motion.div
-                className="p-2 bg-primary/20 rounded-xl"
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.6 }}
-              >
-                <BarChart3 className="w-6 h-6 text-primary" />
-              </motion.div>
-              ภาพรวมสถิติ
-            </motion.h2>
-            <p className="text-muted-foreground">ติดตามผลงานและความก้าวหน้าของคุณ</p>
-          </div>
-          
-          <div className="flex items-center gap-4 text-muted-foreground">
-            <motion.div 
-              className="flex items-center gap-2 bg-secondary/50 px-4 py-2 rounded-xl"
-              whileHover={{ scale: 1.05, backgroundColor: "var(--secondary)" }}
-            >
-              <Calendar className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                อัปเดตล่าสุด: {currentTime.toLocaleTimeString('th-TH', { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
-                })}
-              </span>
-            </motion.div>
-            
-            <motion.button
-              className="p-2 bg-secondary/50 hover:bg-secondary text-secondary-foreground rounded-xl transition-colors"
-              whileHover={{ scale: 1.1, rotate: 180 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              <Activity className="w-5 h-5" />
-            </motion.button>
-          </div>
-        </div>
-      </motion.div>
-
-      <div className="p-6 md:p-8">
-        {/* Main Stats Grid */}
+      <div>
+        {/* Header */}
         <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8"
-          variants={itemVariants}
+          className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b border-border p-6 md:p-8"
+          variants={headerVariants}
         >
-          {mainStats.map((stat, index) => (
-            <StatCard
-              key={stat.title}
-              title={stat.title}
-              value={stat.value}
-              icon={stat.icon}
-              trend={stat.trend ?? undefined}
-              color={stat.color}
-              gradient={stat.gradient}
-              delay={index * 0.1}
-              formatValue={stat.formatValue}
-            />
-          ))}
+          <div className="flex items-center justify-between">
+            <div>
+              <motion.h2 
+                className="text-2xl md:text-3xl font-bold text-card-foreground mb-2 flex items-center gap-3"
+                whileHover={{ scale: 1.02 }}
+              >
+                <motion.div
+                  className="p-2 bg-primary/20 rounded-xl"
+                  whileHover={{ rotate: 360 }}
+                  transition={{ duration: 0.6 }}
+                >
+                  <BarChart3 className="w-6 h-6 text-primary" />
+                </motion.div>
+                ภาพรวมสถิติ
+              </motion.h2>
+              <p className="text-muted-foreground">ติดตามผลงานและความก้าวหน้าของคุณ</p>
+            </div>
+            
+            <div className="flex items-center gap-4 text-muted-foreground">
+              <motion.div 
+                className="flex items-center gap-2 bg-secondary/50 px-4 py-2 rounded-xl"
+                whileHover={{ scale: 1.05, backgroundColor: "var(--secondary)" }}
+              >
+                <Calendar className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  อัปเดตล่าสุด: {currentTime.toLocaleTimeString('th-TH', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
+                </span>
+              </motion.div>
+              
+              <motion.button
+                className="p-2 bg-secondary/50 hover:bg-secondary text-secondary-foreground rounded-xl transition-colors"
+                whileHover={{ scale: 1.1, rotate: 180 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Activity className="w-5 h-5" />
+              </motion.button>
+            </div>
+          </div>
         </motion.div>
 
-        {/* Secondary Stats */}
-        <motion.div 
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
-          variants={itemVariants}
-        >
-          {/* Total Novels */}
+        <div className="p-6 md:p-8">
+          {/* Main Stats Grid */}
           <motion.div 
-            className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 group"
-            whileHover={{ scale: 1.03, y: -5 }}
-            transition={{ type: "spring", stiffness: 300 }}
+            className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8"
+            variants={itemVariants}
           >
-            <div className="flex items-center gap-3 mb-4">
-              <motion.div
-                className="p-3 bg-blue-100 dark:bg-blue-800/30 rounded-xl"
-                whileHover={{ rotate: 15, scale: 1.1 }}
-              >
-                <BookOpen className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </motion.div>
-              <h3 className="font-semibold text-blue-800 dark:text-blue-400">นิยายทั้งหมด</h3>
-            </div>
-            <motion.div 
-              className="text-4xl font-bold text-blue-700 dark:text-blue-300 mb-2"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.5, type: "spring" }}
-            >
-              {stats.totalNovels}
-            </motion.div>
-            <p className="text-sm text-blue-600 dark:text-blue-500 flex items-center gap-1">
-              <FileText className="w-4 h-4" />
-              เรื่องที่สร้าง
-            </p>
+            {mainStats.map((stat, index) => (
+              <StatCard
+                key={stat.title}
+                title={stat.title}
+                value={stat.value}
+                icon={stat.icon}
+                trend={stat.trend ?? undefined}
+                color={stat.color}
+                gradient={stat.gradient}
+                delay={index * 0.1}
+                formatValue={stat.formatValue}
+              />
+            ))}
           </motion.div>
 
-          {/* Total Episodes */}
+          {/* Secondary Stats */}
           <motion.div 
-            className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6"
-            whileHover={{ scale: 1.03, y: -5 }}
-            transition={{ type: "spring", stiffness: 300 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
+            variants={itemVariants}
           >
-            <div className="flex items-center gap-3 mb-4">
-              <motion.div
-                className="p-3 bg-green-100 dark:bg-green-800/30 rounded-xl"
-                whileHover={{ rotate: 15, scale: 1.1 }}
-              >
-                <MessageCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </motion.div>
-              <h3 className="font-semibold text-green-800 dark:text-green-400">ตอนทั้งหมด</h3>
-            </div>
+            {/* Total Novels */}
             <motion.div 
-              className="text-4xl font-bold text-green-700 dark:text-green-300 mb-2"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.6, type: "spring" }}
+              className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 group"
+              whileHover={{ scale: 1.03, y: -5 }}
+              transition={{ type: "spring", stiffness: 300 }}
             >
-              {stats.totalEpisodes}
+              <div className="flex items-center gap-3 mb-4">
+                <motion.div
+                  className="p-3 bg-blue-100 dark:bg-blue-800/30 rounded-xl"
+                  whileHover={{ rotate: 15, scale: 1.1 }}
+                >
+                  <BookOpen className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </motion.div>
+                <h3 className="font-semibold text-blue-800 dark:text-blue-400">นิยายทั้งหมด</h3>
+              </div>
+              <motion.div 
+                className="text-4xl font-bold text-blue-700 dark:text-blue-300 mb-2"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.5, type: "spring" }}
+              >
+                {stats.totalNovels}
+              </motion.div>
+              <p className="text-sm text-blue-600 dark:text-blue-500 flex items-center gap-1">
+                <FileText className="w-4 h-4" />
+                เรื่องที่สร้าง
+              </p>
             </motion.div>
-            <p className="text-sm text-green-600 dark:text-green-500 flex items-center gap-1">
-              <MessageSquare className="w-4 h-4" />
-              ตอนที่เผยแพร่แล้ว
-            </p>
+
+            {/* Total Episodes */}
+            <motion.div 
+              className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6"
+              whileHover={{ scale: 1.03, y: -5 }}
+              transition={{ type: "spring", stiffness: 300 }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <motion.div
+                  className="p-3 bg-green-100 dark:bg-green-800/30 rounded-xl"
+                  whileHover={{ rotate: 15, scale: 1.1 }}
+                >
+                  <MessageCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </motion.div>
+                <h3 className="font-semibold text-green-800 dark:text-green-400">ตอนทั้งหมด</h3>
+              </div>
+              <motion.div 
+                className="text-4xl font-bold text-green-700 dark:text-green-300 mb-2"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.6, type: "spring" }}
+              >
+                {stats.totalEpisodes}
+              </motion.div>
+              <p className="text-sm text-green-600 dark:text-green-500 flex items-center gap-1">
+                <MessageSquare className="w-4 h-4" />
+                ตอนที่เผยแพร่แล้ว
+              </p>
+            </motion.div>
+
+            {/* Engagement Rate */}
+            <motion.div 
+              className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-6"
+              whileHover={{ scale: 1.03, y: -5 }}
+              transition={{ type: "spring", stiffness: 300 }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <motion.div
+                  className="p-3 bg-purple-100 dark:bg-purple-800/30 rounded-xl"
+                  whileHover={{ rotate: 15, scale: 1.1 }}
+                >
+                  <Heart className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </motion.div>
+                <h3 className="font-semibold text-purple-800 dark:text-purple-400">อัตราการมีส่วนร่วม</h3>
+              </div>
+              <motion.div 
+                className="text-4xl font-bold text-purple-700 dark:text-purple-300 mb-2"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.7, type: "spring" }}
+              >
+                {stats.totalViews > 0 ? ((stats.totalFollowers / stats.totalViews) * 100).toFixed(1) : '0'}%
+              </motion.div>
+              <p className="text-sm text-purple-600 dark:text-purple-500 flex items-center gap-1">
+                <ThumbsUp className="w-4 h-4" />
+                ผู้ติดตาม / ยอดชม
+              </p>
+            </motion.div>
           </motion.div>
 
-          {/* Engagement Rate */}
-          <motion.div 
-            className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-6"
-            whileHover={{ scale: 1.03, y: -5 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <motion.div
-                className="p-3 bg-purple-100 dark:bg-purple-800/30 rounded-xl"
-                whileHover={{ rotate: 15, scale: 1.1 }}
+          {/* Recent Activity */}
+          <motion.div variants={itemVariants}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-card-foreground flex items-center gap-3">
+                <motion.div
+                  className="p-2 bg-gradient-to-r from-orange-400 to-red-400 rounded-xl"
+                  whileHover={{ rotate: 360 }}
+                  transition={{ duration: 6 }}
+                >
+                  <Flame className="w-5 h-5 text-white" />
+                </motion.div>
+                กิจกรรมล่าสุด
+              </h3>
+              
+              <motion.button
+                className="text-sm font-medium text-primary hover:text-primary-hover"
+                whileHover={{ scale: 1.05, x: 5 }}
               >
-                <Heart className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </motion.div>
-              <h3 className="font-semibold text-purple-800 dark:text-purple-400">อัตราการมีส่วนร่วม</h3>
+                ดูทั้งหมด
+                <ArrowUpRight className="w-4 h-4" />
+              </motion.button>
             </div>
-            <motion.div 
-              className="text-4xl font-bold text-purple-700 dark:text-purple-300 mb-2"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.7, type: "spring" }}
-            >
-              {stats.totalViews > 0 ? ((stats.totalFollowers / stats.totalViews) * 100).toFixed(1) : '0'}%
-            </motion.div>
-            <p className="text-sm text-purple-600 dark:text-purple-500 flex items-center gap-1">
-              <ThumbsUp className="w-4 h-4" />
-              ผู้ติดตาม / ยอดชม
-            </p>
           </motion.div>
-        </motion.div>
-
-        {/* Recent Activity */}
-        <motion.div variants={itemVariants}>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-card-foreground flex items-center gap-3">
-              <motion.div
-                className="p-2 bg-gradient-to-r from-orange-400 to-red-400 rounded-xl"
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.6 }}
-              >
-                <Flame className="w-5 h-5 text-white" />
-              </motion.div>
-              กิจกรรมล่าสุด
-            </h3>
-            
-            <motion.button
-              className="text-sm text-primary hover:text-primary-hover font-medium flex items-center gap-1"
-              whileHover={{ scale: 1.05, x: 5 }}
-            >
-              ดูทั้งหมด
-              <ArrowUpRight className="w-4 h-4" />
-            </motion.button>
-          </div>
 
           <div className="bg-secondary/20 rounded-xl p-6 border border-border/50">
             {recentTransactions.length > 0 ? (
               <div className="space-y-3">
                 {recentTransactions.slice(0, 5).map((transaction, index) => (
                   <ActivityItem
-                    key={transaction._id.toString()}
+                    key={transaction._id as string}
                     transaction={transaction}
                     index={index}
                   />
@@ -607,23 +629,21 @@ export default function StatsOverview({ stats, recentTransactions, earningAnalyt
             ) : (
               <motion.div 
                 className="text-center py-12"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: '0', scale: '0.9' }}
+                animate={{ opacity: '1', scale: '1' }}
               >
                 <motion.div
                   animate={{ y: [0, -10, 0] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
-                  <Coffee className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                  <Coffee className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                 </motion.div>
-                <h4 className="font-semibold text-card-foreground mb-2">ยังไม่มีกิจกรรม</h4>
-                <p className="text-muted-foreground">
-                  เริ่มต้นเขียนนิยายเพื่อดูกิจกรรมและธุรกรรมของคุณ
-                </p>
+                <h4 className="font-semibold mb-2 text-card-foreground">ยังไม่มีกิจกรรม</h4>
+                <p className="text-muted-foreground">เริ่มต้นเขียนนิยายเพื่อดูกิจกรรมและธุรกรรมของคุณ</p>
               </motion.div>
             )}
           </div>
-        </motion.div>
+        </div>
       </div>
     </motion.section>
   );

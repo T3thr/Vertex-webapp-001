@@ -133,11 +133,18 @@ const FollowSchema = new Schema<IFollow>(
   }
 );
 
-// ==================================================================================================
-// SECTION: Virtual Populate (สำหรับ `followingId`)
-// ==================================================================================================
+// Add the partial unique index for active follows.
+// This ensures a user cannot follow the same entity more than once while the follow is active.
+FollowSchema.index(
+    { followerId: 1, followingId: 1, followingType: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { isDeleted: false },
+        name: "unique_active_follow_constraint"
+    }
+);
 
-// Virtual field `following` เพื่อ populate `followingId` ไปยัง model ที่ถูกต้องตาม `followingType`
+// Virtual for populating the 'following' field dynamically based on 'followingType'
 FollowSchema.virtual("following", {
   ref: function (this: IFollow) {
     // ตรวจสอบว่า followingType เป็นค่าที่ Mongoose รู้จัก (มี model register ไว้)
@@ -155,15 +162,6 @@ FollowSchema.virtual("following", {
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
-
-// Unique index เพื่อป้องกันการติดตามซ้ำซ้อน (ทั้ง active และ inactive)
-// หมายเหตุ: MongoDB ไม่รองรับ partial unique index ใน Mongoose schema โดยตรง
-// ต้องสร้างใน MongoDB shell: 
-// db.follows.createIndex({ followerId: 1, followingId: 1, followingType: 1 }, { unique: true })
-FollowSchema.index(
-  { followerId: 1, followingId: 1, followingType: 1 },
-  { unique: true, name: "FollowerFollowingTypeUniqueIndex" }
-);
 
 // Index สำหรับ query การติดตามทั้งหมดของผู้ใช้คนหนึ่ง (ที่ยัง active อยู่)
 FollowSchema.index(
@@ -197,76 +195,82 @@ FollowSchema.index(
 // ==================================================================================================
 
 /**
- * @function updateFollowCounts
- * @description Helper function เพื่ออัปเดตจำนวน followers/following ใน User และ Novel models
- * @param {IFollow} doc - เอกสาร Follow ที่มีการเปลี่ยนแปลง
- * @param {"increment" | "decrement"} operation - การดำเนินการ (เพิ่มหรือลด)
+ * Provides context for updating follow counts based on the type of entity being followed.
+ * This makes the logic scalable for future followable entity types.
+ * @param type - The type of the entity being followed.
+ * @returns An object with the model to update and the correct field names for stats.
+ */
+const getUpdateContext = (type: FollowingType) => {
+    switch (type) {
+        case FollowingType.USER:
+            return {
+                FollowingModel: models.User,
+                // Field in follower's stats to increment/decrement
+                followerField: "socialStats.followingUsersCount",
+                // Field in the followed user's stats to increment/decrement
+                followingField: "socialStats.followersCount",
+            };
+        case FollowingType.NOVEL:
+            return {
+                FollowingModel: models.Novel,
+                 // Field in follower's stats to increment/decrement
+                followerField: "socialStats.followingNovelsCount",
+                 // Field in the followed novel's stats to increment/decrement
+                followingField: "followersCount",
+            };
+        // Future entity types like 'Series', 'Tag', or 'List' can be added here.
+        default:
+            console.warn(`Follow count update skipped: Unhandled followingType "${type}"`);
+            return null;
+    }
+};
+
+/**
+ * Atomically updates the follow-related counters on both the follower and the followed documents
+ * using a MongoDB transaction to ensure data consistency.
+ * @param doc - The follow document instance.
+ * @param operation - Whether to 'increment' or 'decrement' the counters.
  */
 async function updateFollowCounts(doc: IFollow, operation: "increment" | "decrement") {
-  // อัปเดต count เฉพาะเมื่อ status เป็น ACTIVE หรือเมื่อ isDeleted=true (เพื่อ decrement)
-  if (!doc || (doc.status !== FollowStatus.ACTIVE && !(operation === "decrement" && doc.isDeleted))) {
-    console.log(`[FollowMiddleware] Skipping count update for docId=${doc._id} due to status: ${doc.status} or operation/isDeleted mismatch.`);
-    return;
-  }
-
   const value = operation === "increment" ? 1 : -1;
+  const context = getUpdateContext(doc.followingType);
 
+  if (!context) return;
+  
+  const { FollowingModel, followerField, followingField } = context;
+
+  // Transactions require a replica set environment in production.
+  const session = await mongoose.startSession();
+  
   try {
-    const UserModel = models.User as mongoose.Model<IUser>;
-    const NovelModel = models.Novel as mongoose.Model<INovel>;
+    await session.withTransaction(async () => {
+      // Update the follower's stats (e.g., increment their 'followingUsersCount')
+      const followerUpdate = models.User.findByIdAndUpdate(
+          doc.followerId,
+          { $inc: { [followerField]: value } },
+          { session, new: true, runValidators: true }
+      );
 
-    // อัปเดต User model (follower)
-    if (doc.followingType === FollowingType.USER) {
-      await UserModel.findByIdAndUpdate(doc.followerId, {
-        $inc: { "socialStats.followingUsersCount": value },
-      });
-    } else if (doc.followingType === FollowingType.NOVEL) {
-      await UserModel.findByIdAndUpdate(doc.followerId, {
-        $inc: { "socialStats.followingNovelsCount": value },
-      });
-    } // เพิ่มเงื่อนไขสำหรับ FollowingType อื่นๆ ที่ User สามารถติดตามได้
-
-    // อัปเดต Target model (following)
-    if (doc.followingType === FollowingType.USER) {
-      await UserModel.findByIdAndUpdate(doc.followingId, {
-        $inc: { "socialStats.followersCount": value },
-      });
-    } else if (doc.followingType === FollowingType.NOVEL) {
-      await NovelModel.findByIdAndUpdate(doc.followingId, {
-        $inc: { "stats.followersCount": value },
-      });
-    } // เพิ่มเงื่อนไขสำหรับ FollowingType อื่นๆ ที่มี followers count
-
-    console.log(`[FollowMiddleware] Updated counts for follower ${doc.followerId} and ${doc.followingType} ${doc.followingId} by ${value}`);
+      // Update the followed entity's stats (e.g., increment their 'followersCount')
+      const followingUpdate = FollowingModel.findByIdAndUpdate(
+          doc.followingId,
+          { $inc: { [followingField]: value } },
+          { session, new: true, runValidators: true }
+      );
+      
+      // Await both promises to complete within the transaction
+      await Promise.all([followerUpdate, followingUpdate]);
+    });
+    console.log(`Transaction for follow count update committed successfully.`);
   } catch (error) {
-    console.error(`[FollowMiddleware] Error updating follow counts for docId=${doc._id}:`, error);
-    // TODO: เพิ่ม error handling เช่น retry, logging, หรือแจ้งเตือน admin
+    console.error("Transaction for follow count update failed and was aborted:", error);
+    // Re-throw the error to allow the calling function to handle the failure,
+    // which is crucial for preventing inconsistent data.
+    throw new Error(`Failed to update follow counts due to: ${error instanceof Error ? error.message : error}`);
+  } finally {
+    await session.endSession();
   }
 }
-
-// Middleware: ก่อนการบันทึก (save)
-FollowSchema.pre<IFollow>("save", function (next) {
-  // จัดการ soft delete และ re-follow
-  if (this.isModified("isDeleted")) {
-    if (this.isDeleted) {
-      // ถ้ากำลังจะ soft delete (unfollow)
-      if (!this.deletedAt) {
-        this.deletedAt = new Date();
-      }
-      if (!this.deletedBy) {
-        this.deletedBy = this.followerId; // ผู้ติดตามเป็นคนสั่ง unfollow
-      }
-      this.status = FollowStatus.ACTIVE; // คง status เป็น ACTIVE เพราะ isDeleted ระบุการ unfollow
-    } else {
-      // ถ้ากำลังจะ re-follow (isDeleted เปลี่ยนจาก true เป็น false)
-      this.deletedAt = undefined;
-      this.deletedBy = undefined;
-      this.followedAt = new Date(); // อัปเดตวันที่ติดตาม
-      this.status = FollowStatus.ACTIVE; // กลับมา active
-    }
-  }
-  next();
-});
 
 // Middleware: หลังจากการบันทึก (save) - สร้าง follow ใหม่ หรืออัปเดต (รวม soft delete/re-follow)
 FollowSchema.post<IFollow>("save", async function (doc: IFollow & mongoose.Document, next) {
@@ -277,7 +281,16 @@ FollowSchema.post<IFollow>("save", async function (doc: IFollow & mongoose.Docum
   if (doc.isNew) {
     // สร้าง follow ใหม่ และ active (isDeleted: false, status: ACTIVE)
     if (!doc.isDeleted && doc.status === FollowStatus.ACTIVE) {
-      await updateFollowCounts(doc, "increment");
+      try {
+        await updateFollowCounts(doc, "increment");
+      } catch(error) {
+        // If the transaction fails, we should log it.
+        // In a production environment, this might trigger an alert or a retry job.
+        console.error("Critical: Failed to update follow counts after creating a new follow document.", {
+          followId: doc._id,
+          error,
+        });
+      }
     }
   } else {
     // กรณีอัปเดต follow ที่มีอยู่
@@ -290,10 +303,24 @@ FollowSchema.post<IFollow>("save", async function (doc: IFollow & mongoose.Docum
 
       if (wasActiveAndNotDeleted && !isActiveAndNotDeleted) {
         // เปลี่ยนจาก active -> inactive/deleted (unfollow)
-        await updateFollowCounts(doc, "decrement");
+        try {
+          await updateFollowCounts(doc, "decrement");
+        } catch (error) {
+          console.error("Critical: Failed to update follow counts while soft-deleting a follow document.", {
+            followId: doc._id,
+            error,
+          });
+        }
       } else if (!wasActiveAndNotDeleted && isActiveAndNotDeleted) {
         // เปลี่ยนจาก inactive/deleted -> active (re-follow)
-        await updateFollowCounts(doc, "increment");
+        try {
+          await updateFollowCounts(doc, "increment");
+        } catch (error) {
+          console.error("Critical: Failed to update follow counts while re-following a follow document.", {
+            followId: doc._id,
+            error,
+          });
+        }
       }
     }
   }
@@ -308,7 +335,14 @@ FollowSchema.post<mongoose.ModifyResult<IFollow>>("findOneAndDelete", async func
     const deletedDoc = doc.value as IFollow;
     // อัปเดต follow counts เฉพาะเมื่อเอกสารที่ถูกลบเป็น active follow
     if (!deletedDoc.isDeleted && deletedDoc.status === FollowStatus.ACTIVE) {
-      await updateFollowCounts(deletedDoc, "decrement");
+      try {
+        await updateFollowCounts(deletedDoc, "decrement");
+      } catch (error) {
+        console.error("Critical: Failed to update follow counts while soft-deleting a follow document.", {
+          followId: deletedDoc._id,
+          error,
+        });
+      }
     }
   } else {
     console.warn("[Follow findOneAndDelete Hook] No document found in ModifyResult or doc is null.");

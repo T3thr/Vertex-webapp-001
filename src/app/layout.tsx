@@ -9,11 +9,13 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
+import UserSettingsModel from "@/backend/models/UserSettings";
 import { Toaster } from 'sonner';
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import type { Theme } from "@/context/ThemeContext";
+import type { SessionUser } from "@/app/api/auth/[...nextauth]/options";
 
 // --- การตั้งค่า Font ---
 const geistSans = Geist({
@@ -96,15 +98,14 @@ export const viewport: Viewport = {
   ],
 };
 
-// --- Script สำหรับการตั้งค่า Theme เริ่มต้น (คงเดิมจากที่คุณปรับปรุงล่าสุด) ---
-function ThemeInitializerScript() {
+// --- Script สำหรับการตั้งค่า Theme เริ่มต้น ---
+function ThemeInitializerScript(theme: Theme | null) {
   const scriptContent = `
 (function() { // IIFE
   try {
     const storageKey = 'divwy-theme';
     const defaultCssTheme = 'light'; // Fallback CSS class สุดท้ายหากเกิดข้อผิดพลาด
-    const serverThemeAttribute = document.documentElement.getAttribute('data-server-theme');
-    const userDbThemeFromServer = serverThemeAttribute === 'null' ? null : serverThemeAttribute;
+    const userDbThemeFromServer = ${theme ? JSON.stringify(theme) : 'null'};
 
     function determineEffectiveTheme() {
       let themeToApply;
@@ -118,7 +119,6 @@ function ThemeInitializerScript() {
         } else {
           themeToApply = userDbThemeFromServer; // light, dark, sepia
         }
-        // console.log('[ThemeScript] Using DB theme from server: ' + userDbThemeFromServer + ', applying CSS: ' + themeToApply + ', storing in localStorage: ' + themeToStoreInLocalStorage);
         localStorage.setItem(storageKey, themeToStoreInLocalStorage);
         return themeToApply;
       }
@@ -132,7 +132,6 @@ function ThemeInitializerScript() {
         } else {
           themeToApply = storedTheme; // light, dark, sepia
         }
-        // console.log('[ThemeScript] Using localStorage theme: ' + storedTheme + ', applying CSS: ' + themeToApply);
         return themeToApply;
       }
 
@@ -140,7 +139,6 @@ function ThemeInitializerScript() {
       themeToStoreInLocalStorage = 'system';
       localStorage.setItem(storageKey, themeToStoreInLocalStorage);
       themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      // console.log('[ThemeScript] Using default system preference, applying CSS: ' + themeToApply + ', storing "system" in localStorage.');
       return themeToApply;
     }
 
@@ -166,7 +164,27 @@ function ThemeInitializerScript() {
   );
 }
 
-// --- RootLayout Component (ปรับปรุงส่วนการดึง theme) ---
+function toPlainObject(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(toPlainObject);
+  if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const key in obj) {
+      const value = obj[key];
+      if (value && typeof value === 'object' && typeof value.toHexString === 'function') {
+        // Mongoose ObjectId
+        result[key] = value.toHexString();
+      } else if (value instanceof Date) {
+        result[key] = value.toISOString();
+      } else {
+        result[key] = toPlainObject(value);
+      }
+    }
+    return result;
+  }
+  return obj;
+}
+
+// --- RootLayout Component ---
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -175,38 +193,29 @@ export default async function RootLayout({
   await dbConnect(); // เชื่อมต่อ DB
 
   const session = await getServerSession(authOptions);
-  // ดึง theme จาก JWT เป็นค่าเริ่มต้น (อาจจะเก่าถ้า JWT ยังไม่อัปเดต)
-  let userDbTheme: Theme | undefined | null = session?.user?.preferences?.display?.theme as Theme | undefined | null;
+  let userDbTheme: Theme | null = null;
+  const user: SessionUser | null = session?.user ? toPlainObject(session.user) : null;
 
   // ✅ ส่วนสำคัญ: ถ้าผู้ใช้ล็อกอินอยู่ ให้ดึง theme ล่าสุดจาก DB โดยตรง
-  // เพื่อให้แน่ใจว่าค่าที่ส่งให้ InitializeTheme script เป็นค่าล่าสุดเสมอสำหรับการ render หน้านี้
   if (session?.user?.id) {
     try {
-      const freshUser = await UserModel.findById(session.user.id)
-        .select("preferences.display.theme") // เลือกเฉพาะ field ที่ต้องการ
-        .lean() // ใช้ .lean() เพื่อ performance ที่ดีขึ้นถ้าไม่ต้องการ Mongoose document methods
+      const userSettings = await UserSettingsModel.findOne({ userId: session.user.id })
+        .select("display.theme") // เลือกเฉพาะ field ที่ต้องการ
+        .lean()
         .exec();
 
-      if (freshUser?.preferences?.display?.theme) {
-        const themeFromDbDirect = freshUser.preferences.display.theme as Theme;
-        // ใช้ค่าจาก DB โดยตรง ถ้ามันต่างจากใน JWT หรือถ้า JWT ไม่มีค่านี้
-        // นี่เป็นการันตีว่า data-server-theme จะเป็นค่าล่าสุดเสมอ
-        if (userDbTheme !== themeFromDbDirect) {
-          // console.log(`[RootLayout Server] Theme from JWT was '${userDbTheme}', but fresh DB theme is '${themeFromDbDirect}'. Using DB theme for initialization.`);
-          userDbTheme = themeFromDbDirect;
-        }
+      if (userSettings?.display?.theme) {
+        userDbTheme = userSettings.display.theme as Theme;
       }
     } catch (dbError) {
-      console.error("[RootLayout Server] Error fetching fresh theme directly from DB:", dbError);
-      // หากเกิดข้อผิดพลาด, จะใช้ theme จาก session (JWT) ตามเดิมที่ดึงไว้ก่อนหน้า
+      console.error("[RootLayout Server] Error fetching user settings directly from DB:", dbError);
     }
   }
-  // console.log(`[RootLayout Server] Final User DB Theme for Initializer Script: ${userDbTheme}`);
 
   return (
     <html lang="th" suppressHydrationWarning data-server-theme={userDbTheme || 'null'}>
       <head>
-        <ThemeInitializerScript />
+        {ThemeInitializerScript(userDbTheme)}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
@@ -215,13 +224,13 @@ export default async function RootLayout({
         suppressHydrationWarning={true}
       >
         <GlobalProvider>
-          <NavBarWrapper />
+          <NavBarWrapper user={user} />
           <main className="flex-grow w-full">
             {children}
           </main>
           <Footer />        
-        <Analytics />
-        <SpeedInsights />
+          <Analytics />
+          <SpeedInsights />
         </GlobalProvider>
       </body>
     </html>

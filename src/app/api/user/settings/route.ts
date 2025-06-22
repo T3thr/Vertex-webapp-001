@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel, { IUserPreferences } from "@/backend/models/User";
+import UserModel from "@/backend/models/User";
+import UserSettingsModel, { IUserSettings } from "@/backend/models/UserSettings";
 import { z } from "zod";
 import mongoose from "mongoose";
 
@@ -351,7 +352,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // เนื่องจากใช้ lean: true, `preferences` จะเป็น plain object ที่ตรงกับ IUserPreferences
-    const finalUserPreferences = updatedUserDocument.preferences as IUserPreferences;
+    const finalUserPreferences = updatedUserDocument.preferences as IUserSettings;
 
     console.log(`✅ [API Settings] Successfully updated settings for User ID: ${userId}`);
     return NextResponse.json({

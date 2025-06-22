@@ -74,9 +74,10 @@ UserAvatar.displayName = "UserAvatar";
 
 interface NavBarProps {
   logoText?: string;
+  initialUser?: AppSessionUser | null;
 }
 
-export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
+export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps) {
   const { user: authContextUser, status: authStatus, signOut } = useAuth();
   const {
     theme: currentThemeChoice,
@@ -98,8 +99,10 @@ export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // userDisplay จะเป็น AppSessionUser หรือ null (ตรงกับ user จาก AuthContext)
-  const userDisplay = authContextUser;
+  // `userDisplay` จะใช้ข้อมูลจาก server (`initialUser`) ในการเรนเดอร์ครั้งแรก
+  // และจะอัปเดตตามข้อมูลจาก client-side context (`authContextUser`) เมื่อมีการเปลี่ยนแปลง
+  // เพื่อให้แน่ใจว่า UI ถูกต้องเสมอและไม่มีการกระพริบ
+  const userDisplay = useMemo(() => authContextUser ?? initialUser, [authContextUser, initialUser]);
 
   const handleScroll = useCallback(() => setIsScrolled(window.scrollY > 20), []);
 
@@ -202,16 +205,8 @@ export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
   );
 
   const AuthSection = () => {
-    if (authStatus === "loading" || !themeMounted) {
-      return (
-        <div className="flex items-center space-x-2 animate-pulse">
-          <div className="h-8 w-8 rounded-full bg-muted"></div>
-          <div className="h-5 w-20 rounded bg-muted hidden sm:block"></div>
-        </div>
-      );
-    }
-
-    if (authStatus === "unauthenticated") {
+    if (!userDisplay) {
+      // หากไม่มีข้อมูลผู้ใช้ (ทั้งจาก server และ client) หมายถึงยังไม่ได้ล็อกอิน
       return (
         <motion.button
           onClick={openAuthModal}
@@ -224,6 +219,7 @@ export default function NavBar({ logoText = "DIVWY" }: NavBarProps) {
       );
     }
 
+    // หากมีข้อมูล `userDisplay` ให้แสดงผลส่วนของเมนูผู้ใช้ที่ล็อกอินแล้ว
     if (userDisplay) { // userDisplay คือ AppSessionUser | null
       return (
         <div className="relative" ref={dropdownRef}>

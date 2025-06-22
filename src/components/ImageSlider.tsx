@@ -78,13 +78,12 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   }, [totalSlides]);
 
   // ฟังก์ชันสำหรับอัปเดต transform (translateX) ของ slideContainer
-  const setTransform = useCallback((translateX: number, useTransition: boolean = true) => {
+  const setTransform = useCallback((translateX: number, useTransition: boolean = false) => {
     if (slideContainerRef.current) {
-      slideContainerRef.current.style.transition = useTransition
-        ? `transform ${TRANSITION_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`
-        : 'none';
-      // ค่า transform สุดท้ายจะเป็น offset หลัก + ค่าที่เกิดจากการลาก (currentTranslate จะถูกรวมก่อนเรียก setTransform)
-      slideContainerRef.current.style.transform = `translateX(${translateX}px)`;
+        slideContainerRef.current.style.transition = useTransition
+            ? `transform ${TRANSITION_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`
+            : 'none';
+        slideContainerRef.current.style.transform = `translateX(${translateX}px)`;
     }
   }, []);
 
@@ -103,23 +102,16 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   const handleSlideChange = useCallback((direction: 'next' | 'prev') => {
     if (isTransitioning || totalSlides <= 1) return;
 
-    setIsTransitioning(true);
     const effectiveSlideWidth = getEffectiveSlideWidth();
-    const newLogicalCurrentIndex = getLoopedIndex(currentIndex + (direction === 'next' ? 1 : -1));
+    const newLogicalCurrentIndex = getLoopedIndex(currentIndex + (direction === 'prev' ? 1 : -1));
 
-    const targetTransform = slideContainerOffset + (direction === 'next' ? -effectiveSlideWidth : effectiveSlideWidth);
-    setTransform(targetTransform, true); // สั่งให้เลื่อนพร้อม animation
+    const targetTransform = slideContainerOffset + (direction === 'prev' ? -effectiveSlideWidth : effectiveSlideWidth);
+    setTransform(targetTransform, false); // No animation for immediate change
 
-    if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
-    transitionTimeoutRef.current = setTimeout(() => {
-      setCurrentIndex(newLogicalCurrentIndex); // อัปเดต logical currentIndex *หลังจาก* animation เสร็จ
-      const newCenteringOffset = calculateCenteringOffset();
-      setSlideContainerOffset(newCenteringOffset);
-      setTransform(newCenteringOffset, false);
-      setCurrentTranslate(0);
-      setIsTransitioning(false);
-    }, TRANSITION_DURATION);
-
+    setCurrentIndex(newLogicalCurrentIndex); // Update index immediately
+    const newCenteringOffset = calculateCenteringOffset();
+    setSlideContainerOffset(newCenteringOffset);
+    setTransform(newCenteringOffset, true); // Animate to new position
   }, [isTransitioning, totalSlides, getEffectiveSlideWidth, currentIndex, getLoopedIndex, slideContainerOffset, setTransform, calculateCenteringOffset]);
 
 
@@ -289,6 +281,12 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     };
   }, [isDragging, dragMove, dragEnd]);
 
+  // Add fade-out effect for arrow buttons
+  const [showArrows, setShowArrows] = useState(true);
+  useEffect(() => {
+    const timeout = setTimeout(() => setShowArrows(false), 3000); // Hide arrows after 3 seconds
+    return () => clearTimeout(timeout);
+  }, [currentIndex]);
 
   if (totalSlides === 0) {
     return (
@@ -418,7 +416,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
         <>
           <button
             onClick={goToPrevious}
-            className={`${styles.navButton} ${styles.navButtonPrev}`}
+            className={`${styles.navButton} ${styles.navButtonPrev} ${showArrows ? '' : styles.fadeOut}`}
             aria-label="สไลด์ก่อนหน้า"
             disabled={isTransitioning || isDragging}
           >
@@ -426,7 +424,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
           </button>
           <button
             onClick={goToNext}
-            className={`${styles.navButton} ${styles.navButtonNext}`}
+            className={`${styles.navButton} ${styles.navButtonNext} ${showArrows ? '' : styles.fadeOut}`}
             aria-label="สไลด์ถัดไป"
             disabled={isTransitioning || isDragging}
           >

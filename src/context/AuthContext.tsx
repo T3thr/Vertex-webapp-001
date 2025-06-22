@@ -20,14 +20,15 @@ import { useQueryClient } from "@tanstack/react-query";
 // Import original Mongoose model interfaces for type hinting data from API
 import {
   IUser, // IUser จาก backend/models/User
-  IUserGamification as OriginalUserGamification,
-  IShowcasedGamificationItem as OriginalShowcasedGamificationItem,
-  IUserDisplayBadge as OriginalUserDisplayBadge
-  // ILevelReward ไม่ได้ export จาก User.ts
 } from "@/backend/models/User";
 import {
+  IUserGamification as OriginalUserGamification,
+  IShowcasedGamificationItem as OriginalShowcasedGamificationItem,
+  IUserDisplayBadge as OriginalUserDisplayBadge,
+} from "@/backend/models/UserGamification";
+import {
   ILevel as OriginalILevel, // ILevel จาก backend/models/Level
-  ILevelReward as OriginalLevelReward // ✅ ILevelReward ถูก import จาก Level.ts
+  ILevelReward as OriginalLevelReward, // ✅ ILevelReward ถูก import จาก Level.ts
 } from "@/backend/models/Level";
 
 // อินเทอร์เฟซสำหรับ AuthContext

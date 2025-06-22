@@ -1,37 +1,65 @@
-// src/app/api/auth/signup/route.ts
-// API สำหรับการสมัครสมาชิกผู้ใช้ใหม่ด้วย Credentials-based authentication
-// จัดการการสร้างผู้ใช้ใน User collection (ที่รวมแล้ว) พร้อมส่งอีเมลยืนยัน
-// API นี้จะทำการ verify reCAPTCHA token อีกครั้งกับ Google
-// อัปเดต: ปรับให้ใช้ UserModel แบบ Monolithic, ปรับปรุง default values สำหรับ IUser
+/**
+ * @file src/app/api/auth/signup/route.ts
+ * @description API endpoint for new user registration using credentials-based authentication.
+ *              Handles the creation of documents across multiple collections within a transaction
+ *              to ensure data integrity for the new modular architecture. Also triggers
+ *              the sending of a verification email.
+ * @version 2.0.0
+ * @date 2024-07-28
+ *
+ * @history
+ * - 2.0.0 (2024-07-28): Refactored to work with modular User models.
+ *   - Introduced MongoDB transaction to ensure atomic creation of documents across
+ *     `users`, `user_profiles`, `user_settings`, `user_security`, `user_gamification`,
+ *     `user_tracking`, and `user_gamification_data` collections.
+ *   - Updated imports to use new individual models instead of the monolithic User model.
+ * - 1.0.0: Initial implementation with monolithic User model.
+ */
 
+import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
-import UserModel, {
-    IUser,
-    IAccount,
-    IUserProfile,
-    IUserTrackingStats,
-    IUserSocialStats,
-    IUserPreferences,
-    IUserWallet,
-    IUserGamification,
-    IUserVerification,
-    IUserDonationSettings,
-    IUserSecuritySettings,
-    IMentalWellbeingInsights,
-    INotificationChannelSettings,
-    IUserDisplayPreferences,
-    IUserContentPrivacyPreferences,
-    IVisualNovelGameplayPreferences,
-    IUserAnalyticsConsent,
-    IUserReadingDisplayPreferences,
-    IUserAccessibilityDisplayPreferences,
-    IShowcasedGamificationItem,
-    IUserDisplayBadge
-} from "@/backend/models/User";
 import { sendVerificationEmail } from "@/backend/services/sendemail";
-import { validateEmail, validatePassword, validateUsername } from "@/backend/utils/validation";
-import { Types } from "mongoose";
+import {
+  validateEmail,
+  validatePassword,
+  validateUsername,
+} from "@/backend/utils/validation";
+
+// SECTION: Import New Modular Models
+// Import a user model that has been broken down into sub-models for improved scalability and maintainability.
+import UserModel, { IAccount } from "@/backend/models/User";
+import UserProfileModel, {
+  IUserProfile,
+  IUserSocialStats,
+} from "@/backend/models/UserProfile";
+import UserSettingsModel, {
+  IUserSettings,
+  IUserPreferencesNotifications,
+  INotificationChannelSettings,
+  IUserDisplayPreferences,
+  IUserReadingDisplayPreferences,
+  IUserAccessibilityDisplayPreferences,
+  IUserContentPrivacyPreferences,
+  IUserAnalyticsConsent,
+  IVisualNovelGameplayPreferences,
+} from "@/backend/models/UserSettings";
+import UserSecurityModel, {
+  IUserSecurity,
+  IUserVerification,
+} from "@/backend/models/UserSecurity";
+import UserGamificationModel, {
+  IUserGamification,
+  IUserWallet,
+  IUserGamificationDoc,
+} from "@/backend/models/UserGamification";
+import UserTrackingModel, {
+  IUserTracking,
+  IUserTrackingStats,
+} from "@/backend/models/UserTracking";
+import UserAchievementModel from "@/backend/models/UserAchievement";
+
+// SECTION: Type Definitions for Request and Response
 
 interface SignUpRequestBody {
   email: string;
@@ -47,41 +75,46 @@ interface RecaptchaResponseFromGoogle {
   "error-codes"?: string[];
 }
 
-// Helper function เพื่อสร้าง default notification settings (เหมือนใน oauth/route.ts)
+// SECTION: Default Data Helper Functions
+// Functions to create default sub-documents, ensuring consistency for new users.
+
+/**
+ * สร้างการตั้งค่าการแจ้งเตือนเริ่มต้นสำหรับช่องทางต่างๆ
+ * @returns {INotificationChannelSettings} Object การตั้งค่าเริ่มต้น
+ */
 function createDefaultNotificationChannelSettings(): INotificationChannelSettings {
-    return {
-        enabled: true,
-        newsletter: true,
-        novelUpdatesFromFollowing: true,
-        newFollowers: true,
-        commentsOnMyNovels: true,
-        repliesToMyComments: true,
-        donationAlerts: true,
-        systemAnnouncements: true,
-        securityAlerts: true,
-        promotionalOffers: false,
-        achievementUnlocks: true,
-    };
+  return {
+    enabled: true,
+    newsletter: true,
+    novelUpdatesFromFollowing: true,
+    newFollowers: true,
+    commentsOnMyNovels: true,
+    repliesToMyComments: true,
+    donationAlerts: true,
+    systemAnnouncements: true,
+    securityAlerts: true,
+    promotionalOffers: false,
+    achievementUnlocks: true,
+  };
 }
 
+// SECTION: API Handler (POST)
 
 export async function POST(request: Request): Promise<NextResponse> {
-  console.log("🔵 [Signup API] ได้รับคำขอสมัครสมาชิก...");
+  console.log("🔵 [Signup API v2] ได้รับคำขอสมัครสมาชิก...");
+
+  const session = await mongoose.startSession();
+  console.log("ℹ️ [Signup API v2] เริ่มต้น MongoDB Session");
+
   try {
     await dbConnect();
-    console.log("✅ [Signup API] เชื่อมต่อ MongoDB สำเร็จ");
+    console.log("✅ [Signup API v2] เชื่อมต่อ MongoDB สำเร็จ");
 
     let body: SignUpRequestBody;
     try {
       body = await request.json();
-      console.log(`ℹ️ [Signup API] Body ที่ได้รับ:`, {
-        email: body.email,
-        username: body.username,
-        password: body.password ? '[มีรหัสผ่าน]' : '[ไม่มีรหัสผ่าน]',
-        recaptchaToken: body.recaptchaToken ? `${body.recaptchaToken.substring(0, 15)}...` : '[ไม่มี token]'
-      });
     } catch (jsonError: any) {
-      console.error("❌ [Signup API] JSON parse error:", jsonError.message);
+      console.error("❌ [Signup API v2] JSON parse error:", jsonError.message);
       return NextResponse.json(
         { error: `รูปแบบ JSON ไม่ถูกต้อง: ${jsonError.message}`, success: false },
         { status: 400 }
@@ -90,241 +123,274 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { email, username, password, recaptchaToken } = body;
 
+    // --- Input Validation ---
     if (!email || !username || !password || !recaptchaToken) {
-      const missingFields = [];
-      if (!email) missingFields.push("อีเมล");
-      if (!username) missingFields.push("ชื่อผู้ใช้");
-      if (!password) missingFields.push("รหัสผ่าน");
-      if (!recaptchaToken) missingFields.push("reCAPTCHA token");
-      console.error(`❌ [Signup API] ข้อมูลไม่ครบถ้วน: ${missingFields.join(", ")}`);
+      const missingFields = ["email", "username", "password", "recaptchaToken"].filter(field => !body[field as keyof SignUpRequestBody]);
+      console.error(`❌ [Signup API v2] ข้อมูลไม่ครบถ้วน: ${missingFields.join(", ")}`);
       return NextResponse.json(
         { error: `กรุณากรอกข้อมูลให้ครบถ้วน: ${missingFields.join(", ")}`, success: false },
         { status: 400 }
       );
     }
 
-    if (!validateEmail(email)) {
-      console.error(`❌ [Signup API] รูปแบบอีเมลไม่ถูกต้อง: ${email}`);
-      return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง", success: false }, { status: 400 });
-    }
+    // --- Business Logic Validation ---
+    if (!validateEmail(email)) return NextResponse.json({ error: "รูปแบบอีเมลไม่ถูกต้อง", success: false }, { status: 400 });
     const usernameValidation = validateUsername(username);
-    if (!usernameValidation.valid) {
-      console.error(`❌ [Signup API] ชื่อผู้ใช้ไม่ถูกต้อง: ${username}, เหตุผล: ${usernameValidation.message}`);
-      return NextResponse.json(
-        { error: usernameValidation.message || "ชื่อผู้ใช้ไม่ถูกต้องตามนโยบาย", success: false },
-        { status: 400 }
-      );
-    }
+    if (!usernameValidation.valid) return NextResponse.json({ error: usernameValidation.message || "ชื่อผู้ใช้ไม่ถูกต้อง", success: false }, { status: 400 });
     const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-      console.error(`❌ [Signup API] รหัสผ่านไม่ถูกต้อง: ${passwordValidation.message}`);
-      return NextResponse.json(
-        { error: passwordValidation.message || "รหัสผ่านไม่ตรงตามนโยบายความปลอดภัย", success: false },
-        { status: 400 }
-      );
-    }
+    if (!passwordValidation.valid) return NextResponse.json({ error: passwordValidation.message || "รหัสผ่านไม่ปลอดภัย", success: false }, { status: 400 });
 
+    // --- reCAPTCHA Verification ---
     const secretKey = process.env.RECAPTCHA_SECRET_KEY;
     if (!secretKey) {
-      console.error("❌ [Signup API] RECAPTCHA_SECRET_KEY ไม่ได้ตั้งค่า");
-      return NextResponse.json(
-        { error: "การตั้งค่า reCAPTCHA ของเซิร์ฟเวอร์ไม่ถูกต้อง (SK missing)", success: false },
-        { status: 500 }
-      );
+        console.error("❌ [Signup API v2] RECAPTCHA_SECRET_KEY ไม่ได้ตั้งค่า");
+        return NextResponse.json({ error: "การตั้งค่า reCAPTCHA ของเซิร์ฟเวอร์ไม่ถูกต้อง", success: false }, { status: 500 });
     }
     const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${recaptchaToken}`;
-    console.log("🔄 [Signup API] ส่งคำขอตรวจสอบ reCAPTCHA ไปยัง Google...");
     const googleResponse = await fetch(verificationUrl, { method: "POST" });
     const googleRecaptchaData: RecaptchaResponseFromGoogle = await googleResponse.json();
-    console.log(`ℹ️ [Signup API] การตอบกลับจาก Google reCAPTCHA:`, googleRecaptchaData);
-
     if (!googleRecaptchaData.success) {
-      console.warn(`❌ [Signup API] การยืนยัน reCAPTCHA ล้มเหลว:`, googleRecaptchaData["error-codes"]);
-      return NextResponse.json(
-        { success: false, error: "การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่อีกครั้ง", "error-codes": googleRecaptchaData["error-codes"] || [] },
-        { status: 400 }
-      );
+        console.warn(`❌ [Signup API v2] การยืนยัน reCAPTCHA ล้มเหลว:`, googleRecaptchaData["error-codes"]);
+        return NextResponse.json({ success: false, error: "การยืนยัน reCAPTCHA ล้มเหลว", "error-codes": googleRecaptchaData["error-codes"] || [] }, { status: 400 });
     }
-    console.log(`✅ [Signup API] reCAPTCHA ผ่านการยืนยัน`);
+    console.log(`✅ [Signup API v2] reCAPTCHA ผ่านการยืนยัน`);
 
+    // --- Check for existing user ---
     const lowerCaseEmail = email.toLowerCase();
-    console.log(`🔍 [Signup API] ตรวจสอบผู้ใช้ซ้ำ: email=${lowerCaseEmail}, username=${username}`);
-    const existingUser = await UserModel.findOne({
-      $or: [{ email: lowerCaseEmail }, { username: username }],
-    }).lean();
-
+    const existingUser = await UserModel.findOne({ $or: [{ email: lowerCaseEmail }, { username: username }] }).lean();
     if (existingUser) {
-      let conflictField = "ข้อมูล";
-      if (existingUser.email === lowerCaseEmail) conflictField = "อีเมล";
-      else if (existingUser.username === username) conflictField = "ชื่อผู้ใช้";
-      console.error(`❌ [Signup API] ${conflictField} '${conflictField === "อีเมล" ? lowerCaseEmail : username}' ถูกใช้งานแล้ว`);
-      return NextResponse.json(
-        { error: `${conflictField} นี้ถูกใช้งานแล้ว`, success: false },
-        { status: 409 }
-      );
+        let conflictField = existingUser.email === lowerCaseEmail ? "อีเมล" : "ชื่อผู้ใช้";
+        console.error(`❌ [Signup API v2] ${conflictField} นี้ถูกใช้งานแล้ว`);
+        return NextResponse.json({ error: `${conflictField} นี้ถูกใช้งานแล้ว`, success: false }, { status: 409 });
     }
 
-    console.log("🔄 [Signup API] สร้าง instance ผู้ใช้ใหม่...");
+    // --- Transactional User Creation ---
+    console.log("🔄 [Signup API v2] เริ่ม Transaction สำหรับการสร้างผู้ใช้ใหม่...");
+    let newUserId: mongoose.Types.ObjectId | undefined;
+    let userEmailForToken: string | undefined;
+    let verificationTokenPlain: string | undefined;
 
-    // Default values from User.ts will be applied by Mongoose for fields not explicitly set here
-    // or for nested fields within objects if not fully specified.
-    const defaultReadingPrefs: IUserReadingDisplayPreferences = {
-        fontSize: "medium", readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left",
-    };
-    const defaultAccessibilityPrefs: IUserAccessibilityDisplayPreferences = {
-        dyslexiaFriendlyFont: false, highContrastMode: false,
-    };
-    const defaultDisplayPrefs: IUserDisplayPreferences = {
-        theme: "system", reading: defaultReadingPrefs, accessibility: defaultAccessibilityPrefs,
-    };
-    const defaultAnalyticsConsent: IUserAnalyticsConsent = {
-        allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false, // lastConsentReviewDate will be set by schema if needed
-    };
-    const defaultContentPrivacyPrefs: IUserContentPrivacyPreferences = {
-        showMatureContent: false, preferredGenres: [], profileVisibility: "public",
-        readingHistoryVisibility: "followers_only", showActivityStatus: true,
-        allowDirectMessagesFrom: "followers", analyticsConsent: defaultAnalyticsConsent,
-        // blocked fields will be default empty arrays by Mongoose
-    };
-    const defaultVisualNovelGameplayPrefs: IVisualNovelGameplayPreferences = {
-        textSpeed: "normal", autoPlayMode: "click", autoPlayDelayMs:1500, skipUnreadText: false,
-        transitionsEnabled: true, screenEffectsEnabled: true, textWindowOpacity: 0.8,
-        masterVolume: 1.0, bgmVolume: 0.7, sfxVolume: 0.8, voiceVolume: 1.0,
-        voicesEnabled: true, preferredVoiceLanguage: "original", showChoiceTimer: true,
-        blurThumbnailsOfMatureContent: true, preferredArtStyles: [], preferredGameplayMechanics: [],
-        assetPreloading: "essential", characterAnimationLevel: "full"
-    };
+    await session.withTransaction(async () => {
+        // Step 1: สร้างเอกสาร User หลัก (Identity)
+        const newUser = new UserModel({
+            username,
+            email: lowerCaseEmail,
+            password,
+            accounts: [{
+                provider: "credentials",
+                providerAccountId: new mongoose.Types.ObjectId().toString(), // Placeholder, will be updated
+                type: "credentials",
+            } as IAccount],
+            roles: ["Reader"],
+        });
 
-    const newUser = new UserModel({
-      username: username,
-      email: lowerCaseEmail,
-      password: password,
-      accounts: [{
-        provider: "credentials",
-        providerAccountId: new Types.ObjectId().toString(), // This will be unique for this credential account
-        type: "credentials",
-      } as IAccount],
-      roles: ["Reader"],
-      isEmailVerified: false,
-      isActive: true,
-      isBanned: false,
-      profile: {
-        displayName: username,
-      } as IUserProfile,
-      trackingStats: { // สอดคล้องกับ IUserTrackingStats และ schema defaults
-        joinDate: new Date(),
-        totalLoginDays: 0, //ยังไม่ได้ login จริงจัง
-        totalNovelsRead: 0,
-        totalEpisodesRead: 0,
-        totalTimeSpentReadingSeconds: 0,
-        totalCoinSpent: 0,
-        totalRealMoneySpent: 0,
-        // firstLoginAt will be set on first actual login
-      } as IUserTrackingStats,
-      socialStats: { // สอดคล้องกับ IUserSocialStats และ schema defaults
-        followersCount: 0,
-        followingCount: 0,
-        novelsCreatedCount: 0,
-        commentsMadeCount: 0,
-        ratingsGivenCount: 0,
-        likesGivenCount: 0,
-      } as IUserSocialStats,
-      preferences: { // สอดคล้องกับ IUserPreferences และ schema defaults
-        language: "th",
-        display: defaultDisplayPrefs,
-        notifications: {
-            masterNotificationsEnabled: true,
-            email: createDefaultNotificationChannelSettings(),
-            push: createDefaultNotificationChannelSettings(),
-            inApp: createDefaultNotificationChannelSettings(),
-        },
-        contentAndPrivacy: defaultContentPrivacyPrefs,
-        visualNovelGameplay: defaultVisualNovelGameplayPrefs,
-      } as IUserPreferences,
-      wallet: { // สอดคล้องกับ IUserWallet และ schema defaults
-        coinBalance: 0,
-      } as IUserWallet,
-      gamification: { // สอดคล้องกับ IUserGamification และ schema defaults
-        level: 1,
-        currentLevelObject: null, // pre-save hook will attempt to set this
-        experiencePoints: 0,
-        totalExperiencePointsEverEarned: 0,
-        nextLevelXPThreshold: 100, // pre-save hook might update this from Level model
-        achievements: [],
-        showcasedItems: [] as IShowcasedGamificationItem[],
-        primaryDisplayBadge: undefined as IUserDisplayBadge | undefined,
-        secondaryDisplayBadges: [] as IUserDisplayBadge[],
-        loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 }, // No login yet
-        dailyCheckIn: { currentStreakDays: 0 },
-        lastActivityAt: new Date(), // Activity is signup itself
-      } as IUserGamification,
-      // writerStats, verification, donationSettings, securitySettings, mentalWellbeingInsights
-      // will use Mongoose schema defaults (typically undefined or basic structures)
-      // or can be explicitly set to their minimal default if needed:
-      verification: { kycStatus: "none" } as IUserVerification,
-      donationSettings: { isEligibleForDonation: false } as IUserDonationSettings,
-      securitySettings: {
-          twoFactorAuthentication: { isEnabled: false },
-          loginAttempts: { count: 0 },
-          activeSessions: [],
-      } as IUserSecuritySettings,
+        const verificationToken = newUser.generateEmailVerificationToken(); // Generate token before save
+        await newUser.save({ session });
+        console.log(`✅ [Tx] สร้างเอกสาร User หลักสำเร็จ (ID: ${newUser._id})`);
+
+        // Update providerAccountId with the actual userId for consistency
+        const credAccount = newUser.accounts.find(acc => acc.provider === "credentials");
+        if (credAccount) {
+            credAccount.providerAccountId = newUser._id.toString();
+            await newUser.save({ session }); // Small update within the same transaction
+        }
+
+        const userId = newUser._id;
+        newUserId = userId;
+        userEmailForToken = newUser.email;
+        verificationTokenPlain = verificationToken;
+
+        // Step 2: สร้างเอกสารอื่นๆ ที่เกี่ยวข้องทั้งหมด
+        const now = new Date();
+
+        // 2a. UserProfile
+        const profilePromise = UserProfileModel.create([{
+            userId,
+            displayName: username,
+            socialStats: {
+                followersCount: 0,
+                followingUsersCount: 0,
+                followingNovelsCount: 0,
+                novelsCreatedCount: 0,
+                boardPostsCreatedCount: 0,
+                commentsMadeCount: 0,
+                ratingsGivenCount: 0,
+                likesGivenCount: 0,
+            } as IUserSocialStats,
+            joinDate: now,
+        } as Partial<IUserProfile>], { session });
+
+        // 2b. UserSettings
+        const settingsPromise = UserSettingsModel.create([{
+            userId,
+            language: "th",
+            display: {
+                theme: "system",
+                reading: { fontSize: 16, readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left", textContrastMode: false },
+                accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false, reducedMotion: false },
+                uiVisibility: { textBoxOpacity: 100, backgroundBrightness: 100, textBoxBorder: true },
+                visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true, particleEffects: true },
+                characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
+                characterVoiceDisplay: { voiceIndicatorIcon: true },
+                backgroundDisplay: { backgroundQuality: 'mid', showCGs: true, backgroundEffects: true },
+                voiceSubtitles: { enabled: true },
+            },
+            notifications: {
+                masterNotificationsEnabled: true,
+                email: createDefaultNotificationChannelSettings(),
+                push: createDefaultNotificationChannelSettings(),
+                inApp: createDefaultNotificationChannelSettings(),
+                saveLoad: { autoSaveNotification: true, noSaveSpaceWarning: true },
+                newContent: { contentUpdates: true, promotionEvent: true },
+                outOfGame: { type: 'all' },
+                optional: { statChange: true, statDetailLevel: 'summary' },
+            },
+            contentAndPrivacy: {
+                showMatureContent: false,
+                preferredGenres: [],
+                blockedGenres: [],
+                blockedTags: [],
+                blockedAuthors: [],
+                blockedNovels: [],
+                profileVisibility: "public",
+                readingHistoryVisibility: "followers_only",
+                showActivityStatus: true,
+                allowDirectMessagesFrom: "followers",
+                analyticsConsent: { allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false },
+            },
+            visualNovelGameplay: {
+                textSpeedValue: 50,
+                instantTextDisplay: false,
+                autoPlayMode: "click",
+                autoPlayDelayMs: 2000,
+                autoPlaySpeedValue: 50,
+                autoPlayEnabled: false,
+                skipUnreadText: false,
+                skipReadTextOnly: true,
+                skipAllText: false,
+                skipOnHold: true,
+                transitionsEnabled: true,
+                screenEffectsEnabled: true,
+                textWindowOpacity: 80,
+                masterVolume: 100,
+                bgmVolume: 80,
+                sfxVolume: 90,
+                voiceVolume: 100,
+                voicesEnabled: true,
+                preferredVoiceLanguage: "default",
+                showChoiceTimer: true,
+                blurThumbnailsOfMatureContent: true,
+                preferredArtStyles: [],
+                preferredGameplayMechanics: [],
+                assetPreloading: "essential",
+                characterAnimationLevel: "full",
+                backlog: { enableHistory: true, historyVoice: false, historyBack: true },
+                choices: { highlightChoices: true, routePreview: false },
+                saveLoad: { autoSave: true, saveFrequency: 'scene' },
+                decisions: { decisionWarning: true, importantMark: true },
+                routeManagement: { routeProgress: true, showUnvisited: true, secretHints: false },
+             },
+        } as Partial<IUserSettings>], { session });
+        
+        // 2c. UserSecurity
+        const securityPromise = UserSecurityModel.create([{
+            userId,
+            verification: { kycStatus: "none" },
+        } as Partial<IUserSecurity>], { session });
+
+        // 2d. UserGamification
+        const gamificationPromise = UserGamificationModel.create([{
+            userId,
+            wallet: { coinBalance: 0 },
+            gamification: {
+                level: 1,
+                experiencePoints: 0,
+                totalExperiencePointsEverEarned: 0,
+                nextLevelXPThreshold: 100, // This could be dynamically set from Level 1 model
+                achievements: [],
+                showcasedItems: [],
+                secondaryDisplayBadges: [],
+                loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 },
+                dailyCheckIn: { currentStreakDays: 0 },
+                lastActivityAt: now,
+            },
+        } as Partial<IUserGamificationDoc>], { session });
+
+        // 2e. UserTracking
+        const trackingPromise = UserTrackingModel.create([{
+            userId,
+            trackingStats: {
+                joinDate: now,
+                totalLoginDays: 0,
+                totalNovelsRead: 0,
+                totalEpisodesRead: 0,
+                totalTimeSpentReadingSeconds: 0,
+                totalCoinSpent: 0,
+                totalRealMoneySpent: 0,
+            },
+        } as Partial<IUserTracking>], { session });
+        
+        // 2f. UserAchievement Data
+        const achievementPromise = UserAchievementModel.create([{
+            user: userId,
+            earnedItems: [],
+            ongoingProgress: new Map(),
+            totalExperiencePointsFromGamification: 0,
+        }], { session });
+
+        // Wait for all creation promises to resolve
+        await Promise.all([
+            profilePromise, settingsPromise, securityPromise,
+            gamificationPromise, trackingPromise, achievementPromise
+        ]);
+
+        console.log(`✅ [Tx] สร้างเอกสารย่อยทั้งหมดสำหรับ User ID: ${userId} สำเร็จ`);
     });
 
-    const verificationTokenPlain = newUser.generateEmailVerificationToken();
+    console.log(`✅ [Signup API v2] Transaction สำหรับ User ID: ${newUserId} สำเร็จสมบูรณ์`);
 
-    await newUser.save();
-    console.log(`✅ [Signup API] สร้างผู้ใช้ใหม่สำเร็จ (ID: ${newUser._id}), username: ${newUser.username}, email: ${newUser.email}`);
-
-    // อัปเดต providerAccountId ของ credentials account ด้วย ID ผู้ใช้จริง (เป็นทางเลือก)
-    const credAccount = newUser.accounts.find(acc => acc.provider === "credentials");
-    if (credAccount) {
-        credAccount.providerAccountId = newUser._id.toString();
-        await newUser.save(); // บันทึกการเปลี่ยนแปลงเล็กน้อยนี้
-        console.log(`ℹ️ [Signup API] อัปเดต providerAccountId สำหรับ credentials account ของ ${newUser.username}`);
+    // --- Send Verification Email ---
+    if (userEmailForToken && verificationTokenPlain) {
+        try {
+            await sendVerificationEmail(userEmailForToken, verificationTokenPlain);
+            console.log(`✅ [Signup API v2] ส่งอีเมลยืนยันไปยัง ${userEmailForToken} สำเร็จ`);
+        } catch (emailError: any) {
+            console.error("❌ [Signup API v2] ไม่สามารถส่งอีเมลยืนยันได้:", emailError.message);
+            // Even if email fails, user creation was successful.
+            return NextResponse.json({
+                success: true,
+                message: "สมัครสมาชิกสำเร็จ แต่การส่งอีเมลยืนยันมีปัญหา กรุณาลองใหม่ในภายหลัง",
+                userId: newUserId,
+            }, { status: 201 });
+        }
+    } else {
+        throw new Error("เกิดข้อผิดพลาด: ไม่สามารถสร้างข้อมูลสำหรับส่งอีเมลยืนยันได้");
     }
 
-
-    try {
-      await sendVerificationEmail(newUser.email as string, verificationTokenPlain);
-      console.log(`✅ [Signup API] ส่งอีเมลยืนยันไปยัง ${newUser.email} สำเร็จ`);
-    } catch (emailError: any) {
-      console.error("❌ [Signup API] ไม่สามารถส่งอีเมลยืนยันได้:", emailError.message);
-      return NextResponse.json(
-        {
-          success: true, // ผู้ใช้ถูกสร้างแล้ว
-          message: "สมัครสมาชิกสำเร็จ แต่การส่งอีเมลยืนยันมีปัญหา กรุณาลองขอส่งอีเมลยืนยันใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ",
-          userId: newUser._id.toString(),
-        },
-        { status: 201 }
-      );
-    }
-
-    return NextResponse.json(
-      {
+    return NextResponse.json({
         success: true,
         message: "สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลของคุณเพื่อยืนยันบัญชี",
-        userId: newUser._id.toString(),
-      },
-      { status: 201 }
-    );
+        userId: newUserId,
+    }, { status: 201 });
 
   } catch (error: any) {
-    console.error("❌ [Signup API] เกิดข้อผิดพลาดที่ไม่คาดคิด:", error.message || error, error.stack);
+    console.error("❌ [Signup API v2] เกิดข้อผิดพลาดในกระบวนการสมัครสมาชิก:", error.message || error, error.stack);
     let errorMessage = "เกิดข้อผิดพลาดในการสมัครสมาชิก";
     let status = 500;
 
     if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-      errorMessage = `${field === "email" ? "อีเมล" : (field === "username" ? "ชื่อผู้ใช้" : `ข้อมูล '${field}'`)} นี้ถูกใช้งานแล้ว`;
-      status = 409;
+        errorMessage = `ข้อมูลนี้ถูกใช้งานแล้ว`;
+        status = 409;
     } else if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((e: any) => e.message);
-      errorMessage = `ข้อมูลไม่ถูกต้อง: ${errors.join(", ")}`;
-      status = 400;
+        errorMessage = `ข้อมูลไม่ถูกต้อง: ${Object.values(error.errors).map((e: any) => e.message).join(", ")}`;
+        status = 400;
     } else if (error.message) {
-      errorMessage = error.message;
+        errorMessage = error.message;
     }
 
     return NextResponse.json({ error: errorMessage, success: false }, { status });
+  } finally {
+    await session.endSession();
+    console.log("ℹ️ [Signup API v2] สิ้นสุด MongoDB Session");
   }
 }

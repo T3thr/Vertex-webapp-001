@@ -2,9 +2,10 @@
 // API สำหรับอัปเดตการตั้งค่า (Preferences) ของผู้ใช้, โดยเฉพาะ Theme
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/options"; // ✅ ตรวจสอบ Path ให้ถูกต้องไปยัง options.ts ของคุณ
-import dbConnect from "@/backend/lib/mongodb"; // ✅ ตรวจสอบ Path ให้ถูกต้อง
-import UserModel, { IUserPreferences } from "@/backend/models/User"; // ✅ Import IUserPreferences จาก User.ts
+import { authOptions } from "@/app/api/auth/[...nextauth]/options"; 
+import dbConnect from "@/backend/lib/mongodb"; 
+import UserSettingsModel, { IUserSettings } from "@/backend/models/UserSettings"; // ✅ Import IUserSettings จาก UserSettings.ts
+import UserModel from "@/backend/models/User"; // ✅ Import User model
 import { z } from "zod";
 import mongoose from "mongoose";
 
@@ -95,35 +96,26 @@ export async function PUT(req: NextRequest) { // Client จะเรียกใ
     await dbConnect();
     console.log(`ℹ️ [API UpdatePrefs] เชื่อมต่อ MongoDB สำเร็จสำหรับ User ID: ${userId}`);
 
-    // 4. เตรียม fields สำหรับอัปเดตใน MongoDB
-    // เราจะอัปเดต `preferences.display.theme`
-    const updateFields: { [key: string]: any } = {
-      "preferences.display.theme": newThemePreference as ThemePreference,
-    };
-    console.log("ℹ️ [API UpdatePrefs] Fields ที่จะถูกตั้งค่าใน MongoDB:", updateFields);
+    // 4. อัปเดต UserSettings
+    const updatedUserSettings = await UserSettingsModel.findOneAndUpdate(
+      { userId: userId },
+      { $set: { "display.theme": newThemePreference } },
+      { new: true, runValidators: true }
+    );
 
-    // 5. ค้นหาและอัปเดตผู้ใช้ใน UserModel
-    const updatedUserDocument = await UserModel.findByIdAndUpdate(
-      userId,
-      { $set: updateFields },
-      { new: true, runValidators: true, lean: true, select: 'preferences email username roles' }
-    ).exec();
-
-    if (!updatedUserDocument) {
-      console.warn(`⚠️ [API UpdatePrefs] ไม่พบผู้ใช้ด้วย ID: ${userId} ใน UserModel`);
+    if (!updatedUserSettings) {
+      console.warn(`⚠️ [API UpdatePrefs] ไม่พบการตั้งค่าผู้ใช้ด้วย ID: ${userId}`);
       return NextResponse.json(
-        { success: false, error: "ไม่พบข้อมูลผู้ใช้" },
+        { success: false, error: "ไม่พบการตั้งค่าผู้ใช้" },
         { status: 404 }
       );
     }
-
-    const finalUserPreferences = updatedUserDocument.preferences as IUserPreferences;
 
     console.log(`✅ [API UpdatePrefs] อัปเดต Theme Preference สำเร็จสำหรับ User ID: ${userId}`);
     return NextResponse.json({
       success: true,
       message: "อัปเดตการตั้งค่า Theme เรียบร้อยแล้ว",
-      preferences: finalUserPreferences, // ส่ง preferences ที่อัปเดตแล้วทั้งหมดกลับไป
+      preferences: updatedUserSettings.display, // ส่ง preferences ที่อัปเดตแล้วทั้งหมดกลับไป
     });
 
   } catch (error: any) {

@@ -218,8 +218,23 @@ export async function POST(
         version: 1,
         nodes: defaultNodes,
         edges: [],
-        storyVariables: [],
-        startNodeId: startNodeId, // Set the ID of the created start node
+        groups: [{
+          groupId: uuidv4(),
+          title: 'กลุ่มเริ่มต้น',
+          nodeIds: [startNodeId],
+          position: { x: 200, y: 100 },
+          dimensions: { width: 200, height: 200 }
+        }],
+        storyVariables: [{
+          variableId: uuidv4(),
+          variableName: 'karma',
+          dataType: 'number',
+          initialValue: 0,
+          description: 'ค่ากรรม (Karma) ของตัวละครหลัก',
+          minValue: -100,
+          maxValue: 100
+        }],
+        startNodeId: startNodeId,
         lastModifiedByUserId: new mongoose.Types.ObjectId(session.user.id),
         isActive: true,
         editorMetadata: {

@@ -3,6 +3,9 @@
 // รองรับ global.css theme system และมี interactive elements ที่สวยงาม
 'use client';
 
+// Header สำหรับ Writer Dashboard พร้อม animation และ responsive design ที่อัพเกรดแล้ว
+// รองรับ global.css theme system และมี interactive elements ที่สวยงาม
+
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { 
   User, 
@@ -27,7 +30,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { SerializedUser } from '@/app/dashboard/page';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 interface DashboardHeaderProps {
   user: SerializedUser;
@@ -61,6 +64,15 @@ function StatCard({ icon: Icon, label, value, change, changeType = 'neutral', de
     neutral: 'text-muted-foreground'
   };
 
+  // สร้าง particles สำหรับ StatCard โดยใช้ค่า static เพื่อหลีกเลี่ยง hydration error
+  const statParticles = useMemo(() => [
+    { id: 1, left: '20%', top: '5%' },
+    { id: 2, left: '14%', top: '96%' },
+    { id: 3, left: '48%', top: '48%' },
+    { id: 4, left: '8%', top: '4%' },
+    { id: 5, left: '84%', top: '2%' }
+  ], []);
+
   return (
     <motion.div
       className={`bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 relative overflow-hidden group cursor-pointer`}
@@ -82,6 +94,26 @@ function StatCard({ icon: Icon, label, value, change, changeType = 'neutral', de
         animate={isHovered ? { scale: 1.1, rotate: 1 } : { scale: 1, rotate: 0 }}
         transition={{ duration: 0.3 }}
       />
+
+      {/* Particle Effects สำหรับ StatCard */}
+      {statParticles.map((particle) => (
+        <motion.div
+          key={particle.id}
+          className="absolute w-1 h-1 bg-primary/40 rounded-full"
+          style={{ left: particle.left, top: particle.top }}
+          animate={{
+            y: [0, -5, 0],
+            x: [0, 5, 0],
+            scale: [1, 1.2, 1]
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            repeatType: 'mirror',
+            ease: 'easeInOut'
+          }}
+        />
+      ))}
 
       {/* Content */}
       <div className="relative z-10">
@@ -150,6 +182,26 @@ function AchievementBadge({ achievement, delay }: { achievement: string; delay: 
     </motion.div>
   );
 }
+
+const formattedDate = (date: Date) => {
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
+
+// สร้าง particles คงที่สำหรับ background เพื่อหลีกเลี่ยง hydration error
+const staticParticles = [
+  { id: 1, x: 10, y: 20, size: 80, opacity: 0.2, duration: 10 },
+  { id: 2, x: 30, y: 40, size: 100, opacity: 0.15, duration: 12 },
+  { id: 3, x: 50, y: 60, size: 90, opacity: 0.25, duration: 11 },
+  { id: 4, x: 70, y: 80, size: 110, opacity: 0.18, duration: 13 },
+  { id: 5, x: 90, y: 10, size: 95, opacity: 0.22, duration: 10.5 },
+  { id: 6, x: 20, y: 50, size: 85, opacity: 0.17, duration: 11.5 },
+  { id: 7, x: 40, y: 70, size: 105, opacity: 0.19, duration: 12.5 },
+  { id: 8, x: 60, y: 30, size: 100, opacity: 0.21, duration: 11 }
+];
 
 export default function DashboardHeader({ user, totalStats }: DashboardHeaderProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -247,6 +299,21 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     }
   ];
 
+  // State to track if the component is mounted
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Set the state to true only on the client
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const welcomeMessage = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "สวัสดีตอนเช้า";
+    if (hour < 18) return "สวัสดีตอนบ่าย";
+    return "สวัสดีตอนเย็น";
+  }, []);
+
   return (
     <motion.header 
       className="relative overflow-hidden bg-gradient-to-br from-secondary via-secondary-hover to-accent"
@@ -258,25 +325,27 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
       {/* Animated Background Pattern */}
       <div className="absolute inset-0 opacity-10">
         {/* Floating Circles */}
-        {[...Array(8)].map((_, i) => (
+        {isMounted && staticParticles.map((particle) => (
           <motion.div
-            key={i}
+            key={particle.id}
             className="absolute bg-white rounded-full"
             style={{
-              width: Math.random() * 100 + 50,
-              height: Math.random() * 100 + 50,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              width: particle.size,
+              height: particle.size,
+              left: `${particle.x}%`,
+              top: `${particle.y}%`,
+              opacity: particle.opacity
             }}
             animate={{
               y: [0, -20, 0],
-              x: [0, Math.random() * 20 - 10, 0],
-              scale: [1, 1.1, 1],
+              x: [0, 10, 0],
+              scale: [1, 1.1, 1]
             }}
             transition={{
-              duration: 4 + Math.random() * 2,
+              duration: particle.duration,
               repeat: Infinity,
-              delay: Math.random() * 2,
+              delay: particle.id,
+              ease: "easeInOut"
             }}
           />
         ))}
@@ -305,11 +374,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  {currentTime.toLocaleDateString('th-TH', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long'
-                  })}
+                  {formattedDate(new Date(user.trackingStats.joinDate))}
                 </span>
               </div>
             </div>
@@ -403,10 +468,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
                     <span className="text-sm">
-                      สมาชิกตั้งแต่ {new Date(user.trackingStats.joinDate).toLocaleDateString('th-TH', { 
-                        year: 'numeric', 
-                        month: 'long' 
-                      })}
+                      {formattedDate(new Date(user.trackingStats.joinDate))}
                     </span>
                   </div>
 
@@ -564,7 +626,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                 </div>
                 <div>
                   <h3 className="text-foreground font-semibold text-lg mb-1">
-                    ยินดีต้อนรับสู่ NovelMaze!
+                    {welcomeMessage}, {user.profile?.displayName || user.username}!
                   </h3>
                   <p className="text-foreground/70 text-sm">
                     เริ่มต้นการเดินทางในฐานะนักเขียนและสร้างสรรค์เรื่องราวที่น่าตื่นเต้น
