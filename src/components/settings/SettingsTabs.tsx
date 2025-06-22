@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { Loader2, Monitor, Gamepad2, Bell, Shield, Palette, TextCursorInput, Accessibility, Volume2, PictureInPicture2, Sparkles, UserCheck, Search, Route, Settings2, Save, Rss } from 'lucide-react';
-import type { IUserPreferences } from '@/backend/models/User';
+import type { IUserSettings } from '@/backend/models/UserSettings';
 
 // Helper function สำหรับการตั้งค่าค่าใน object ที่ซ้อนกัน (nested object)
 // โดยใช้ path แบบ dot notation (เช่น 'display.reading.fontSize')
@@ -53,7 +53,7 @@ const isObject = (item: any): boolean => {
 }
 
 interface SettingsTabsProps {
-  initialPreferences: IUserPreferences;
+  initialPreferences: IUserSettings;
 }
 
 export default function SettingsTabs({ initialPreferences }: SettingsTabsProps) {
@@ -61,7 +61,7 @@ export default function SettingsTabs({ initialPreferences }: SettingsTabsProps) 
   const [isLoading, setIsLoading] = useState(false);
   
   // State สำหรับเก็บค่าที่เปลี่ยนแปลง แต่ยังไม่ได้บันทึก
-  const [pendingUpdates, setPendingUpdates] = useState<Partial<IUserPreferences>>({});
+  const [pendingUpdates, setPendingUpdates] = useState<Partial<IUserSettings>>({});
   
   // State สำหรับเก็บค่าที่แสดงผลบน UI ซึ่งจะรวมค่าเริ่มต้นกับค่าที่กำลังจะเปลี่ยน
   const [displayPreferences, setDisplayPreferences] = useState(initialPreferences);
@@ -73,14 +73,9 @@ export default function SettingsTabs({ initialPreferences }: SettingsTabsProps) 
    * @param value - ค่าใหม่
    */
   const handleSettingChange = useCallback((path: string, value: any) => {
-    // 1. สร้าง object ของค่าที่เปลี่ยนแปลง
     const update = setNestedValue({}, path, value);
-    
-    // 2. อัปเดต pendingUpdates โดยการ merge ของเก่ากับของใหม่
-    setPendingUpdates(prev => deepMerge(prev, update));
-    
-    // 3. อัปเดต displayPreferences เพื่อให้ UI แสดงผลการเปลี่ยนแปลงทันที
-    setDisplayPreferences(prev => deepMerge({ ...prev }, update));
+    setPendingUpdates((prev: Partial<IUserSettings>) => deepMerge(prev, update));
+    setDisplayPreferences((prev: IUserSettings) => deepMerge({ ...prev }, update));
   }, []);
 
   /**
@@ -264,7 +259,7 @@ export default function SettingsTabs({ initialPreferences }: SettingsTabsProps) 
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="text-speed">ความเร็วในการแสดงข้อความ</Label>
-                                <Slider id="text-speed" value={[displayPreferences.visualNovelGameplay?.textSpeedNumeric || 50]} onValueChange={(v) => handleSettingChange('visualNovelGameplay.textSpeedNumeric', v[0])} min={0} max={100} step={1} />
+                                <Slider id="text-speed" value={[displayPreferences.visualNovelGameplay?.textSpeedValue || 50]} onValueChange={(v) => handleSettingChange('visualNovelGameplay.textSpeedValue', v[0])} min={0} max={100} step={1} />
                             </div>
                              <div className="flex items-center justify-between">
                                 <Label htmlFor="instant-text">แสดงข้อความทันที</Label>
@@ -293,7 +288,7 @@ export default function SettingsTabs({ initialPreferences }: SettingsTabsProps) 
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="autoplay-speed">ความเร็วในการเล่นอัตโนมัติ</Label>
-                                <Slider id="autoplay-speed" value={[displayPreferences.visualNovelGameplay?.autoPlaySpeedNumeric || 50]} onValueChange={(v) => handleSettingChange('visualNovelGameplay.autoPlaySpeedNumeric', v[0])} min={0} max={100} step={1} disabled={!displayPreferences.visualNovelGameplay?.autoPlayEnabled} />
+                                <Slider id="autoplay-speed" value={[displayPreferences.visualNovelGameplay?.autoPlaySpeedValue || 50]} onValueChange={(v) => handleSettingChange('visualNovelGameplay.autoPlaySpeedValue', v[0])} min={0} max={100} step={1} disabled={!displayPreferences.visualNovelGameplay?.autoPlayEnabled} />
                             </div>
                         </CardContent>
                     </Card>
