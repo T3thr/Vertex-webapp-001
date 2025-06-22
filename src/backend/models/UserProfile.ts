@@ -239,21 +239,20 @@ UserProfileSchema.index({ "displayName": "text", "penNames": "text", "bio": "tex
 // ==================================================================================================
 UserProfileSchema.pre<IUserProfile>("save", async function (next) {
     // Prioritization Logic: จัดการ penName และ primaryPenName
-    const profile = this;
 
     // Logic 1: ถ้ามี displayName แต่ไม่มี penNames เลย, ใช้ displayName เป็น default
-    if (profile.displayName && (!profile.penNames || profile.penNames.length === 0)) {
-        profile.penNames = [profile.displayName];
+    if (this.displayName && (!this.penNames || this.penNames.length === 0)) {
+        this.penNames = [this.displayName];
     }
 
     // Logic 2: ถ้ามี penNames แต่ยังไม่มี primaryPenName, ใช้ตัวแรกเป็น default
-    if (profile.penNames && profile.penNames.length > 0 && !profile.primaryPenName) {
-        profile.primaryPenName = profile.penNames[0];
+    if (this.penNames && this.penNames.length > 0 && !this.primaryPenName) {
+        this.primaryPenName = this.penNames[0];
     }
 
     // Logic 3: ถ้า primaryPenName ถูกลบออกจาก list ของ penNames, ให้ตั้งค่าใหม่
-    if (profile.primaryPenName && profile.penNames && !profile.penNames.includes(profile.primaryPenName)) {
-      profile.primaryPenName = profile.penNames.length > 0 ? profile.penNames[0] : undefined;
+    if (this.primaryPenName && this.penNames && !this.penNames.includes(this.primaryPenName)) {
+      this.primaryPenName = this.penNames.length > 0 ? this.penNames[0] : undefined;
     }
 
     // Logic 4: (สำคัญ) เมื่อ primaryPenName หรือ avatarUrl ที่เป็น Source of Truth เปลี่ยนแปลง

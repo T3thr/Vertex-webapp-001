@@ -159,7 +159,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const lowerCaseEmail = email.toLowerCase();
     const existingUser = await UserModel.findOne({ $or: [{ email: lowerCaseEmail }, { username: username }] }).lean();
     if (existingUser) {
-        let conflictField = existingUser.email === lowerCaseEmail ? "อีเมล" : "ชื่อผู้ใช้";
+        const conflictField = existingUser.email === lowerCaseEmail ? "อีเมล" : "ชื่อผู้ใช้";
         console.error(`❌ [Signup API v2] ${conflictField} นี้ถูกใช้งานแล้ว`);
         return NextResponse.json({ error: `${conflictField} นี้ถูกใช้งานแล้ว`, success: false }, { status: 409 });
     }
