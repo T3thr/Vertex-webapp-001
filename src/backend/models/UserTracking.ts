@@ -1,6 +1,5 @@
 // src/backend/models/UserTracking.ts
 
-// SECTION: Imports
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
 import { IUser } from './User';
 
@@ -64,52 +63,59 @@ export interface IUserTracking extends Document {
 
 // SECTION: Mongoose Schema
 
-const UserTrackingSchema = new Schema<IUserTrackingDoc, Model<IUserTrackingDoc>>({
-  // SECTION: Core Fields
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'จำเป็นต้องมี ID ผู้ใช้'],
-    unique: true,
-    index: true, // สร้าง index เพื่อการ join และค้นหาที่รวดเร็ว
-  },
+const UserTrackingSchema = new Schema<IUserTrackingDoc, Model<IUserTrackingDoc>>(
+  {
+    // SECTION: Core Fields
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'จำเป็นต้องมี ID ผู้ใช้'],
+      unique: true,
+      index: true, // สร้าง index เพื่อการ join และค้นหาที่รวดเร็ว
+    },
 
-  // SECTION: Embedded Tracking Stats Data
-  trackingStats: {
-    totalLoginDays: { type: Number, default: 0, min: 0 },
-    totalNovelsRead: { type: Number, default: 0, min: 0 },
-    totalEpisodesRead: { type: Number, default: 0, min: 0 },
-    totalTimeSpentReadingSeconds: { type: Number, default: 0, min: 0 },
-    totalCoinSpent: { type: Number, default: 0, min: 0 },
-    totalRealMoneySpent: { type: Number, default: 0, min: 0 },
-    lastNovelReadId: { type: Schema.Types.ObjectId, ref: 'Novel' },
-    lastNovelReadAt: { type: Date },
-    joinDate: { type: Date, required: true },
-    firstLoginAt: { type: Date },
+    // SECTION: Embedded Tracking Stats Data
+    trackingStats: {
+      totalLoginDays: { type: Number, default: 0, min: 0 },
+      totalNovelsRead: { type: Number, default: 0, min: 0 },
+      totalEpisodesRead: { type: Number, default: 0, min: 0 },
+      totalTimeSpentReadingSeconds: { type: Number, default: 0, min: 0 },
+      totalCoinSpent: { type: Number, default: 0, min: 0 },
+      totalRealMoneySpent: { type: Number, default: 0, min: 0 },
+      lastNovelReadId: { type: Schema.Types.ObjectId, ref: 'Novel' },
+      lastNovelReadAt: { type: Date },
+      joinDate: { type: Date, required: true },
+      firstLoginAt: { type: Date },
+    },
+  },
+  {
+    // SECTION: Schema Options
+    timestamps: true, // เปิดใช้งาน createdAt และ updatedAt อัตโนมัติ
+    collection: 'user_trackings', // กำหนดชื่อ collection ให้ชัดเจน
+    autoIndex: process.env.NODE_ENV !== 'production',
   }
-}, {
-  // SECTION: Schema Options
-  timestamps: true, // เปิดใช้งาน createdAt และ updatedAt อัตโนมัติ
-  collection: 'user_trackings', // กำหนดชื่อ collection ให้ชัดเจน
-  autoIndex: process.env.NODE_ENV !== 'production',
-});
+);
 
 // SECTION: Indexes
 UserTrackingSchema.index({ 'trackingStats.lastNovelReadAt': -1 }); // Index สำหรับค้นหาผู้ใช้ที่ Active ล่าสุด
 
 // SECTION: Middleware (Hooks)
-UserTrackingSchema.pre('save', function(next) {
-  // Middleware นี้สามารถใช้เพื่อคำนวณค่าสถิติบางอย่างก่อนบันทึก
-  // เช่น ตรวจสอบว่า firstLoginAt ถูกตั้งค่าแล้วหรือยัง
+UserTrackingSchema.pre('save', function (next) {
+  // หลีกเลี่ยงการ alias this เพื่อให้สอดคล้องกับ @typescript-eslint/no-this-alias
+  // ตรวจสอบว่า firstLoginAt ถูกตั้งค่าแล้วหรือยัง
   if (this.isNew && !this.trackingStats.firstLoginAt) {
-      // สามารถตั้งค่า default จากที่อื่นได้ แต่ตัวอย่างนี้คือการป้องกันค่า null
-      // this.trackingStats.firstLoginAt = new Date();
+    // หมายเหตุ: ไม่ตั้งค่า default ที่นี่เพื่อให้ควบคุมการตั้งค่า firstLoginAt จาก service อื่น
+    // หากต้องการตั้งค่า default สามารถ uncomment บรรทัดต่อไปนี้
+    // this.trackingStats.firstLoginAt = new Date();
   }
   next();
 });
 
 // SECTION: Statics and Methods
-UserTrackingSchema.statics.incrementEpisodesRead = async function(userId: Types.ObjectId, timeSpentSeconds: number): Promise<IUserTrackingDoc | null> {
+UserTrackingSchema.statics.incrementEpisodesRead = async function (
+  userId: Types.ObjectId,
+  timeSpentSeconds: number
+): Promise<IUserTrackingDoc | null> {
   return this.findOneAndUpdate(
     { userId },
     {
@@ -119,7 +125,7 @@ UserTrackingSchema.statics.incrementEpisodesRead = async function(userId: Types.
       },
       $set: {
         'trackingStats.lastNovelReadAt': new Date(),
-      }
+      },
     },
     { new: true, upsert: true } // upsert: true จะสร้างเอกสารใหม่หากยังไม่มี
   );
@@ -127,7 +133,7 @@ UserTrackingSchema.statics.incrementEpisodesRead = async function(userId: Types.
 
 // SECTION: Virtuals
 // ตัวอย่าง virtual field คำนวณเวลาอ่านเฉลี่ยต่อตอน
-UserTrackingSchema.virtual('trackingStats.averageTimePerEpisodeSeconds').get(function() {
+UserTrackingSchema.virtual('trackingStats.averageTimePerEpisodeSeconds').get(function () {
   if (!this.trackingStats.totalEpisodesRead || this.trackingStats.totalEpisodesRead === 0) {
     return 0;
   }
@@ -135,12 +141,14 @@ UserTrackingSchema.virtual('trackingStats.averageTimePerEpisodeSeconds').get(fun
 });
 
 // SECTION: หมายเหตุและแนวทางการปรับปรุงเพิ่มเติม (Notes and Future Improvements)
-// 1.  **Granularity:** สถิติในโมเดลนี้เป็นแบบสรุปรวม (Summary) หากในอนาคตต้องการเก็บข้อมูลการอ่านที่ละเอียดกว่านี้ (เช่น อ่านหน้าไหน, ใช้เวลาแต่ละหน้าเท่าไหร่) ควรสร้าง Collection ใหม่สำหรับเก็บ Event Stream (เช่น `ReadingAnalytic_EventStream`) เพื่อไม่ให้เอกสารนี้ใหญ่เกินไป
-// 2.  **Data Update:** การอัปเดตสถิติ (เช่น `totalTimeSpentReadingSeconds`) ควรเกิดขึ้นผ่าน Service ที่ควบคุมตรรกะทางธุรกิจอย่างชัดเจน เพื่อป้องกันการอัปเดตที่ไม่ถูกต้องโดยตรงจากหลายๆ ที่
-// 3.  **Historical Data:** โมเดลนี้เก็บแค่ค่าล่าสุด หากต้องการวิเคราะห์แนวโน้มการใช้งานของผู้ใช้ในอดีต (เช่น จำนวนตอนที่อ่านในแต่ละเดือน) จำเป็นต้องมีระบบ Data Warehousing หรือการทำ Snapshot ข้อมูลเป็นระยะๆ
-// 4.  **Join Date:** `joinDate` ถูกเก็บไว้ที่นี่เพื่อความสะดวกในการคำนวณสถิติบางอย่างที่อาจเกี่ยวกับอายุของบัญชี แต่ข้อมูลหลัก (Source of Truth) ของวันที่สมัครควรอยู่ที่ `Users` collection ใน field `createdAt`
+// 1. **Granularity:** สถิติในโมเดลนี้เป็นแบบสรุปรวม (Summary) หากในอนาคตต้องการเก็บข้อมูลการอ่านที่ละเอียดกว่านี้ (เช่น อ่านหน้าไหน, ใช้เวลาแต่ละหน้าเท่าไหร่) ควรสร้าง Collection ใหม่สำหรับเก็บ Event Stream (เช่น `ReadingAnalytic_EventStream`) เพื่อไม่ให้เอกสารนี้ใหญ่เกินไป
+// 2. **Data Update:** การอัปเดตสถิติ (เช่น `totalTimeSpentReadingSeconds`) ควรเกิดขึ้นผ่าน Service ที่ควบคุมตรรกะทางธุรกิจอย่างชัดเจน เพื่อป้องกันการอัปเดตที่ไม่ถูกต้องโดยตรงจากหลายๆ ที่
+// 3. **Historical Data:** โมเดลนี้เก็บแค่ค่าล่าสุด หากต้องการวิเคราะห์แนวโน้มการใช้งานของผู้ใช้ในอดีต (เช่น จำนวนตอนที่อ่านในแต่ละเดือน) จำเป็นต้องมีระบบ Data Warehousing หรือการทำ Snapshot ข้อมูลเป็นระยะๆ
+// 4. **Join Date:** `joinDate` ถูกเก็บไว้ที่นี่เพื่อความสะดวกในการคำนวณสถิติบางอย่างที่อาจเกี่ยวกับอายุของบัญชี แต่ข้อมูลหลัก (Source of Truth) ของวันที่สมัครควรอยู่ที่ `Users` collection ใน field `createdAt`
 
 // SECTION: Model Export
-const UserTracking = (mongoose.models.UserTracking as Model<IUserTrackingDoc, {}, {}>) || mongoose.model<IUserTrackingDoc>('UserTracking', UserTrackingSchema);
+const UserTracking =
+  (mongoose.models.UserTracking as Model<IUserTrackingDoc, Record<string, never>, Record<string, never>>) ||
+  mongoose.model<IUserTrackingDoc>('UserTracking', UserTrackingSchema);
 
 export default UserTracking;
