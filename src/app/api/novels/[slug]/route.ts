@@ -15,7 +15,9 @@ import NovelModel, {
   IPsychologicalAnalysisConfig,
   ICollaborationSettings
 } from "@/backend/models/Novel";
-import UserModel, { IUser, IUserProfile, IWriterStats } from "@/backend/models/User";
+import UserModel, { IUser } from "@/backend/models/User";
+import { IUserProfile } from '@/backend/models/UserProfile';
+import IWriterStats from '@/backend/models/WriterStats';
 import CategoryModel, { ICategory } from "@/backend/models/Category";
 import CharacterModel, { ICharacter, CharacterRoleInStory } from "@/backend/models/Character";
 import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
@@ -318,12 +320,7 @@ export async function GET(request: NextRequest) {
       author: {
         _id: populatedAuthor._id.toString(),
         username: populatedAuthor.username,
-        profile: {
-          displayName: populatedAuthor.profile.displayName,
-          penNames: populatedAuthor.profile.penNames,
-          avatarUrl: populatedAuthor.profile.avatarUrl,
-          bio: populatedAuthor.profile.bio,
-        },
+        profile: populatedAuthor.profile,
         writerStats: populatedAuthor.writerStats ? {
           totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
           totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
