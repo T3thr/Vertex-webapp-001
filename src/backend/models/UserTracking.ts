@@ -109,8 +109,7 @@ UserTrackingSchema.pre('save', function(next) {
 });
 
 // SECTION: Statics and Methods
-/*
-UserTrackingSchema.statics.incrementEpisodesRead = async function(userId: Types.ObjectId, timeSpentSeconds: number) {
+UserTrackingSchema.statics.incrementEpisodesRead = async function(userId: Types.ObjectId, timeSpentSeconds: number): Promise<IUserTrackingDoc | null> {
   return this.findOneAndUpdate(
     { userId },
     {
@@ -125,7 +124,6 @@ UserTrackingSchema.statics.incrementEpisodesRead = async function(userId: Types.
     { new: true, upsert: true } // upsert: true จะสร้างเอกสารใหม่หากยังไม่มี
   );
 };
-*/
 
 // SECTION: Virtuals
 // ตัวอย่าง virtual field คำนวณเวลาอ่านเฉลี่ยต่อตอน
