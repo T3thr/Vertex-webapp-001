@@ -81,6 +81,7 @@ export function NovelCard({
   imageClassName = "aspect-[2/3]", // ปรับเป็น 2:3 ให้เล็กลงเหมือน readawrite.com
 }: NovelCardProps) {
 
+  // ตรวจสอบข้อมูลนิยายและ slug
   if (!novel || !novel.slug) {
     console.warn("[NovelCard] Novel data or slug is missing.", novel);
     return (
@@ -92,23 +93,26 @@ export function NovelCard({
     );
   }
 
+  // จัดรูปแบบวันที่อัปเดตล่าสุด
   const lastUpdatedText = novel.stats?.lastPublishedEpisodeAt
     ? formatDistanceToNow(new Date(novel.stats.lastPublishedEpisodeAt), { addSuffix: true, locale: th })
     : novel.publishedAt
     ? formatDistanceToNow(new Date(novel.publishedAt), { addSuffix: true, locale: th })
     : "เร็วๆ นี้";
 
+  // กำหนดชื่อผู้เขียนที่แสดง
   const authorDisplay =
     novel.author?.profile?.penName ||
     novel.author?.profile?.displayName ||
     novel.author?.username ||
     "นักเขียนนิรนาม";
 
+  // กำหนดประเภทหลักและสี
   const mainGenre = novel.themeAssignment?.mainTheme?.categoryId;
   const mainGenreName = mainGenre?.name || novel.themeAssignment?.mainTheme?.customName || "เรื่องเล่า";
   const mainGenreColor = mainGenre?.color && mainGenre.color !== "#000000" && mainGenre.color !== "#FFFFFF" ? mainGenre.color : 'var(--color-primary)';
 
-  // ปรับสี status badges ให้ดูดีขึ้น
+  // สร้าง badges สำหรับสถานะต่างๆ
   const statusBadges: { label: string; colorClass: string; icon?: React.ReactNode; title?: string }[] = [];
 
   if (novel.isFeatured) {
@@ -126,6 +130,7 @@ export function NovelCard({
     });
   }
 
+  // ตรวจสอบโปรโมชัน
   const promo = novel.monetizationSettings?.activePromotion;
   const now = new Date();
   if (
@@ -148,6 +153,7 @@ export function NovelCard({
   const isAdultContent = ageRating?.name === "18+" || ageRating?.name?.includes("18");
   const ageRatingText = isAdultContent ? "18+" : null;
 
+  // อินิเชียลแอนิเมชันของการ์ด
   const cardVariants = {
     initial: { opacity: 0, y: 4 },
     animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" } },
@@ -158,7 +164,11 @@ export function NovelCard({
     },
   };
 
+  // รูปภาพสำรอง
   const placeholderCover = "/images/placeholder-cover.webp";
+
+  // เข้ารหัส slug เพื่อรองรับภาษาไทยและ non-English
+  const encodedSlug = encodeURIComponent(novel.slug);
 
   return (
     <motion.div
@@ -170,7 +180,8 @@ export function NovelCard({
       role="article"
       aria-labelledby={`novel-title-${novel._id}`}
     >
-      <Link href={`/novels/${novel.slug}`} className="block h-full flex flex-col" title={novel.title}>
+      {/* ลิงก์ไปยังหน้าเรื่องโดยใช้ slug ที่เข้ารหัส */}
+      <Link href={`/novels/${encodedSlug}`} className="block h-full flex flex-col" title={novel.title}>
         {/* Image Container - ปรับให้เล็กลงตาม readawrite.com */}
         <div className={`relative w-full overflow-hidden rounded-t-lg ${imageClassName}`}>
           <Image
@@ -272,7 +283,7 @@ export function NovelCard({
   );
 }
 
-// ฟังก์ชัน formatNumber คงเดิม
+// ฟังก์ชันจัดรูปแบบตัวเลข
 function formatNumber(num?: number | null): string {
   if (num === null || num === undefined || isNaN(num) || typeof num !== 'number') {
     return "0";
@@ -285,7 +296,7 @@ function formatNumber(num?: number | null): string {
   }
   if (Math.abs(num) >= 1000) {
     const result = (num / 1000).toFixed(1);
-    return result.endsWith(".0") ? result.slice(0, -2) + "K" : result + "K";
+    return result.endsWith(".0") ? result.slice(-2) + "k" : result + "k";
   }
   return num.toString();
 }
