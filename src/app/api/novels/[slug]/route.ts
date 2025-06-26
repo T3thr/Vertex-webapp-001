@@ -35,7 +35,7 @@ import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType
 interface PopulatedAuthorForDetailPage {
   _id: string;
   username?: string;
-  profile: IUserProfile;
+  profile: IUserProfile; // Changed to IUserProfile
   writerStats?: {
     totalNovelsPublished: number;
     totalViewsAcrossAllNovels: number;
@@ -150,6 +150,15 @@ export interface PopulatedNovelForDetailPage {
   episodes?: PopulatedEpisodeForDetailPage[];
 }
 
+/**
+ * @interface RouteParams
+ * @description Interface สำหรับ route parameters
+ */
+interface RouteParams {
+  params: {
+    slug: string;
+  };
+}
 
 // ===================================================================
 // SECTION: API Route Handler
@@ -158,19 +167,19 @@ export interface PopulatedNovelForDetailPage {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object
- * @param params object containing the dynamic route parameters, e.g., { slug: string }
+ * @param context object containing the dynamic route parameters, e.g., { params: { slug: 'my-novel-slug' } }
  * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
  */
 export async function GET(
     request: NextRequest, 
-    { params }: { params: { slug: string } }
+    context: RouteParams
 ) {
   try {
     // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
 
-    // 1. รับ slug จาก params
-    const rawSlug = params.slug;
+    // 1. ✨[แก้ไข] รับ slug จาก context.params โดยตรง
+    const { slug: rawSlug } = context.params;
 
     // ตรวจสอบความถูกต้องของ slug
     if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
@@ -184,7 +193,7 @@ export async function GET(
       );
     }
 
-    // 2. ใช้ decodeURIComponent เพื่อความปลอดภัย
+    // 2. ✨[แก้ไข] ใช้ decodeURIComponent เพื่อความปลอดภัยเผื่อมีกรณีที่ยังไม่ได้ถอดรหัส
     const decodedSlug = decodeURIComponent(rawSlug.trim()).toLowerCase();
 
     console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${decodedSlug}"`);
@@ -399,8 +408,8 @@ export async function GET(
     );
 
   } catch (error: any) {
-    // ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
-    const slugForError = (params.slug || 'unknown').substring(0, 100);
+    // 3. ✨[แก้ไข] ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
+    const slugForError = (context?.params?.slug || 'unknown').substring(0, 100);
     console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`);
     return NextResponse.json(
       {
