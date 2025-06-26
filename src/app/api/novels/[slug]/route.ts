@@ -4,6 +4,7 @@
 // รองรับการ populate ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น หมวดหมู่, ผู้เขียน, ตัวละคร, ตอน
 
 import { NextRequest, NextResponse } from "next/server";
+import { NextApiRequest, NextApiResponse } from 'next';
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, {
   INovel,
