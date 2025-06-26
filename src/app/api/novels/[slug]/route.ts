@@ -1,4 +1,5 @@
 // src/app/api/novels/[slug]/route.ts
+// FILE: src/app/api/novels/[slug]/route.ts
 // API Route สำหรับดึงข้อมูลนิยายตาม slug เพื่อแสดงในหน้ารายละเอียด
 // รองรับการ populate ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น หมวดหมู่, ผู้เขียน, ตัวละคร, ตอน
 
@@ -21,6 +22,7 @@ import IWriterStats from '@/backend/models/WriterStats';
 import CategoryModel, { ICategory } from "@/backend/models/Category";
 import CharacterModel, { ICharacter, CharacterRoleInStory } from "@/backend/models/Character";
 import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
+
 
 // ===================================================================
 // SECTION: TypeScript Interfaces สำหรับ API Response
@@ -54,7 +56,7 @@ interface PopulatedCategoryInfo {
 
 /**
  * @interface PopulatedThemeAssignment
- * @description Interface สำหรับ themeAssignment ที่ถูก populate
+ * @description Interfaceสำหรับ themeAssignment ที่ถูก populate
  */
 interface PopulatedThemeAssignment {
   mainTheme: {
@@ -148,6 +150,7 @@ export interface PopulatedNovelForDetailPage {
   episodes?: PopulatedEpisodeForDetailPage[];
 }
 
+
 // ===================================================================
 // SECTION: API Route Handler
 // ===================================================================
@@ -155,19 +158,23 @@ export interface PopulatedNovelForDetailPage {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object
+ * @param params object containing the dynamic route parameters, e.g., { slug: 'my-novel-slug' }
  * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
  */
-export async function GET(request: NextRequest) {
+export async function GET(
+    request: NextRequest, 
+    { params }: { params: { slug: string } }
+) {
   try {
     // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
 
-    // ดึง slug จาก URL โดยใช้ request.nextUrl
-    const slug = request.nextUrl.pathname.split('/').pop();
+    // 1. ✨[แก้ไข] รับ slug จาก `params` ซึ่ง Next.js ถอดรหัสให้แล้ว
+    const rawSlug = await params.slug;
 
     // ตรวจสอบความถูกต้องของ slug
-    if (!slug || typeof slug !== 'string' || !slug.trim()) {
-      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${slug}"`);
+    if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
+      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${rawSlug}"`);
       return NextResponse.json(
         {
           error: "Invalid slug parameter",
@@ -177,11 +184,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${slug}"`);
+    // 2. ✨[แก้ไข] ใช้ decodeURIComponent เพื่อความปลอดภัยเผื่อมีกรณีที่ยังไม่ได้ถอดรหัส
+    const decodedSlug = decodeURIComponent(rawSlug.trim()).toLowerCase();
+
+    console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${decodedSlug}"`);
 
     // ค้นหานิยายตาม slug พร้อม populate ข้อมูลที่เกี่ยวข้อง
     const novelFromDb = await NovelModel.findOne({
-      slug: slug.trim().toLowerCase(),
+      slug: decodedSlug,
       isDeleted: false // ไม่แสดงนิยายที่ถูกลบ
     })
       .populate<{ author: IUser }>({
@@ -223,11 +233,11 @@ export async function GET(request: NextRequest) {
 
     // ตรวจสอบว่าพบนิยายหรือไม่
     if (!novelFromDb) {
-      console.warn(`⚠️ [API /novels/[slug]] ไม่พบนิยายสำหรับ slug: "${slug}"`);
+      console.warn(`⚠️ [API /novels/[slug]] ไม่พบนิยายสำหรับ slug: "${decodedSlug}"`);
       return NextResponse.json(
         {
           error: "Novel not found",
-          message: `ไม่พบนิยายที่มี slug "${slug}"`
+          message: `ไม่พบนิยายที่มี slug "${decodedSlug}"`
         },
         { status: 404 }
       );
@@ -389,7 +399,9 @@ export async function GET(request: NextRequest) {
     );
 
   } catch (error: any) {
-    console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${request.nextUrl.pathname.split('/').pop()}": ${error.message}`);
+    // 3. ✨[แก้ไข] ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
+    const slugForError = (request.nextUrl.pathname.split('/').pop() || params.slug || 'unknown').substring(0, 100);
+    console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`);
     return NextResponse.json(
       {
         error: "Internal server error",
