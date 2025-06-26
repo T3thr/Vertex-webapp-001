@@ -159,19 +159,23 @@ export interface PopulatedNovelForDetailPage {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object
- * @param params object containing the dynamic route parameters, e.g., { slug: 'my-novel-slug' }
+ * @param context object containing the dynamic route parameters, e.g., { params: { slug: 'my-novel-slug' } }
  * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
  */
 export async function GET(
-    request: NextRequest, 
-    { params }: { params: { slug: string } }
+    request: NextRequest,
+    // ✨[FIX 1/3] Correct the function signature for the second argument.
+    context: { params: { slug: string } }
 ) {
+  // ✨[FIX 2/3] Destructure 'slug' from context.params inside the function.
+  const { slug } = context.params;
+
   try {
     // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
 
-    // 1. ✨[แก้ไข] รับ slug จาก `params` ซึ่ง Next.js ถอดรหัสให้แล้ว
-    const rawSlug = await params.slug;
+    // The slug from context.params is already decoded by Next.js.
+    const rawSlug = slug;
 
     // ตรวจสอบความถูกต้องของ slug
     if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
@@ -185,8 +189,8 @@ export async function GET(
       );
     }
 
-    // 2. ✨[แก้ไข] ใช้ decodeURIComponent เพื่อความปลอดภัยเผื่อมีกรณีที่ยังไม่ได้ถอดรหัส
-    const decodedSlug = decodeURIComponent(rawSlug.trim()).toLowerCase();
+    // Use the slug directly, ensuring it's trimmed and lowercased for consistency.
+    const decodedSlug = rawSlug.trim().toLowerCase();
 
     console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${decodedSlug}"`);
 
@@ -232,6 +236,8 @@ export async function GET(
       })
       .lean();
 
+    // ... (The rest of your logic for processing and returning the data remains the same) ...
+
     // ตรวจสอบว่าพบนิยายหรือไม่
     if (!novelFromDb) {
       console.warn(`⚠️ [API /novels/[slug]] ไม่พบนิยายสำหรับ slug: "${decodedSlug}"`);
@@ -244,164 +250,113 @@ export async function GET(
       );
     }
 
-    // ฟังก์ชันช่วยแปลง category เป็น PopulatedCategoryInfo
+    // ... (Your helper functions and data mapping logic is correct)
     const toPopulatedCategoryInfo = (cat: any): PopulatedCategoryInfo | undefined => {
-      if (!cat || typeof cat !== 'object' || !('_id' in cat)) return undefined;
-      return {
-        _id: cat._id.toString(),
-        name: cat.name,
-        slug: cat.slug,
-        color: cat.color,
-      };
+        if (!cat || typeof cat !== 'object' || !('_id' in cat)) return undefined;
+        return { _id: cat._id.toString(), name: cat.name, slug: cat.slug, color: cat.color };
     };
-
     const toPopulatedCategoryInfoArray = (cats: any[]): PopulatedCategoryInfo[] => {
-      if (!Array.isArray(cats)) return [];
-      return cats.map(toPopulatedCategoryInfo).filter(Boolean) as PopulatedCategoryInfo[];
+        if (!Array.isArray(cats)) return [];
+        return cats.map(toPopulatedCategoryInfo).filter(Boolean) as PopulatedCategoryInfo[];
     };
-
-    // ดึงข้อมูลตัวละครของนิยาย (จำกัด 6 ตัวแรก)
-    const charactersFromDb = await CharacterModel.find({
-      novelId: novelFromDb._id,
-      isArchived: false
-    })
-      .select('_id name description roleInStory colorTheme profileImageMediaId profileImageSourceType')
-      .sort({ createdAt: 1 })
-      .limit(6)
-      .lean();
-
+    const charactersFromDb = await CharacterModel.find({ novelId: novelFromDb._id, isArchived: false }).select('_id name description roleInStory colorTheme profileImageMediaId profileImageSourceType').sort({ createdAt: 1 }).limit(6).lean();
     const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map(char => {
-      let imageUrl = '/images/default-avatar.png';
-      if (char.profileImageMediaId && char.profileImageSourceType) {
-        imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
-      }
-
-      return {
-        _id: char._id.toString(),
-        name: char.name,
-        profileImageUrl: imageUrl,
-        description: char.description,
-        roleInStory: char.roleInStory as CharacterRoleInStory,
-        colorTheme: char.colorTheme
-      };
+        let imageUrl = '/images/default-avatar.png';
+        if (char.profileImageMediaId && char.profileImageSourceType) {
+            imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
+        }
+        return { _id: char._id.toString(), name: char.name, profileImageUrl: imageUrl, description: char.description, roleInStory: char.roleInStory as CharacterRoleInStory, colorTheme: char.colorTheme };
     });
-
-    // ดึงข้อมูลตอนของนิยาย (จำกัด 10 ตอนแรก)
-    const episodesFromDb = await EpisodeModel.find({
-      novelId: novelFromDb._id,
-      status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] }
-    })
-      .select('_id title episodeOrder status accessType priceCoins publishedAt teaserText stats')
-      .sort({ episodeOrder: 1 })
-      .limit(10)
-      .lean();
-
+    const episodesFromDb = await EpisodeModel.find({ novelId: novelFromDb._id, status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] } }).select('_id title episodeOrder status accessType priceCoins publishedAt teaserText stats').sort({ episodeOrder: 1 }).limit(10).lean();
     const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map(ep => ({
-      _id: ep._id.toString(),
-      title: ep.title,
-      episodeOrder: ep.episodeOrder,
-      status: ep.status as EpisodeStatus,
-      accessType: ep.accessType as EpisodeAccessType,
-      priceCoins: ep.priceCoins,
-      publishedAt: ep.publishedAt?.toISOString(),
-      teaserText: ep.teaserText,
-      stats: {
-        viewsCount: ep.stats?.viewsCount || 0,
-        likesCount: ep.stats?.likesCount || 0,
-        commentsCount: ep.stats?.commentsCount || 0,
-        totalWords: ep.stats?.totalWords || 0,
-        estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 0
-      }
+        _id: ep._id.toString(),
+        title: ep.title,
+        episodeOrder: ep.episodeOrder,
+        status: ep.status as EpisodeStatus,
+        accessType: ep.accessType as EpisodeAccessType,
+        priceCoins: ep.priceCoins,
+        publishedAt: ep.publishedAt?.toISOString(),
+        teaserText: ep.teaserText,
+        stats: {
+            viewsCount: ep.stats?.viewsCount || 0,
+            likesCount: ep.stats?.likesCount || 0,
+            commentsCount: ep.stats?.commentsCount || 0,
+            totalWords: ep.stats?.totalWords || 0,
+            estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 0
+        }
     }));
-
-    // แปลงข้อมูลนิยายเป็น PopulatedNovelForDetailPage
     const populatedAuthor = novelFromDb.author as unknown as IUser;
     if (!populatedAuthor || typeof populatedAuthor !== 'object' || !populatedAuthor._id || !populatedAuthor.profile) {
-      console.error(`❌ [API /novels/[slug]] ข้อมูลผู้เขียนไม่ครบถ้วนสำหรับนิยาย: "${novelFromDb.title}"`);
-      return NextResponse.json(
-        { error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย" },
-        { status: 500 }
-      );
+        console.error(`❌ [API /novels/[slug]] ข้อมูลผู้เขียนไม่ครบถ้วนสำหรับนิยาย: "${novelFromDb.title}"`);
+        return NextResponse.json({ error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย" }, { status: 500 });
     }
-
     const responseData: PopulatedNovelForDetailPage = {
-      _id: novelFromDb._id.toString(),
-      title: novelFromDb.title,
-      slug: novelFromDb.slug,
-      author: {
-        _id: populatedAuthor._id.toString(),
-        username: populatedAuthor.username,
-        profile: populatedAuthor.profile,
-        writerStats: populatedAuthor.writerStats ? {
-          totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
-          totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
-          totalLikesReceivedOnNovels: populatedAuthor.writerStats.totalLikesReceivedOnNovels,
-        } : undefined,
-      },
-      synopsis: novelFromDb.synopsis,
-      longDescription: novelFromDb.longDescription,
-      coverImageUrl: novelFromDb.coverImageUrl,
-      bannerImageUrl: novelFromDb.bannerImageUrl,
-      themeAssignment: {
-        mainTheme: {
-          categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.mainTheme?.categoryId)!,
-          customName: novelFromDb.themeAssignment?.mainTheme?.customName,
+        _id: novelFromDb._id.toString(),
+        title: novelFromDb.title,
+        slug: novelFromDb.slug,
+        author: {
+            _id: populatedAuthor._id.toString(),
+            username: populatedAuthor.username,
+            profile: populatedAuthor.profile,
+            writerStats: populatedAuthor.writerStats ? {
+                totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
+                totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
+                totalLikesReceivedOnNovels: populatedAuthor.writerStats.totalLikesReceivedOnNovels,
+            } : undefined,
         },
-        subThemes: novelFromDb.themeAssignment?.subThemes?.map((st, index) => ({
-          categoryId: toPopulatedCategoryInfo((novelFromDb.themeAssignment?.subThemes?.[index]?.categoryId as any))!,
-          customName: st.customName,
-        })) || [],
-        moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone as any[] || []),
-        contentWarnings: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.contentWarnings as any[] || []),
-        customTags: novelFromDb.themeAssignment?.customTags || [],
-      },
-      narrativeFocus: novelFromDb.narrativeFocus,
-      worldBuildingDetails: novelFromDb.worldBuildingDetails,
-      ageRatingCategoryId: toPopulatedCategoryInfo(novelFromDb.ageRatingCategoryId as any),
-      status: novelFromDb.status as INovel["status"],
-      accessLevel: novelFromDb.accessLevel as INovel["accessLevel"],
-      isCompleted: novelFromDb.isCompleted,
-      endingType: novelFromDb.endingType as INovel["endingType"],
-      sourceType: novelFromDb.sourceType as ISourceType,
-      language: toPopulatedCategoryInfo(novelFromDb.language as any)!,
-      firstEpisodeId: novelFromDb.firstEpisodeId?.toString(),
-      totalEpisodesCount: novelFromDb.totalEpisodesCount,
-      publishedEpisodesCount: novelFromDb.publishedEpisodesCount,
-      stats: novelFromDb.stats as INovelStats,
-      monetizationSettings: novelFromDb.monetizationSettings as IMonetizationSettings,
-      psychologicalAnalysisConfig: novelFromDb.psychologicalAnalysisConfig as IPsychologicalAnalysisConfig,
-      collaborationSettings: novelFromDb.collaborationSettings,
-      isFeatured: novelFromDb.isFeatured,
-      publishedAt: novelFromDb.publishedAt?.toISOString(),
-      scheduledPublicationDate: novelFromDb.scheduledPublicationDate?.toISOString(),
-      lastContentUpdatedAt: novelFromDb.lastContentUpdatedAt.toISOString(),
-      relatedNovels: novelFromDb.relatedNovels?.map(id => id.toString()),
-      seriesId: novelFromDb.seriesId?.toString(),
-      seriesOrder: novelFromDb.seriesOrder,
-      createdAt: novelFromDb.createdAt.toISOString(),
-      updatedAt: novelFromDb.updatedAt.toISOString(),
-      characters: characters,
-      episodes: episodes,
+        synopsis: novelFromDb.synopsis,
+        longDescription: novelFromDb.longDescription,
+        coverImageUrl: novelFromDb.coverImageUrl,
+        bannerImageUrl: novelFromDb.bannerImageUrl,
+        themeAssignment: {
+            mainTheme: {
+                categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.mainTheme?.categoryId)!,
+                customName: novelFromDb.themeAssignment?.mainTheme?.customName,
+            },
+            subThemes: novelFromDb.themeAssignment?.subThemes?.map((st, index) => ({
+                categoryId: toPopulatedCategoryInfo((novelFromDb.themeAssignment?.subThemes?.[index]?.categoryId as any))!,
+                customName: st.customName,
+            })) || [],
+            moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone as any[] || []),
+            contentWarnings: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.contentWarnings as any[] || []),
+            customTags: novelFromDb.themeAssignment?.customTags || [],
+        },
+        narrativeFocus: novelFromDb.narrativeFocus,
+        worldBuildingDetails: novelFromDb.worldBuildingDetails,
+        ageRatingCategoryId: toPopulatedCategoryInfo(novelFromDb.ageRatingCategoryId as any),
+        status: novelFromDb.status as INovel["status"],
+        accessLevel: novelFromDb.accessLevel as INovel["accessLevel"],
+        isCompleted: novelFromDb.isCompleted,
+        endingType: novelFromDb.endingType as INovel["endingType"],
+        sourceType: novelFromDb.sourceType as ISourceType,
+        language: toPopulatedCategoryInfo(novelFromDb.language as any)!,
+        firstEpisodeId: novelFromDb.firstEpisodeId?.toString(),
+        totalEpisodesCount: novelFromDb.totalEpisodesCount,
+        publishedEpisodesCount: novelFromDb.publishedEpisodesCount,
+        stats: novelFromDb.stats as INovelStats,
+        monetizationSettings: novelFromDb.monetizationSettings as IMonetizationSettings,
+        psychologicalAnalysisConfig: novelFromDb.psychologicalAnalysisConfig as IPsychologicalAnalysisConfig,
+        collaborationSettings: novelFromDb.collaborationSettings,
+        isFeatured: novelFromDb.isFeatured,
+        publishedAt: novelFromDb.publishedAt?.toISOString(),
+        scheduledPublicationDate: novelFromDb.scheduledPublicationDate?.toISOString(),
+        lastContentUpdatedAt: novelFromDb.lastContentUpdatedAt.toISOString(),
+        relatedNovels: novelFromDb.relatedNovels?.map(id => id.toString()),
+        seriesId: novelFromDb.seriesId?.toString(),
+        seriesOrder: novelFromDb.seriesOrder,
+        createdAt: novelFromDb.createdAt.toISOString(),
+        updatedAt: novelFromDb.updatedAt.toISOString(),
+        characters: characters,
+        episodes: episodes,
     };
 
     console.log(`✅ [API /novels/[slug]] ดึงข้อมูลนิยายสำเร็จ: "${novelFromDb.title}" (${characters.length} ตัวละคร, ${episodes.length} ตอน)`);
 
-    // ส่งข้อมูลกลับพร้อม cache header
-    return NextResponse.json(
-      {
-        success: true,
-        novel: responseData
-      },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-        }
-      }
-    );
+    return NextResponse.json({ success: true, novel: responseData }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
 
   } catch (error: any) {
-    // 3. ✨[แก้ไข] ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
-    const slugForError = (request.nextUrl.pathname.split('/').pop() || params.slug || 'unknown').substring(0, 100);
+    // ✨[FIX 3/3] Update the error logging to use the 'slug' variable
+    const slugForError = (request.nextUrl.pathname.split('/').pop() || slug || 'unknown').substring(0, 100);
     console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`);
     return NextResponse.json(
       {
