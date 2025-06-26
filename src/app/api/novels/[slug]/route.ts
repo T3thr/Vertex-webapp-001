@@ -150,16 +150,6 @@ export interface PopulatedNovelForDetailPage {
   episodes?: PopulatedEpisodeForDetailPage[];
 }
 
-/**
- * @interface RouteParams
- * @description Interface สำหรับ route parameters
- */
-interface RouteParams {
-  params: {
-    slug: string;
-  };
-}
-
 // ===================================================================
 // SECTION: API Route Handler
 // ===================================================================
@@ -167,19 +157,19 @@ interface RouteParams {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object
- * @param context object containing the dynamic route parameters, e.g., { params: { slug: 'my-novel-slug' } }
+ * @param context object containing the dynamic route parameters with correct Next.js typing
  * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
  */
 export async function GET(
     request: NextRequest, 
-    context: RouteParams
+    { params }: { params: { slug: string } }
 ) {
   try {
     // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
 
-    // 1. ✨[แก้ไข] รับ slug จาก context.params โดยตรง
-    const { slug: rawSlug } = context.params;
+    // 1. ✨[แก้ไข] รับ slug จาก params โดยตรง
+    const { slug: rawSlug } = params;
 
     // ตรวจสอบความถูกต้องของ slug
     if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
@@ -409,7 +399,7 @@ export async function GET(
 
   } catch (error: any) {
     // 3. ✨[แก้ไข] ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
-    const slugForError = (context?.params?.slug || 'unknown').substring(0, 100);
+    const slugForError = (params?.slug || 'unknown').substring(0, 100);
     console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`);
     return NextResponse.json(
       {
