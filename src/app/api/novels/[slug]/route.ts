@@ -19,7 +19,7 @@ import UserModel, { IUser } from "@/backend/models/User";
 import { IUserProfile } from '@/backend/models/UserProfile';
 import CategoryModel, { ICategory } from "@/backend/models/Category";
 import CharacterModel, { ICharacter, CharacterRoleInStory } from "@/backend/models/Character";
-import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
+import EpisodeModel, { IEpisode, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
 
 // ===================================================================
 // SECTION: TypeScript Interfaces สำหรับ API Response
@@ -154,77 +154,74 @@ export interface PopulatedNovelForDetailPage {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object
- * @param context Context object containing the dynamic route parameters
+ * @param context Context object containing dynamic route parameters
  * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
  */
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ slug: string }> | { slug: string } }
+  context: { params: Promise<{ slug: string }> }
 ) {
   try {
     // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
 
-    // 1. ✨[แก้ไข] รับ slug จาก context.params และจัดการ Promise อย่างถูกต้อง
-    const params = 'params' in context ? await context.params : context;
-    const rawSlug = params.slug;
+    // 1. ✨[แก้ไข] รับ slug จาก context.params ซึ่งเป็น Promise ใน Next.js 15
+    const { slug } = await context.params;
+    const decodedSlug = decodeURIComponent(slug.trim()).toLowerCase();
 
     // ตรวจสอบความถูกต้องของ slug
-    if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
-      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${rawSlug}"`);
+    if (!decodedSlug) {
+      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${decodedSlug}"`);
       return NextResponse.json(
         {
           error: "Invalid slug parameter",
-          message: "กรุณาระบุ slug ของนิยายที่ถูกต้อง"
+          message: "กรุณาระบุ slug ของนิยายที่ถูกต้อง",
         },
         { status: 400 }
       );
     }
-
-    // 2. ✨[แก้ไข] ใช้ decodeURIComponent เพื่อความปลอดภัยเผื่อมีกรณีที่ยังไม่ได้ถอดรหัส
-    const decodedSlug = decodeURIComponent(rawSlug.trim()).toLowerCase();
 
     console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${decodedSlug}"`);
 
     // ค้นหานิยายตาม slug พร้อม populate ข้อมูลที่เกี่ยวข้อง
     const novelFromDb = await NovelModel.findOne({
       slug: decodedSlug,
-      isDeleted: false // ไม่แสดงนิยายที่ถูกลบ
+      isDeleted: false,
     })
       .populate<{ author: IUser }>({
         path: 'author',
         select: '_id username profile writerStats',
-        model: UserModel
+        model: UserModel,
       })
       .populate<{ 'themeAssignment.mainTheme.categoryId': ICategory }>({
         path: 'themeAssignment.mainTheme.categoryId',
         select: '_id name slug color',
-        model: CategoryModel
+        model: CategoryModel,
       })
       .populate<{ 'themeAssignment.subThemes.categoryId': ICategory[] }>({
         path: 'themeAssignment.subThemes.categoryId',
         select: '_id name slug color',
-        model: CategoryModel
+        model: CategoryModel,
       })
       .populate<{ 'themeAssignment.moodAndTone': ICategory[] }>({
         path: 'themeAssignment.moodAndTone',
         select: '_id name slug color',
-        model: CategoryModel
+        model: CategoryModel,
       })
       .populate<{ 'themeAssignment.contentWarnings': ICategory[] }>({
         path: 'themeAssignment.contentWarnings',
         select: '_id name slug color',
-        model: CategoryModel
+        model: CategoryModel,
       })
       .populate<{ ageRatingCategoryId: ICategory }>({
         path: 'ageRatingCategoryId',
         select: '_id name slug color',
-        model: CategoryModel
+        model: CategoryModel,
       })
       .populate<{ language: ICategory }>({
         path: 'language',
         select: '_id name slug',
-        model: CategoryModel
+        model: CategoryModel,
       })
       .lean();
 
@@ -234,7 +231,7 @@ export async function GET(
       return NextResponse.json(
         {
           error: "Novel not found",
-          message: `ไม่พบนิยายที่มี slug "${decodedSlug}"`
+          message: `ไม่พบนิยายที่มี slug "${decodedSlug}"`,
         },
         { status: 404 }
       );
@@ -253,20 +250,22 @@ export async function GET(
 
     const toPopulatedCategoryInfoArray = (cats: any[]): PopulatedCategoryInfo[] => {
       if (!Array.isArray(cats)) return [];
-      return cats.map(toPopulatedCategoryInfo).filter(Boolean) as PopulatedCategoryInfo[];
+      return cats
+        .map(toPopulatedCategoryInfo)
+        .filter((cat): cat is PopulatedCategoryInfo => Boolean(cat));
     };
 
     // ดึงข้อมูลตัวละครของนิยาย (จำกัด 6 ตัวแรก)
     const charactersFromDb = await CharacterModel.find({
       novelId: novelFromDb._id,
-      isArchived: false
+      isArchived: false,
     })
       .select('_id name description roleInStory colorTheme profileImageMediaId profileImageSourceType')
       .sort({ createdAt: 1 })
       .limit(6)
       .lean();
 
-    const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map(char => {
+    const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map((char) => {
       let imageUrl = '/images/default-avatar.png';
       if (char.profileImageMediaId && char.profileImageSourceType) {
         imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
@@ -278,21 +277,21 @@ export async function GET(
         profileImageUrl: imageUrl,
         description: char.description,
         roleInStory: char.roleInStory as CharacterRoleInStory,
-        colorTheme: char.colorTheme
+        colorTheme: char.colorTheme,
       };
     });
 
     // ดึงข้อมูลตอนของนิยาย (จำกัด 10 ตอนแรก)
     const episodesFromDb = await EpisodeModel.find({
       novelId: novelFromDb._id,
-      status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] }
+      status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] },
     })
       .select('_id title episodeOrder status accessType priceCoins publishedAt teaserText stats')
       .sort({ episodeOrder: 1 })
       .limit(10)
       .lean();
 
-    const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map(ep => ({
+    const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map((ep) => ({
       _id: ep._id.toString(),
       title: ep.title,
       episodeOrder: ep.episodeOrder,
@@ -306,20 +305,24 @@ export async function GET(
         likesCount: ep.stats?.likesCount || 0,
         commentsCount: ep.stats?.commentsCount || 0,
         totalWords: ep.stats?.totalWords || 0,
-        estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 0
-      }
+        estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 0,
+      },
     }));
 
-    // แปลงข้อมูลนิยายเป็น PopulatedNovelForDetailPage
+    // ตรวจสอบข้อมูลผู้เขียน
     const populatedAuthor = novelFromDb.author as unknown as IUser;
     if (!populatedAuthor || typeof populatedAuthor !== 'object' || !populatedAuthor._id || !populatedAuthor.profile) {
       console.error(`❌ [API /novels/[slug]] ข้อมูลผู้เขียนไม่ครบถ้วนสำหรับนิยาย: "${novelFromDb.title}"`);
       return NextResponse.json(
-        { error: "Internal server error", message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย" },
+        {
+          error: "Internal server error",
+          message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย",
+        },
         { status: 500 }
       );
     }
 
+    // แปลงข้อมูลนิยายเป็น PopulatedNovelForDetailPage
     const responseData: PopulatedNovelForDetailPage = {
       _id: novelFromDb._id.toString(),
       title: novelFromDb.title,
@@ -328,11 +331,13 @@ export async function GET(
         _id: populatedAuthor._id.toString(),
         username: populatedAuthor.username,
         profile: populatedAuthor.profile,
-        writerStats: populatedAuthor.writerStats ? {
-          totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
-          totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
-          totalLikesReceivedOnNovels: populatedAuthor.writerStats.totalLikesReceivedOnNovels,
-        } : undefined,
+        writerStats: populatedAuthor.writerStats
+          ? {
+              totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
+              totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
+              totalLikesReceivedOnNovels: populatedAuthor.writerStats.totalLikesReceivedOnNovels,
+            }
+          : undefined,
       },
       synopsis: novelFromDb.synopsis,
       longDescription: novelFromDb.longDescription,
@@ -344,7 +349,7 @@ export async function GET(
           customName: novelFromDb.themeAssignment?.mainTheme?.customName,
         },
         subThemes: novelFromDb.themeAssignment?.subThemes?.map((st, index) => ({
-          categoryId: toPopulatedCategoryInfo((novelFromDb.themeAssignment?.subThemes?.[index]?.categoryId as any))!,
+          categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.subThemes?.[index]?.categoryId as any)!,
           customName: st.customName,
         })) || [],
         moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone as any[] || []),
@@ -371,39 +376,42 @@ export async function GET(
       publishedAt: novelFromDb.publishedAt?.toISOString(),
       scheduledPublicationDate: novelFromDb.scheduledPublicationDate?.toISOString(),
       lastContentUpdatedAt: novelFromDb.lastContentUpdatedAt.toISOString(),
-      relatedNovels: novelFromDb.relatedNovels?.map(id => id.toString()),
+      relatedNovels: novelFromDb.relatedNovels?.map((id) => id.toString()),
       seriesId: novelFromDb.seriesId?.toString(),
       seriesOrder: novelFromDb.seriesOrder,
       createdAt: novelFromDb.createdAt.toISOString(),
       updatedAt: novelFromDb.updatedAt.toISOString(),
-      characters: characters,
-      episodes: episodes,
+      characters,
+      episodes,
     };
 
-    console.log(`✅ [API /novels/[slug]] ดึงข้อมูลนิยายสำเร็จ: "${novelFromDb.title}" (${characters.length} ตัวละคร, ${episodes.length} ตอน)`);
+    console.log(
+      `✅ [API /novels/[slug]] ดึงข้อมูลนิยายสำเร็จ: "${novelFromDb.title}" (${characters.length} ตัวละคร, ${episodes.length} ตอน)`
+    );
 
     // ส่งข้อมูลกลับพร้อม cache header
     return NextResponse.json(
       {
         success: true,
-        novel: responseData
+        novel: responseData,
       },
       {
         headers: {
           'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-        }
+          'Content-Type': 'application/json; charset=utf-8',
+        },
       }
     );
-
   } catch (error: any) {
-    // 3. ✨[แก้ไข] ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
-    const slugForError = (request.nextUrl.pathname.split('/').pop() || 'unknown').substring(0, 100);
-    console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`);
+    const slugForError = (await context.params).slug || 'unknown';
+    console.error(
+      `❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`
+    );
     return NextResponse.json(
       {
         error: "Internal server error",
         message: "เกิดข้อผิดพลาดในการดึงข้อมูลนิยาย กรุณาลองใหม่อีกครั้ง",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       },
       { status: 500 }
     );
