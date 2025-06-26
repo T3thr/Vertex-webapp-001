@@ -4,7 +4,8 @@
 // รองรับการ populate ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น หมวดหมู่, ผู้เขียน, ตัวละคร, ตอน
 
 import { NextRequest, NextResponse } from "next/server";
-import { NextApiRequest, NextApiResponse } from 'next';
+// NextApiRequest and NextApiResponse are for Pages Router, not needed here.
+// import { NextApiRequest, NextApiResponse } from 'next'; 
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, {
   INovel,
@@ -19,10 +20,11 @@ import NovelModel, {
 } from "@/backend/models/Novel";
 import UserModel, { IUser } from "@/backend/models/User";
 import { IUserProfile } from '@/backend/models/UserProfile';
-import IWriterStats from '@/backend/models/WriterStats';
+// IWriterStats is likely an interface, not a default export. Using named import.
+// import IWriterStats from '@/backend/models/WriterStats'; 
 import CategoryModel, { ICategory } from "@/backend/models/Category";
 import CharacterModel, { ICharacter, CharacterRoleInStory } from "@/backend/models/Character";
-import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
+import EpisodeModel, { IEpisode, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
 
 
 // ===================================================================
@@ -36,7 +38,7 @@ import EpisodeModel, { IEpisode, IEpisodeStats, EpisodeStatus, EpisodeAccessType
 interface PopulatedAuthorForDetailPage {
   _id: string;
   username?: string;
-  profile: IUserProfile; // Changed to IUserProfile
+  profile: IUserProfile;
   writerStats?: {
     totalNovelsPublished: number;
     totalViewsAcrossAllNovels: number;
@@ -159,27 +161,24 @@ export interface PopulatedNovelForDetailPage {
 /**
  * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
  * @param request NextRequest object
- * @param context - object containing the dynamic route parameters, e.g., { params: { slug: 'my-novel-slug' } }
+ * @param context object containing the dynamic route parameters, e.g., { params: { slug: 'my-novel-slug' } }
  * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
  */
 export async function GET(
     request: NextRequest,
-    context: { params: { slug: string } } // ✅ [แก้ไข] ปรับ Signature ของฟังก์ชันให้ถูกต้อง
+    // ✨ [แก้ไข] รับ context ทั้ง object ตาม convention ของ Next.js App Router
+    context: { params: { slug: string } }
 ) {
-  // ✅ [แก้ไข] ย้ายการ destructure มาไว้ในฟังก์ชัน
-  const { params } = context;
+  // ✨ [แก้ไข] ดึง slug ออกจาก params ข้างในฟังก์ชัน
+  const { slug } = context.params;
 
   try {
     // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
-
-    // 1. ✨[แก้ไข] รับ slug จาก `params` ซึ่ง Next.js ถอดรหัสให้แล้ว
-    // ✅ [แก้ไข] ลบ `await` ที่ไม่จำเป็นออก
-    const rawSlug = params.slug;
-
+    
     // ตรวจสอบความถูกต้องของ slug
-    if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
-      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${rawSlug}"`);
+    if (!slug || typeof slug !== 'string' || !slug.trim()) {
+      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${slug}"`);
       return NextResponse.json(
         {
           error: "Invalid slug parameter",
@@ -188,9 +187,10 @@ export async function GET(
         { status: 400 }
       );
     }
-
-    // 2. ✨[แก้ไข] ใช้ decodeURIComponent เพื่อความปลอดภัยเผื่อมีกรณีที่ยังไม่ได้ถอดรหัส
-    const decodedSlug = decodeURIComponent(rawSlug.trim()).toLowerCase();
+    
+    // ✨[แก้ไข] ใช้ decodeURIComponent เพื่อความปลอดภัยเผื่อมีกรณีที่ยังไม่ได้ถอดรหัส
+    // (Next.js 13+ มักจะ decode ให้แล้ว แต่ทำไว้กันเหนียว)
+    const decodedSlug = decodeURIComponent(slug.trim()).toLowerCase();
 
     console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${decodedSlug}"`);
 
@@ -275,21 +275,21 @@ export async function GET(
       .lean();
 
     const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map(char => {
-      let imageUrl = '/images/default-avatar.png';
-      if (char.profileImageMediaId && char.profileImageSourceType) {
-        // This assumes you have an endpoint to serve media, which is a good practice.
-        // The original code had this, so we'll keep it.
-        imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
-      }
-
-      return {
-        _id: char._id.toString(),
-        name: char.name,
-        profileImageUrl: imageUrl,
-        description: char.description,
-        roleInStory: char.roleInStory as CharacterRoleInStory,
-        colorTheme: char.colorTheme
-      };
+        // This logic seems fine, assuming profileImage... fields exist
+        let imageUrl = '/images/default-avatar.png'; // Default
+        // Logic for creating image URL seems specific to the project, keeping as is.
+        if (char.profileImageMediaId && char.profileImageSourceType) {
+            imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
+        }
+        
+        return {
+            _id: char._id.toString(),
+            name: char.name,
+            profileImageUrl: imageUrl,
+            description: char.description,
+            roleInStory: char.roleInStory as CharacterRoleInStory,
+            colorTheme: char.colorTheme
+        };
     });
 
     // ดึงข้อมูลตอนของนิยาย (จำกัด 10 ตอนแรก)
@@ -329,7 +329,8 @@ export async function GET(
         { status: 500 }
       );
     }
-
+    
+    // Constructing the response data
     const responseData: PopulatedNovelForDetailPage = {
       _id: novelFromDb._id.toString(),
       title: novelFromDb.title,
@@ -353,8 +354,9 @@ export async function GET(
           categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.mainTheme?.categoryId)!,
           customName: novelFromDb.themeAssignment?.mainTheme?.customName,
         },
-        subThemes: novelFromDb.themeAssignment?.subThemes?.map((st, index) => ({
-          categoryId: toPopulatedCategoryInfo((novelFromDb.themeAssignment?.subThemes?.[index]?.categoryId as any))!,
+        subThemes: novelFromDb.themeAssignment?.subThemes?.map((st) => ({
+          // The populated path is now an object, access it directly
+          categoryId: toPopulatedCategoryInfo(st.categoryId as any)!,
           customName: st.customName,
         })) || [],
         moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone as any[] || []),
@@ -406,9 +408,8 @@ export async function GET(
     );
 
   } catch (error: any) {
-    // 3. ✨[แก้ไข] ปรับปรุง Error Logging ให้แสดง slug ที่มีปัญหาได้ชัดเจนขึ้น
-    const slugForError = (params.slug || 'unknown').substring(0, 100);
-    console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`);
+    // ✨ [แก้ไข] ปรับปรุง Error Logging ให้ใช้ตัวแปร slug ที่อยู่ใน scope ของฟังก์ชันได้โดยตรง
+    console.error(`❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slug}": ${error.message}`);
     return NextResponse.json(
       {
         error: "Internal server error",
