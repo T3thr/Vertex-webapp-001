@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     }).sort({ summaryDate: -1 }).limit(12).lean();
 
     const totalEarnings = earningAnalytics.reduce((sum, analytic) => 
-      sum + (analytic.totalEarningsThisPeriod || 0), 0
+      sum + (analytic.netEarnings || 0), 0
     );
 
     // ดึงข้อมูลผู้ติดตาม (จาก UserProfile.socialStats)
@@ -81,9 +81,9 @@ export async function GET(request: NextRequest) {
             year: { $year: '$summaryDate' },
             month: { $month: '$summaryDate' }
           },
-          totalEarnings: { $sum: '$totalEarningsThisPeriod' },
-          totalViews: { $sum: '$totalViewsThisPeriod' },
-          totalReads: { $sum: '$totalReadsThisPeriod' }
+          totalEarnings: { $sum: '$netEarnings' },
+          totalViews: { $sum: '$grossRevenue.total' },
+          totalTransactions: { $sum: '$transactionCounts.total' }
         }
       },
       {
