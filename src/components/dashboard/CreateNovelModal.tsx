@@ -363,7 +363,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                   <div className="text-sm text-muted-foreground">
                     <p className="font-medium text-foreground mb-1">เกี่ยวกับการสร้างนิยาย:</p>
                     <ul className="space-y-1 text-xs">
-                      <li>• นิยายที่สร้างใหม่จะอยู่ในสถานะ "ฉบับร่าง" และเป็นส่วนตัว</li>
+                      <li>• นิยายที่สร้างใหม่จะอยู่ในสถานะ &quot;ฉบับร่าง&quot; และเป็นส่วนตัว</li>
                       <li>• คุณสามารถแก้ไขข้อมูลและเพิ่มตอนได้ภายหลัง</li>
                       <li>• หมวดหมู่และภาษาสามารถเปลี่ยนแปลงได้ในหน้าตั้งค่านิยาย</li>
                     </ul>
