@@ -501,7 +501,7 @@ async function DashboardContent({ userId, searchParams }: { userId: string; sear
 export default async function WriterDashboardPage({ 
   searchParams 
 }: { 
-  searchParams?: { [key: string]: string | string[] | undefined } 
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }> 
 }) {
   const session = await getServerSession(authOptions);
 
@@ -509,10 +509,13 @@ export default async function WriterDashboardPage({
     redirect('/auth/signin?callbackUrl=/dashboard');
   }
 
+  // Await searchParams in Next.js 15
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
   return (
     <ErrorBoundary>
       <Suspense fallback={<DashboardLoading />}>
-        <DashboardContent userId={session.user.id} searchParams={searchParams} />
+        <DashboardContent userId={session.user.id} searchParams={resolvedSearchParams} />
       </Suspense>
     </ErrorBoundary>
   );
