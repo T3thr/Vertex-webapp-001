@@ -298,3 +298,199 @@ export async function GET(request: Request) {
     );
   }
 }
+
+// POST method สำหรับสร้างนิยายใหม่
+export async function POST(request: Request) {
+  try {
+    await dbConnect();
+
+    const body = await request.json();
+    const { 
+      title, 
+      penName, 
+      synopsis, 
+      mainThemeId, 
+      languageId,
+      authorId,
+      contentType = NovelContentType.INTERACTIVE_FICTION 
+    } = body;
+
+    console.log(`📝 [API /api/novels POST] Creating new novel: ${title} by ${penName}`);
+
+    // Validation
+    if (!title || !authorId) {
+      return NextResponse.json(
+        { error: "ข้อมูลไม่ครบถ้วน กรุณาระบุชื่อเรื่องและผู้แต่ง" },
+        { status: 400 }
+      );
+    }
+
+    // ตรวจสอบว่าผู้ใช้มีสิทธิ์เป็นนักเขียน
+    const user = await UserModel.findById(authorId);
+    if (!user || !user.roles.includes('Writer')) {
+      return NextResponse.json(
+        { error: "คุณไม่มีสิทธิ์ในการสร้างนิยาย กรุณาสมัครเป็นนักเขียนก่อน" },
+        { status: 403 }
+      );
+    }
+
+    // หา default category สำหรับ mainTheme
+    let mainThemeCategory = null;
+    if (mainThemeId) {
+      mainThemeCategory = await CategoryModel.findById(mainThemeId);
+    }
+    
+    if (!mainThemeCategory) {
+      // หา default category
+      mainThemeCategory = await CategoryModel.findOne({ 
+        categoryType: CategoryType.THEME,
+        isActive: true 
+      }).sort({ createdAt: 1 }); // เอาตัวแรกที่สร้าง
+    }
+
+    // หา default language
+    let languageCategory = null;
+    if (languageId) {
+      languageCategory = await CategoryModel.findById(languageId);
+    }
+    
+    if (!languageCategory) {
+      // หา default language (ภาษาไทย)
+      languageCategory = await CategoryModel.findOne({ 
+        categoryType: CategoryType.LANGUAGE,
+        isActive: true,
+        $or: [
+          { name: 'ไทย' },
+          { name: 'Thai' },
+          { slug: 'thai' }
+        ]
+      });
+      
+      if (!languageCategory) {
+        languageCategory = await CategoryModel.findOne({ 
+          categoryType: CategoryType.LANGUAGE,
+          isActive: true 
+        }).sort({ createdAt: 1 });
+      }
+    }
+
+    // สร้าง slug
+    const baseSlug = title
+      .toLowerCase()
+      .replace(/[^\u0E00-\u0E7Fa-z0-9\s-]/g, '') // อนุญาตภาษาไทย อังกฤษ ตัวเลข เว้นวรรค และ dash
+      .replace(/\s+/g, '-') // เปลี่ยนเว้นวรรคเป็น dash
+      .replace(/-+/g, '-') // ลด dash ที่ซ้ำกัน
+      .replace(/^-|-$/g, ''); // ลบ dash ที่ขึ้นต้นและลงท้าย
+
+    // ตรวจสอบ slug ซ้ำและสร้าง unique slug
+    let slug = baseSlug;
+    let counter = 1;
+    while (await NovelModel.findOne({ slug, isDeleted: { $ne: true } })) {
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+
+    // สร้างนิยายใหม่
+    const newNovel = new NovelModel({
+      title: title.trim(),
+      slug,
+      author: new mongoose.Types.ObjectId(authorId),
+      synopsis: synopsis?.trim() || '',
+      status: NovelStatus.DRAFT,
+      accessLevel: NovelAccessLevel.PRIVATE,
+      isCompleted: false,
+      sourceType: {
+        type: contentType
+      },
+      themeAssignment: {
+        mainTheme: {
+          categoryId: mainThemeCategory?._id || null,
+          customName: penName || undefined
+        },
+        subThemes: [],
+        moodAndTone: [],
+        contentWarnings: [],
+        customTags: []
+      },
+      language: languageCategory?._id || null,
+      totalEpisodesCount: 0,
+      publishedEpisodesCount: 0,
+      stats: {
+        viewsCount: 0,
+        uniqueViewersCount: 0,
+        likesCount: 0,
+        commentsCount: 0,
+        discussionThreadCount: 0,
+        ratingsCount: 0,
+        averageRating: 0,
+        followersCount: 0,
+        sharesCount: 0,
+        bookmarksCount: 0,
+        totalWords: 0,
+        estimatedReadingTimeMinutes: 0,
+        completionRate: 0,
+        purchasesCount: 0
+      },
+      monetizationSettings: {
+        isCoinBasedUnlock: false,
+        allowDonations: false,
+        isAdSupported: false,
+        isPremiumExclusive: false
+      },
+      psychologicalAnalysisConfig: {
+        allowsPsychologicalAnalysis: true
+      },
+      isFeatured: false,
+      lastContentUpdatedAt: new Date(),
+      isDeleted: false
+    });
+
+    const savedNovel = await newNovel.save();
+    console.log(`✅ [API /api/novels POST] Novel created successfully: ${savedNovel.title} (${savedNovel._id})`);
+
+    // Populate ข้อมูลสำหรับส่งกลับ
+    const populatedNovel = await NovelModel.findById(savedNovel._id)
+      .populate('author', 'username profile')
+      .populate('themeAssignment.mainTheme.categoryId', 'name')
+      .populate('language', 'name')
+      .lean();
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "สร้างนิยายใหม่สำเร็จ",
+        novel: {
+          _id: populatedNovel?._id.toString(),
+          id: populatedNovel?._id.toString(),
+          title: populatedNovel?.title,
+          slug: populatedNovel?.slug,
+          synopsis: populatedNovel?.synopsis,
+          status: populatedNovel?.status,
+          coverImageUrl: populatedNovel?.coverImageUrl,
+          bannerImageUrl: populatedNovel?.bannerImageUrl,
+          stats: populatedNovel?.stats,
+          themeAssignment: populatedNovel?.themeAssignment,
+          lastContentUpdatedAt: populatedNovel?.lastContentUpdatedAt,
+          createdAt: populatedNovel?.createdAt,
+          updatedAt: populatedNovel?.updatedAt
+        }
+      },
+      { status: 201 }
+    );
+
+  } catch (error: any) {
+    console.error(`❌ [API /api/novels POST] Error creating novel:`, error);
+    
+    if (error.code === 11000) {
+      return NextResponse.json(
+        { error: "ชื่อเรื่องหรือ slug นี้มีอยู่แล้ว กรุณาเลือกชื่อใหม่" },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "เกิดข้อผิดพลาดในการสร้างนิยาย กรุณาลองใหม่อีกครั้ง", details: error.message },
+      { status: 500 }
+    );
+  }
+}

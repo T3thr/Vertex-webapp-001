@@ -64,15 +64,6 @@ function StatCard({ icon: Icon, label, value, change, changeType = 'neutral', de
     neutral: 'text-muted-foreground'
   };
 
-  // สร้าง particles สำหรับ StatCard โดยใช้ค่า static เพื่อหลีกเลี่ยง hydration error
-  const statParticles = useMemo(() => [
-    { id: 1, left: '20%', top: '5%' },
-    { id: 2, left: '14%', top: '96%' },
-    { id: 3, left: '48%', top: '48%' },
-    { id: 4, left: '8%', top: '4%' },
-    { id: 5, left: '84%', top: '2%' }
-  ], []);
-
   return (
     <motion.div
       className={`bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 relative overflow-hidden group cursor-pointer`}
@@ -95,37 +86,13 @@ function StatCard({ icon: Icon, label, value, change, changeType = 'neutral', de
         transition={{ duration: 0.3 }}
       />
 
-      {/* Particle Effects สำหรับ StatCard */}
-      {statParticles.map((particle) => (
-        <motion.div
-          key={particle.id}
-          className="absolute w-1 h-1 bg-primary/40 rounded-full"
-          style={{ left: particle.left, top: particle.top }}
-          animate={{
-            y: [0, -5, 0],
-            x: [0, 5, 0],
-            scale: [1, 1.2, 1]
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            repeatType: 'mirror',
-            ease: 'easeInOut'
-          }}
-        />
-      ))}
-
       {/* Content */}
       <div className="relative z-10">
         {/* Icon และ Change Indicator */}
         <div className="flex items-center justify-between mb-3">
-          <motion.div
-            className="p-2 bg-white/20 rounded-lg"
-            whileHover={{ rotate: 360 }}
-            transition={{ duration: 0.6 }}
-          >
+          <div className="p-2 bg-white/20 rounded-lg">
             <Icon className="w-5 h-5 text-foreground" />
-          </motion.div>
+          </div>
           
           {change !== undefined && (
             <motion.div
@@ -237,17 +204,6 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     visible: { opacity: 1, y: 0 }
   };
 
-  const floatingVariants = {
-    animate: {
-      y: [0, -5, 0],
-      transition: {
-        duration: 3,
-        repeat: Infinity,
-        ease: "easeInOut"
-      }
-    }
-  };
-
   // ตรวจสอบว่าเป็น Writer หรือไม่
   const isWriter = user.roles.includes('Writer');
 
@@ -324,31 +280,6 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     >
       {/* Animated Background Pattern */}
       <div className="absolute inset-0 opacity-10">
-        {/* Floating Circles */}
-        {isMounted && staticParticles.map((particle) => (
-          <motion.div
-            key={particle.id}
-            className="absolute bg-white rounded-full"
-            style={{
-              width: particle.size,
-              height: particle.size,
-              left: `${particle.x}%`,
-              top: `${particle.y}%`,
-              opacity: particle.opacity
-            }}
-            animate={{
-              y: [0, -20, 0],
-              x: [0, 10, 0],
-              scale: [1, 1.1, 1]
-            }}
-            transition={{
-              duration: particle.duration,
-              repeat: Infinity,
-              delay: particle.id,
-              ease: "easeInOut"
-            }}
-          />
-        ))}
         {/* Grid Pattern */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.05\'%3E%3Ccircle cx=\'30\' cy=\'30\' r=\'4\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]" />
       </div>
@@ -406,11 +337,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
               variants={itemVariants}
             >
               {/* Avatar & Writer Badge */}
-              <motion.div 
-                className="relative"
-                variants={floatingVariants}
-                animate="animate"
-              >
+              <div className="relative">
                 <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl bg-white/20 backdrop-blur-sm border-2 border-white/30 flex items-center justify-center overflow-hidden shadow-2xl">
                   {user.profile?.avatarUrl ? (
                     <img 
@@ -437,12 +364,8 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                 )}
 
                 {/* Online Status */}
-                <motion.div
-                  className="absolute top-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                />
-              </motion.div>
+                <div className="absolute top-1 right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white" />
+              </div>
 
               {/* User Details */}
               <div className="text-foreground">

@@ -372,3 +372,116 @@ html[data-theme-ready="true"] {
 .shadow-text-md {
   text-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
 }
+
+/* --------------------------------------- */
+/* Dashboard Layout Utilities - ไม่บดบัง navbar/footer และลบช่องว่างล่าง */
+/* --------------------------------------- */
+
+/* Dashboard Container - จำกัดขอบเขตไม่ให้ทับ navbar/footer */
+.dashboard-container {
+  position: relative;
+  min-height: calc(100vh - 8rem); /* navbar (4rem) + footer (4rem) */
+  margin-top: 0; /* ไม่เว้นระยะจาก navbar */
+  background: hsl(var(--background));
+}
+
+/* Analytics Tab - ลบช่องว่างด้านล่าง */
+.analytics-tab-content {
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.analytics-tab-content > div:last-child {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Remove all bottom gaps in analytics tab */
+.analytics-tab-content * {
+  margin-bottom: 0 !important;
+}
+
+.analytics-tab-content > *:last-child {
+  padding-bottom: 0 !important;
+}
+
+/* Mobile Menu Button */
+.dashboard-mobile-menu {
+  position: fixed;
+  top: 6rem; /* ใต้ navbar */
+  left: 1rem;
+  z-index: 40;
+  background: hsl(var(--background) / 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  transition: all 0.2s ease-in-out;
+}
+
+.dashboard-mobile-menu:hover {
+  background: hsl(var(--secondary));
+  transform: scale(1.05);
+}
+
+/* Sidebar Layout */
+.dashboard-sidebar-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: hsl(var(--card) / 0.95);
+  backdrop-filter: blur(8px);
+  border-right: 1px solid hsl(var(--border));
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Content Area */
+.dashboard-content-area {
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: calc(100vh - 8rem);
+}
+
+/* Mobile Overlay */
+.dashboard-overlay {
+  position: fixed;
+  top: 4rem; /* ใต้ navbar */
+  bottom: 4rem; /* เหนือ footer */
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 30;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1023px) {
+  .dashboard-content-area {
+    padding: 1rem;
+    padding-top: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-content-area {
+    padding: 1.5rem;
+    padding-top: 1.5rem;
+  }
+}
+
+/* Animation Utilities */
+.dashboard-fade-in {
+  animation: dashboardFadeIn 0.3s ease-in-out;
+}
+
+@keyframes dashboardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

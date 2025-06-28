@@ -296,7 +296,8 @@ function formatNumber(num?: number | null): string {
   }
   if (Math.abs(num) >= 1000) {
     const result = (num / 1000).toFixed(1);
-    return result.endsWith(".0") ? result.slice(-2) + "k" : result + "k";
+    // แก้ไขจาก slice(-2) เป็น slice(0, -2)
+    return result.endsWith(".0") ? result.slice(0, -2) + "k" : result + "k";
   }
   return num.toString();
 }
