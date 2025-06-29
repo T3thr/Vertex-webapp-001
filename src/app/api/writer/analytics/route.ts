@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
     const topNovelsByEarnings = earningAnalytics
       .filter(analytic => analytic.novelId)
       .reduce((acc, analytic) => {
-        const novelId = analytic.novelId.toString();
+        const novelId = analytic.novelId!.toString(); // Use non-null assertion since we filtered above
         const existingNovel = acc.find(n => n.novelId === novelId);
         
         if (existingNovel) {
