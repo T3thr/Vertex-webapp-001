@@ -405,8 +405,8 @@ export async function POST(request: Request) {
     }
 
     // จัดการการอัพโหลดรูปภาพ (ถ้ามี)
-    let coverImageUrl = null;
-    let bannerImageUrl = null;
+    const coverImageUrl = null;
+    const bannerImageUrl = null;
     
     // TODO: ในอนาคตอาจต้องใช้ cloud storage service เช่น AWS S3, Cloudinary
     // ตอนนี้จะข้าม file upload ไปก่อน เพราะต้องมี storage service
