@@ -34,7 +34,9 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  DollarSign
+  DollarSign,
+  UserCheck,
+  Library
 } from 'lucide-react';
 import { SerializedUser, WriterDashboardData } from '@/app/dashboard/page';
 
@@ -94,6 +96,19 @@ interface RealStats {
   totalViews: number;
   totalEarnings: number;
   totalFollowers: number;
+  followersBreakdown?: {
+    userFollowers: number;
+    novelFollowers: number;
+    total: number;
+  };
+  lastUpdated?: string;
+}
+
+// Enum สำหรับ Toggle ผู้ติดตาม
+enum FollowerDisplayMode {
+  TOTAL = 'total',
+  USER_FOLLOWERS = 'user',
+  NOVEL_FOLLOWERS = 'novel'
 }
 
 export default function SidebarDashboard({ 
@@ -112,6 +127,7 @@ export default function SidebarDashboard({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [followerDisplayMode, setFollowerDisplayMode] = useState<FollowerDisplayMode>(FollowerDisplayMode.TOTAL);
   const [realUserStats, setRealUserStats] = useState<RealStats>({
     totalNovels: totalStats.totalNovels || 0,
     totalViews: totalStats.totalViews || 0,
@@ -157,12 +173,25 @@ export default function SidebarDashboard({
         if (response.ok) {
           const result = await response.json();
           if (result.success && result.data) {
-            setRealUserStats({
+            const newStats = {
               totalNovels: result.data.totalNovels || 0,
               totalViews: result.data.totalViews || 0,
               totalEarnings: result.data.totalEarnings || 0,
-              totalFollowers: result.data.totalFollowers || user.socialStats?.followersCount || 0
-            });
+              totalFollowers: result.data.totalFollowers || 0,
+              followersBreakdown: result.data.followersBreakdown || {
+                userFollowers: 0,
+                novelFollowers: 0,
+                total: 0
+              },
+              lastUpdated: result.data.lastUpdated
+            };
+            
+            // ตรวจสอบการเปลี่ยนแปลงและ log การอัพเดท
+            if (realUserStats.totalFollowers !== newStats.totalFollowers) {
+              console.log(`📈 [Realtime] ผู้ติดตาม: ${realUserStats.totalFollowers} → ${newStats.totalFollowers}`);
+            }
+            
+            setRealUserStats(newStats);
           }
         }
       } catch (error) {
@@ -172,17 +201,22 @@ export default function SidebarDashboard({
           totalNovels: totalStats.totalNovels || 0,
           totalViews: totalStats.totalViews || 0,
           totalEarnings: totalStats.totalEarnings || 0,
-          totalFollowers: user.socialStats?.followersCount || 0
+          totalFollowers: user.socialStats?.followersCount || 0,
+          followersBreakdown: {
+            userFollowers: 0,
+            novelFollowers: 0,
+            total: user.socialStats?.followersCount || 0
+          }
         });
       }
     };
 
-    // เรียกทันทีและตั้ง interval สำหรับ realtime updates ทุก 15 วินาที
+    // เรียกทันทีและตั้ง interval สำหรับ realtime updates ทุก 10 วินาที (เร็วขึ้น)
     fetchRealStats();
-    const interval = setInterval(fetchRealStats, 15000);
+    const interval = setInterval(fetchRealStats, 10000);
 
     return () => clearInterval(interval);
-  }, [totalStats, user.socialStats?.followersCount]);
+  }, [totalStats, user.socialStats?.followersCount, realUserStats.totalFollowers]);
 
   // ปิด sidebar อัตโนมัติใน mobile เมื่อเปลี่ยน tab
   useEffect(() => {
@@ -196,6 +230,63 @@ export default function SidebarDashboard({
       setIsSidebarOpen(!isSidebarOpen);
     } else {
       setIsCollapsed(!isCollapsed);
+    }
+  };
+
+  // ฟังก์ชันสำหรับ Toggle ผู้ติดตาม
+  const handleFollowerToggle = () => {
+    setFollowerDisplayMode(prev => {
+      switch (prev) {
+        case FollowerDisplayMode.TOTAL:
+          return FollowerDisplayMode.USER_FOLLOWERS;
+        case FollowerDisplayMode.USER_FOLLOWERS:
+          return FollowerDisplayMode.NOVEL_FOLLOWERS;
+        case FollowerDisplayMode.NOVEL_FOLLOWERS:
+          return FollowerDisplayMode.TOTAL;
+        default:
+          return FollowerDisplayMode.TOTAL;
+      }
+    });
+  };
+
+  // ฟังก์ชันสำหรับแสดงข้อมูลผู้ติดตามตามโหมด
+  const getFollowerDisplayData = () => {
+    if (!realUserStats.followersBreakdown) {
+      return {
+        count: realUserStats.totalFollowers,
+        label: 'ติดตาม',
+        icon: Users,
+        color: 'text-purple-600',
+        tooltip: `ผู้ติดตามทั้งหมด: ${realUserStats.totalFollowers.toLocaleString()}`
+      };
+    }
+
+    switch (followerDisplayMode) {
+      case FollowerDisplayMode.USER_FOLLOWERS:
+        return {
+          count: realUserStats.followersBreakdown.userFollowers,
+          label: 'ติดตามคุณ',
+          icon: UserCheck,
+          color: 'text-blue-600',
+          tooltip: `ผู้ติดตามโปรไฟล์: ${realUserStats.followersBreakdown.userFollowers.toLocaleString()}`
+        };
+      case FollowerDisplayMode.NOVEL_FOLLOWERS:
+        return {
+          count: realUserStats.followersBreakdown.novelFollowers,
+          label: 'ติดตามนิยาย',
+          icon: Library,
+          color: 'text-green-600',
+          tooltip: `ผู้ติดตามนิยาย: ${realUserStats.followersBreakdown.novelFollowers.toLocaleString()}`
+        };
+      case FollowerDisplayMode.TOTAL:
+      default:
+        return {
+          count: realUserStats.totalFollowers,
+          label: 'รวมทั้งหมด',
+          icon: Users,
+          color: 'text-purple-600',
+          tooltip: `รวม: ${realUserStats.totalFollowers.toLocaleString()} | โปรไฟล์: ${realUserStats.followersBreakdown.userFollowers} | นิยาย: ${realUserStats.followersBreakdown.novelFollowers}`
+        };
     }
   };
 
@@ -302,6 +393,8 @@ export default function SidebarDashboard({
     }
   };
 
+  const followerDisplayData = getFollowerDisplayData();
+
   return (
     <DashboardContext.Provider value={{ 
       activeTab, 
@@ -314,16 +407,16 @@ export default function SidebarDashboard({
       {/* Dashboard Container - อยู่ในขอบเขต dashboard เท่านั้น */}
       <div className="relative bg-background min-h-[calc(100vh-8rem)] flex"> {/* ใช้ flex layout */}
         
-        {/* Mobile Menu Button - ปรับตำแหน่งให้อยู่ขอบบนของ sidebar */}
+        {/* Mobile Menu Button - อยู่เหนือ sidebar และไม่ blur */}
         {isMobile && (
           <motion.button
             onClick={toggleSidebar}
-            className="fixed top-20 left-4 z-[60] lg:hidden bg-background/95 backdrop-blur-sm border border-border rounded-xl p-3 shadow-lg hover:shadow-xl transition-all duration-200"
+            className="fixed top-20 left-4 z-50 lg:hidden bg-background border border-border rounded-xl p-3 shadow-xl hover:shadow-2xl transition-all duration-200"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             animate={{
               rotate: isSidebarOpen ? 90 : 0,
-              backgroundColor: isSidebarOpen ? 'rgb(239 68 68 / 0.1)' : 'hsl(var(--background) / 0.95)'
+              backgroundColor: isSidebarOpen ? 'rgb(239 68 68 / 0.1)' : 'hsl(var(--background))'
             }}
             transition={{ duration: 0.3 }}
           >
@@ -353,33 +446,50 @@ export default function SidebarDashboard({
           </motion.button>
         )}
 
-        {/* Mobile Overlay - ปรับตำแหน่งให้สูงขึ้นสำหรับ mobile */}
+        {/* Mobile Backdrop - blur เฉพาะเนื้อหาหลัก ไม่ blur navbar */}
         <AnimatePresence>
           {isMobile && isSidebarOpen && (
-            <motion.div
-              className="fixed inset-0 bg-black/30 z-40 lg:hidden backdrop-blur-sm"
-              style={{ 
-                top: '5rem', // ปรับให้สูงขึ้นเล็กน้อย
-                bottom: '0', // ไม่ทับ footer
-                left: '0',
-                right: '0'
-              }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              onTouchStart={(e) => {
-                // ป้องกันการเลื่อนหน้าเว็บเมื่อแตะ overlay
-                e.preventDefault();
-              }}
-            />
+            <>
+              {/* Backdrop สำหรับเนื้อหาหลัก - เริ่มจากใต้ navbar */}
+              <motion.div
+                className="fixed z-35 lg:hidden backdrop-blur-md bg-black/20"
+                style={{ 
+                  top: '5rem', // เริ่มจากใต้ navbar (navbar สูง 5rem)
+                  bottom: '0',
+                  left: '0',
+                  right: '0'
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                onTouchStart={(e) => {
+                  // ป้องกันการเลื่อนหน้าเว็บเมื่อแตะ overlay
+                  e.preventDefault();
+                }}
+              />
+              {/* Overlay สำหรับพื้นที่ navbar - ไม่ blur แต่มี dark overlay เบาๆ */}
+              <motion.div
+                className="fixed z-35 lg:hidden bg-black/10"
+                style={{ 
+                  top: '0',
+                  height: '5rem', // ความสูงของ navbar
+                  left: '0',
+                  right: '0'
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+              />
+            </>
           )}
         </AnimatePresence>
 
         {/* Sidebar - รองรับ swipe gesture และ mobile optimization */}
         <motion.aside 
           className={`
-            ${isMobile ? 'fixed' : 'absolute'} z-50
+            ${isMobile ? 'fixed' : 'absolute'} z-40
             ${isMobile 
               ? 'top-20 left-0 w-80 max-w-[calc(100vw-1rem)]' 
               : 'top-6 left-6 w-72'
@@ -387,7 +497,7 @@ export default function SidebarDashboard({
             ${isCollapsed && !isMobile ? 'w-16' : ''}
             ${isMobile 
               ? 'h-[calc(100vh-6rem)] ml-4' 
-              : 'h-[calc(100vh-14rem)]'
+              : 'h-[calc(100vh-12rem)]'
             } 
             bg-card border border-border
             shadow-2xl rounded-2xl overflow-hidden
@@ -424,7 +534,7 @@ export default function SidebarDashboard({
           {!isMobile && (
             <motion.button
               onClick={toggleSidebar}
-              className="absolute top-6 -right-3 z-40 p-1.5 bg-background border border-border rounded-full shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              className="absolute top-6 -right-3 z-50 p-1.5 bg-background border border-border rounded-full shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
             >
@@ -552,44 +662,109 @@ export default function SidebarDashboard({
                     exit={{ opacity: 0, y: 20 }}
                     transition={{ duration: 0.3, delay: 0.1 }}
                   >
+                    {/* Novels Stat */}
                     <motion.div 
-                      className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+                      className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 relative overflow-hidden"
                       whileHover={{ scale: 1.05, y: -2 }}
                     >
-                      <div className="text-sm font-bold text-blue-600 flex items-center justify-center gap-1">
+                      {/* Update Flash */}
+                      <motion.div
+                        className="absolute inset-0 bg-blue-200 dark:bg-blue-600 opacity-0"
+                        key={`novels-${realUserStats.totalNovels}`}
+                        animate={{ opacity: [0, 0.3, 0] }}
+                        transition={{ duration: 0.6 }}
+                      />
+                      
+                      <div className="text-sm font-bold text-blue-600 flex items-center justify-center gap-1 relative z-10">
                         <BookOpen className="w-3 h-3" />
-                        {realUserStats.totalNovels}
-                      </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">ผลงาน</div>
-                    </motion.div>
-                    
-                    <motion.div 
-                      className="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
-                      whileHover={{ scale: 1.05, y: -2 }}
-                    >
-                      <div className="text-sm font-bold text-green-600 flex items-center justify-center gap-1">
-                        <Eye className="w-3 h-3" />
-                        {realUserStats.totalViews > 999 ? `${Math.floor(realUserStats.totalViews / 1000)}k` : realUserStats.totalViews}
-                      </div>
-                      <div className="text-xs text-green-600 dark:text-green-400 font-medium">ยอดชม</div>
-                    </motion.div>
-
-                    <motion.div 
-                      className="text-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800"
-                      whileHover={{ scale: 1.05, y: -2 }}
-                    >
-                      <div className="text-sm font-bold text-purple-600 flex items-center justify-center gap-1">
-                        <Users className="w-3 h-3" />
                         <motion.span
-                          key={realUserStats.totalFollowers}
-                          initial={{ scale: 1.2, color: '#10b981' }}
-                          animate={{ scale: 1, color: '#7c3aed' }}
-                          transition={{ duration: 0.5 }}
+                          key={realUserStats.totalNovels}
+                          initial={{ scale: 1.1 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.3 }}
                         >
-                          {realUserStats.totalFollowers}
+                          {realUserStats.totalNovels.toLocaleString()}
                         </motion.span>
                       </div>
-                      <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">ติดตาม</div>
+                      <div className="text-xs text-blue-600 dark:text-blue-400 font-medium relative z-10">ผลงาน</div>
+                    </motion.div>
+                    
+                    {/* Views Stat */}
+                    <motion.div 
+                      className="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 relative overflow-hidden"
+                      whileHover={{ scale: 1.05, y: -2 }}
+                    >
+                      {/* Update Flash */}
+                      <motion.div
+                        className="absolute inset-0 bg-green-200 dark:bg-green-600 opacity-0"
+                        key={`views-${realUserStats.totalViews}`}
+                        animate={{ opacity: [0, 0.3, 0] }}
+                        transition={{ duration: 0.6 }}
+                      />
+                      
+                      <div className="text-sm font-bold text-green-600 flex items-center justify-center gap-1 relative z-10">
+                        <Eye className="w-3 h-3" />
+                        <motion.span
+                          key={realUserStats.totalViews}
+                          initial={{ scale: 1.1 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          {realUserStats.totalViews > 999 ? `${Math.floor(realUserStats.totalViews / 1000)}k` : realUserStats.totalViews.toLocaleString()}
+                        </motion.span>
+                      </div>
+                      <div className="text-xs text-green-600 dark:text-green-400 font-medium relative z-10">ยอดชม</div>
+                    </motion.div>
+
+                    {/* Followers Stat with Toggle */}
+                    <motion.div 
+                      className={`text-center p-2 rounded-lg border relative overflow-hidden group cursor-pointer transition-all duration-200 ${
+                        followerDisplayMode === FollowerDisplayMode.USER_FOLLOWERS 
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                          : followerDisplayMode === FollowerDisplayMode.NOVEL_FOLLOWERS
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                          : 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                      }`}
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      onClick={handleFollowerToggle}
+                      title={followerDisplayData.tooltip}
+                    >
+                      {/* Update Flash */}
+                      <motion.div
+                        className={`absolute inset-0 opacity-0 ${
+                          followerDisplayMode === FollowerDisplayMode.USER_FOLLOWERS 
+                            ? 'bg-blue-200 dark:bg-blue-600'
+                            : followerDisplayMode === FollowerDisplayMode.NOVEL_FOLLOWERS
+                            ? 'bg-green-200 dark:bg-green-600'
+                            : 'bg-purple-200 dark:bg-purple-600'
+                        }`}
+                        key={`followers-${followerDisplayData.count}-${followerDisplayMode}`}
+                        animate={{ opacity: [0, 0.3, 0] }}
+                        transition={{ duration: 0.6 }}
+                      />
+                      
+                      <div className={`text-sm font-bold flex items-center justify-center gap-1 relative z-10 ${followerDisplayData.color}`}>
+                        <followerDisplayData.icon className="w-3 h-3" />
+                        <motion.span
+                          key={`${followerDisplayData.count}-${followerDisplayMode}`}
+                          initial={{ scale: 1.2 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.5 }}
+                        >
+                          {followerDisplayData.count.toLocaleString()}
+                        </motion.span>
+                      </div>
+                      <div className={`text-xs font-medium relative z-10 ${followerDisplayData.color} dark:opacity-80`}>
+                        {followerDisplayData.label}
+                      </div>
+                      
+                      {/* Click indicator */}
+                      <motion.div
+                        className="absolute bottom-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        whileHover={{ scale: 1.1 }}
+                      >
+                        <div className={`w-1.5 h-1.5 rounded-full ${followerDisplayData.color.replace('text-', 'bg-')}`} />
+                      </motion.div>
                     </motion.div>
                   </motion.div>
                 )}
@@ -702,20 +877,13 @@ export default function SidebarDashboard({
           </div>
         </motion.aside>
 
-        {/* Main Content - ปรับ margin ตามสถานะ sidebar */}
-        <motion.main 
-          className="flex-1 transition-all duration-300"
-          initial={false}
-          animate={{
-            marginLeft: isMobile ? 0 : (isCollapsed ? 88 : 312), // เพิ่ม margin สำหรับ sidebar + padding
+        {/* Main Content - ปรับ margin แบบทันทีโดยไม่มีแอนิเมชัน */}
+        <main 
+          className="flex-1 transition-none"
+          style={{
+            marginLeft: isMobile ? 0 : (isCollapsed ? 88 : 312),
             paddingLeft: isMobile ? 16 : 24,
             paddingRight: isMobile ? 16 : 24
-          }}
-          transition={{ 
-            type: "spring", 
-            stiffness: 400, 
-            damping: 30,
-            duration: 0.3
           }}
         >
           <div className={`
@@ -735,7 +903,7 @@ export default function SidebarDashboard({
               </motion.div>
             </AnimatePresence>
           </div>
-        </motion.main>
+        </main>
       </div>
     </DashboardContext.Provider>
   );

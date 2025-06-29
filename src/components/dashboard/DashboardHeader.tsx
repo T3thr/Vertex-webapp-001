@@ -34,13 +34,13 @@ import { useState, useEffect, useMemo } from 'react';
 
 interface DashboardHeaderProps {
   user: SerializedUser;
-  totalStats: {
-    totalNovels: number;
-    totalEpisodes: number;
-    totalViews: number;
-    totalEarnings: number;
-    averageRating: number;
-    totalFollowers: number;
+  totalStats?: {
+    totalNovels?: number;
+    totalEpisodes?: number;
+    totalViews?: number;
+    totalEarnings?: number;
+    averageRating?: number;
+    totalFollowers?: number;
   };
 }
 
@@ -150,12 +150,53 @@ function AchievementBadge({ achievement, delay }: { achievement: string; delay: 
   );
 }
 
-const formattedDate = (date: Date) => {
-  return date.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+const formattedDate = (date: Date | string | undefined | null) => {
+  try {
+    // Handle null/undefined cases first
+    if (!date) {
+      return 'วันที่ไม่ระบุ';
+    }
+    
+    let dateObj: Date;
+    
+    if (typeof date === 'string') {
+      // Handle empty string
+      if (date.trim() === '') {
+        return 'วันที่ไม่ระบุ';
+      }
+      dateObj = new Date(date);
+    } else if (date instanceof Date) {
+      dateObj = date;
+    } else {
+      // Handle any other type
+      return 'วันที่ไม่ถูกต้อง';
+    }
+    
+    // Check if the date is valid after creation
+    if (!dateObj || isNaN(dateObj.getTime())) {
+      return 'วันที่ไม่ถูกต้อง';
+    }
+    
+    return dateObj.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch (error) {
+    console.warn('Error formatting date:', error, 'Input:', date);
+    return 'วันที่ไม่ถูกต้อง';
+  }
+};
+
+// Helper function to safely create Date objects
+const safeDate = (date: Date | string | undefined) => {
+  if (!date) return new Date();
+  try {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return isNaN(dateObj.getTime()) ? new Date() : dateObj;
+  } catch {
+    return new Date();
+  }
 };
 
 // สร้าง particles คงที่สำหรับ background เพื่อหลีกเลี่ยง hydration error
@@ -185,6 +226,22 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     return () => clearInterval(timer);
   }, []);
 
+  // Format time safely
+  const formatTime = (date: Date) => {
+    try {
+      return date.toLocaleTimeString('th-TH', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (error) {
+      console.warn('Error formatting time:', error);
+      return new Date().toLocaleTimeString('th-TH', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    }
+  };
+
   // Animation variants
   const containerVariants = {
     hidden: { opacity: 0, y: -20 },
@@ -205,10 +262,10 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
   };
 
   // ตรวจสอบว่าเป็น Writer หรือไม่
-  const isWriter = user.roles.includes('Writer');
+  const isWriter = user?.roles?.includes('Writer') || false;
 
   // คำนวณ Level Progress
-  const levelProgress = user.gamification 
+  const levelProgress = user?.gamification 
     ? (user.gamification.experiencePoints / user.gamification.nextLevelXPThreshold) * 100
     : 0;
 
@@ -224,7 +281,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     {
       icon: BookOpen,
       label: 'นิยาย',
-      value: totalStats.totalNovels,
+      value: totalStats?.totalNovels || 0,
       change: 12,
       changeType: 'increase' as const,
       gradient: 'bg-gradient-to-br from-blue-400 to-blue-600'
@@ -232,7 +289,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     {
       icon: TrendingUp,
       label: 'ตอน',
-      value: totalStats.totalEpisodes,
+      value: totalStats?.totalEpisodes || 0,
       change: 8,
       changeType: 'increase' as const,
       gradient: 'bg-gradient-to-br from-green-400 to-green-600'
@@ -240,7 +297,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     {
       icon: Eye,
       label: 'ยอดชม',
-      value: totalStats.totalViews.toLocaleString(),
+      value: (totalStats?.totalViews || 0).toLocaleString(),
       change: 15,
       changeType: 'increase' as const,
       gradient: 'bg-gradient-to-br from-purple-400 to-purple-600'
@@ -248,7 +305,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     {
       icon: Coins,
       label: 'บาท',
-      value: totalStats.totalEarnings.toLocaleString(),
+      value: (totalStats?.totalEarnings || 0).toLocaleString(),
       change: 22,
       changeType: 'increase' as const,
       gradient: 'bg-gradient-to-br from-yellow-400 to-orange-500'
@@ -296,16 +353,13 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  {currentTime.toLocaleTimeString('th-TH', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
+                  {formatTime(currentTime)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  {formattedDate(new Date(user.trackingStats.joinDate))}
+                  {formattedDate(user.trackingStats?.joinDate)}
                 </span>
               </div>
             </div>
@@ -391,7 +445,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
                     <span className="text-sm">
-                      {formattedDate(new Date(user.trackingStats.joinDate))}
+                      {formattedDate(user.trackingStats?.joinDate)}
                     </span>
                   </div>
 
@@ -488,10 +542,10 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                     </div>
                     <div>
                       <h3 className="text-foreground font-semibold">
-                        Level {user.gamification.level}
+                        Level {user.gamification?.level || 1}
                       </h3>
                       <p className="text-foreground/70 text-sm">
-                        {user.gamification.experiencePoints.toLocaleString()} / {user.gamification.nextLevelXPThreshold.toLocaleString()} XP
+                        {(user.gamification?.experiencePoints || 0).toLocaleString()} / {(user.gamification?.nextLevelXPThreshold || 100).toLocaleString()} XP
                       </p>
                     </div>
                   </div>

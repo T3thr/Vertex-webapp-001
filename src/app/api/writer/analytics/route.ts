@@ -11,14 +11,15 @@ import NovelModel from '@/backend/models/Novel';
 import WriterStatsModel from '@/backend/models/WriterStats';
 import EarningAnalyticModel from '@/backend/models/EarningAnalytic';
 import EarningTransactionModel from '@/backend/models/EarningTransaction';
+import FollowModel from '@/backend/models/Follow';
 
 export async function GET(request: NextRequest) {
   try {
-    // ตรวจสอบ authentication
     const session = await getServerSession(authOptions);
+    
     if (!session?.user?.id) {
       return NextResponse.json(
-        { error: 'กรุณาเข้าสู่ระบบ' },
+        { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
@@ -26,30 +27,23 @@ export async function GET(request: NextRequest) {
     await dbConnect();
     const userId = new Types.ObjectId(session.user.id);
 
-    // ดึงข้อมูลผู้ใช้และโปรไฟล์
-    const [user, userProfile] = await Promise.all([
-      UserModel.findById(userId).lean(),
-      UserProfileModel.findOne({ userId }).lean()
-    ]);
+    // ดึงข้อมูลนิยายของนักเขียน
+    const novels = await NovelModel.find({
+      author: userId,
+      isDeleted: { $ne: true }
+    }).select('stats title').lean();
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'ไม่พบข้อมูลผู้ใช้' },
-        { status: 404 }
-      );
-    }
+    const totalViews = novels.reduce((sum, novel) => 
+      sum + (novel.stats?.viewsCount || 0), 0
+    );
 
-    // ดึงข้อมูลนิยายของผู้ใช้
-    const novels = await NovelModel.find({ 
-      author: userId, 
-      isDeleted: { $ne: true } 
-    }).lean();
+    const totalLikes = novels.reduce((sum, novel) => 
+      sum + (novel.stats?.likesCount || 0), 0
+    );
 
-    // คำนวณสถิติจากนิยาย
-    const totalNovels = novels.length;
-    const totalViews = novels.reduce((sum, novel) => sum + (novel.stats?.viewsCount || 0), 0);
-    const totalLikes = novels.reduce((sum, novel) => sum + (novel.stats?.likesCount || 0), 0);
-    const totalComments = novels.reduce((sum, novel) => sum + (novel.stats?.commentsCount || 0), 0);
+    const totalComments = novels.reduce((sum, novel) => 
+      sum + (novel.stats?.commentsCount || 0), 0
+    );
 
     // ดึงข้อมูลรายได้
     const earningAnalytics = await EarningAnalyticModel.find({
@@ -61,8 +55,29 @@ export async function GET(request: NextRequest) {
       sum + (analytic.netEarnings || 0), 0
     );
 
-    // ดึงข้อมูลผู้ติดตาม (จาก UserProfile.socialStats)
-    const totalFollowers = userProfile?.socialStats?.followersCount || 0;
+    // ดึงข้อมูลผู้ติดตามแบบ realtime และแยกประเภท
+    // 1. ผู้ติดตามผู้ใช้ (User followers) - จาก Follow model
+    const userFollowersCount = await FollowModel.countDocuments({
+      followingType: 'User',
+      followingId: userId,
+      isDeleted: { $ne: true },
+      status: 'ACTIVE'
+    });
+
+    // 2. ผู้ติดตามนิยายทั้งหมด (Novel followers) - รวมจากทุกนิยาย
+    const novelFollowersCount = novels.reduce((sum, novel) => 
+      sum + (novel.stats?.followersCount || 0), 0
+    );
+
+    // 3. รวมผู้ติดตามทั้งหมด
+    const totalFollowers = userFollowersCount + novelFollowersCount;
+
+    // สร้าง breakdown ข้อมูลผู้ติดตาม
+    const followersBreakdown = {
+      userFollowers: userFollowersCount,
+      novelFollowers: novelFollowersCount,
+      total: totalFollowers
+    };
 
     // ดึงข้อมูลรายได้รายเดือน (สำหรับ charts)
     const monthlyEarnings = await EarningAnalyticModel.aggregate([
@@ -91,27 +106,7 @@ export async function GET(request: NextRequest) {
       }
     ]);
 
-    // ดึงข้อมูลนิยายยอดนิยม (Top 30)
-    const topNovelsByViews = await NovelModel.find({
-      author: userId,
-      isDeleted: { $ne: true },
-      status: { $in: ['published', 'completed'] }
-    })
-    .sort({ 'stats.viewsCount': -1 })
-    .limit(30)
-    .select('title stats.viewsCount stats.averageRating stats.likesCount')
-    .lean();
-
-    // ดึงข้อมูลนิยายที่มีรายได้สูงสุด (จำลองจากยอดชม * คะแนน)
-    const topNovelsByEarnings = novels
-      .map(novel => ({
-        ...novel,
-        estimatedEarnings: (novel.stats?.viewsCount || 0) * (novel.stats?.averageRating || 1) * 0.1
-      }))
-      .sort((a, b) => b.estimatedEarnings - a.estimatedEarnings)
-      .slice(0, 30);
-
-    // ดึงข้อมูลการกระจายตามประเภท
+    // การกระจายตามประเภทนิยาย (Genre Distribution)
     const genreDistribution = await NovelModel.aggregate([
       {
         $match: {
@@ -124,15 +119,18 @@ export async function GET(request: NextRequest) {
           from: 'categories',
           localField: 'themeAssignment.mainTheme.categoryId',
           foreignField: '_id',
-          as: 'genre'
+          as: 'mainThemeCategory'
         }
       },
       {
-        $unwind: '$genre'
+        $unwind: {
+          path: '$mainThemeCategory',
+          preserveNullAndEmptyArrays: true
+        }
       },
       {
         $group: {
-          _id: '$genre.name',
+          _id: '$mainThemeCategory.name',
           count: { $sum: 1 },
           totalViews: { $sum: '$stats.viewsCount' }
         }
@@ -155,40 +153,82 @@ export async function GET(request: NextRequest) {
         $group: {
           _id: {
             year: { $year: '$publishedAt' },
-            month: { $month: '$publishedAt' }
+            month: { $month: '$publishedAt' },
+            day: { $dayOfMonth: '$publishedAt' }
           },
           totalViews: { $sum: '$stats.viewsCount' },
           totalLikes: { $sum: '$stats.likesCount' },
           totalComments: { $sum: '$stats.commentsCount' },
-          novelCount: { $sum: 1 }
+          novelsCount: { $sum: 1 }
         }
       },
       {
         $addFields: {
-          engagementRate: {
-            $cond: {
-              if: { $gt: ['$totalViews', 0] },
-              then: { $multiply: [{ $divide: [{ $add: ['$totalLikes', '$totalComments'] }, '$totalViews'] }, 100] },
-              else: 0
+          date: {
+            $dateFromParts: {
+              year: '$_id.year',
+              month: '$_id.month',
+              day: '$_id.day'
             }
+          },
+          engagement: {
+            $add: ['$totalViews', { $multiply: ['$totalLikes', 2] }, { $multiply: ['$totalComments', 3] }]
           }
         }
       },
       {
-        $sort: { '_id.year': 1, '_id.month': 1 }
+        $sort: { date: 1 }
+      },
+      {
+        $limit: 30
       }
     ]);
+
+    // นิยายยอดนิยม 30 อันดับแรก (ตามยอดชม)
+    const topNovelsByViews = novels
+      .sort((a, b) => (b.stats?.viewsCount || 0) - (a.stats?.viewsCount || 0))
+      .slice(0, 30)
+      .map(novel => ({
+        novelId: novel._id.toString(),
+        title: novel.title,
+        views: novel.stats?.viewsCount || 0
+      }));
+
+    // นิยายที่มีรายได้สูงสุด 30 อันดับแรก
+    const topNovelsByEarnings = earningAnalytics
+      .filter(analytic => analytic.novelId)
+      .reduce((acc, analytic) => {
+        const novelId = analytic.novelId.toString();
+        const existingNovel = acc.find(n => n.novelId === novelId);
+        
+        if (existingNovel) {
+          existingNovel.earnings += analytic.netEarnings || 0;
+        } else {
+          const novel = novels.find(n => n._id.toString() === novelId);
+          if (novel) {
+            acc.push({
+              novelId: novelId,
+              title: novel.title,
+              earnings: analytic.netEarnings || 0
+            });
+          }
+        }
+        return acc;
+      }, [] as Array<{novelId: string, title: string, earnings: number}>)
+      .sort((a, b) => b.earnings - a.earnings)
+      .slice(0, 30);
 
     return NextResponse.json({
       success: true,
       data: {
         // สถิติพื้นฐาน
-        totalNovels,
+        totalNovels: novels.length,
         totalViews,
         totalLikes,
         totalComments,
         totalEarnings,
         totalFollowers,
+        followersBreakdown, // เพิ่ม breakdown ข้อมูลผู้ติดตาม
         
         // ข้อมูลสำหรับ Charts
         monthlyEarnings,
@@ -206,17 +246,17 @@ export async function GET(request: NextRequest) {
         ).length,
         totalChapters: novels.reduce((sum, novel) => 
           sum + (novel.publishedEpisodesCount || 0), 0
-        )
+        ),
+        
+        // เพิ่ม timestamp สำหรับการอัพเดท
+        lastUpdated: new Date().toISOString()
       }
     });
 
   } catch (error) {
-    console.error('Error in writer analytics API:', error);
+    console.error('Analytics API Error:', error);
     return NextResponse.json(
-      { 
-        error: 'เกิดข้อผิดพลาดในการดึงข้อมูล',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

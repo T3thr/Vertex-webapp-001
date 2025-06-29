@@ -84,7 +84,13 @@ export async function GET(request: Request) {
       } else {
         console.warn(`⚠️ [API /api/novels] Category with slug "${categorySlug}" not found. No novels will match this category slug.`);
         // ถ้า categorySlug ระบุมาแต่หาไม่เจอ, ควรคืนค่าว่างเพื่อไม่ให้ user สับสน
-        return NextResponse.json({ novels: [], pagination: { total: 0, page, limit, totalPages: 0 } }, { status: 200 });
+        return NextResponse.json({ novels: [], pagination: { total: 0, page, limit, totalPages: 0 } }, { 
+          status: 200,
+          headers: {
+            'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // Cache 5 นาที
+            'CDN-Cache-Control': 'public, s-maxage=300'
+          }
+        });
       }
     }
 
@@ -152,149 +158,145 @@ export async function GET(request: Request) {
       query.$and = query.$and ? [...query.$and, ...andConditions] : andConditions;
     }
 
-    const total = await NovelModel.countDocuments(query);
+    // ปรับปรุง: ใช้ countDocuments แบบ parallel กับ main query
+    const [total, rawNovels] = await Promise.all([
+      NovelModel.countDocuments(query),
+      NovelModel.find(query)
+        .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
+          path: "author",
+          select: "username profile.displayName profile.penName profile.avatarUrl roles", // เลือก field ที่จำเป็นเท่านั้น
+          model: UserModel,
+        })
+        .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory } } }>({
+          path: "themeAssignment.mainTheme.categoryId",
+          select: "name slug iconUrl color", // ลดข้อมูลที่ไม่จำเป็น
+          model: CategoryModel,
+        })
+        .populate({
+          path: "language",
+          select: "name slug",
+          model: CategoryModel,
+        })
+        .populate({
+          path: "ageRatingCategoryId",
+          select: "name",
+          model: CategoryModel,
+        })
+        .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount") // เลือกเฉพาะ field ที่จำเป็นสำหรับการ์ด
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean({ virtuals: true }) // ใช้ lean เพื่อประสิทธิภาพที่ดีขึ้น
+    ]);
+
     console.log(`ℹ️ [API /api/novels] Final Query: ${JSON.stringify(query)}, Sort: ${JSON.stringify(sort)}`);
-    console.log(`ℹ️ [API /api/novels] Found ${total} novels matching query.`);
+    console.log(`ℹ️ [API /api/novels] Found ${total} novels matching query, returning ${rawNovels.length} novels.`);
 
-    // ดึงข้อมูลนิยายพร้อม populate field ที่เกี่ยวข้อง
-    // ใช้ .lean({ virtuals: true }) เพื่อให้ได้ plain JS objects และรวม virtual fields (เช่น currentEpisodePriceCoins)
-    const rawNovels = await NovelModel.find(query)
-      .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
-        path: "author",
-        select: "username profile.displayName profile.penName profile.avatarUrl roles", // เลือก field ที่จำเป็นสำหรับ card
-        model: UserModel, // ระบุ model เพื่อความชัดเจน (Mongoose มักจะ infer ได้)
-      })
-      .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory }, subThemes: { categoryId: ICategory }[], moodAndTone: ICategory[], contentWarnings: ICategory[] } }>({
-        path: "themeAssignment.mainTheme.categoryId",
-        select: "name slug localizations iconUrl color categoryType description",
-        model: CategoryModel,
-      })
-      .populate({ // Populate subThemes (array of objects)
-        path: 'themeAssignment.subThemes.categoryId',
-        select: 'name slug iconUrl color categoryType description',
-        model: CategoryModel,
-      })
-      .populate({
-        path: 'themeAssignment.moodAndTone',
-        select: 'name slug iconUrl color categoryType description',
-        model: CategoryModel,
-      })
-      .populate({
-        path: 'themeAssignment.contentWarnings',
-        select: 'name slug iconUrl color categoryType description',
-        model: CategoryModel,
-      })
-      .populate<{ language: ICategory }>({
-        path: "language",
-        select: "name slug localizations iconUrl color categoryType description",
-        model: CategoryModel,
-      })
-      .populate<{ ageRatingCategoryId?: ICategory }>({
-        path: "ageRatingCategoryId",
-        select: "name slug localizations iconUrl color categoryType description",
-        model: CategoryModel,
-      })
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-      .lean({ virtuals: true }) as any[]; // Cast to any[] ชั่วคราว, แล้ว map ด้านล่าง
-
-    // Map ข้อมูลดิบ (rawNovels) ไปยังโครงสร้าง NovelCardData ที่ Client Component (NovelCard) คาดหวัง
-    // รวมถึงการแปลง ObjectId เป็น string
-    const novels: NovelCardData[] = rawNovels.map(novel => {
-      // Helper function สำหรับแปลง populated category (ถ้ามี)
-      const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
-        if (!cat || typeof cat !== 'object' || !cat._id) return undefined; // ตรวจสอบว่า cat เป็น object และมี _id
-        return {
-          _id: cat._id.toString(), // แปลง ObjectId เป็น string
-          name: cat.name,
-          slug: cat.slug,
-          localizations: cat.localizations,
-          iconUrl: cat.iconUrl,
-          color: cat.color,
-          categoryType: cat.categoryType,
-          description: cat.description,
-        };
-      };
-      
-      // Helper สำหรับแปลง array ของ populated categories
-      const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
-        if (!Array.isArray(cats)) return [];
-        return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
-      };
-
-      // สร้าง object author
-      const authorData: PopulatedAuthor = novel.author && typeof novel.author === 'object' && novel.author._id
-        ? {
-            _id: novel.author._id.toString(),
-            username: novel.author.username,
-            profile: novel.author.profile, // สมมติว่า profile sub-document ถูก populate มาครบ
-            roles: novel.author.roles,
-          }
-        : { _id: new mongoose.Types.ObjectId().toString(), username: "ไม่ทราบนามปากกา" }; // Default author ถ้าไม่มีข้อมูล
-
+    // ปรับปรุง: Helper functions สำหรับ transform ข้อมูล (เหมือนเดิม)
+    const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
+      if (!cat || !cat._id) return undefined;
       return {
-        _id: novel._id?.toString(), // _id ของ Novel
-        title: novel.title,
-        slug: novel.slug,
-        synopsis: novel.synopsis,
+        _id: cat._id.toString(),
+        name: cat.name || 'Unknown Category',
+        slug: cat.slug,
+        localizations: cat.localizations,
+        iconUrl: cat.iconUrl,
+        color: cat.color,
+        categoryType: cat.categoryType,
+        description: cat.description,
+      };
+    };
+
+    const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
+      if (!Array.isArray(cats)) return [];
+      return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
+    };
+
+    // Transform ข้อมูลให้ตรงกับ interface ที่ต้องการ
+    const novels: NovelCardData[] = rawNovels.map((novel: any) => {
+      const transformedAuthor: PopulatedAuthor = {
+        _id: novel.author?._id?.toString() || '',
+        username: novel.author?.username,
+        profile: novel.author?.profile || {},
+        roles: novel.author?.roles || [],
+      };
+
+      const transformedNovel: NovelCardData = {
+        _id: novel._id.toString(),
+        title: novel.title || 'ไม่มีชื่อ',
+        slug: novel.slug || '',
+        synopsis: novel.synopsis || '',
         coverImageUrl: novel.coverImageUrl,
-        stats: { // เลือกเฉพาะ stats ที่ NovelCard ต้องการ
-          viewsCount: novel.stats?.viewsCount || 0,
-          likesCount: novel.stats?.likesCount || 0,
-          averageRating: novel.stats?.averageRating || 0,
-          lastPublishedEpisodeAt: novel.stats?.lastPublishedEpisodeAt ? new Date(novel.stats.lastPublishedEpisodeAt) : undefined,
-        },
-        isCompleted: novel.isCompleted,
-        isFeatured: novel.isFeatured,
-        publishedAt: novel.publishedAt ? new Date(novel.publishedAt) : undefined,
-        status: novel.status as NovelStatus,
-        totalEpisodesCount: novel.totalEpisodesCount,
-        publishedEpisodesCount: novel.publishedEpisodesCount,
-        currentEpisodePriceCoins: novel.currentEpisodePriceCoins, // Virtual field
-        monetizationSettings: novel.monetizationSettings as INovel['monetizationSettings'],
-
-        author: authorData,
-
+        isCompleted: novel.isCompleted || false,
+        isFeatured: novel.isFeatured || false,
+        publishedAt: novel.publishedAt?.toISOString(),
+        status: novel.status,
+        totalEpisodesCount: novel.totalEpisodesCount || 0,
+        publishedEpisodesCount: novel.publishedEpisodesCount || 0,
+        currentEpisodePriceCoins: novel.currentEpisodePriceCoins || 0,
+        author: transformedAuthor,
         themeAssignment: {
           mainTheme: novel.themeAssignment?.mainTheme?.categoryId
             ? {
-                categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!, // ใช้ ! เพราะมีการตรวจสอบข้างใน transformPopulatedCategory
+                categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!,
                 customName: novel.themeAssignment.mainTheme.customName,
               }
-            : { categoryId: { _id: new mongoose.Types.ObjectId().toString(), name: 'ทั่วไป' } as PopulatedCategory }, // Default mainTheme
-          subThemes: novel.themeAssignment?.subThemes?.map((st: any) => ({
-            categoryId: transformPopulatedCategory(st.categoryId)!,
-            customName: st.customName,
-          })).filter((st: any) => st.categoryId && st.categoryId._id) || [], // กรองอันที่ categoryId ถูกแปลงสำเร็จ
-          moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone),
-          contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings),
+            : undefined,
+          subThemes: novel.themeAssignment?.subThemes
+            ? novel.themeAssignment.subThemes.map((subTheme: any) => ({
+                categoryId: transformPopulatedCategory(subTheme.categoryId)!,
+                customName: subTheme.customName,
+              })).filter((st: any) => st.categoryId)
+            : [],
+          moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone || []),
+          contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings || []),
           customTags: novel.themeAssignment?.customTags || [],
         },
-        language: transformPopulatedCategory(novel.language) || { _id: new mongoose.Types.ObjectId().toString(), name: 'ไม่ระบุ' } as PopulatedCategory, // Default language
-        ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId), // อาจเป็น undefined ถ้าไม่มี
+        language: transformPopulatedCategory(novel.language)!,
+        ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId),
+        monetizationSettings: novel.monetizationSettings,
+        stats: {
+          viewsCount: novel.stats?.viewsCount || 0,
+          likesCount: novel.stats?.likesCount || 0,
+          averageRating: novel.stats?.averageRating || 0,
+          lastPublishedEpisodeAt: novel.stats?.lastPublishedEpisodeAt?.toISOString(),
+        },
       };
+
+      return transformedNovel;
     });
 
-    console.log(`✅ [API /api/novels] Successfully fetched and transformed ${novels.length} novels for filter: ${filter}, page: ${page}, limit: ${limit}`);
+    const totalPages = Math.ceil(total / limit);
+    const pagination = { total, page, limit, totalPages };
+
+    console.log(`✅ [API /api/novels] Returning ${novels.length} novels with pagination:`, pagination);
 
     return NextResponse.json(
+      { novels, pagination },
       {
-        novels,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        },
-      },
-      { status: 200 }
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1200', // Cache 10 นาที, stale-while-revalidate 20 นาที
+          'CDN-Cache-Control': 'public, s-maxage=600',
+          'Vary': 'Accept-Encoding' // สำหรับ compression
+        }
+      }
     );
-  } catch (error: any) {
-    console.error(`❌ [API /api/novels] Critical error fetching novels (URL: ${request ? request.url : 'N/A'}):`, error.message, error.stack);
+
+  } catch (error) {
+    console.error('❌ [API /api/novels] Error:', error);
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดร้ายแรงในการดึงข้อมูลนิยาย", details: error.message },
-      { status: 500 }
+      { 
+        error: 'เกิดข้อผิดพลาดในการดึงข้อมูลนิยาย',
+        novels: [], 
+        pagination: { total: 0, page: 1, limit: 7, totalPages: 0 } 
+      },
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-cache', // ไม่ cache error response
+        }
+      }
     );
   }
 }
@@ -304,16 +306,38 @@ export async function POST(request: Request) {
   try {
     await dbConnect();
 
-    const body = await request.json();
+    // รองรับทั้ง JSON และ FormData
+    const contentType = request.headers.get('content-type');
+    let formData: any = {};
+    
+    if (contentType?.includes('multipart/form-data')) {
+      const form = await request.formData();
+      // แปลง FormData เป็น object
+      for (const [key, value] of form.entries()) {
+        if (key === 'coverImage' || key === 'bannerImage') {
+          formData[key] = value; // เก็บ File object
+        } else {
+          formData[key] = value.toString();
+        }
+      }
+    } else {
+      formData = await request.json();
+    }
+
     const { 
       title, 
       penName, 
       synopsis, 
+      longDescription,
       mainThemeId, 
       languageId,
+      ageRating,
       authorId,
-      contentType = NovelContentType.INTERACTIVE_FICTION 
-    } = body;
+      contentType: novelContentType = NovelContentType.INTERACTIVE_FICTION,
+      endingType = 'multiple_endings',
+      coverImage,
+      bannerImage
+    } = formData;
 
     console.log(`📝 [API /api/novels POST] Creating new novel: ${title} by ${penName}`);
 
@@ -374,6 +398,28 @@ export async function POST(request: Request) {
       }
     }
 
+    // หา age rating category
+    let ageRatingCategory = null;
+    if (ageRating) {
+      ageRatingCategory = await CategoryModel.findById(ageRating);
+    }
+
+    // จัดการการอัพโหลดรูปภาพ (ถ้ามี)
+    let coverImageUrl = null;
+    let bannerImageUrl = null;
+    
+    // TODO: ในอนาคตอาจต้องใช้ cloud storage service เช่น AWS S3, Cloudinary
+    // ตอนนี้จะข้าม file upload ไปก่อน เพราะต้องมี storage service
+    if (coverImage && coverImage instanceof File) {
+      console.log(`📷 [API /api/novels POST] Cover image received: ${coverImage.name} (${coverImage.size} bytes)`);
+      // coverImageUrl = await uploadToCloudStorage(coverImage);
+    }
+    
+    if (bannerImage && bannerImage instanceof File) {
+      console.log(`🖼️ [API /api/novels POST] Banner image received: ${bannerImage.name} (${bannerImage.size} bytes)`);
+      // bannerImageUrl = await uploadToCloudStorage(bannerImage);
+    }
+
     // สร้าง slug
     const baseSlug = title
       .toLowerCase()
@@ -396,11 +442,15 @@ export async function POST(request: Request) {
       slug,
       author: new mongoose.Types.ObjectId(authorId),
       synopsis: synopsis?.trim() || '',
+      longDescription: longDescription?.trim() || '',
+      coverImageUrl,
+      bannerImageUrl,
       status: NovelStatus.DRAFT,
       accessLevel: NovelAccessLevel.PRIVATE,
       isCompleted: false,
+      endingType: endingType || 'multiple_endings',
       sourceType: {
-        type: contentType
+        type: novelContentType
       },
       themeAssignment: {
         mainTheme: {
@@ -412,6 +462,7 @@ export async function POST(request: Request) {
         contentWarnings: [],
         customTags: []
       },
+      ageRatingCategoryId: ageRatingCategory?._id || null,
       language: languageCategory?._id || null,
       totalEpisodesCount: 0,
       publishedEpisodesCount: 0,

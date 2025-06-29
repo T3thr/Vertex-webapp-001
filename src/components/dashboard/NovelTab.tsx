@@ -43,7 +43,11 @@ import {
   PlayCircle,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { SerializedNovel, SerializedUser } from '@/app/dashboard/page';
 import { useState, useMemo, useEffect } from 'react';
@@ -213,7 +217,7 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
                     engagementRate > 2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' :
                     'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
                   }`}>
-                    {engagementRate.toFixed(1)}% Engagement
+                    {engagementRate.toFixed(1)}% การมีส่วนร่วม
                   </span>
                 </div>
               </div>
@@ -367,7 +371,7 @@ interface SummaryCardProps {
 function SummaryCard({ title, description, icon: Icon, color, action, delay, onClick }: SummaryCardProps) {
   return (
     <motion.div
-      className="bg-card border border-border rounded-2xl p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group"
+      className="bg-card border border-border rounded-xl md:rounded-2xl p-4 md:p-6 hover:shadow-lg transition-all duration-300 cursor-pointer group"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5 }}
@@ -375,15 +379,15 @@ function SummaryCard({ title, description, icon: Icon, color, action, delay, onC
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
     >
-      <div className="flex items-center gap-4">
-        <div className={`w-14 h-14 rounded-2xl ${color} flex items-center justify-center group-hover:scale-110 transition-transform`}>
-          <Icon className="w-7 h-7 text-white" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4">
+        <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl ${color} flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0`}>
+          <Icon className="w-6 h-6 md:w-7 md:h-7 text-white" />
         </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-bold text-card-foreground mb-1">{title}</h3>
-          <p className="text-sm text-muted-foreground mb-3">{description}</p>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base md:text-lg font-bold text-card-foreground mb-1 truncate">{title}</h3>
+          <p className="text-xs md:text-sm text-muted-foreground mb-3 line-clamp-2">{description}</p>
           <motion.button
-            className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
+            className="bg-primary/10 text-primary px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -398,364 +402,498 @@ function SummaryCard({ title, description, icon: Icon, color, action, delay, onC
 export default function NovelTab({ novels, totalStats, user, initialCreateModal = false }: NovelTabProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'updated' | 'views' | 'likes' | 'rating'>('updated');
+  const [sortBy, setSortBy] = useState<'updated' | 'views' | 'likes' | 'rating' | 'title' | 'episodes' | 'created'>('updated');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(initialCreateModal);
   const [novelsList, setNovelsList] = useState(novels);
-
-  // Handle initial create modal from URL parameter
-  useEffect(() => {
-    if (initialCreateModal) {
-      setIsCreateModalOpen(true);
+  
+  // Enhanced Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
+  
+  // Quick actions สำหรับ summary cards
+  const summaryCards = [
+    {
+      title: "เขียนนิยายใหม่",
+      description: "เริ่มต้นการเขียนผลงานใหม่",
+      icon: Plus,
+      color: "text-blue-500",
+      action: "สร้างเลย",
+      delay: 0,
+      onClick: () => setIsCreateModalOpen(true)
+    },
+    {
+      title: "จัดการผลงาน",
+      description: "แก้ไขและปรับปรุงนิยาย",
+      icon: Edit,
+      color: "text-green-500", 
+      action: "จัดการ",
+      delay: 0.1
+    },
+    {
+      title: "ดูสถิติ",
+      description: "ติดตามยอดชมและผลตอบรับ",
+      icon: BarChart,
+      color: "text-purple-500",
+      action: "ดูเลย",
+      delay: 0.2
+    },
+    {
+      title: "การตั้งค่า",
+      description: "ปรับแต่งการแสดงผล",
+      icon: Settings,
+      color: "text-orange-500",
+      action: "ตั้งค่า",
+      delay: 0.3
     }
-  }, [initialCreateModal]);
+  ];
 
-  // Handle novel creation success
   const handleNovelCreated = (newNovel: any) => {
-    // Add the new novel to the beginning of the list
-    const formattedNovel: SerializedNovel = {
-      ...newNovel,
-      stats: {
-        viewsCount: 0,
-        likesCount: 0,
-        commentsCount: 0,
-        discussionThreadCount: 0,
-        ratingsCount: 0,
-        averageRating: 0,
-        followersCount: 0,
-        sharesCount: 0,
-        bookmarksCount: 0,
-        totalWords: 0,
-        estimatedReadingTimeMinutes: 0,
-        completionRate: 0,
-        purchasesCount: 0,
-        uniqueViewersCount: 0,
-        ...newNovel.stats
-      },
-      themeAssignment: newNovel.themeAssignment || {
-        mainTheme: { categoryId: { _id: '', name: 'ทั่วไป' } },
-        subThemes: [],
-        moodAndTone: [],
-        contentWarnings: [],
-        customTags: []
-      },
-      narrativeFocus: {},
-      language: newNovel.language || { _id: '', name: 'ไม่ระบุ' },
-      author: user._id,
-      coAuthors: [],
-      firstEpisodeId: undefined,
-      relatedNovels: [],
-      seriesId: undefined,
-      deletedByUserId: undefined,
-      monetizationSettings: {
-        isCoinBasedUnlock: false,
-        allowDonations: false,
-        isAdSupported: false,
-        isPremiumExclusive: false
-      },
-      psychologicalAnalysisConfig: {
-        allowsPsychologicalAnalysis: true
-      },
-      publishedAt: undefined,
-      scheduledPublicationDate: undefined,
-      deletedAt: undefined,
-      isDeleted: false,
-      totalEpisodesCount: 0,
-      publishedEpisodesCount: 0,
-      isCompleted: false,
-      accessLevel: 'private' as any,
-      sourceType: { type: 'interactive_fiction' as any },
-      endingType: 'ongoing' as any,
-      isFeatured: false,
-      adminNotes: undefined
-    };
-
-    setNovelsList(prev => [formattedNovel, ...prev]);
+    setNovelsList(prev => [newNovel, ...prev]);
+    setIsCreateModalOpen(false);
   };
 
-  // Filter and sort novels
+  // Enhanced filtering and sorting
   const filteredAndSortedNovels = useMemo(() => {
-    const filtered = novelsList.filter(novel => {
+    let filtered = novelsList.filter(novel => {
       const matchesSearch = novel.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            novel.synopsis?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = filterStatus === 'all' || novel.status === filterStatus;
       return matchesSearch && matchesStatus;
     });
 
+    // Enhanced sorting
     filtered.sort((a, b) => {
-      let aValue: number | string;
-      let bValue: number | string;
+      let aValue: any = 0;
+      let bValue: any = 0;
 
       switch (sortBy) {
+        case 'title':
+          aValue = a.title.toLowerCase();
+          bValue = b.title.toLowerCase();
+          break;
         case 'updated':
           aValue = new Date(a.lastContentUpdatedAt).getTime();
           bValue = new Date(b.lastContentUpdatedAt).getTime();
           break;
+        case 'created':
+          aValue = new Date(a.createdAt).getTime();
+          bValue = new Date(b.createdAt).getTime();
+          break;
         case 'views':
-          aValue = a.stats.viewsCount;
-          bValue = b.stats.viewsCount;
+          aValue = a.stats?.viewsCount || 0;
+          bValue = b.stats?.viewsCount || 0;
           break;
         case 'likes':
-          aValue = a.stats.likesCount;
-          bValue = b.stats.likesCount;
+          aValue = a.stats?.likesCount || 0;
+          bValue = b.stats?.likesCount || 0;
           break;
         case 'rating':
-          aValue = a.stats.averageRating;
-          bValue = b.stats.averageRating;
+          aValue = a.stats?.averageRating || 0;
+          bValue = b.stats?.averageRating || 0;
           break;
-        default:
-          aValue = new Date(a.lastContentUpdatedAt).getTime();
-          bValue = new Date(b.lastContentUpdatedAt).getTime();
+        case 'episodes':
+          aValue = a.publishedEpisodesCount || 0;
+          bValue = b.publishedEpisodesCount || 0;
+          break;
       }
 
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return sortOrder === 'desc' ? bValue - aValue : aValue - bValue;
+      if (typeof aValue === 'string') {
+        return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
       }
-      return 0;
+      return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
     });
 
     return filtered;
-  }, [novelsList, searchQuery, sortBy, filterStatus, sortOrder]);
+  }, [novelsList, searchQuery, filterStatus, sortBy, sortOrder]);
 
-  const summaryCards = [
-    {
-      title: 'เขียนนิยายใหม่',
-      description: 'เริ่มต้นสร้างสรรค์เรื่องราวใหม่ที่น่าตื่นเต้น',
-      icon: Plus,
-      color: 'bg-gradient-to-br from-blue-500 to-blue-600',
-      action: 'เริ่มเขียน',
-      onClick: () => setIsCreateModalOpen(true)
-    },
-    {
-      title: 'จัดการนิยาย',
-      description: 'แก้ไข อัปเดต และจัดการนิยายที่มีอยู่',
-      icon: Edit,
-      color: 'bg-gradient-to-br from-green-500 to-green-600',
-      action: 'จัดการ'
-    },
-    {
-      title: 'วิเคราะห์ผลงาน',
-      description: 'ดูสถิติและประสิทธิภาพของนิยายทั้งหมด',
-      icon: BarChart,
-      color: 'bg-gradient-to-br from-purple-500 to-purple-600',
-      action: 'ดูรายงาน'
-    },
-    {
-      title: 'การตั้งค่า',
-      description: 'ปรับแต่งการแสดงผลและการทำงานของนิยาย',
-      icon: Settings,
-      color: 'bg-gradient-to-br from-orange-500 to-orange-600',
-      action: 'ตั้งค่า'
+  // Enhanced pagination
+  const totalPages = Math.ceil(filteredAndSortedNovels.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedNovels = filteredAndSortedNovels.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus, sortBy, sortOrder, itemsPerPage]);
+
+  const handleSortChange = (newSortBy: typeof sortBy) => {
+    if (sortBy === newSortBy) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(newSortBy);
+      setSortOrder('desc');
     }
+  };
+
+  // Get sort icon
+  const getSortIcon = (field: typeof sortBy) => {
+    if (sortBy !== field) return ArrowUpDown;
+    return sortOrder === 'asc' ? ArrowUp : ArrowDown;
+  };
+
+  const statusOptions = [
+    { value: 'all', label: 'ทั้งหมด', count: novelsList.length },
+    { value: 'published', label: 'เผยแพร่แล้ว', count: novelsList.filter(n => n.status === 'published').length },
+    { value: 'draft', label: 'ฉบับร่าง', count: novelsList.filter(n => n.status === 'draft').length },
+    { value: 'completed', label: 'จบแล้ว', count: novelsList.filter(n => n.status === 'completed').length },
   ];
 
+  const itemsPerPageOptions = [6, 12, 24, 48];
+
   return (
-    <motion.div
-      className="space-y-8"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      {/* Header */}
-      <motion.div
-        className="flex flex-col lg:flex-row lg:items-center justify-between gap-6"
+    <div className="space-y-4 md:space-y-6 px-2 sm:px-4 md:px-6">
+      {/* Header Section */}
+      <motion.div 
+        className="flex flex-col gap-3 md:gap-4"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
       >
-        <div>
-          <h2 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-3">
-            <BookOpen className="w-8 h-8 text-primary" />
-            จัดการนิยาย
-          </h2>
-          <p className="text-muted-foreground">
-            จัดการและติดตามผลงานนิยายทั้งหมดของคุณ
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-        {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="ค้นหานิยาย..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-          />
-        </div>
-
-          {/* Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="all">ทั้งหมด</option>
-            <option value="published">เผยแพร่แล้ว</option>
-            <option value="draft">ฉบับร่าง</option>
-            <option value="completed">จบแล้ว</option>
-          </select>
-
-          {/* Sort */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className="bg-secondary border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="updated">อัปเดตล่าสุด</option>
-            <option value="views">ยอดชม</option>
-            <option value="likes">ไลค์</option>
-            <option value="rating">คะแนน</option>
-          </select>
-
-          {/* Sort Order */}
-          <motion.button
-            onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-            className="p-2 bg-secondary border border-border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            {sortOrder === 'desc' ? <ArrowDown className="w-4 h-4" /> : <ArrowUp className="w-4 h-4" />}
-          </motion.button>
-
-          {/* View Mode Toggle */}
-          <div className="flex bg-secondary rounded-lg p-1">
-            <motion.button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </motion.button>
-            <motion.button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <List className="w-4 h-4" />
-            </motion.button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg md:text-xl lg:text-2xl font-bold text-foreground mb-1 md:mb-2 flex items-center gap-2 md:gap-3">
+              <BookOpen className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8 text-primary flex-shrink-0" />
+              <span className="truncate">จัดการนิยาย</span>
+            </h3>
+            <p className="text-xs md:text-sm text-muted-foreground">จัดการและติดตามผลงานของคุณ</p>
           </div>
+          
+          <motion.button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-primary text-primary-foreground px-3 md:px-4 lg:px-6 py-2 md:py-3 rounded-lg font-medium hover:bg-primary-hover transition-colors flex items-center gap-2 md:gap-3 shadow-lg"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Plus className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="text-sm md:text-base">เขียนใหม่</span>
+          </motion.button>
         </div>
       </motion.div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {summaryCards.map((card, index) => (
-          <SummaryCard
-            key={card.title}
-            {...card}
-            delay={index * 0.1}
-          />
-        ))}
-      </div>
-
-      {/* Stats Overview */}
-      <motion.div
-        className="bg-card border border-border rounded-2xl p-6"
+      <motion.div 
+        className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.5 }}
+        transition={{ delay: 0.1 }}
       >
-        <h3 className="text-xl font-bold text-card-foreground mb-6 flex items-center gap-2">
-          <TrendingUp className="w-6 h-6 text-primary" />
-          ภาพรวมผลงาน
-        </h3>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {[
-            { label: 'นิยายทั้งหมด', value: totalStats.totalNovels, icon: BookOpen, color: 'text-blue-500' },
-            { label: 'ตอนทั้งหมด', value: totalStats.totalEpisodes, icon: FileText, color: 'text-green-500' },
-            { label: 'ยอดชมรวม', value: totalStats.totalViews.toLocaleString(), icon: Eye, color: 'text-purple-500' },
-            { label: 'ผู้ติดตาม', value: totalStats.totalFollowers.toLocaleString(), icon: Users, color: 'text-pink-500' },
-            { label: 'คะแนนเฉลี่ย', value: totalStats.averageRating.toFixed(1), icon: Star, color: 'text-yellow-500' },
-            { label: 'รายได้', value: `฿${totalStats.totalEarnings.toLocaleString()}`, icon: DollarSign, color: 'text-emerald-500' }
-          ].map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              className="text-center p-4 bg-secondary/50 rounded-xl hover:bg-secondary transition-colors"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 + 0.5, duration: 0.3 }}
-              whileHover={{ scale: 1.05 }}
-            >
-              <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
-              <div className="text-lg font-bold text-card-foreground">{stat.value}</div>
-              <div className="text-xs text-muted-foreground">{stat.label}</div>
-            </motion.div>
-          ))}
+        {summaryCards.map((card, index) => (
+          <SummaryCard key={card.title} {...card} delay={index * 0.1} />
+        ))}
+      </motion.div>
+
+      {/* Search and Filter Controls - Moved below summary cards */}
+      <motion.div 
+        className="bg-card border border-border rounded-lg md:rounded-xl p-3 md:p-4 lg:p-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <div className="space-y-3 md:space-y-4">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="ค้นหานิยายจากชื่อเรื่องหรือเรื่องย่อ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-secondary border border-border rounded-lg pl-10 md:pl-12 pr-4 py-2 md:py-3 text-sm md:text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            {searchQuery && (
+              <motion.button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <XCircle className="w-4 h-4" />
+              </motion.button>
+            )}
+          </div>
+
+          {/* Filter Controls */}
+          <div className="flex flex-col lg:flex-row gap-3 md:gap-4">
+            {/* Status Filter */}
+            <div className="flex-1">
+              <label className="block text-xs md:text-sm font-medium text-muted-foreground mb-1 md:mb-2">สถานะ</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full bg-secondary border border-border rounded-lg px-3 py-2 md:py-2.5 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div className="flex-1">
+              <label className="block text-xs md:text-sm font-medium text-muted-foreground mb-1 md:mb-2">เรียงตาม</label>
+              <div className="flex gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                  className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 md:py-2.5 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="updated">วันที่อัปเดต</option>
+                  <option value="created">วันที่สร้าง</option>
+                  <option value="title">ชื่อเรื่อง</option>
+                  <option value="views">ยอดชม</option>
+                  <option value="likes">ไลค์</option>
+                  <option value="rating">คะแนน</option>
+                  <option value="episodes">จำนวนตอน</option>
+                </select>
+                
+                <motion.button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="bg-secondary border border-border rounded-lg px-3 py-2 md:py-2.5 hover:bg-accent hover:text-accent-foreground transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title={sortOrder === 'asc' ? 'เรียงจากน้อยไปมาก' : 'เรียงจากมากไปน้อย'}
+                >
+                  {sortOrder === 'asc' ? <ArrowUpAZ className="w-4 h-4" /> : <ArrowDownAZ className="w-4 h-4" />}
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Items Per Page */}
+            <div className="flex-1">
+              <label className="block text-xs md:text-sm font-medium text-muted-foreground mb-1 md:mb-2">จำนวนต่อหน้า</label>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="w-full bg-secondary border border-border rounded-lg px-3 py-2 md:py-2.5 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                {itemsPerPageOptions.map(option => (
+                  <option key={option} value={option}>{option} รายการ</option>
+                ))}
+              </select>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex-shrink-0">
+              <label className="block text-xs md:text-sm font-medium text-muted-foreground mb-1 md:mb-2">รูปแบบ</label>
+              <div className="flex bg-secondary border border-border rounded-lg p-1">
+                <motion.button
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium transition-colors ${
+                    viewMode === 'grid' 
+                      ? 'bg-primary text-primary-foreground shadow-sm' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Grid3X3 className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">ตาราง</span>
+                </motion.button>
+                <motion.button
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium transition-colors ${
+                    viewMode === 'list' 
+                      ? 'bg-primary text-primary-foreground shadow-sm' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <List className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">รายการ</span>
+                </motion.button>
+              </div>
+            </div>
+          </div>
         </div>
       </motion.div>
 
-      {/* Novels Grid/List */}
-      <motion.div
+      {/* Results Summary */}
+      <motion.div 
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 md:gap-4 text-xs md:text-sm text-muted-foreground"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4, duration: 0.5 }}
+        transition={{ delay: 0.3 }}
       >
+        <div>
+          แสดง {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAndSortedNovels.length)} จาก {filteredAndSortedNovels.length} ผลงาน
+          {searchQuery && ` (ค้นหา: "${searchQuery}")`}
+        </div>
+        {filteredAndSortedNovels.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span>หน้า {currentPage} จาก {totalPages}</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Novels Grid/List */}
+      <AnimatePresence mode="wait">
         {filteredAndSortedNovels.length > 0 ? (
-          <div className={
-              viewMode === 'grid'
-              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-              : 'space-y-4'
-          }>
-            {filteredAndSortedNovels.map((novel, index) => (
-              <NovelCard
-                key={novel._id}
-                novel={novel}
-                index={index}
+          <motion.div
+            key={`${viewMode}-${currentPage}`}
+            className={`grid gap-4 md:gap-6 ${
+              viewMode === 'grid' 
+                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+                : 'grid-cols-1'
+            }`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {paginatedNovels.map((novel, index) => (
+              <NovelCard 
+                key={novel._id} 
+                novel={novel} 
+                index={index} 
                 viewMode={viewMode}
               />
             ))}
-          </div>
+          </motion.div>
         ) : (
           <motion.div
-            className="text-center py-16"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
+            className="text-center py-12 md:py-16 lg:py-20"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
           >
-            <div className="w-24 h-24 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <BookOpen className="w-12 h-12 text-primary" />
-            </div>
-            <h3 className="text-xl font-bold text-card-foreground mb-2">
-              {searchQuery || filterStatus !== 'all' ? 'ไม่พบนิยายที่ตรงกับเงื่อนไข' : 'ยังไม่มีนิยาย'}
+            <BookOpen className="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 mx-auto mb-4 md:mb-6 text-muted-foreground opacity-50" />
+            <h3 className="text-lg md:text-xl font-semibold text-foreground mb-2 md:mb-3">
+              {searchQuery || filterStatus !== 'all' ? 'ไม่พบผลลัพธ์' : 'ยังไม่มีนิยาย'}
             </h3>
-            <p className="text-muted-foreground mb-6">
-              {searchQuery || filterStatus !== 'all'
-                ? 'ลองเปลี่ยนคำค้นหาหรือเงื่อนไขการกรอง' 
-                : 'เริ่มต้นสร้างสรรค์เรื่องราวแรกของคุณได้เลย'
+            <p className="text-sm md:text-base text-muted-foreground mb-6 md:mb-8 max-w-md mx-auto">
+              {searchQuery || filterStatus !== 'all' 
+                ? 'ลองปรับเปลี่ยนคำค้นหาหรือตัวกรองเพื่อหาผลงานที่ต้องการ'
+                : 'เริ่มต้นการเขียนผลงานแรกของคุณวันนี้'
               }
             </p>
-            {!searchQuery && filterStatus === 'all' && (
+            {(!searchQuery && filterStatus === 'all') && (
               <motion.button
-                className="bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary-hover transition-colors flex items-center gap-2 mx-auto"
+                onClick={() => setIsCreateModalOpen(true)}
+                className="bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary-hover transition-colors flex items-center gap-3 mx-auto shadow-lg"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
                 <Plus className="w-5 h-5" />
-                เขียนนิยายแรก
+                เขียนนิยายใหม่
               </motion.button>
             )}
           </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
+
+      {/* Enhanced Pagination */}
+      {totalPages > 1 && (
+        <motion.div 
+          className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-border"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          {/* Page Info */}
+          <div className="text-xs md:text-sm text-muted-foreground">
+            หน้า {currentPage} จาก {totalPages} ({filteredAndSortedNovels.length} ผลงาน)
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center gap-2">
+            {/* First Page */}
+            <motion.button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed text-xs md:text-sm"
+              whileHover={{ scale: currentPage === 1 ? 1 : 1.05 }}
+              whileTap={{ scale: currentPage === 1 ? 1 : 0.95 }}
+            >
+              ««
+            </motion.button>
+
+            {/* Previous Page */}
+            <motion.button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-xs md:text-sm"
+              whileHover={{ scale: currentPage === 1 ? 1 : 1.05 }}
+              whileTap={{ scale: currentPage === 1 ? 1 : 0.95 }}
+            >
+              <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">ก่อนหน้า</span>
+            </motion.button>
+
+            {/* Page Numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                // Show first page, last page, current page, and pages around current page
+                if (
+                  page === 1 ||
+                  page === totalPages ||
+                  (page >= currentPage - 2 && page <= currentPage + 2)
+                ) {
+                  return (
+                    <motion.button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'border border-border hover:bg-secondary'
+                      }`}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {page}
+                    </motion.button>
+                  );
+                } else if (
+                  page === currentPage - 3 ||
+                  page === currentPage + 3
+                ) {
+                  return (
+                    <span key={page} className="px-1 text-muted-foreground text-xs md:text-sm">
+                      ...
+                    </span>
+                  );
+                }
+                return null;
+              })}
+            </div>
+
+            {/* Next Page */}
+            <motion.button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-xs md:text-sm"
+              whileHover={{ scale: currentPage === totalPages ? 1 : 1.05 }}
+              whileTap={{ scale: currentPage === totalPages ? 1 : 0.95 }}
+            >
+              <span className="hidden sm:inline">ถัดไป</span>
+              <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
+            </motion.button>
+
+            {/* Last Page */}
+            <motion.button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="px-2 md:px-3 py-1.5 md:py-2 rounded-lg border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed text-xs md:text-sm"
+              whileHover={{ scale: currentPage === totalPages ? 1 : 1.05 }}
+              whileTap={{ scale: currentPage === totalPages ? 1 : 0.95 }}
+            >
+              »»
+            </motion.button>
+          </div>
+        </motion.div>
+      )}
 
       {/* Create Novel Modal */}
       <CreateNovelModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        user={user}
         onNovelCreated={handleNovelCreated}
+        user={user}
       />
-    </motion.div>
+    </div>
   );
 }

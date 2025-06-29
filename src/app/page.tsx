@@ -3,6 +3,7 @@
 // Next.js App Router ทำให้ Server Components เป็น SSR โดยอัตโนมัติ
 // ปรับปรุงเพื่อความเร็วสูงสุดและไม่มี loading flickering
 
+import { Suspense } from 'react';
 import { NovelCard, NovelCardData } from "@/components/NovelCard";
 import { ImageSlider, SlideData as SliderSlideData } from "@/components/ImageSlider";
 import {
@@ -40,65 +41,90 @@ interface SectionData {
   showViewAllButton: boolean;
 }
 
-// ปรับปรุงฟังก์ชันดึงข้อมูลให้รองรับ parallel fetching
-async function getAllNovelsData(sectionsConfig: SectionConfig[]): Promise<SectionData[]> {
-  console.log('🚀 [HomePage Server] Starting parallel fetch for all sections');
-  
-  // สร้าง Promise array สำหรับ fetch ทุก section พร้อมกัน
-  const fetchPromises = sectionsConfig.map(async (config): Promise<SectionData> => {
-    try {
-      const params = new URLSearchParams({
-        limit: NOVELS_PER_SECTION.toString(),
-        filter: config.filter,
-      });
-      if (config.novelType) {
-        params.append("novelType", config.novelType);
-      }
+// ฟังก์ชันดึงข้อมูลเดียว สำหรับ section เดียว (ใช้สำหรับ parallel fetching)
+async function fetchSectionData(config: SectionConfig): Promise<SectionData> {
+  try {
+    const params = new URLSearchParams({
+      limit: NOVELS_PER_SECTION.toString(),
+      filter: config.filter,
+    });
+    if (config.novelType) {
+      params.append("novelType", config.novelType);
+    }
 
-      const url = `${API_URL}/api/novels?${params.toString()}`;
-      console.log(`📞 [HomePage Server] Fetching ${config.key} from: ${url}`);
+    const url = `${API_URL}/api/novels?${params.toString()}`;
+    console.log(`📞 [HomePage Server] Fetching ${config.key} from: ${url}`);
 
-      // ใช้ revalidation แทน no-store เพื่อให้ cache ได้ในระดับหนึ่ง
-      const res = await fetch(url, { 
-        next: { revalidate: 300 }, // cache 5 นาที
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+    // ปรับปรุง: ใช้ timeout และ signal เพื่อป้องกัน hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 วินาที timeout
 
-      if (!res.ok) {
-        console.error(`❌ [HomePage Server] Failed to fetch ${config.key} (HTTP ${res.status})`);
-        return {
-          config,
-          novels: [],
-          showViewAllButton: false
-        };
-      }
+    const res = await fetch(url, { 
+      next: { revalidate: 600 }, // เพิ่ม cache เป็น 10 นาที
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal
+    });
 
-      const data = await res.json();
-      const fetchedNovels = Array.isArray(data.novels) ? data.novels : [];
-      console.log(`✅ [HomePage Server] Received ${fetchedNovels.length} novels for ${config.key}`);
-      
-      return {
-        config,
-        novels: fetchedNovels,
-        showViewAllButton: fetchedNovels.length === NOVELS_PER_SECTION
-      };
-    } catch (error: any) {
-      console.error(`❌ [HomePage Server] Error fetching ${config.key}:`, error.message);
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.error(`❌ [HomePage Server] Failed to fetch ${config.key} (HTTP ${res.status})`);
       return {
         config,
         novels: [],
         showViewAllButton: false
       };
     }
+
+    const data = await res.json();
+    const fetchedNovels = Array.isArray(data.novels) ? data.novels : [];
+    console.log(`✅ [HomePage Server] Received ${fetchedNovels.length} novels for ${config.key}`);
+    
+    return {
+      config,
+      novels: fetchedNovels,
+      showViewAllButton: fetchedNovels.length === NOVELS_PER_SECTION
+    };
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error(`⏰ [HomePage Server] Request timeout for ${config.key}`);
+    } else {
+      console.error(`❌ [HomePage Server] Error fetching ${config.key}:`, error.message);
+    }
+    return {
+      config,
+      novels: [],
+      showViewAllButton: false
+    };
+  }
+}
+
+// ปรับปรุงฟังก์ชันดึงข้อมูลให้รองรับ timeout และ error handling ที่ดีขึ้น
+async function getAllNovelsData(sectionsConfig: SectionConfig[]): Promise<SectionData[]> {
+  console.log('🚀 [HomePage Server] Starting parallel fetch for all sections');
+  
+  // ใช้ Promise.allSettled แทน Promise.all เพื่อไม่ให้ section หนึ่งล้มเหลวทำให้ทั้งหมดล้มเหลว
+  const results = await Promise.allSettled(
+    sectionsConfig.map(config => fetchSectionData(config))
+  );
+
+  const sectionsData = results.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    } else {
+      console.error(`❌ [HomePage Server] Section ${sectionsConfig[index].key} failed:`, result.reason);
+      return {
+        config: sectionsConfig[index],
+        novels: [],
+        showViewAllButton: false
+      };
+    }
   });
 
-  // รอให้ทุก Promise เสร็จสิ้นพร้อมกัน
-  const results = await Promise.all(fetchPromises);
-  console.log('✅ [HomePage Server] All sections fetched successfully');
-  
-  return results;
+  console.log('✅ [HomePage Server] All sections processed (some may have failed gracefully)');
+  return sectionsData;
 }
 
 function SectionTitle({ icon, title, description }: { icon: React.ReactNode; title: string; description?: string }) {
@@ -115,7 +141,32 @@ function SectionTitle({ icon, title, description }: { icon: React.ReactNode; tit
   );
 }
 
-// ลบ Suspense และ skeleton เพื่อลด flickering
+// ปรับปรุง: เพิ่ม minimal skeleton loader สำหรับ Suspense
+function SectionSkeleton() {
+  return (
+    <section className="mb-6 md:mb-10">
+      <div className="flex justify-between items-center mb-2.5 md:mb-3">
+        <div className="flex items-center gap-2.5 md:gap-3">
+          <div className="w-10 h-10 bg-muted rounded-md animate-pulse" />
+          <div>
+            <div className="h-6 w-32 bg-muted rounded animate-pulse mb-1" />
+            <div className="h-4 w-48 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+      </div>
+      <div className="flex overflow-hidden space-x-2 sm:space-x-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="flex-shrink-0 w-[120px] min-[400px]:w-[130px] sm:w-[140px] md:w-[150px]">
+            <div className="bg-muted rounded-lg aspect-[2/3] mb-2 animate-pulse" />
+            <div className="h-4 w-full bg-muted rounded animate-pulse mb-1" />
+            <div className="h-3 w-3/4 bg-muted rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function NovelRow({
   novels,
   filterKey,
@@ -187,23 +238,37 @@ function NovelRow({
   );
 }
 
-// ลบ async และ Suspense เพื่อลด render blocking
-function SectionRenderer({ data }: { data: SectionData }) {
-  const { config, novels, showViewAllButton } = data;
-  
-  return (
-    <section aria-labelledby={config.key} className="mb-6 md:mb-10">
-      <div className="flex justify-between items-center mb-2.5 md:mb-3">
-        <SectionTitle icon={config.icon} title={config.title} description={config.description} />
-      </div>
-      <NovelRow
-        novels={novels}
-        filterKey={config.key}
-        viewAllLink={config.viewAllLink}
-        showViewAllButton={showViewAllButton}
-      />
-    </section>
-  );
+// Component สำหรับแสดงผล section พร้อม error boundary
+async function SectionRenderer({ configPromise }: { configPromise: Promise<SectionData> }) {
+  try {
+    const data = await configPromise;
+    const { config, novels, showViewAllButton } = data;
+    
+    return (
+      <section aria-labelledby={config.key} className="mb-6 md:mb-10">
+        <div className="flex justify-between items-center mb-2.5 md:mb-3">
+          <SectionTitle icon={config.icon} title={config.title} description={config.description} />
+        </div>
+        <NovelRow
+          novels={novels}
+          filterKey={config.key}
+          viewAllLink={config.viewAllLink}
+          showViewAllButton={showViewAllButton}
+        />
+      </section>
+    );
+  } catch (error) {
+    console.error('❌ Section rendering error:', error);
+    return (
+      <section className="mb-6 md:mb-10">
+        <div className="text-center text-muted-foreground py-8 md:py-10 flex flex-col items-center justify-center min-h-[200px] bg-secondary/20 rounded-lg">
+          <BookOpen size={36} strokeWidth={1.5} className="mx-auto mb-3 text-red-500/60" />
+          <p className="font-semibold text-base text-foreground/80">เกิดข้อผิดพลาดในการโหลดเนื้อหา</p>
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-xs mx-auto">กรุณาลองรีเฟรชหน้าใหม่อีกครั้ง</p>
+        </div>
+      </section>
+    );
+  }
 }
 
 export default async function HomePage() {
@@ -278,26 +343,25 @@ export default async function HomePage() {
     },
   ];
 
-  // ดึงข้อมูลทั้งหมดแบบ parallel เพื่อความเร็วสูงสุด
-  const sectionsData = await getAllNovelsData(sectionsConfig);
+  // เริ่ม fetch ข้อมูลทั้งหมดแบบ parallel แต่ไม่รอให้เสร็จ
+  const sectionPromises = sectionsConfig.map(config => fetchSectionData(config));
   
-  console.log('✅ [HomePage Server] Homepage data ready, rendering...');
+  console.log('✅ [HomePage Server] Homepage setup complete, starting render...');
 
   return (
     <div className="bg-background text-foreground min-h-screen">
       <main className="pb-10 md:pb-16">
-        {/* ลบ Suspense ออกจาก ImageSlider เพื่อลด flickering */}
+        {/* แสดง ImageSlider ทันทีโดยไม่ต้องรอ API */}
         <section className="w-full mb-6 md:mb-10 xl:mb-12 relative">
           <ImageSlider slides={imageSlideData} autoPlayInterval={7000} />
         </section>
 
         <div className="container-custom space-y-8 md:space-y-12">
-          {/* ลบ Suspense ออกและ render ทุก section พร้อมกัน */}
-          {sectionsData.map((data) => (
-            <SectionRenderer
-              key={data.config.key}
-              data={data}
-            />
+          {/* ใช้ Suspense แยกแต่ละ section เพื่อ progressive loading */}
+          {sectionPromises.map((promise, index) => (
+            <Suspense key={sectionsConfig[index].key} fallback={<SectionSkeleton />}>
+              <SectionRenderer configPromise={promise} />
+            </Suspense>
           ))}
         </div>
       </main>

@@ -385,7 +385,7 @@ html[data-theme-ready="true"] {
   background: hsl(var(--background));
 }
 
-/* Analytics Tab - ลบช่องว่างด้านล่าง */
+/* Analytics Tab - ลบช่องว่างด้านล่างทั้งหมด */
 .analytics-tab-content {
   padding-bottom: 0 !important;
   margin-bottom: 0 !important;
@@ -402,6 +402,20 @@ html[data-theme-ready="true"] {
 }
 
 .analytics-tab-content > *:last-child {
+  padding-bottom: 0 !important;
+}
+
+/* Fix for analytics tab bottom spacing */
+.analytics-tab-content .motion-div:last-child {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Ensure no extra space after last element */
+.analytics-tab-content > motion-div:last-child,
+.analytics-tab-content > div:last-child,
+.analytics-tab-content > section:last-child {
+  margin-bottom: 0 !important;
   padding-bottom: 0 !important;
 }
 

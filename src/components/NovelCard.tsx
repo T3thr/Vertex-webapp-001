@@ -3,6 +3,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, ThumbsUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
