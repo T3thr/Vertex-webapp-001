@@ -651,7 +651,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                     <div className="text-sm text-muted-foreground">
                       <p className="font-semibold text-foreground mb-2">เกี่ยวกับการสร้าง Visual Novel:</p>
                       <ul className="space-y-1 text-sm">
-                        <li>• นิยายที่สร้างใหม่จะอยู่ในสถานะ "ฉบับร่าง" และเป็นส่วนตัว</li>
+                        <li>• นิยายที่สร้างใหม่จะอยู่ในสถานะ &quot;ฉบับร่าง&quot; และเป็นส่วนตัว</li>
                         <li>• คุณสามารถเพิ่มตอน สร้างตัวละคร และออกแบบเส้นทางเรื่องได้ภายหลัง</li>
                         <li>• รูปภาพทั้งหมดจะถูกประมวลผลและปรับขนาดอัตโนมัติ</li>
                         <li>• Visual Novel รองรับการมีปฏิสัมพันธ์และการเลือกที่หลากหลาย</li>

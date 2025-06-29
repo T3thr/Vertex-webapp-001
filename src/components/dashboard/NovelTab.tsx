@@ -456,7 +456,7 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
 
   // Enhanced filtering and sorting
   const filteredAndSortedNovels = useMemo(() => {
-    let filtered = novelsList.filter(novel => {
+    const filtered = novelsList.filter(novel => {
       const matchesSearch = novel.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            novel.synopsis?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = filterStatus === 'all' || novel.status === filterStatus;
