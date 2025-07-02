@@ -7,19 +7,18 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
 import WriterApplicationModel, { 
   WriterApplicationStatus, 
-  WriterLevel,
   type IWriterApplication 
 } from '@/backend/models/WriterApplication';
 import UserModel from '@/backend/models/User';
-import WriterStatsModel from '@/backend/models/WriterStats';
 import { Types } from 'mongoose';
 
 // GET - ดูรายละเอียดใบสมัคร (Admin เท่านั้น)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {
@@ -40,11 +39,10 @@ export async function GET(
       );
     }
 
-    const applicationId = new Types.ObjectId(params.id);
+    const applicationId = new Types.ObjectId(id);
     
     const application = await WriterApplicationModel.findById(applicationId)
       .populate('applicantId', 'username email primaryPenName avatarUrl roles createdAt')
-      .populate('assignedReviewerId', 'username primaryPenName')
       .populate('reviewNotes.reviewerId', 'username primaryPenName')
       .lean();
 
@@ -72,9 +70,10 @@ export async function GET(
 // PUT - อัปเดตสถานะใบสมัคร (Admin เท่านั้น)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {
@@ -96,16 +95,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { 
-      action, 
-      status, 
-      notes, 
-      reason, 
-      reviewNote, 
-      estimatedLevel,
-      priority,
-      assignToSelf 
-    } = body;
+    const { action, status, reason, reviewNote } = body;
 
     if (!action) {
       return NextResponse.json(
@@ -114,7 +104,7 @@ export async function PUT(
       );
     }
 
-    const applicationId = new Types.ObjectId(params.id);
+    const applicationId = new Types.ObjectId(id);
     const reviewerId = new Types.ObjectId(session.user.id);
 
     const application = await WriterApplicationModel.findById(applicationId);
@@ -129,13 +119,6 @@ export async function PUT(
     let responseMessage = '';
 
     switch (action) {
-      case 'assign':
-        if (assignToSelf) {
-          application.assignedReviewerId = reviewerId;
-          responseMessage = 'มอบหมายงานให้ตัวเองเรียบร้อย';
-        }
-        break;
-
       case 'change_status':
         if (!status || !Object.values(WriterApplicationStatus).includes(status)) {
           return NextResponse.json(
@@ -144,20 +127,20 @@ export async function PUT(
           );
         }
 
-        // เพิ่มการเปลี่ยนสถานะ
-        application.addStatusChange(status, reviewerId, notes, reason);
+        // ใช้ static method เพื่อเปลี่ยนสถานะ
+        await (WriterApplicationModel as any).changeApplicationStatus(
+          applicationId, 
+          status, 
+          reviewerId, 
+          reason, 
+          status === WriterApplicationStatus.REJECTED ? reason : undefined
+        );
 
         if (status === WriterApplicationStatus.APPROVED) {
-          if (estimatedLevel && Object.values(WriterLevel).includes(estimatedLevel)) {
-            application.estimatedLevel = estimatedLevel;
-          }
           responseMessage = 'อนุมัติใบสมัครเรียบร้อย';
         } else if (status === WriterApplicationStatus.REJECTED) {
-          if (reason) {
-            application.rejectionReason = reason;
-          }
           responseMessage = 'ปฏิเสธใบสมัครเรียบร้อย';
-        } else if (status === WriterApplicationStatus.REQUIRES_REVISION) {
+        } else if (status === WriterApplicationStatus.REQUIRES_MORE_INFO) {
           responseMessage = 'ส่งใบสมัครกลับเพื่อแก้ไข';
         } else {
           responseMessage = 'เปลี่ยนสถานะเรียบร้อย';
@@ -172,35 +155,13 @@ export async function PUT(
           );
         }
 
-        application.addReviewNote(
+        // ใช้ static method เพื่อเพิ่มบันทึก
+        await (WriterApplicationModel as any).addReviewNote(
+          applicationId,
           reviewerId,
-          reviewNote.content,
-          reviewNote.isPublic || false,
-          reviewNote.category || 'general'
+          reviewNote.content
         );
         responseMessage = 'เพิ่มบันทึกเรียบร้อย';
-        break;
-
-      case 'update_priority':
-        if (!['low', 'normal', 'high', 'urgent'].includes(priority)) {
-          return NextResponse.json(
-            { success: false, error: 'ลำดับความสำคัญไม่ถูกต้อง' },
-            { status: 400 }
-          );
-        }
-        application.priority = priority;
-        responseMessage = 'อัปเดตลำดับความสำคัญเรียบร้อย';
-        break;
-
-      case 'update_estimated_level':
-        if (!estimatedLevel || !Object.values(WriterLevel).includes(estimatedLevel)) {
-          return NextResponse.json(
-            { success: false, error: 'ระดับที่ประเมินไม่ถูกต้อง' },
-            { status: 400 }
-          );
-        }
-        application.estimatedLevel = estimatedLevel;
-        responseMessage = 'อัปเดตระดับที่ประเมินเรียบร้อย';
         break;
 
       default:
@@ -210,17 +171,15 @@ export async function PUT(
         );
     }
 
-    await application.save();
+    // ดึงข้อมูลใบสมัครที่อัปเดตแล้ว
+    const updatedApplication = await WriterApplicationModel.findById(applicationId);
 
     return NextResponse.json({
       success: true,
       message: responseMessage,
       data: {
-        _id: application._id,
-        status: application.status,
-        priority: application.priority,
-        estimatedLevel: application.estimatedLevel,
-        assignedReviewerId: application.assignedReviewerId
+        _id: updatedApplication?._id,
+        status: updatedApplication?.status
       }
     });
 
@@ -236,9 +195,10 @@ export async function PUT(
 // DELETE - ลบใบสมัคร (Admin เท่านั้น)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {
@@ -259,7 +219,7 @@ export async function DELETE(
       );
     }
 
-    const applicationId = new Types.ObjectId(params.id);
+    const applicationId = new Types.ObjectId(id);
     
     const application = await WriterApplicationModel.findById(applicationId);
     

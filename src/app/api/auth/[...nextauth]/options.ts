@@ -228,22 +228,9 @@ function toSessionUserFormat(userDoc: any): SessionUser {
       totalExperiencePointsEverEarned: g.totalExperiencePointsEverEarned,
       nextLevelXPThreshold: g.nextLevelXPThreshold,
       achievements: g.achievements?.map((id: any) => id.toString()) || [],
-      showcasedItems:
-        g.showcasedItems?.map((item: OriginalShowcasedItem) => ({
-          ...item,
-          earnedItemId: item.earnedItemId.toString(),
-        })) || [],
-      primaryDisplayBadge: g.primaryDisplayBadge
-        ? {
-            ...g.primaryDisplayBadge,
-            earnedBadgeId: g.primaryDisplayBadge.earnedBadgeId.toString(),
-          }
-        : undefined,
-      secondaryDisplayBadges:
-        g.secondaryDisplayBadges?.map((badge: OriginalDisplayBadge) => ({
-          ...badge,
-          earnedBadgeId: badge.earnedBadgeId.toString(),
-        })) || [],
+      showcasedItems: [], // Moved to UserProfile
+      primaryDisplayBadge: undefined, // Moved to UserProfile
+      secondaryDisplayBadges: [], // Moved to UserProfile
       loginStreaks: {
         currentStreakDays: g.loginStreaks?.currentStreakDays || 0,
         longestStreakDays: g.loginStreaks?.longestStreakDays || 0,

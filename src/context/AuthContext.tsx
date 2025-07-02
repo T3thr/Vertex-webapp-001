@@ -146,21 +146,9 @@ const transformApiUserToSessionUser = (apiUser: IUser): SessionUser => {
       totalExperiencePointsEverEarned: g.totalExperiencePointsEverEarned,
       nextLevelXPThreshold: g.nextLevelXPThreshold,
       achievements: g.achievements?.map((id: any) => id.toString()) || [], // แปลง ID ใน achievements เป็น string
-      // แปลง showcasedItems
-      showcasedItems: g.showcasedItems?.map((item: OriginalShowcasedGamificationItem): SessionShowcasedItem => ({
-        earnedItemId: item.earnedItemId.toString(), // แปลง earnedItemId เป็น string
-        itemType: item.itemType,
-      })) || [],
-      // แปลง primaryDisplayBadge
-      primaryDisplayBadge: g.primaryDisplayBadge ? {
-        earnedBadgeId: (g.primaryDisplayBadge as OriginalUserDisplayBadge).earnedBadgeId.toString(), // แปลง earnedBadgeId เป็น string
-        displayContext: (g.primaryDisplayBadge as OriginalUserDisplayBadge).displayContext,
-      } : undefined,
-      // แปลง secondaryDisplayBadges
-      secondaryDisplayBadges: g.secondaryDisplayBadges?.map((badge: OriginalUserDisplayBadge): SessionDisplayBadge => ({
-        earnedBadgeId: badge.earnedBadgeId.toString(), // แปลง earnedBadgeId เป็น string
-        displayContext: badge.displayContext,
-      })) || [],
+      showcasedItems: [], // Moved to UserProfile
+      primaryDisplayBadge: undefined, // Moved to UserProfile
+      secondaryDisplayBadges: [], // Moved to UserProfile
       loginStreaks: {
         currentStreakDays: g.loginStreaks?.currentStreakDays || 0,
         longestStreakDays: g.loginStreaks?.longestStreakDays || 0,
