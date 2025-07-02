@@ -58,6 +58,7 @@ import UserTrackingModel, {
   IUserTrackingStats,
 } from "@/backend/models/UserTracking";
 import UserAchievementModel from "@/backend/models/UserAchievement";
+import UserLibraryItemModel from "@/backend/models/UserLibraryItem";
 
 // SECTION: Type Definitions for Request and Response
 
@@ -338,10 +339,17 @@ export async function POST(request: Request): Promise<NextResponse> {
             totalExperiencePointsFromGamification: 0,
         }], { session });
 
+        // 2g. UserLibraryItem (สร้างเอกสารเปล่าเพื่อเตรียมไว้สำหรับการเพิ่มรายการในอนาคต)
+        // หมายเหตุ: UserLibraryItem จะถูกสร้างเมื่อผู้ใช้เพิ่มนิยายเข้าคลังครั้งแรก
+        // ดังนั้นเราไม่จำเป็นต้องสร้างเอกสารเปล่าที่นี่
+        // แต่เราจะเตรียม promise เปล่าไว้เพื่อความสอดคล้อง
+        const libraryPromise = Promise.resolve(); // Placeholder - UserLibraryItem จะถูกสร้างตามความต้องการ
+
         // Wait for all creation promises to resolve
         await Promise.all([
             profilePromise, settingsPromise, securityPromise,
-            gamificationPromise, trackingPromise, achievementPromise
+            gamificationPromise, trackingPromise, achievementPromise,
+            libraryPromise
         ]);
 
         console.log(`✅ [Tx] สร้างเอกสารย่อยทั้งหมดสำหรับ User ID: ${userId} สำเร็จ`);

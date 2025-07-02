@@ -64,7 +64,6 @@ export interface IWriterStatsSummary {
     totalNovelsPublished: number;
     totalViewsAcrossAllNovels: number;
     totalLikesReceivedOnNovels: number;
-    writerTier?: string;
     writerRank?: number;
 }
 
@@ -162,7 +161,6 @@ const WriterStatsSummarySchema = new Schema<IWriterStatsSummary>(
         totalNovelsPublished: { type: Number, default: 0, min: 0 },
         totalViewsAcrossAllNovels: { type: Number, default: 0, min: 0 },
         totalLikesReceivedOnNovels: { type: Number, default: 0, min: 0 },
-        writerTier: { type: String, trim: true, maxlength: 50 },
         writerRank: { type: Number, min: 0 },
     },
     { _id: false }

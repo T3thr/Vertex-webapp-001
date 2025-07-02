@@ -36,7 +36,9 @@ import {
   AlertCircle,
   DollarSign,
   UserCheck,
-  Library
+  Library,
+  LayoutDashboard,
+  Lock
 } from 'lucide-react';
 import { SerializedUser, WriterDashboardData } from '@/app/dashboard/page';
 
@@ -294,46 +296,46 @@ export default function SidebarDashboard({
   const shouldShowWriterApplicationNotification = !isWriter && !writerApplication; // ถ้ายังไม่ใช่นักเขียนและยังไม่เคยสมัคร
   const shouldShowDonationNotification = isWriter && !donationApplication; // ถ้าเป็นนักเขียนแต่ยังไม่สมัครระบบบริจาค
 
-  // Navigation Items
-  const navigationItems: MenuItem[] = [
+  // เมนูรายการ - อัพเดตให้รองรับทุกบทบาท
+  const menuItems: MenuItem[] = [
     {
       id: 'overview',
       label: 'ภาพรวม',
-      icon: Home,
-      color: 'text-blue-600'
+      icon: LayoutDashboard,
+      color: 'from-blue-500 to-blue-600',
     },
     {
       id: 'novels',
       label: 'นิยาย',
       icon: BookOpen,
-      color: 'text-green-600'
-      // ลบ badge ออกแล้ว
+      badge: totalStats.totalNovels.toString(),
+      color: 'from-purple-500 to-purple-600',
+      // เอา requiresWriter ออกเพื่อให้ทุกคนเข้าถึงได้
     },
     {
       id: 'analytics',
       label: 'วิเคราะห์',
       icon: BarChart3,
-      requiresWriter: true,
-      color: 'text-purple-600'
+      color: 'from-green-500 to-green-600',
+      requiresWriter: true, // ล็อคไว้สำหรับ Writer เท่านั้น
     },
     {
       id: 'profile',
       label: 'โปรไฟล์',
       icon: User,
-      requiresWriter: true,
-      color: 'text-orange-600',
-      badge: shouldShowWriterApplicationNotification || shouldShowDonationNotification ? '!' : undefined
+      color: 'from-orange-500 to-orange-600',
+      badge: !isWriter ? '!' : undefined, // แจ้งเตือนสำหรับนักอ่าน
     },
     {
       id: 'settings',
       label: 'ตั้งค่า',
       icon: Settings,
-      color: 'text-gray-600'
-    }
+      color: 'from-gray-500 to-gray-600',
+    },
   ];
 
   // กรอง navigation items ตาม writer status
-  const filteredNavigationItems = navigationItems.filter(item => 
+  const filteredNavigationItems = menuItems.filter(item => 
     !item.requiresWriter || isWriter
   );
 
@@ -394,6 +396,15 @@ export default function SidebarDashboard({
   };
 
   const followerDisplayData = getFollowerDisplayData();
+
+  // ฟังก์ชันสำหรับจัดการการคลิกเมนู
+  const handleMenuClick = (itemId: string) => {
+    if (itemId === 'analytics' && !isWriter) {
+      // แสดง tooltip แทนการเปลี่ยน tab
+      return;
+    }
+    setActiveTab(itemId);
+  };
 
   return (
     <DashboardContext.Provider value={{ 
@@ -774,8 +785,10 @@ export default function SidebarDashboard({
             {/* Navigation */}
             <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
               <ul className={`space-y-1 ${isCollapsed ? 'px-1' : ''} ${isMobile ? 'pb-4' : ''}`}>
-                {filteredNavigationItems.map((item, index) => {
+                {/* Show all menu items including locked ones */}
+                {menuItems.map((item, index) => {
                   const isActive = activeTab === item.id;
+                  const isLocked = item.requiresWriter && !isWriter;
                   
                   return (
                     <motion.li 
@@ -786,25 +799,29 @@ export default function SidebarDashboard({
                     >
                       <motion.button
                         onClick={() => {
-                          setActiveTab(item.id);
-                          // Auto-close sidebar on mobile after selecting a tab
-                          if (isMobile) {
-                            setTimeout(() => setIsSidebarOpen(false), 100);
+                          if (!isLocked) {
+                            handleMenuClick(item.id);
+                            // Auto-close sidebar on mobile after selecting a tab
+                            if (isMobile) {
+                              setTimeout(() => setIsSidebarOpen(false), 100);
+                            }
                           }
                         }}
                         className={`
-                          w-full flex items-center rounded-xl transition-all duration-300 group
+                          w-full flex items-center rounded-xl transition-all duration-300 group relative
                           ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-3'}
-                          ${isActive 
-                            ? 'bg-gradient-to-r from-primary to-primary-hover text-primary-foreground shadow-lg shadow-primary/25' 
-                            : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                          ${isLocked 
+                            ? 'text-muted-foreground/50 cursor-not-allowed' 
+                            : isActive 
+                              ? 'bg-gradient-to-r from-primary to-primary-hover text-primary-foreground shadow-lg shadow-primary/25' 
+                              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                           }
                         `}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        title={isCollapsed ? item.label : undefined}
+                        whileHover={{ scale: isLocked ? 1 : 1.02 }}
+                        whileTap={{ scale: isLocked ? 1 : 0.98 }}
+                        title={isCollapsed ? (isLocked ? `${item.label} - สมัครเป็นนักเขียนเพื่อปลดล็อค` : item.label) : undefined}
                       >
-                        <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-5 h-5'} flex-shrink-0 ${isActive ? '' : item.color}`} />
+                        <item.icon className={`${isCollapsed ? 'w-5 h-5' : 'w-5 h-5'} flex-shrink-0 ${isActive ? '' : isLocked ? 'text-muted-foreground/50' : item.color}`} />
                         
                         <AnimatePresence>
                           {!isCollapsed && (
@@ -816,26 +833,67 @@ export default function SidebarDashboard({
                               transition={{ duration: 0.2 }}
                             >
                               <span className="font-medium">{item.label}</span>
-                              {item.badge && (
-                                <motion.span 
-                                  className={`
-                                    text-white text-xs px-2 py-1 rounded-full font-bold
-                                    ${item.badge === '!' 
-                                      ? 'bg-red-500 animate-pulse' 
-                                      : 'bg-blue-500'
-                                    }
-                                  `}
-                                  key={item.badge}
-                                  initial={{ scale: 1.2 }}
-                                  animate={{ scale: 1 }}
-                                  transition={{ duration: 0.3 }}
-                                >
-                                  {item.badge}
-                                </motion.span>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {item.badge && !isLocked && (
+                                  <motion.span 
+                                    className={`
+                                      text-white text-xs px-2 py-1 rounded-full font-bold
+                                      ${item.badge === '!' 
+                                        ? 'bg-red-500 animate-pulse' 
+                                        : 'bg-blue-500'
+                                      }
+                                    `}
+                                    key={item.badge}
+                                    initial={{ scale: 1.2 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ duration: 0.3 }}
+                                  >
+                                    {item.badge}
+                                  </motion.span>
+                                )}
+                                {/* Lock Icon for Writer-only features */}
+                                {isLocked && (
+                                  <motion.div
+                                    className="group relative"
+                                    whileHover={{ scale: 1.1 }}
+                                  >
+                                    <Lock className="w-4 h-4 text-muted-foreground/50" />
+                                    {/* Tooltip */}
+                                    <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg p-3 shadow-xl z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                                      <div className="text-xs text-card-foreground font-medium mb-1">
+                                        ต้องเป็นนักเขียน
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        สมัครเป็นนักเขียนในแท็บโปรไฟล์เพื่อปลดล็อคฟีเจอร์นี้
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                )}
+
+                                {/* Notification badge for Profile tab when user is reader */}
+                                {item.id === 'profile' && !isWriter && (
+                                  <motion.div
+                                    className="w-2 h-2 bg-orange-500 rounded-full"
+                                    animate={{ scale: [1, 1.3, 1] }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                    title="สมัครเป็นนักเขียน"
+                                  />
+                                )}
+                              </div>
                             </motion.div>
                           )}
                         </AnimatePresence>
+
+                        {/* Icon notification when collapsed */}
+                        {isCollapsed && item.id === 'profile' && !isWriter && (
+                          <motion.div
+                            className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full flex items-center justify-center"
+                            animate={{ scale: [1, 1.2, 1] }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                          >
+                            <PenTool className="w-2 h-2 text-white" />
+                          </motion.div>
+                        )}
                       </motion.button>
                     </motion.li>
                   );

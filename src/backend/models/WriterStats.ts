@@ -96,8 +96,7 @@ export interface IUserDonationSettings {
  * @property {Date} [writerSince] - วันที่ได้รับการอนุมัติเป็นนักเขียน
  * @property {Date} [lastNovelPublishedAt] - วันที่เผยแพร่นิยายเรื่องล่าสุด
  * @property {Date} [lastEpisodePublishedAt] - วันที่เผยแพร่ตอนล่าสุด
- * @property {string} [writerTier] - ระดับขั้นของนักเขียน
- * @property {number} [writerRank] - อันดับของนักเขียน
+ * @property {number} [writerRank] - อันดับของนักเขียน (ตามผลงาน)
  * @property {IUserDonationSettings} donationSettings - การตั้งค่าการรับบริจาค
  * @property {Types.ObjectId} [writerApplicationId] - ID ใบสมัครนักเขียนล่าสุด
  */
@@ -119,7 +118,6 @@ export interface IWriterStatsDoc extends Document {
   writerSince?: Date;
   lastNovelPublishedAt?: Date;
   lastEpisodePublishedAt?: Date;
-  writerTier?: string;
   writerRank?: number;
   donationSettings: IUserDonationSettings;
   writerApplicationId?: Types.ObjectId;
@@ -202,8 +200,7 @@ const WriterStatsSchema = new Schema<IWriterStatsDoc>(
     writerSince: { type: Date, comment: "วันที่เริ่มเป็นนักเขียน" },
     lastNovelPublishedAt: { type: Date, comment: "วันที่เผยแพร่นิยายล่าสุด" },
     lastEpisodePublishedAt: { type: Date, comment: "วันที่เผยแพร่ตอนล่าสุด" },
-    writerTier: { type: String, trim: true, maxlength: 50, index: true, comment: "ระดับนักเขียน" },
-    writerRank: { type: Number, min: 0, index: true, comment: "อันดับนักเขียน" },
+    writerRank: { type: Number, min: 0, index: true, comment: "อันดับนักเขียน (ตามผลงาน)" },
     donationSettings: { type: UserDonationSettingsSchema, default: () => ({ isEligibleForDonation: false }), required: true },
     writerApplicationId: { type: Schema.Types.ObjectId, ref: "WriterApplication", comment: "ID ของใบสมัครนักเขียนล่าสุดหรือที่เกี่ยวข้อง" },
   },
@@ -216,7 +213,7 @@ const WriterStatsSchema = new Schema<IWriterStatsDoc>(
 // ==================================================================================================
 // SECTION: Indexes (ดัชนีสำหรับการค้นหาและ Query Performance)
 // ==================================================================================================
-WriterStatsSchema.index({ writerTier: 1, writerRank: 1 }, { name: "WriterStatsTierRankIndex" });
+WriterStatsSchema.index({ writerRank: 1 }, { name: "WriterStatsRankIndex" });
 WriterStatsSchema.index({ "activeNovelPromotions.novelId": 1 }, { sparse: true, name: "WriterStatsActivePromotionsIndex" });
 WriterStatsSchema.index({ "trendingNovels.novelId": 1 }, { sparse: true, name: "WriterStatsTrendingNovelsIndex" });
 WriterStatsSchema.index({ "donationSettings.isEligibleForDonation": 1 }, { name: "WriterStatsDonationEligibilityIndex" });

@@ -162,30 +162,30 @@ export async function GET(request: Request) {
     const [total, rawNovels] = await Promise.all([
       NovelModel.countDocuments(query),
       NovelModel.find(query)
-        .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
-          path: "author",
+      .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
+        path: "author",
           select: "username profile.displayName profile.penName profile.avatarUrl roles", // เลือก field ที่จำเป็นเท่านั้น
           model: UserModel,
-        })
+      })
         .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory } } }>({
-          path: "themeAssignment.mainTheme.categoryId",
+        path: "themeAssignment.mainTheme.categoryId",
           select: "name slug iconUrl color", // ลดข้อมูลที่ไม่จำเป็น
-          model: CategoryModel,
-        })
-        .populate({
+        model: CategoryModel,
+      })
+      .populate({
           path: "language",
           select: "name slug",
-          model: CategoryModel,
-        })
-        .populate({
-          path: "ageRatingCategoryId",
+        model: CategoryModel,
+      })
+      .populate({
+        path: "ageRatingCategoryId",
           select: "name",
-          model: CategoryModel,
-        })
+        model: CategoryModel,
+      })
         .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount") // เลือกเฉพาะ field ที่จำเป็นสำหรับการ์ด
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
         .lean({ virtuals: true }) // ใช้ lean เพื่อประสิทธิภาพที่ดีขึ้น
     ]);
 
@@ -193,24 +193,24 @@ export async function GET(request: Request) {
     console.log(`ℹ️ [API /api/novels] Found ${total} novels matching query, returning ${rawNovels.length} novels.`);
 
     // ปรับปรุง: Helper functions สำหรับ transform ข้อมูล (เหมือนเดิม)
-    const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
+      const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
       if (!cat || !cat._id) return undefined;
-      return {
+        return {
         _id: cat._id.toString(),
         name: cat.name || 'Unknown Category',
-        slug: cat.slug,
-        localizations: cat.localizations,
-        iconUrl: cat.iconUrl,
-        color: cat.color,
-        categoryType: cat.categoryType,
-        description: cat.description,
+          slug: cat.slug,
+          localizations: cat.localizations,
+          iconUrl: cat.iconUrl,
+          color: cat.color,
+          categoryType: cat.categoryType,
+          description: cat.description,
+        };
       };
-    };
-
-    const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
-      if (!Array.isArray(cats)) return [];
-      return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
-    };
+      
+      const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
+        if (!Array.isArray(cats)) return [];
+        return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
+      };
 
     // Transform ข้อมูลให้ตรงกับ interface ที่ต้องการ
     const novels: NovelCardData[] = rawNovels.map((novel: any) => {

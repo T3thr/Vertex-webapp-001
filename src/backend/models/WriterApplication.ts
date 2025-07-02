@@ -33,9 +33,8 @@ export enum WriterApplicationStatus {
 /**
  * @enum {string} WriterLevel
  * @description ระดับของนักเขียนที่จะได้รับเมื่อได้รับการอนุมัติ
- * - `BEGINNER`: นักเขียนมือใหม่
- * - `INTERMEDIATE`: นักเขียนระดับกลาง
- * - `ADVANCED`: นักเขียนระดับสูง
+ * หมายเหตุ: ไม่ใช้แล้ว เพื่อป้องกันความเหลื่อมล้ำในชุมชน
+ * @deprecated
  */
 export enum WriterLevel {
   BEGINNER = "beginner",
@@ -74,44 +73,6 @@ export interface IPortfolioItem {
 }
 
 /**
- * @const PortfolioItemSchema
- * @description สกีมาสำหรับผลงานของผู้สมัคร
- */
-const PortfolioItemSchema = new Schema<IPortfolioItem>(
-  {
-    title: {
-      type: String,
-      required: [true, "กรุณาระบุชื่อผลงาน"],
-      trim: true,
-      maxlength: [100, "ชื่อผลงานต้องไม่เกิน 100 ตัวอักษร"],
-    },
-    url: {
-      type: String,
-      required: [true, "กรุณาระบุ URL ของผลงาน"],
-      trim: true,
-      maxlength: [500, "URL ต้องไม่เกิน 500 ตัวอักษร"],
-      validate: {
-        validator: function (v: string) {
-          try {
-            new URL(v);
-            return true;
-          } catch (e) {
-            return false;
-          }
-        },
-        message: "URL ไม่ถูกต้อง กรุณาระบุ URL ที่สมบูรณ์ เช่น https://example.com",
-      },
-    },
-    description: {
-      type: String,
-      trim: true,
-      maxlength: [200, "คำอธิบายต้องไม่เกิน 200 ตัวอักษร"],
-    },
-  },
-  { _id: false }
-);
-
-/**
  * @interface IReviewNote
  * @description บันทึกจากผู้ตรวจสอบใบสมัคร
  * @property {Types.ObjectId} reviewerId - ID ของผู้ตรวจสอบ (Admin/Moderator)
@@ -125,31 +86,6 @@ export interface IReviewNote {
 }
 
 /**
- * @const ReviewNoteSchema
- * @description สกีมาสำหรับบันทึกจากผู้ตรวจสอบ
- */
-const ReviewNoteSchema = new Schema<IReviewNote>(
-  {
-    reviewerId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "กรุณาระบุ ID ของผู้ตรวจสอบ"],
-    },
-    note: {
-      type: String,
-      required: [true, "กรุณาระบุข้อความบันทึก"],
-      trim: true,
-      maxlength: [1000, "บันทึกต้องไม่เกิน 1000 ตัวอักษร"],
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  { _id: false }
-);
-
-/**
  * @interface IApplicantMessage
  * @description ข้อความจากผู้สมัครตอบกลับการขอข้อมูลเพิ่มเติม
  * @property {string} message - ข้อความจากผู้สมัคร
@@ -159,26 +95,6 @@ export interface IApplicantMessage {
   message: string;
   sentAt: Date;
 }
-
-/**
- * @const ApplicantMessageSchema
- * @description สกีมาสำหรับข้อความจากผู้สมัคร
- */
-const ApplicantMessageSchema = new Schema<IApplicantMessage>(
-  {
-    message: {
-      type: String,
-      required: [true, "กรุณาระบุข้อความ"],
-      trim: true,
-      maxlength: [1000, "ข้อความต้องไม่เกิน 1000 ตัวอักษร"],
-    },
-    sentAt: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  { _id: false }
-);
 
 /**
  * @interface IStatusChange
@@ -199,6 +115,74 @@ export interface IStatusChange {
  * @const StatusChangeSchema
  * @description สกีมาสำหรับบันทึกการเปลี่ยนสถานะ
  */
+const PortfolioItemSchema = new Schema<IPortfolioItem>(
+  {
+    title: {
+      type: String,
+      required: [true, "กรุณาระบุชื่อผลงาน"],
+      trim: true,
+      maxlength: [100, "ชื่อผลงานต้องไม่เกิน 100 ตัวอักษร"],
+    },
+    url: {
+      type: String,
+      required: [true, "กรุณาระบุ URL ของผลงาน"],
+      trim: true,
+      maxlength: [2048, "URL ต้องไม่เกิน 2048 ตัวอักษร"],
+      validate: {
+        validator: function (v: string) {
+          return /^https?:\/\/.+/.test(v);
+        },
+        message: "URL ต้องเป็น HTTP หรือ HTTPS",
+      },
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [200, "คำอธิบายต้องไม่เกิน 200 ตัวอักษร"],
+    },
+  },
+  { _id: false }
+);
+
+const ReviewNoteSchema = new Schema<IReviewNote>(
+  {
+    reviewerId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "กรุณาระบุ ID ผู้ตรวจสอบ"],
+    },
+    note: {
+      type: String,
+      required: [true, "กรุณาระบุข้อความบันทึก"],
+      trim: true,
+      maxlength: [1000, "ข้อความบันทึกต้องไม่เกิน 1000 ตัวอักษร"],
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      required: true,
+    },
+  },
+  { _id: false }
+);
+
+const ApplicantMessageSchema = new Schema<IApplicantMessage>(
+  {
+    message: {
+      type: String,
+      required: [true, "กรุณาระบุข้อความ"],
+      trim: true,
+      maxlength: [1000, "ข้อความต้องไม่เกิน 1000 ตัวอักษร"],
+    },
+    sentAt: {
+      type: Date,
+      default: Date.now,
+      required: true,
+    },
+  },
+  { _id: false }
+);
+
 const StatusChangeSchema = new Schema<IStatusChange>(
   {
     status: {
@@ -235,7 +219,7 @@ const StatusChangeSchema = new Schema<IStatusChange>(
 export interface IWriterApplication extends Document {
   _id: Types.ObjectId;
   applicantId: Types.ObjectId;
-  displayName: string;
+  primaryPenName: string;
   aboutMe?: string;
   contactEmail?: string;
   writingExperience?: string;
@@ -252,7 +236,6 @@ export interface IWriterApplication extends Document {
   applicantMessages: Types.DocumentArray<IApplicantMessage>;
   rejectionReason?: string;
   adminNotes?: string;
-  assignedLevel?: WriterLevel;
   hasReadTerms: boolean;
   submittedAt: Date;
   updatedAt: Date;
@@ -270,8 +253,7 @@ interface WriterApplicationModel extends Model<IWriterApplication> {
     newStatus: WriterApplicationStatus,
     changedBy?: Types.ObjectId,
     reason?: string,
-    rejectionReason?: string,
-    assignedLevel?: WriterLevel
+    rejectionReason?: string
   ): Promise<IWriterApplication | null>;
   getUserActiveApplication(userId: Types.ObjectId): Promise<IWriterApplication | null>;
   getUserLastApplication(userId: Types.ObjectId): Promise<IWriterApplication | null>;
@@ -289,17 +271,17 @@ const WriterApplicationSchema = new Schema<IWriterApplication, WriterApplication
       required: [true, "กรุณาระบุ ID ผู้สมัคร"],
       index: true,
     },
-    displayName: {
+    primaryPenName: {
       type: String,
-      required: [true, "กรุณาระบุชื่อที่ต้องการแสดง (นามปากกา)"],
+      required: [true, "กรุณาระบุนามปากกาหลักที่ต้องการใช้"],
       trim: true,
-      minlength: [2, "ชื่อต้องมีอย่างน้อย 2 ตัวอักษร"],
-      maxlength: [50, "ชื่อต้องไม่เกิน 50 ตัวอักษร"],
+      minlength: [2, "นามปากกาต้องมีอย่างน้อย 2 ตัวอักษร"],
+      maxlength: [50, "นามปากกาต้องไม่เกิน 50 ตัวอักษร"],
       validate: {
         validator: function (v: string) {
           return /^[ก-๙a-zA-Z0-9\s\-_.]+$/.test(v);
         },
-        message: "ชื่อต้องประกอบด้วยตัวอักษรภาษาไทย, ภาษาอังกฤษ, ตัวเลข, และอักขระพิเศษที่อนุญาต (-, _, .) เท่านั้น",
+        message: "นามปากกาต้องประกอบด้วยตัวอักษรภาษาไทย, ภาษาอังกฤษ, ตัวเลข, และอักขระพิเศษที่อนุญาต (-, _, .) เท่านั้น",
       },
     },
     aboutMe: {
@@ -379,10 +361,6 @@ const WriterApplicationSchema = new Schema<IWriterApplication, WriterApplication
       trim: true,
       maxlength: [1000, "หมายเหตุจากทีมงานต้องไม่เกิน 1000 ตัวอักษร"],
     },
-    assignedLevel: {
-      type: String,
-      enum: Object.values(WriterLevel),
-    },
     hasReadTerms: {
       type: Boolean,
       required: [true, "กรุณายืนยันว่าได้อ่านข้อกำหนดและเงื่อนไข"],
@@ -446,8 +424,8 @@ WriterApplicationSchema.index(
 );
 
 WriterApplicationSchema.index(
-  { displayName: 1 },
-  { name: "DisplayNameIndex" }
+  { primaryPenName: 1 },
+  { name: "PrimaryPenNameIndex" }
 );
 
 // ==================================================================================================
@@ -480,25 +458,20 @@ WriterApplicationSchema.pre<IWriterApplication>("save", function (next) {
 });
 
 // Middleware: อัปเดตข้อมูลผู้ใช้เมื่อใบสมัครได้รับการอนุมัติ
-WriterApplicationSchema.post<IWriterApplication>("save", async function (this: IWriterApplication, doc, next) { // แก้ไข signature ของ post hook
-  // ตรวจสอบว่า status มีการเปลี่ยนแปลงเป็น APPROVED หรือไม่
-  // `this.isModified("status")` อาจจะไม่ทำงานตามที่คาดใน post hook, เราจึงควรเช็คค่า `status` โดยตรง
-  // และอาจจะต้องมีวิธีตรวจสอบสถานะก่อนหน้าถ้า logic ซับซ้อนกว่านี้
+WriterApplicationSchema.post<IWriterApplication>("save", async function (this: IWriterApplication, doc, next) {
+  // ตรวจสอบว่า status เป็น APPROVED หรือไม่
   if (this.status !== WriterApplicationStatus.APPROVED) {
-    // ถ้าสถานะไม่ใช่ APPROVED ไม่ต้องทำอะไรต่อ
-    // หรือถ้าเคย APPROVED ไปแล้ว และมีการแก้ไขอื่นๆ ที่ไม่ใช่การเปลี่ยน status เป็น APPROVED อีกครั้ง ก็ไม่ต้องทำ
-    // การตรวจสอบ this.isModified("status") ใน pre hook จะแม่นยำกว่าสำหรับการ trigger action แบบครั้งเดียวเมื่อ status เปลี่ยน
-    return next(); // เรียก next() ใน post hook ถ้าไม่ต้องการ error handling เพิ่มเติม
+    return next();
   }
 
   const UserModel = models.User as mongoose.Model<IUser>;
-  // const WriterApplicationModel = this.model("WriterApplication") as Model<IWriterApplication>; // ไม่จำเป็นต้องใช้ใน post นี้
+  const WriterStatsModel = models.WriterStats;
 
   try {
     const user = await UserModel.findById(this.applicantId);
     if (!user) {
       console.error(`[WriterApp Post-Save] ไม่พบข้อมูลผู้ใช้รหัส ${this.applicantId} สำหรับใบสมัครรหัส ${this._id}`);
-      return next(); // หรือ next(new Error(...)) ถ้าต้องการให้ process หยุด
+      return next();
     }
 
     let userNeedsSave = false;
@@ -510,96 +483,65 @@ WriterApplicationSchema.post<IWriterApplication>("save", async function (this: I
       userNeedsSave = true;
     }
 
-    // 2. อัปเดต/สร้าง writerStats
-    if (!user.writerStats) {
-      user.writerStats = {
-        totalViewsReceived: 0,
-        totalNovelsPublished: 0,
-        totalEpisodesPublished: 0,
-        totalViewsAcrossAllNovels: 0,
-        totalReadsAcrossAllNovels: 0,
-        totalLikesReceivedOnNovels: 0,
-        totalCommentsReceivedOnNovels: 0,
-        totalEarningsToDate: 0,
-        totalCoinsReceived: 0,
-        totalRealMoneyReceived: 0,
-        totalDonationsReceived: 0,
-        writerSince: this.reviewedAt || this.updatedAt || new Date(), // ใช้วันที่ตรวจสอบหรืออัปเดตล่าสุดของใบสมัคร
-      };
-      console.log(`[WriterApp Post-Save] สร้าง writerStats เริ่มต้นสำหรับผู้ใช้ ${user.username}`);
-      userNeedsSave = true;
-    } else if (!user.writerStats.writerSince) {
-      // ถ้ามี writerStats อยู่แล้วแต่ยังไม่มี writerSince (กรณีข้อมูลเก่า)
-      user.writerStats.writerSince = this.reviewedAt || this.updatedAt || new Date();
-      userNeedsSave = true;
-    }
-
-    // 3. อัปเดตนามปากกา (penName) จาก displayName ในใบสมัคร
-    // และอัปเดต bio ถ้ามีการกรอกในใบสมัครและ bio เดิมใน profile ว่าง
-    if (this.displayName && (!user.profile.penNames || user.profile.penNames[0] !== this.displayName)) {
-        // ตรวจสอบความซ้ำซ้อนของ penName ก่อนตั้งค่า
-        const existingUserWithPenName = await UserModel.findOne({
-            "profile.penNames": this.displayName, // Check against the array
-            _id: { $ne: this.applicantId }, // ไม่นับ user คนปัจจุบัน
-        });
-
-        if (!existingUserWithPenName) {
-            user.profile.penNames = [this.displayName];
-            console.log(`[WriterApp Post-Save] อัปเดตนามปากกา (penName) ของผู้ใช้ ${user.username} เป็น "${this.displayName}"`);
-            userNeedsSave = true;
-        } else {
-            console.warn(`[WriterApp Post-Save] นามปากกา "${this.displayName}" จากใบสมัคร ${this._id} ซ้ำกับผู้ใช้อื่น ไม่สามารถอัปเดต penName ได้อัตโนมัติ`);
-            // อาจจะต้องมี logic แจ้งเตือนผู้ใช้หรือ admin ให้แก้ไข penName ด้วยตนเอง
-            // หรือ rollback สถานะใบสมัคร (ซับซ้อนขึ้น)
-            // ในกรณีนี้ เราจะไม่อัปเดต penName และปล่อยให้ user.save() ดำเนินการส่วนอื่นต่อไป
-        }
-    }
-
-    if (this.aboutMe && !user.profile.bio) { // อัปเดต bio ถ้า bio เดิมว่างเท่านั้น
-      user.profile.bio = this.aboutMe;
-      console.log(`[WriterApp Post-Save] อัปเดต bio ของผู้ใช้ ${user.username} จากใบสมัคร`);
-      userNeedsSave = true;
-    }
-
-    // 4. อัปเดตสถานะการสมัครใน User.verification
-    if (user.verification) {
-      user.verification.writerApplicationId = this._id;
-      // user.verification.writerApplicationStatus = "approved"; // เอาออก เพราะสถานะหลักอยู่ที่ WriterApplication
-      // user.verification.writerApplicationApprovedAt = this.reviewedAt || new Date(); // ใช้ writerSince ใน writerStats แทน
-      console.log(`[WriterApp Post-Save] อัปเดต user.verification สำหรับผู้ใช้ ${user.username}`);
-      userNeedsSave = true;
-    } else {
-      // สร้าง verification object ถ้ายังไม่มี
-      user.verification = {
-        kycStatus: "none", // หรือค่า default อื่นๆ
+    // 2. สร้างหรืออัปเดต WriterStats document ใน writerstats collection
+    const existingStats = await WriterStatsModel.findOne({ userId: this.applicantId });
+    
+    if (!existingStats) {
+      // สร้าง WriterStats document ใหม่
+      await WriterStatsModel.create({
+        userId: this.applicantId,
+        writerSince: this.reviewedAt || new Date(),
         writerApplicationId: this._id,
-        // writerApplicationStatus: "approved",
-        // writerApplicationApprovedAt: this.reviewedAt || new Date(),
-      };
-      userNeedsSave = true;
+        donationSettings: { isEligibleForDonation: false },
+        // ค่า default อื่นๆ จะถูกกำหนดโดย schema
+      });
+      console.log(`[WriterApp Post-Save] สร้าง WriterStats document ใหม่สำหรับผู้ใช้ ${user.username}`);
+    } else {
+      // อัปเดต WriterStats ที่มีอยู่
+      let statsNeedsSave = false;
+      
+      if (!existingStats.writerSince) {
+        existingStats.writerSince = this.reviewedAt || new Date();
+        statsNeedsSave = true;
+      }
+      
+      existingStats.writerApplicationId = this._id;
+      statsNeedsSave = true;
+      
+      if (statsNeedsSave) {
+        await existingStats.save();
+        console.log(`[WriterApp Post-Save] อัปเดต WriterStats document ที่มีอยู่สำหรับผู้ใช้ ${user.username}`);
+      }
     }
 
-    // 5. อัปเดตระดับนักเขียน (ถ้ามี)
-    if (this.assignedLevel && (!user.writerStats.writerTier || user.writerStats.writerTier !== this.assignedLevel)) {
-        user.writerStats.writerTier = this.assignedLevel;
-        console.log(`[WriterApp Post-Save] อัปเดตระดับนักเขียน (writerTier) ของผู้ใช้ ${user.username} เป็น "${this.assignedLevel}"`);
+    // 3. อัปเดต primaryPenName ใน User model (Source of Truth จะอยู่ที่ UserProfile)
+    if (this.primaryPenName && user.primaryPenName !== this.primaryPenName) {
+      // ตรวจสอบความซ้ำซ้อนของ primaryPenName
+      const existingUserWithPenName = await UserModel.findOne({
+        primaryPenName: this.primaryPenName,
+        _id: { $ne: this.applicantId },
+      });
+
+      if (!existingUserWithPenName) {
+        user.primaryPenName = this.primaryPenName;
+        console.log(`[WriterApp Post-Save] อัปเดต primaryPenName ของผู้ใช้ ${user.username} เป็น "${this.primaryPenName}"`);
         userNeedsSave = true;
+      } else {
+        console.warn(`[WriterApp Post-Save] นามปากกา "${this.primaryPenName}" จากใบสมัคร ${this._id} ซ้ำกับผู้ใช้อื่น`);
+      }
     }
-
 
     if (userNeedsSave) {
       await user.save();
       console.log(`[WriterApp Post-Save] อัปเดตข้อมูล User (${user.username}) หลังอนุมัติใบสมัครนักเขียน ${this._id} สำเร็จ`);
     }
 
+    // TODO: ส่ง Event ไปยัง UserProfileService เพื่ออัปเดต penNames ใน UserProfile
+    // await UserProfileService.updatePenNamesFromApplication(this.applicantId, this.primaryPenName, this.aboutMe);
+
   } catch (error) {
     console.error(`[WriterApp Post-Save] เกิดข้อผิดพลาดในการอัปเดต User model หลังอนุมัติใบสมัคร ${this._id}:`, error);
-    // ควรพิจารณาการจัดการ error ที่เหมาะสม เช่น logging หรือแจ้งเตือน admin
-    // การ throw error ที่นี่อาจทำให้ process ที่เรียก .save() ของ WriterApplication ล้มเหลว
-    // ซึ่งอาจไม่เป็นที่ต้องการเสมอไป ขึ้นอยู่กับ business logic
-    // next(error); // ถ้าต้องการให้การ save ของ WriterApplication ล้มเหลวด้วย
   }
-  // ไม่จำเป็นต้องเรียก next() ใน post hook แบบนี้ เว้นแต่จะมีการ chaining post hooks
 });
 
 // ==================================================================================================
@@ -608,11 +550,11 @@ WriterApplicationSchema.post<IWriterApplication>("save", async function (this: I
 
 WriterApplicationSchema.statics.checkDisplayNameAvailability = async function (
   this: Model<IWriterApplication>,
-  displayName: string,
+  primaryPenName: string,
   excludeUserId?: Types.ObjectId
 ): Promise<boolean> {
   const UserModel = models.User as mongoose.Model<IUser>;
-  const query: any = { "profile.displayName": displayName };
+  const query: any = { primaryPenName: primaryPenName };
   if (excludeUserId) {
     query._id = { $ne: excludeUserId };
   }
@@ -623,7 +565,7 @@ WriterApplicationSchema.statics.checkDisplayNameAvailability = async function (
   }
 
   const existingApplication = await this.findOne({
-    displayName,
+    primaryPenName,
     status: WriterApplicationStatus.APPROVED,
     applicantId: { $ne: excludeUserId },
   });
@@ -685,8 +627,7 @@ WriterApplicationSchema.statics.changeApplicationStatus = async function (
   newStatus: WriterApplicationStatus,
   changedBy?: Types.ObjectId,
   reason?: string,
-  rejectionReason?: string,
-  assignedLevel?: WriterLevel
+  rejectionReason?: string
 ): Promise<IWriterApplication | null> {
   const updateObj: any = {
     status: newStatus,
@@ -703,8 +644,7 @@ WriterApplicationSchema.statics.changeApplicationStatus = async function (
   if (newStatus === WriterApplicationStatus.REJECTED && rejectionReason) {
     updateObj.rejectionReason = rejectionReason;
     updateObj.reviewedAt = new Date();
-  } else if (newStatus === WriterApplicationStatus.APPROVED && assignedLevel) {
-    updateObj.assignedLevel = assignedLevel;
+  } else if (newStatus === WriterApplicationStatus.APPROVED) {
     updateObj.reviewedAt = new Date();
   }
 

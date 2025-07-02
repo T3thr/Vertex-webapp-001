@@ -1,134 +1,99 @@
 // src/app/api/search/categories/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import dbConnect from '@/backend/lib/mongodb'; //
-import CategoryModel, { ICategory, CategoryType, CategoryVisibility } from '@/backend/models/Category'; //
-import mongoose from "mongoose";
+// API สำหรับดึงหมวดหมู่/ประเภทนิยาย
 
-// Interface สำหรับ Category ที่จะส่งกลับ
-interface CategorySearchResult extends Pick<ICategory,
-  "_id" | "name" | "slug" | "description" | "iconUrl" | "coverImageUrl" | "color" | "displayOrder" | "isPromoted" | "categoryType"
-> {
-  localizations?: ICategory["localizations"]; //
-  novelCount?: number; // จาก usageStats
-}
+import { NextRequest, NextResponse } from 'next/server';
+import dbConnect from '@/backend/lib/mongodb';
+import mongoose from 'mongoose';
+
+// Simple Category schema for this API
+const CategorySchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  slug: { type: String, required: true },
+  categoryType: { type: String, default: 'genre' },
+  isActive: { type: Boolean, default: true },
+  description: String,
+  color: String
+}, {
+  timestamps: true,
+  collection: 'categories'
+});
+
+const CategoryModel = mongoose.models.Category || mongoose.model('Category', CategorySchema);
 
 export async function GET(request: NextRequest) {
   try {
-    // เชื่อมต่อกับฐานข้อมูล
-    await dbConnect(); //
+    await dbConnect();
 
-    // ดึงพารามิเตอร์การค้นหาจาก URL
-    const searchParams = request.nextUrl.searchParams;
-    const type = searchParams.get('type') as CategoryType | null; // ประเภทของหมวดหมู่
-    const parentId = searchParams.get('parentId') || null; // ID หมวดหมู่แม่
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
-    const q = searchParams.get('q')?.trim() || ''; // คำค้นหาชื่อหมวดหมู่
-    const includeChildrenCount = searchParams.get('includeChildrenCount') === 'true'; // ต้องการจำนวนหมวดหมู่ย่อยหรือไม่
-    const forNovelCreation = searchParams.get('forNovelCreation') === 'true'; // ดึงหมวดหมู่สำหรับหน้าสร้างนิยายหรือไม่ (อาจมีเงื่อนไขพิเศษ)
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'genre';
+    const limit = parseInt(searchParams.get('limit') || '50');
 
+    // ดึงหมวดหมู่ที่ active
+    const categories = await CategoryModel.find({
+      categoryType: type,
+      isActive: true
+    })
+    .select('_id name slug description color')
+    .sort({ name: 1 })
+    .limit(limit)
+    .lean();
 
-    // สร้างเงื่อนไขการค้นหา
-    const query: mongoose.FilterQuery<ICategory> = {
-      visibility: CategoryVisibility.PUBLIC, // แสดงเฉพาะ public categories
-      isActive: true, // แสดงเฉพาะ active categories
-      // isSystemDefined: false, // อาจจะไม่ต้องการให้ user เห็น system-defined บางประเภท ยกเว้นจำเป็น
-    };
-
-    // กรองตามประเภทหมวดหมู่
-    if (type && Object.values(CategoryType).includes(type)) {
-      query.categoryType = type;
-    }
-
-    // กรองตามหมวดหมู่หลัก (ถ้ามี)
-    if (parentId === "null" || (parentId === null && type)) { // "null" string or actual null for top-level
-      query.parentCategoryId = null; //
-    } else if (parentId) {
-      query.parentCategoryId = new mongoose.Types.ObjectId(parentId);
-    }
-
-    // ถ้ามีการค้นหาด้วยข้อความ
-    if (q) {
-      query.$or = [
-        { name: { $regex: q, $options: 'i' } }, // ค้นหาชื่อภาษาหลัก
-        { "localizations.name": { $regex: q, $options: 'i' } } // ค้นหาชื่อใน localizations
+    // ถ้าไม่มีหมวดหมู่ในฐานข้อมูล ให้สร้างข้อมูลเริ่มต้น
+    if (categories.length === 0 && type === 'genre') {
+      const defaultGenres = [
+        { name: 'โรแมนติก', slug: 'romance', color: '#FF69B4' },
+        { name: 'แฟนตาซี', slug: 'fantasy', color: '#9370DB' },
+        { name: 'ลึกลับ/สืบสวน', slug: 'mystery', color: '#2F4F4F' },
+        { name: 'ดราม่า', slug: 'drama', color: '#DC143C' },
+        { name: 'คอมเมดี้', slug: 'comedy', color: '#FFD700' },
+        { name: 'ระทึกขวัญ', slug: 'thriller', color: '#8B0000' },
+        { name: 'วิทยาศาสตร์', slug: 'sci-fi', color: '#4169E1' },
+        { name: 'ผจญภัย', slug: 'adventure', color: '#228B22' },
+        { name: 'สยองขวัญ', slug: 'horror', color: '#800080' },
+        { name: 'ประวัติศาสตร์', slug: 'historical', color: '#8B4513' },
+        { name: 'ชีวิตจริง', slug: 'slice-of-life', color: '#20B2AA' },
+        { name: 'ยูริ (GL)', slug: 'yuri', color: '#FF1493' },
+        { name: 'ยาโออิ (BL)', slug: 'yaoi', color: '#00CED1' },
+        { name: 'โรงเรียน', slug: 'school', color: '#32CD32' },
+        { name: 'ท่องเวลา', slug: 'time-travel', color: '#6A5ACD' }
       ];
-    }
 
-    // เงื่อนไขพิเศษสำหรับหน้าสร้างนิยาย
-    // เช่น ไม่แสดงหมวดหมู่ที่เป็น editorial_tag, event_tag, sensitive_choice_topic โดยตรง
-    if (forNovelCreation) {
-        query.categoryType = { $nin: [
-            CategoryType.EDITORIAL_TAG,
-            CategoryType.EVENT_TAG,
-            CategoryType.SENSITIVE_CHOICE_TOPIC,
-            CategoryType.MEDIA_TYPE, // โดยทั่วไปผู้ใช้ไม่เลือก media type โดยตรง
-            // CategoryType.OTHER, // อาจจะไม่ให้เลือก other โดยตรง
-        ]};
-    }
+      for (const genre of defaultGenres) {
+        await CategoryModel.create({
+          ...genre,
+          categoryType: 'genre',
+          description: `หมวดหมู่${genre.name}`,
+          isActive: true
+        });
+      }
 
-
-    // ดึงข้อมูลหมวดหมู่จากฐานข้อมูล
-    const totalCategories = await CategoryModel.countDocuments(query);
-
-    const categoriesQuery = CategoryModel.find(query)
-      .sort({ isPromoted: -1, displayOrder: 1, "usageStats.novelCount": -1, name: 1 }) // เรียงตามโปรโมท, ลำดับ, จำนวนนิยาย, ชื่อ
-      .skip((page - 1) * limit)
+      // ดึงข้อมูลใหม่หลังสร้าง
+      const newCategories = await CategoryModel.find({
+        categoryType: type,
+        isActive: true
+      })
+      .select('_id name slug description color')
+      .sort({ name: 1 })
       .limit(limit)
-      .select('_id name slug description iconUrl coverImageUrl color displayOrder isPromoted categoryType localizations usageStats.novelCount') // เลือก fields ที่ต้องการ
       .lean();
 
-    const categoriesRaw = await categoriesQuery;
-
-    const categoriesResult: CategorySearchResult[] = categoriesRaw.map(cat => ({
-        _id: cat._id,
-        name: cat.name,
-        slug: cat.slug,
-        description: cat.description,
-        iconUrl: cat.iconUrl,
-        coverImageUrl: cat.coverImageUrl,
-        color: cat.color,
-        displayOrder: cat.displayOrder,
-        isPromoted: cat.isPromoted,
-        categoryType: cat.categoryType,
-        localizations: cat.localizations,
-        novelCount: cat.usageStats?.novelCount // ดึง novelCount จาก usageStats
-    }));
-
-    // (Optional) หากต้องการนับจำนวน children ของแต่ละ category ที่ดึงมา
-    if (includeChildrenCount) {
-        for (let i = 0; i < categoriesResult.length; i++) {
-            const childCount = await CategoryModel.countDocuments({
-                parentCategoryId: categoriesResult[i]._id,
-                isActive: true,
-                visibility: CategoryVisibility.PUBLIC
-            });
-            (categoriesResult[i] as any).childrenCount = childCount; // เพิ่ม field childrenCount เข้าไป
-        }
+      return NextResponse.json({
+        success: true,
+        data: newCategories,
+        message: 'สร้างหมวดหมู่เริ่มต้นเรียบร้อย'
+      });
     }
 
-
-    // คำนวณข้อมูลการแบ่งหน้า
-    const totalPages = Math.ceil(totalCategories / limit);
-    const hasNextPage = page < totalPages;
-    const hasPrevPage = page > 1;
-
-    // ส่งข้อมูลกลับ
     return NextResponse.json({
       success: true,
-      data: categoriesResult,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalItems: totalCategories,
-        hasNextPage,
-        hasPrevPage
-      }
+      data: categories,
+      total: categories.length
     });
-  } catch (error: any) { // Explicitly type error as any or Error
-    console.error('Error fetching categories:', error);
+
+  } catch (error) {
+    console.error('Categories API Error:', error);
     return NextResponse.json(
-      { success: false, message: 'เกิดข้อผิดพลาดในการดึงข้อมูลหมวดหมู่', details: error.message },
+      { success: false, error: 'เกิดข้อผิดพลาดในการดึงข้อมูลหมวดหมู่' },
       { status: 500 }
     );
   }

@@ -457,8 +457,8 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                   )}
                 </motion.div>
 
-                {/* Writer Tier */}
-                {user.writerStats?.writerTier && (
+                {/* Writer Badge */}
+                {isWriter && (
                   <motion.div
                     className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm px-4 py-2 rounded-full border border-purple-400/30 mb-3"
                     initial={{ opacity: 0, x: -20 }}
@@ -468,9 +468,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                   >
                     <Crown className="w-4 h-4 text-purple-300" />
                     <span className="text-sm font-medium text-purple-100">
-                      {user.writerStats.writerTier === 'beginner' && 'นักเขียนมือใหม่'}
-                      {user.writerStats.writerTier === 'intermediate' && 'นักเขียนระดับกลาง'}
-                      {user.writerStats.writerTier === 'advanced' && 'นักเขียนระดับสูง'}
+                      นักเขียนที่ได้รับการยืนยัน
                     </span>
                   </motion.div>
                 )}

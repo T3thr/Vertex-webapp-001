@@ -6,6 +6,13 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import UserModel, { IUser, IAccount } from "@/backend/models/User"; // << ลดการ import ที่ไม่จำเป็น
+import UserProfileModel, { IUserProfile, IUserSocialStats } from "@/backend/models/UserProfile";
+import UserSettingsModel, { IUserSettings, INotificationChannelSettings } from "@/backend/models/UserSettings";
+import UserSecurityModel, { IUserSecurity } from "@/backend/models/UserSecurity";
+import UserGamificationModel, { IUserGamificationDoc } from "@/backend/models/UserGamification";
+import UserTrackingModel, { IUserTracking } from "@/backend/models/UserTracking";
+import UserAchievementModel from "@/backend/models/UserAchievement";
+import UserLibraryItemModel from "@/backend/models/UserLibraryItem";
 import { Types, Document } from "mongoose";
 
 interface OAuthSignInRequestBody {
@@ -60,6 +67,365 @@ async function generateUniqueUsername(baseUsername: string): Promise<string> {
     }
   }
   return uniqueUsername;
+}
+
+// Helper function สำหรับสร้าง default notification settings
+function createDefaultNotificationChannelSettings(): INotificationChannelSettings {
+  return {
+    enabled: true,
+    newsletter: true,
+    novelUpdatesFromFollowing: true,
+    newFollowers: true,
+    commentsOnMyNovels: true,
+    repliesToMyComments: true,
+    donationAlerts: true,
+    systemAnnouncements: true,
+    securityAlerts: true,
+    promotionalOffers: false,
+    achievementUnlocks: true,
+  };
+}
+
+// Helper function สำหรับสร้าง user documents ที่เกี่ยวข้องทั้งหมดสำหรับ OAuth user ใหม่
+async function createCompleteUserDocuments(userId: Types.ObjectId, username: string, email?: string, displayName?: string): Promise<void> {
+  const now = new Date();
+
+  // สร้างเอกสารทั้งหมดแบบ parallel เพื่อประสิทธิภาพ
+  await Promise.all([
+    // UserProfile
+    UserProfileModel.create({
+      userId,
+      displayName: displayName || username,
+      socialStats: {
+        followersCount: 0,
+        followingUsersCount: 0,
+        followingNovelsCount: 0,
+        novelsCreatedCount: 0,
+        boardPostsCreatedCount: 0,
+        commentsMadeCount: 0,
+        ratingsGivenCount: 0,
+        likesGivenCount: 0,
+      } as IUserSocialStats,
+      joinDate: now,
+    } as Partial<IUserProfile>),
+
+    // UserSettings
+    UserSettingsModel.create({
+      userId,
+      language: "th",
+      display: {
+        theme: "system",
+        reading: { fontSize: 16, readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left", textContrastMode: false },
+        accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false, reducedMotion: false },
+        uiVisibility: { textBoxOpacity: 100, backgroundBrightness: 100, textBoxBorder: true },
+        visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true, particleEffects: true },
+        characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
+        characterVoiceDisplay: { voiceIndicatorIcon: true },
+        backgroundDisplay: { backgroundQuality: 'mid', showCGs: true, backgroundEffects: true },
+        voiceSubtitles: { enabled: true },
+      },
+      notifications: {
+        masterNotificationsEnabled: true,
+        email: createDefaultNotificationChannelSettings(),
+        push: createDefaultNotificationChannelSettings(),
+        inApp: createDefaultNotificationChannelSettings(),
+        saveLoad: { autoSaveNotification: true, noSaveSpaceWarning: true },
+        newContent: { contentUpdates: true, promotionEvent: true },
+        outOfGame: { type: 'all' },
+        optional: { statChange: true, statDetailLevel: 'summary' },
+      },
+      contentAndPrivacy: {
+        showMatureContent: false,
+        preferredGenres: [],
+        blockedGenres: [],
+        blockedTags: [],
+        blockedAuthors: [],
+        blockedNovels: [],
+        profileVisibility: "public",
+        readingHistoryVisibility: "followers_only",
+        showActivityStatus: true,
+        allowDirectMessagesFrom: "followers",
+        analyticsConsent: { allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false },
+      },
+      visualNovelGameplay: {
+        textSpeedValue: 50,
+        instantTextDisplay: false,
+        autoPlayMode: "click",
+        autoPlayDelayMs: 2000,
+        autoPlaySpeedValue: 50,
+        autoPlayEnabled: false,
+        skipUnreadText: false,
+        skipReadTextOnly: true,
+        skipAllText: false,
+        skipOnHold: true,
+        transitionsEnabled: true,
+        screenEffectsEnabled: true,
+        textWindowOpacity: 80,
+        masterVolume: 100,
+        bgmVolume: 80,
+        sfxVolume: 90,
+        voiceVolume: 100,
+        voicesEnabled: true,
+        preferredVoiceLanguage: "default",
+        showChoiceTimer: true,
+        blurThumbnailsOfMatureContent: true,
+        preferredArtStyles: [],
+        preferredGameplayMechanics: [],
+        assetPreloading: "essential",
+        characterAnimationLevel: "full",
+        backlog: { enableHistory: true, historyVoice: false, historyBack: true },
+        choices: { highlightChoices: true, routePreview: false },
+        saveLoad: { autoSave: true, saveFrequency: 'scene' },
+        decisions: { decisionWarning: true, importantMark: true },
+        routeManagement: { routeProgress: true, showUnvisited: true, secretHints: false },
+      },
+    } as Partial<IUserSettings>),
+
+    // UserSecurity
+    UserSecurityModel.create({
+      userId,
+      verification: { kycStatus: "none" },
+      twoFactorAuthentication: { isEnabled: false },
+      loginAttempts: { count: 0 },
+      activeSessions: [],
+    } as Partial<IUserSecurity>),
+
+    // UserGamification
+    UserGamificationModel.create({
+      userId,
+      wallet: { coinBalance: 0 },
+      gamification: {
+        level: 1,
+        experiencePoints: 0,
+        totalExperiencePointsEverEarned: 0,
+        nextLevelXPThreshold: 100,
+        achievements: [],
+        showcasedItems: [],
+        secondaryDisplayBadges: [],
+        loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 },
+        dailyCheckIn: { currentStreakDays: 0 },
+        lastActivityAt: now,
+      },
+    } as Partial<IUserGamificationDoc>),
+
+    // UserTracking
+    UserTrackingModel.create({
+      userId,
+      trackingStats: {
+        joinDate: now,
+        totalLoginDays: 0,
+        totalNovelsRead: 0,
+        totalEpisodesRead: 0,
+        totalTimeSpentReadingSeconds: 0,
+        totalCoinSpent: 0,
+        totalRealMoneySpent: 0,
+      },
+    } as Partial<IUserTracking>),
+
+    // UserAchievement
+    UserAchievementModel.create({
+      user: userId,
+      earnedItems: [],
+      ongoingProgress: new Map(),
+      totalExperiencePointsFromGamification: 0,
+    })
+
+    // หมายเหตุ: UserLibraryItem จะถูกสร้างเมื่อผู้ใช้เพิ่มรายการเข้าคลังครั้งแรก
+    // ดังนั้นไม่จำเป็นต้องสร้างที่นี่
+  ]);
+
+  console.log(`✅ [OAuth Helper] สร้างเอกสารย่อยทั้งหมดสำหรับ User ID: ${userId} สำเร็จ`);
+}
+
+// Helper function สำหรับตรวจสอบและสร้าง sub-documents ที่ขาดหายไปสำหรับผู้ใช้เดิม
+async function ensureUserSubDocuments(userId: Types.ObjectId, username: string, email?: string): Promise<void> {
+  const now = new Date();
+  
+  // ตรวจสอบและสร้าง documents ที่ขาดหายไป
+  const checks = await Promise.allSettled([
+    // ตรวจสอบ UserProfile
+    UserProfileModel.findOne({ userId }).then(doc => {
+      if (!doc) {
+        return UserProfileModel.create({
+          userId,
+          displayName: username,
+          socialStats: {
+            followersCount: 0,
+            followingUsersCount: 0,
+            followingNovelsCount: 0,
+            novelsCreatedCount: 0,
+            boardPostsCreatedCount: 0,
+            commentsMadeCount: 0,
+            ratingsGivenCount: 0,
+            likesGivenCount: 0,
+          } as IUserSocialStats,
+          joinDate: now,
+        } as Partial<IUserProfile>);
+      }
+      return null;
+    }),
+
+    // ตรวจสอบ UserSettings
+    UserSettingsModel.findOne({ userId }).then(doc => {
+      if (!doc) {
+        return UserSettingsModel.create({
+          userId,
+          language: "th",
+          display: {
+            theme: "system",
+            reading: { fontSize: 16, readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left", textContrastMode: false },
+            accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false, reducedMotion: false },
+            uiVisibility: { textBoxOpacity: 100, backgroundBrightness: 100, textBoxBorder: true },
+            visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true, particleEffects: true },
+            characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
+            characterVoiceDisplay: { voiceIndicatorIcon: true },
+            backgroundDisplay: { backgroundQuality: 'mid', showCGs: true, backgroundEffects: true },
+            voiceSubtitles: { enabled: true },
+          },
+          notifications: {
+            masterNotificationsEnabled: true,
+            email: createDefaultNotificationChannelSettings(),
+            push: createDefaultNotificationChannelSettings(),
+            inApp: createDefaultNotificationChannelSettings(),
+            saveLoad: { autoSaveNotification: true, noSaveSpaceWarning: true },
+            newContent: { contentUpdates: true, promotionEvent: true },
+            outOfGame: { type: 'all' },
+            optional: { statChange: true, statDetailLevel: 'summary' },
+          },
+          contentAndPrivacy: {
+            showMatureContent: false,
+            preferredGenres: [],
+            blockedGenres: [],
+            blockedTags: [],
+            blockedAuthors: [],
+            blockedNovels: [],
+            profileVisibility: "public",
+            readingHistoryVisibility: "followers_only",
+            showActivityStatus: true,
+            allowDirectMessagesFrom: "followers",
+            analyticsConsent: { allowPsychologicalAnalysis: false, allowPersonalizedFeedback: false },
+          },
+          visualNovelGameplay: {
+            textSpeedValue: 50,
+            instantTextDisplay: false,
+            autoPlayMode: "click",
+            autoPlayDelayMs: 2000,
+            autoPlaySpeedValue: 50,
+            autoPlayEnabled: false,
+            skipUnreadText: false,
+            skipReadTextOnly: true,
+            skipAllText: false,
+            skipOnHold: true,
+            transitionsEnabled: true,
+            screenEffectsEnabled: true,
+            textWindowOpacity: 80,
+            masterVolume: 100,
+            bgmVolume: 80,
+            sfxVolume: 90,
+            voiceVolume: 100,
+            voicesEnabled: true,
+            preferredVoiceLanguage: "default",
+            showChoiceTimer: true,
+            blurThumbnailsOfMatureContent: true,
+            preferredArtStyles: [],
+            preferredGameplayMechanics: [],
+            assetPreloading: "essential",
+            characterAnimationLevel: "full",
+            backlog: { enableHistory: true, historyVoice: false, historyBack: true },
+            choices: { highlightChoices: true, routePreview: false },
+            saveLoad: { autoSave: true, saveFrequency: 'scene' },
+            decisions: { decisionWarning: true, importantMark: true },
+            routeManagement: { routeProgress: true, showUnvisited: true, secretHints: false },
+          },
+        } as Partial<IUserSettings>);
+      }
+      return null;
+    }),
+
+    // ตรวจสอบ UserSecurity
+    UserSecurityModel.findOne({ userId }).then(doc => {
+      if (!doc) {
+        return UserSecurityModel.create({
+          userId,
+          verification: { kycStatus: "none" },
+          twoFactorAuthentication: { isEnabled: false },
+          loginAttempts: { count: 0 },
+          activeSessions: [],
+        } as Partial<IUserSecurity>);
+      }
+      return null;
+    }),
+
+    // ตรวจสอบ UserGamification
+    UserGamificationModel.findOne({ userId }).then(doc => {
+      if (!doc) {
+        return UserGamificationModel.create({
+          userId,
+          wallet: { coinBalance: 0 },
+          gamification: {
+            level: 1,
+            experiencePoints: 0,
+            totalExperiencePointsEverEarned: 0,
+            nextLevelXPThreshold: 100,
+            achievements: [],
+            showcasedItems: [],
+            secondaryDisplayBadges: [],
+            loginStreaks: { currentStreakDays: 0, longestStreakDays: 0 },
+            dailyCheckIn: { currentStreakDays: 0 },
+            lastActivityAt: now,
+          },
+        } as Partial<IUserGamificationDoc>);
+      }
+      return null;
+    }),
+
+    // ตรวจสอบ UserTracking
+    UserTrackingModel.findOne({ userId }).then(doc => {
+      if (!doc) {
+        return UserTrackingModel.create({
+          userId,
+          trackingStats: {
+            joinDate: now,
+            totalLoginDays: 0,
+            totalNovelsRead: 0,
+            totalEpisodesRead: 0,
+            totalTimeSpentReadingSeconds: 0,
+            totalCoinSpent: 0,
+            totalRealMoneySpent: 0,
+          },
+        } as Partial<IUserTracking>);
+      }
+      return null;
+    }),
+
+    // ตรวจสอบ UserAchievement
+    UserAchievementModel.findOne({ user: userId }).then(doc => {
+      if (!doc) {
+        return UserAchievementModel.create({
+          user: userId,
+          earnedItems: [],
+          ongoingProgress: new Map(),
+          totalExperiencePointsFromGamification: 0,
+        });
+      }
+      return null;
+    })
+  ]);
+
+  // นับจำนวน documents ที่สร้างใหม่
+  const createdCount = checks.filter(result => 
+    result.status === 'fulfilled' && result.value !== null
+  ).length;
+
+  if (createdCount > 0) {
+    console.log(`✅ [OAuth Helper] สร้าง sub-documents ที่ขาดหายไป ${createdCount} รายการสำหรับ User ID: ${userId}`);
+  }
+
+  // ตรวจสอบ errors
+  const errors = checks.filter(result => result.status === 'rejected');
+  if (errors.length > 0) {
+    console.warn(`⚠️ [OAuth Helper] มีข้อผิดพลาดในการสร้าง sub-documents:`, errors);
+  }
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -158,6 +524,14 @@ export async function POST(request: Request): Promise<NextResponse> {
 
       userDocument.lastLoginAt = new Date();
       await userDocument.save();
+      
+      // ตรวจสอบและสร้าง sub-documents ที่อาจขาดหายไปสำหรับผู้ใช้เดิม
+      try {
+        await ensureUserSubDocuments(userDocument._id, userDocument.username as string, userDocument.email);
+      } catch (subDocError: any) {
+        console.warn(`⚠️ [API:OAuthSignIn] ไม่สามารถสร้าง sub-documents ที่ขาดหายไปสำหรับผู้ใช้ ${userDocument.username}:`, subDocError.message);
+      }
+      
       console.log(`🔄 [API:OAuthSignIn] อัปเดต lastLoginAt ${updated ? 'และข้อมูลอื่นๆ ' : ''}สำหรับผู้ใช้ ${userDocument.username}`);
 
     } else {
@@ -217,21 +591,15 @@ export async function POST(request: Request): Promise<NextResponse> {
           `user${Date.now().toString().slice(-6)}`;
         const finalUsername = await generateUniqueUsername(newUsernameBase);
 
-        // สร้างผู้ใช้ใหม่โดยใช้ข้อมูลที่จำเป็นเท่านั้น
-        // Schema defaults และ pre-save hook ใน User.ts จะจัดการส่วนที่เหลือทั้งหมด
-        // รวมถึงการสร้าง sub-documents, ตั้งค่า default, และดึงข้อมูล Level 1
+        // สร้างผู้ใช้ใหม่พร้อมกับ sub-documents ทั้งหมด
         const newUserInput = {
           username: finalUsername,
           email: email ? email.toLowerCase() : undefined,
           isEmailVerified: !!email,
           emailVerifiedAt: email ? new Date() : undefined,
           accounts: [{ provider, providerAccountId, type: "oauth" } as IAccount],
-          profile: {
-            displayName: name || finalUsername,
-            avatarUrl: picture || undefined,
-          },
+          roles: ["Reader"], // กำหนด role เริ่มต้น
           lastLoginAt: new Date(),
-          // Mongoose จะใช้ค่า default จาก UserSchema สำหรับ field ที่เหลือทั้งหมด
         };
 
         if (newUserInput.email) {
@@ -244,12 +612,26 @@ export async function POST(request: Request): Promise<NextResponse> {
           }
         }
 
-        // UserModel constructor expects a type compatible with IUser's schema definition.
-        // The 'as IUser' cast might be needed if newUserInput isn't perfectly matching or if strict type checking is very high.
-        // However, Mongoose is generally flexible.
+        // สร้าง User document หลักก่อน
         userDocument = new UserModel(newUserInput);
         await userDocument.save();
-        console.log(`✅ [API:OAuthSignIn] สร้างผู้ใช้ใหม่ ${userDocument.username} จาก ${provider} สำเร็จ`);
+        console.log(`✅ [API:OAuthSignIn] สร้างผู้ใช้หลัก ${userDocument.username} จาก ${provider} สำเร็จ`);
+
+        // สร้าง sub-documents ทั้งหมดที่เกี่ยวข้อง
+        try {
+          await createCompleteUserDocuments(
+            userDocument._id, 
+            finalUsername, 
+            email || undefined, 
+            name || finalUsername
+          );
+          console.log(`✅ [API:OAuthSignIn] สร้างเอกสารย่อยทั้งหมดสำหรับผู้ใช้ ${userDocument.username} สำเร็จ`);
+        } catch (subDocError: any) {
+          console.error(`❌ [API:OAuthSignIn] ข้อผิดพลาดในการสร้างเอกสารย่อย:`, subDocError);
+          // หากเกิดข้อผิดพลาดในการสร้าง sub-documents ให้ลบ user หลักออกด้วย
+          await UserModel.findByIdAndDelete(userDocument._id);
+          throw new Error(`ไม่สามารถสร้างข้อมูลผู้ใช้ครบถ้วน: ${subDocError.message}`);
+        }
       }
     }
 

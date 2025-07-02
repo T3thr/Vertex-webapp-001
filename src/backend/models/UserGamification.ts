@@ -23,6 +23,7 @@ export interface IUserWallet {
  * @interface IShowcasedGamificationItem
  * @description Represents a single achievement or badge that a user chooses to showcase on their profile.
  * ข้อมูลของ Achievement หรือ Badge ที่ผู้ใช้เลือกมาแสดงบนโปรไฟล์
+ * @deprecated ย้ายไปเก็บที่ UserProfile แล้ว เพื่อลดความซ้ำซ้อน
  */
 export interface IShowcasedGamificationItem {
   earnedItemId: Types.ObjectId; // ID ของ UserEarnedItem (จาก UserAchievement.earnedItems._id หรือ UserBadge.earnedItems._id)
@@ -33,6 +34,7 @@ export interface IShowcasedGamificationItem {
  * @interface IUserDisplayBadge
  * @description Represents a specific badge a user has chosen to display in a primary or secondary slot.
  * ข้อมูลของ Badge ที่ผู้ใช้เลือกมาแสดงในตำแหน่งหลักหรือรอง
+ * @deprecated ย้ายไปเก็บที่ UserProfile แล้ว เพื่อลดความซ้ำซ้อน
  */
 export interface IUserDisplayBadge {
   earnedBadgeId: Types.ObjectId; // อ้างอิง ID ของ Badge ที่ได้รับแล้ว (UserEarnedItem._id)
@@ -51,9 +53,6 @@ export interface IUserGamification {
   totalExperiencePointsEverEarned: number; // ค่าประสบการณ์สะสมทั้งหมดที่เคยได้รับ
   nextLevelXPThreshold: number; // ค่า XP ที่ต้องการเพื่อไป Level ถัดไป
   achievements: Types.ObjectId[]; // รายการ ID ของ **UserAchievement** (ที่ผู้ใช้ได้รับ)
-  showcasedItems?: IShowcasedGamificationItem[]; // ไอเท็มที่ผู้ใช้เลือกแสดงบนโปรไฟล์
-  primaryDisplayBadge?: IUserDisplayBadge; // Badge ที่แสดงเป็นหลัก
-  secondaryDisplayBadges?: IUserDisplayBadge[]; // Badge ที่แสดงเป็นรอง (จำกัด 2)
   loginStreaks: {
     currentStreakDays: number; // จำนวนวันล็อกอินต่อเนื่องปัจจุบัน
     longestStreakDays: number; // จำนวนวันล็อกอินต่อเนื่องที่ยาวนานที่สุด
@@ -89,39 +88,6 @@ export interface IUserGamificationDoc extends Document {
 // SECTION: Mongoose Schema Definitions
 
 // Schemas are defined from the most nested to the least nested.
-
-const ShowcasedGamificationItemSchema = new Schema<IShowcasedGamificationItem>(
-  {
-    earnedItemId: {
-      type: Schema.Types.ObjectId,
-      required: true,
-      comment: "ID of an item within the UserAchievement 'earnedItems' array",
-    },
-    itemType: {
-      type: String,
-      enum: ["Achievement", "Badge"],
-      required: true,
-      comment: "ประเภทของไอเท็มที่เลือกมาแสดง",
-    },
-  },
-  { _id: false }
-);
-
-const UserDisplayBadgeSchema = new Schema<IUserDisplayBadge>(
-  {
-    earnedBadgeId: {
-      type: Schema.Types.ObjectId,
-      required: true,
-      comment: "ID of a badge item within the UserAchievement 'earnedItems' array",
-    },
-    displayContext: {
-      type: String,
-      trim: true,
-      comment: "บริบทที่จะแสดง เช่น 'comment_signature'",
-    },
-  },
-  { _id: false }
-);
 
 const UserWalletSchema = new Schema<IUserWallet>(
   {
@@ -172,23 +138,6 @@ const UserGamificationObjectSchema = new Schema<IUserGamification>(
       type: Schema.Types.ObjectId,
       comment: "Array of _id's from UserAchievement.earnedItems (where itemType is 'Achievement')",
     }],
-    showcasedItems: {
-      type: [ShowcasedGamificationItemSchema],
-      default: [],
-       validate: [
-        (val: IShowcasedGamificationItem[]) => val.length <= 5,
-        "สามารถแสดงไอเท็มได้สูงสุด 5 ชิ้น",
-      ],
-    },
-    primaryDisplayBadge: { type: UserDisplayBadgeSchema },
-    secondaryDisplayBadges: {
-        type: [UserDisplayBadgeSchema],
-        default: [],
-        validate: [
-            (val: IUserDisplayBadge[]) => val.length <= 2,
-            "สามารถแสดง Badge รองได้สูงสุด 2 อัน",
-        ],
-    },
     loginStreaks: {
       currentStreakDays: { type: Number, default: 0, min: 0 },
       longestStreakDays: { type: Number, default: 0, min: 0 },
@@ -256,14 +205,7 @@ UserGamificationSchema.index({ "wallet.coinBalance": -1 }, { name: "UserGamifica
 UserGamificationSchema.pre("save", function (next) {
   // `this` is the document being saved.
   // Prioritization Logic: ตรวจสอบก่อนบันทึก
-  if (this.isModified("gamification.secondaryDisplayBadges") && this.gamification.secondaryDisplayBadges && this.gamification.secondaryDisplayBadges.length > 2) {
-      const error = new Error("สามารถแสดง Badge รองได้สูงสุด 2 อันเท่านั้น");
-      return next(error);
-  }
-   if (this.isModified("gamification.showcasedItems") && this.gamification.showcasedItems && this.gamification.showcasedItems.length > 5) {
-      const error = new Error("สามารถแสดงไอเท็มได้สูงสุด 5 ชิ้นเท่านั้น");
-      return next(error);
-  }
+  // หมายเหตุ: ลบการตรวจสอบ showcasedItems และ displayBadges แล้ว เพราะย้ายไป UserProfile
   next();
 });
 

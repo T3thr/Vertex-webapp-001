@@ -38,6 +38,7 @@ import {
     Gift
 } from 'lucide-react';
 import { SerializedUser, SerializedWriterApplication, SerializedDonationApplication } from '@/app/dashboard/page';
+// import WriterApplicationForm from '@/components/dashboard/WriterApplicationForm';
 import React, { useState } from 'react';
 
 interface WriterProfileSectionProps {
@@ -198,10 +199,76 @@ function WriterStatCard({ icon: Icon, label, value, sublabel, color, delay }: Wr
                 </motion.div>
 
                 <div className="text-white/90 font-medium text-sm">{label}</div>
-
                 {sublabel && (
                     <div className="text-white/70 text-xs mt-1">{sublabel}</div>
                 )}
+            </div>
+        </motion.div>
+    );
+}
+
+// Component สำหรับแสดงสิทธิพิเศษของนักเขียน
+interface WriterBenefitProps {
+    icon: React.ElementType;
+    title: string;
+    description: string;
+    isUnlocked: boolean;
+    color: string;
+    delay: number;
+}
+
+function WriterBenefitCard({ icon: Icon, title, description, isUnlocked, color, delay }: WriterBenefitProps) {
+    return (
+        <motion.div
+            className={`p-4 rounded-xl border-2 transition-all duration-300 relative overflow-hidden group ${
+                isUnlocked 
+                    ? 'border-green-500/50 bg-green-50 dark:bg-green-900/20' 
+                    : 'border-border bg-secondary/30'
+            }`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay, duration: 0.5 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+        >
+            {/* Sparkle effect for unlocked benefits */}
+            {isUnlocked && (
+                <motion.div
+                    className="absolute top-2 right-2"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                >
+                    <Sparkles className="w-4 h-4 text-green-500" />
+                </motion.div>
+            )}
+
+            <div className="flex items-start gap-3">
+                <motion.div
+                    className={`p-2 rounded-lg ${isUnlocked ? color : 'bg-muted'}`}
+                    whileHover={{ rotate: 5 }}
+                >
+                    <Icon className={`w-5 h-5 ${isUnlocked ? 'text-white' : 'text-muted-foreground'}`} />
+                </motion.div>
+                
+                <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h4 className={`font-semibold ${isUnlocked ? 'text-card-foreground' : 'text-muted-foreground'}`}>
+                            {title}
+                        </h4>
+                        {isUnlocked ? (
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                        ) : (
+                            <motion.div
+                                animate={{ opacity: [0.5, 1, 0.5] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                            >
+                                <Clock className="w-4 h-4 text-orange-500" />
+                            </motion.div>
+                        )}
+                    </div>
+                    <p className={`text-sm ${isUnlocked ? 'text-muted-foreground' : 'text-muted-foreground/70'}`}>
+                        {description}
+                    </p>
+                </div>
             </div>
         </motion.div>
     );
@@ -215,6 +282,8 @@ export default function WriterProfileSection({
     donationApplication
 }: WriterProfileSectionProps) {
     const [activeTab, setActiveTab] = useState<'profile' | 'writer' | 'donation'>('profile');
+    const [showApplicationForm, setShowApplicationForm] = useState(false);
+    const [availableGenres, setAvailableGenres] = useState<any[]>([]);
 
     // Animation variants
     const containerVariants = {
@@ -233,6 +302,70 @@ export default function WriterProfileSection({
         hidden: { opacity: 0, x: -20 },
         visible: { opacity: 1, x: 0 }
     };
+
+    // โหลดหมวดหมู่สำหรับฟอร์มสมัคร
+    const loadGenres = async () => {
+        try {
+            const response = await fetch('/api/search/categories');
+            if (response.ok) {
+                const result = await response.json();
+                setAvailableGenres(result.data || []);
+            }
+        } catch (error) {
+            console.error('Error loading genres:', error);
+        }
+    };
+
+    const handleShowApplicationForm = () => {
+        loadGenres();
+        setShowApplicationForm(true);
+    };
+
+    // ข้อมูลสิทธิพิเศษของนักเขียน
+    const writerBenefits = [
+        {
+            icon: DollarSign,
+            title: 'สร้างรายได้',
+            description: 'รับเงินจากการขายตอนและระบบบริจาค',
+            isUnlocked: isWriter,
+            color: 'bg-green-500'
+        },
+        {
+            icon: TrendingUp,
+            title: 'วิเคราะห์เชิงลึก',
+            description: 'ดูสถิติผู้อ่าน กราฟรายได้ และข้อมูลการมีส่วนร่วม',
+            isUnlocked: isWriter,
+            color: 'bg-blue-500'
+        },
+        {
+            icon: Crown,
+            title: 'ป้ายนักเขียน',
+            description: 'ได้ป้ายพิเศษและสิทธิ์ในชุมชน',
+            isUnlocked: isWriter,
+            color: 'bg-purple-500'
+        },
+        {
+            icon: Gift,
+            title: 'ระบบบริจาค',
+            description: 'เปิดรับบริจาคจากแฟนๆ ที่ชื่นชอบผลงาน',
+            isUnlocked: isWriter && !!donationApplication,
+            color: 'bg-pink-500'
+        },
+        {
+            icon: Target,
+            title: 'การตลาดผลงาน',
+            description: 'เครื่องมือโปรโมทและเพิ่มยอดผู้อ่าน',
+            isUnlocked: isWriter,
+            color: 'bg-orange-500'
+        },
+        {
+            icon: Star,
+            title: 'สิทธิพิเศษ',
+            description: 'เข้าถึงฟีเจอร์ล่วงหน้าและกิจกรรมพิเศษ',
+            isUnlocked: isWriter,
+            color: 'bg-indigo-500'
+        }
+    ];
 
     // ฟังก์ชันสำหรับแสดงสถานะใบสมัคร
     const getApplicationStatusDisplay = (status: string) => {
@@ -574,22 +707,18 @@ export default function WriterProfileSection({
                                             </motion.div>
                                         )}
 
-                                        {/* Writer Tier Badge */}
-                                        {user.writerStats?.writerTier && (
-                                            <motion.div
-                                                className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm px-4 py-2 rounded-full border border-purple-400/30"
-                                                initial={{ opacity: 0, scale: 0 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                transition={{ delay: 0.7, type: "spring" }}
-                                            >
-                                                <Crown className="w-4 h-4 text-purple-400" />
-                                                <span className="text-sm font-medium text-purple-300">
-                                                    {user.writerStats.writerTier === 'beginner' && 'นักเขียนมือใหม่'}
-                                                    {user.writerStats.writerTier === 'intermediate' && 'นักเขียนระดับกลาง'}
-                                                    {user.writerStats.writerTier === 'advanced' && 'นักเขียนระดับสูง'}
-                                                </span>
-                                            </motion.div>
-                                        )}
+                                        {/* Writer Verified Badge */}
+                                        <motion.div
+                                            className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm px-4 py-2 rounded-full border border-purple-400/30"
+                                            initial={{ opacity: 0, scale: 0 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: 0.7, type: "spring" }}
+                                        >
+                                            <Crown className="w-4 h-4 text-purple-400" />
+                                            <span className="text-sm font-medium text-purple-300">
+                                                นักเขียนที่ได้รับการยืนยัน
+                                            </span>
+                                        </motion.div>
                                     </motion.div>
                                 </div>
                             ) : (
@@ -657,6 +786,10 @@ export default function WriterProfileSection({
                                             transition={{ delay: 0.3 }}
                                         >
                                             <motion.button
+                                                onClick={() => {
+                                                    // Temporary: just show alert for now
+                                                    alert('ฟีเจอร์นี้จะพร้อมใช้งานเร็วๆ นี้!');
+                                                }}
                                                 className="bg-gradient-to-r from-primary to-primary-hover text-primary-foreground py-4 px-8 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-3 mx-auto"
                                                 whileHover={{ scale: 1.05, y: -2 }}
                                                 whileTap={{ scale: 0.95 }}
@@ -667,6 +800,48 @@ export default function WriterProfileSection({
                                             </motion.button>
                                         </motion.div>
                                     )}
+
+                                    {/* Writer Benefits Section */}
+                                    <motion.div
+                                        className="mt-8"
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.5 }}
+                                    >
+                                        <div className="flex items-center gap-2 mb-6">
+                                            <Crown className="w-6 h-6 text-primary" />
+                                            <h4 className="text-lg font-semibold text-card-foreground">
+                                                สิทธิพิเศษของนักเขียน
+                                            </h4>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {writerBenefits.map((benefit, index) => (
+                                                <WriterBenefitCard
+                                                    key={benefit.title}
+                                                    icon={benefit.icon}
+                                                    title={benefit.title}
+                                                    description={benefit.description}
+                                                    isUnlocked={benefit.isUnlocked}
+                                                    color={benefit.color}
+                                                    delay={0.1 * index}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        {!isWriter && (
+                                            <motion.div
+                                                className="mt-6 p-4 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl text-center"
+                                                initial={{ opacity: 0, scale: 0.9 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ delay: 0.8 }}
+                                            >
+                                                <p className="text-sm text-primary font-medium">
+                                                    ✨ สมัครเป็นนักเขียนเพื่อปลดล็อคสิทธิพิเศษทั้งหมด!
+                                                </p>
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
                                 </div>
                             )}
                         </motion.div>
@@ -786,6 +961,8 @@ export default function WriterProfileSection({
                     )}
                 </AnimatePresence>
             </div>
+
+
         </motion.section>
     );
 }
