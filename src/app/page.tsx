@@ -6,6 +6,7 @@
 import { Suspense } from 'react';
 import { NovelCard, NovelCardData } from "@/components/NovelCard";
 import { ImageSlider, SlideData as SliderSlideData } from "@/components/ImageSlider";
+import { NovelRowNavButton } from "@/components/NovelRowNavigation";
 import {
   TrendingUp,
   CheckCircle,
@@ -33,6 +34,7 @@ interface SectionConfig {
   filter: string;
   novelType?: string;
   viewAllLink: string;
+  headerImageUrl?: string; // ✅ [เพิ่มใหม่] รองรับรูปภาพ header
 }
 
 interface SectionData {
@@ -127,6 +129,33 @@ async function getAllNovelsData(sectionsConfig: SectionConfig[]): Promise<Sectio
   return sectionsData;
 }
 
+// ✅ [เพิ่มใหม่] Component สำหรับ Section Header ที่รองรับรูปภาพ
+function SectionHeader({ config }: { config: SectionConfig }) {
+  const hasImage = config.headerImageUrl;
+  
+  return (
+    <div 
+      className={`section-header ${hasImage ? 'section-header-with-image' : ''} smooth-appear`}
+      style={hasImage ? { backgroundImage: `url(${config.headerImageUrl})` } : {}}
+    >
+      {hasImage && <div className="section-header-overlay" />}
+      <div className={hasImage ? 'section-header-content' : 'py-2'}>
+        <div className="flex items-center gap-2.5 md:gap-3">
+          <div className="text-primary bg-primary/10 p-2 sm:p-2.5 rounded-md shadow-sm flex items-center justify-center">
+            {config.icon}
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">{config.title}</h2>
+            {config.description && (
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{config.description}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({ icon, title, description }: { icon: React.ReactNode; title: string; description?: string }) {
   return (
     <div className="flex items-center gap-2.5 md:gap-3">
@@ -157,7 +186,7 @@ function SectionSkeleton() {
       <div className="flex overflow-hidden space-x-2 sm:space-x-3">
         {Array.from({ length: 6 }, (_, i) => (
           <div key={i} className="flex-shrink-0 w-[120px] min-[400px]:w-[130px] sm:w-[140px] md:w-[150px]">
-            <div className="bg-muted rounded-lg aspect-[2/3] mb-2 animate-pulse" />
+            <div className="bg-muted rounded-lg aspect-square mb-2 animate-pulse" />
             <div className="h-4 w-full bg-muted rounded animate-pulse mb-1" />
             <div className="h-3 w-3/4 bg-muted rounded animate-pulse" />
           </div>
@@ -167,20 +196,89 @@ function SectionSkeleton() {
   );
 }
 
+// ✅ [ปรับปรุงใหม่] Component สำหรับ Featured Section แบบ Asymmetrical Grid รองรับ responsive mobile
+function FeaturedSection({ novels, viewAllLink, showViewAllButton }: {
+  novels: NovelCardData[];
+  viewAllLink: string;
+  showViewAllButton: boolean;
+}) {
+  if (!novels || novels.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground py-8 md:py-10 col-span-full flex flex-col items-center justify-center min-h-[200px] bg-secondary/20 rounded-lg my-2">
+        <BookOpen size={36} strokeWidth={1.5} className="mx-auto mb-3 text-primary/60" />
+        <p className="font-semibold text-base text-foreground/80">ยังไม่พบนิยายในหมวดนี้</p>
+        <p className="text-xs sm:text-sm text-muted-foreground max-w-xs mx-auto">ลองสำรวจหมวดหมู่อื่นๆ หรือแวะมาใหม่เร็วๆ นี้นะ</p>
+      </div>
+    );
+  }
+
+  const mainNovel = novels[0]; // นิยายหลักด้านซ้าย
+  const sideNovels = novels.slice(1, 5); // เอา 4 ตัวสำหรับ grid 2x2 ด้านขวา
+
+  return (
+    <div className="featured-section-wrapper"> {/* ✅ [เพิ่มใหม่] wrapper สำหรับเพิ่มพื้นที่ด้านล่าง */}
+      <div className="featured-grid"> {/* ✅ [ลบ smooth-appear] เพื่อความเร็วสูงสุด */}
+        {/* Main Novel (ใหญ่ ซ้าย) - สัดส่วน 2 ส่วน */}
+        <div className="featured-main">
+          <NovelCard
+            novel={mainNovel}
+            priority={true}
+            variant="large"
+            className="novel-card h-full w-full" /* ✅ [เพิ่ม w-full] เพื่อให้ยืดเต็มพื้นที่ใน mobile */
+          />
+        </div>
+
+        {/* Side Novels (ขวา 2x2) - สัดส่วน 1 ส่วน */}
+        <div className="featured-side">
+          {/* Grid 2x2: แสดงการ์ด 4 ตัวหรือน้อยกว่า */}
+          {sideNovels.map((novel, idx) => (
+            <NovelCard
+              key={`featured-side-${novel._id}-${idx}`}
+              novel={novel}
+              priority={true}
+              variant="featured" /* ✅ [แก้ไขจาก default เป็น featured] เพื่อให้ใช้ขนาดที่เหมาะสม */
+              className="novel-card h-full w-full" /* ✅ [เพิ่ม w-full] เพื่อให้ยืดเต็มพื้นที่ grid cell */
+            />
+          ))}
+          
+          {/* ✅ [ปรับใหม่] ปุ่มดูเพิ่มเติมอยู่ใต้ grid แบบสมมาตร */}
+          {showViewAllButton && (
+            <div className="view-more-button-container">
+              <Link
+                href={viewAllLink}
+                className="view-more-circle" /* ✅ [ลบ gpu-accelerated hover-lift] เพื่อความเร็ว */
+                role="link"
+                aria-label="ดูนิยายทั้งหมดในหมวดผลงานยอดนิยม"
+              >
+                <div className="view-more-content">
+                  <ArrowRightCircle size={14} strokeWidth={1.5} className="text-primary mb-0.5" />
+                  <span className="text-[8px] sm:text-[9px] font-medium text-primary">ดูเพิ่ม</span> {/* ✅ [ปรับปรุง] responsive text size */}
+                </div>
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ✅ [ปรับปรุง] NovelRow ที่รองรับปุ่มเลื่อนซ้าย-ขวา
 function NovelRow({
   novels,
   filterKey,
   viewAllLink,
-  showViewAllButton
+  showViewAllButton,
+  showNavigation = true // ✅ [เพิ่มใหม่] ควบคุมการแสดงปุ่ม navigation
 }: {
   novels: NovelCardData[];
   filterKey: string;
   viewAllLink: string;
   showViewAllButton: boolean;
+  showNavigation?: boolean;
 }) {
   // ปรับขนาด card ให้เล็กลงตาม readawrite.com
-  const cardWidthClasses = "w-[120px] min-[400px]:w-[130px] sm:w-[140px] md:w-[150px]";
-  const imageAspectRatio = "aspect-[2/3]";
+  const cardWidthClasses = "w-[160px] min-[400px]:w-[170px] sm:w-[180px] md:w-[190px]";
 
   if (!novels || novels.length === 0) {
     return (
@@ -193,53 +291,64 @@ function NovelRow({
   }
 
   return (
-    <div
-      className="flex overflow-x-auto space-x-2 sm:space-x-3 pb-3 -mb-3 custom-scrollbar-horizontal scroll-smooth snap-x snap-mandatory py-2 -mx-0.5 px-0.5 sm:-mx-1 sm:px-1"
-      role="region"
-      aria-label={`แถวนิยาย ${filterKey}`}
-    >
-      {novels.map((novel, index) => (
-        <div
-          key={`${filterKey}-${novel._id}-${index}`}
-          className={`flex-shrink-0 ${cardWidthClasses} snap-start`}
-        >
-          <NovelCard
-            novel={novel}
-            priority={index < 3}
-            className="h-full"
-            imageClassName={imageAspectRatio}
-          />
-        </div>
-      ))}
-
-      {showViewAllButton && (
-        <div
-          className={`flex-shrink-0 ${cardWidthClasses} snap-start`}
-        >
-          <Link
-            href={viewAllLink}
-            className="bg-card hover:bg-secondary transition-colors duration-200 rounded-lg shadow-sm hover:shadow-md flex flex-col items-center justify-center h-full group p-3 text-center border border-border/50"
-            role="link"
-            aria-label={`ดูนิยายทั้งหมดในหมวด ${filterKey}`}
-          >
-            <div className="flex flex-col items-center justify-center flex-grow">
-                <ArrowRightCircle size={28} strokeWidth={1.5} className="text-primary mb-2 group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-xs font-medium text-primary group-hover:underline">
-                  ดูทั้งหมด
-                </span>
-                <span className="text-[9px] text-muted-foreground mt-0.5">
-                  ({filterKey})
-                </span>
-            </div>
-          </Link>
-        </div>
+    <div className={`novel-row-container ${showNavigation ? '' : 'overflow-hidden'}`}>
+      {/* ✅ [เพิ่มใหม่] Navigation Buttons สำหรับ Desktop */}
+      {showNavigation && (
+        <>
+          <NovelRowNavButton direction="left" targetId={`novel-row-${filterKey}`} />
+          <NovelRowNavButton direction="right" targetId={`novel-row-${filterKey}`} />
+        </>
       )}
+
+      <div
+        id={`novel-row-${filterKey}`}
+        className="novel-row-scroll novel-cards-grid custom-scrollbar-horizontal py-2 -mx-0.5 px-0.5 sm:-mx-1 sm:px-1 contain-layout"
+        role="region"
+        aria-label={`แถวนิยาย ${filterKey}`}
+      >
+        {novels.map((novel, index) => (
+          <div
+            key={`${filterKey}-${novel._id}-${index}`}
+            className={`novel-card-item ${cardWidthClasses}`}
+          >
+            <NovelCard
+              novel={novel}
+              priority={index < 3}
+              className="h-full" /* ✅ [ลบ hover-lift gpu-accelerated] เพื่อความเร็วสูงสุด */
+            />
+          </div>
+        ))}
+
+        {showViewAllButton && (
+          <div className={`novel-card-item ${cardWidthClasses} flex items-center justify-center`}>
+            <Link
+              href={viewAllLink}
+              className="view-more-circle"
+              role="link"
+              aria-label={`ดูนิยายทั้งหมดในหมวด ${filterKey}`}
+            >
+              <div className="view-more-content">
+                <ArrowRightCircle size={20} strokeWidth={1.5} className="text-primary mb-1" />
+                <span className="text-[10px] font-medium text-primary">
+                  ดูเพิ่ม
+                </span>
+              </div>
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // Component สำหรับแสดงผล section พร้อม error boundary
-async function SectionRenderer({ configPromise }: { configPromise: Promise<SectionData> }) {
+async function SectionRenderer({ 
+  configPromise, 
+  isFeatured = false 
+}: { 
+  configPromise: Promise<SectionData>; 
+  isFeatured?: boolean;
+}) {
   try {
     const data = await configPromise;
     const { config, novels, showViewAllButton } = data;
@@ -247,14 +356,24 @@ async function SectionRenderer({ configPromise }: { configPromise: Promise<Secti
     return (
       <section aria-labelledby={config.key} className="mb-6 md:mb-10">
         <div className="flex justify-between items-center mb-2.5 md:mb-3">
-          <SectionTitle icon={config.icon} title={config.title} description={config.description} />
+          <SectionHeader config={config} />
         </div>
-        <NovelRow
-          novels={novels}
-          filterKey={config.key}
-          viewAllLink={config.viewAllLink}
-          showViewAllButton={showViewAllButton}
-        />
+        
+        {isFeatured ? (
+          <FeaturedSection 
+            novels={novels}
+            viewAllLink={config.viewAllLink}
+            showViewAllButton={showViewAllButton}
+          />
+        ) : (
+          <NovelRow
+            novels={novels}
+            filterKey={config.key}
+            viewAllLink={config.viewAllLink}
+            showViewAllButton={showViewAllButton}
+            showNavigation={true}
+          />
+        )}
       </section>
     );
   } catch (error) {
@@ -316,6 +435,7 @@ export default async function HomePage() {
       icon: <TrendingUp className="h-5 w-5 text-primary" />,
       filter: "trending",
       viewAllLink: "/novels?filter=trending",
+      // headerImageUrl: "/images/section-headers/trending-bg.webp", // ✅ [ตัวอย่าง] สำหรับอนาคต
     },
     {
       key: "new-releases",
@@ -327,8 +447,8 @@ export default async function HomePage() {
     },
     {
       key: "promoted-deals",
-      title: "โปรโมชันและเรื่องเด่น",
-      description: "นิยายคุณภาพพร้อมข้อเสนอพิเศษ",
+      title: "ส่วนลด",
+      description: "นิยายลดราคาพิเศษ อ่านคุ้มกว่าเดิม",
       icon: <BadgePercent className="h-5 w-5 text-primary" />,
       filter: "promoted",
       viewAllLink: "/novels?filter=promoted",
@@ -352,15 +472,22 @@ export default async function HomePage() {
     <div className="bg-background text-foreground min-h-screen">
       <main className="pb-10 md:pb-16">
         {/* แสดง ImageSlider ทันทีโดยไม่ต้องรอ API */}
-        <section className="w-full mb-6 md:mb-10 xl:mb-12 relative">
+        <section className="w-full mb-8 md:mb-12 relative">
           <ImageSlider slides={imageSlideData} autoPlayInterval={7000} />
+          {/* ✅ [เพิ่มใหม่] พื้นที่พื้นหลังด้านล่าง banner เพื่อเพิ่มระยะห่างจาก component นิยาย */}
+          <div className="h-4 md:h-6 bg-background"></div>
         </section>
 
         <div className="container-custom space-y-8 md:space-y-12">
-          {/* ใช้ Suspense แยกแต่ละ section เพื่อ progressive loading */}
-          {sectionPromises.map((promise, index) => (
-            <Suspense key={sectionsConfig[index].key} fallback={<SectionSkeleton />}>
-              <SectionRenderer configPromise={promise} />
+          {/* ✅ [เปลี่ยนแปลง] Section แรก (ผลงานยอดนิยม) ใช้ Asymmetrical Grid */}
+          <Suspense key="trending-featured" fallback={<SectionSkeleton />}>
+            <SectionRenderer configPromise={sectionPromises[0]} isFeatured={true} />
+          </Suspense>
+
+          {/* ✅ [เปลี่ยนแปลง] Section อื่นๆ ใช้ NovelRow ปกติพร้อมปุ่มเลื่อน */}
+          {sectionPromises.slice(1).map((promise, index) => (
+            <Suspense key={sectionsConfig[index + 1].key} fallback={<SectionSkeleton />}>
+              <SectionRenderer configPromise={promise} isFeatured={false} />
             </Suspense>
           ))}
         </div>

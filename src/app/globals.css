@@ -3,21 +3,11 @@
 @import "tailwindcss";
 
 /* --------------------------------------- */
-/* การกำหนด Keyframes สำหรับแอนิเมชั่น */
+/* การกำหนด Keyframes สำหรับแอนิเมชั่น - ✅ [ลดลง] เหลือเฉพาะที่จำเป็น */
 /* --------------------------------------- */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes slideIn {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
 }
 
 @keyframes spin {
@@ -283,10 +273,6 @@ body {
   animation: fadeIn var(--duration-animation-normal) ease-in-out;
 }
 
-.animate-slideIn {
-  animation: slideIn var(--duration-animation-normal) ease-out;
-}
-
 /* --------------------------------------- */
 /* การปรับแต่ง Scrollbar */
 /* --------------------------------------- */
@@ -499,4 +485,512 @@ html[data-theme-ready="true"] {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* --------------------------------------- */
+/* Novel Row Utilities - ✅ [เพิ่มใหม่] สำหรับ horizontal scrolling และ navigation */
+/* --------------------------------------- */
+
+/* Novel Row Navigation Utilities - ✅ [ปรับปรุง] Smart Arrows */
+.novel-row-container {
+  position: relative;
+  width: 100%;
+}
+
+.novel-row-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox - ซ่อน scrollbar */
+  -ms-overflow-style: none; /* IE/Edge - ซ่อน scrollbar */
+}
+
+.novel-row-scroll::-webkit-scrollbar {
+  display: none; /* Webkit - ซ่อน scrollbar */
+}
+
+.novel-cards-grid {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.novel-card-item {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+/* Custom horizontal scrollbar for novel rows */
+.custom-scrollbar-horizontal {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) transparent;
+}
+
+.custom-scrollbar-horizontal::-webkit-scrollbar {
+  height: 4px;
+}
+
+.custom-scrollbar-horizontal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar-horizontal::-webkit-scrollbar-thumb {
+  background-color: var(--primary);
+  border-radius: var(--border-radius-full);
+}
+
+.custom-scrollbar-horizontal::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary-hover);
+}
+
+.novel-row-nav-button {
+  position: absolute;
+  top: 50%;
+  z-index: 15;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  /* ✅ ไม่มี transition สำหรับ hover ตามที่ขอ */
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* ✅ ไม่มี hover effects */
+.novel-row-nav-button:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.novel-row-nav-left {
+  left: -20px;
+}
+
+.novel-row-nav-right {
+  right: -20px;
+}
+
+/* Dark theme support */
+.dark .novel-row-nav-button {
+  background: rgba(30, 30, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* ✅ [เพิ่มใหม่] Dark theme support สำหรับ view-more-circle */
+.dark .view-more-circle {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2); /* ✅ เงาเข้มขึ้นสำหรับ dark theme */
+}
+
+.dark .view-more-circle:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25); /* ✅ เงา hover เข้มขึ้นสำหรับ dark theme */
+}
+
+/* ✅ [เพิ่มใหม่] Dark theme responsive shadows */
+@media (max-width: 1024px) {
+  .dark .view-more-circle {
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35), 0 2px 5px rgba(0, 0, 0, 0.25);
+  }
+  
+  .dark .view-more-circle:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 3px 10px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@media (max-width: 768px) {
+  .dark .view-more-circle {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+  
+  .dark .view-more-circle:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), 0 3px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@media (max-width: 480px) {
+  .dark .view-more-circle {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+  }
+  
+  .dark .view-more-circle:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1280px) {
+  .novel-row-nav-left {
+    left: -15px;
+  }
+  
+  .novel-row-nav-right {
+    right: -15px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .novel-row-nav-button {
+    display: none; /* ซ่อนบน tablet และ mobile */
+  }
+}
+
+/* Section Header Utilities - ✅ [เพิ่มใหม่] รองรับรูปภาพในอนาคต */
+.section-header {
+  position: relative;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  transition: all 0.3s ease-in-out;
+}
+
+.section-header-with-image {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  min-height: 120px;
+}
+
+.section-header-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    hsl(var(--background) / 0.95) 0%, 
+    hsl(var(--background) / 0.85) 50%, 
+    hsl(var(--background) / 0.9) 100%
+  );
+  backdrop-filter: blur(2px);
+}
+
+.section-header-content {
+  position: relative;
+  z-index: 2;
+  padding: 1rem;
+}
+
+/* Asymmetrical Grid Utilities - ✅ [ปรับปรุงให้การ์ด grid เท่ากับ section อื่น] สำหรับ section แรก */
+.featured-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* ✅ สัดส่วน 2:1 (ซ้าย:ขวา) */
+  gap: 0.75rem; /* ✅ [ลดจาก 1rem เป็น 0.75rem] ลดระยะห่างระหว่างซ้าย-ขวาให้ใกล้ชิด */
+  align-items: stretch;
+  justify-content: center;
+  max-width: 800px;
+  margin: 0 auto;
+  min-height: 300px; /* ✅ [เพิ่มจาก 280px เป็น 300px] เพิ่มความสูงให้การ์ดหลักสูงขึ้นเล็กน้อย */
+  padding: 0 1rem;
+}
+
+.featured-main {
+  grid-column: 1 / 2;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.featured-main .novel-card {
+  width: 100%;
+  height: 100%;
+  min-width: 280px;
+  min-height: 300px; /* ✅ [เพิ่มจาก 280px เป็น 300px] เพิ่มความสูงการ์ดหลักเล็กน้อย */
+  max-width: 380px;
+  max-height: 370px; /* ✅ [เพิ่มจาก 350px เป็น 370px] เพิ่มความสูงสูงสุด */
+}
+
+.featured-side {
+  grid-column: 2 / 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* ✅ Grid 2x2 */
+  grid-template-rows: 1fr 1fr;
+  gap: 0.5rem; /* ✅ [ลดจาก 0.75rem เป็น 0.5rem] ให้การ์ดใกล้ชิดกันมากขึ้น */
+  height: 100%;
+  align-items: stretch;
+  position: relative; /* ✅ [เพิ่มใหม่] สำหรับจัดตำแหน่งปุ่มดูเพิ่มเติม */
+}
+
+/* ✅ [ปรับใหม่] การ์ด default ใน featured section ให้มีขนาดเท่ากับ section อื่นทุกประการ */
+.featured-side .novel-card {
+  width: 100%;
+  height: 100%;
+  /* ✅ ใช้ขนาดเดียวกับการ์ด default ปกติทุกประการ */
+  min-width: 160px; /* ✅ [เพิ่มจาก 140px เป็น 160px] ตรงกับ default wrapper ใหม่ */
+  max-width: 190px; /* ✅ [เพิ่มจาก 170px เป็น 190px] ตรงกับ default wrapper ใหม่ */
+  min-height: 200px; /* ✅ [เพิ่มจาก 180px เป็น 200px] ให้สูงพอสำหรับเนื้อหาครบถ้วน */
+  max-height: 240px; /* ✅ [เพิ่มจาก 220px เป็น 240px] */
+}
+
+/* ✅ [ปรับใหม่] ปุ่มดูเพิ่มเติมให้อยู่ใต้ grid 2x2 แบบสมมาตร */
+.featured-side .view-more-button-container {
+  position: absolute;
+  bottom: -3rem; /* ✅ วางใต้ grid 2x2 */
+  left: 50%;
+  transform: translateX(-50%); /* ✅ จัดกึ่งกลางแนวนอน */
+  z-index: 10;
+}
+
+.featured-side .view-more-circle {
+  width: 50px; /* ✅ [ลดจาก 60px เป็น 50px] ให้เหมาะสมกับตำแหน่งใหม่ */
+  height: 50px;
+  margin: 0;
+}
+
+/* ✅ [เพิ่มใหม่] เพิ่มพื้นที่ด้านล่าง featured section สำหรับปุ่มดูเพิ่มเติม */
+.featured-section-wrapper {
+  margin-bottom: 4rem; /* ✅ เพิ่มพื้นที่ด้านล่างสำหรับปุ่มดูเพิ่มเติม */
+}
+
+/* Responsive Design สำหรับ Featured Grid */
+@media (max-width: 1024px) {
+  .featured-grid {
+    max-width: 95vw;
+    gap: 0.625rem; /* ✅ [ลดจาก 0.875rem] ให้เหมาะสมกับหน้าจอเล็ก */
+    padding: 0 0.5rem;
+    min-height: 320px; /* ✅ [เพิ่มจาก 280px เป็น 320px] เพิ่มความสูงใน tablet เพื่อรายละเอียดชัดเจนขึ้น */
+  }
+  
+  .featured-main .novel-card {
+    min-width: 260px; /* ✅ [เพิ่มจาก 240px เป็น 260px] ให้รายละเอียดชัดเจนขึ้น */
+    min-height: 320px; /* ✅ [เพิ่มจาก 280px เป็น 320px] ปรับตามความสูง grid */
+    max-width: 340px; /* ✅ [เพิ่มจาก 320px เป็น 340px] */
+    max-height: 360px; /* ✅ [เพิ่มจาก 320px เป็น 360px] */
+  }
+  
+  .featured-side .novel-card {
+    min-width: 150px; /* ✅ [เพิ่มจาก 140px เป็น 150px] รองรับขนาดใหม่ */
+    max-width: 180px; /* ✅ [เพิ่มจาก 170px เป็น 180px] */
+    min-height: 200px; /* ✅ [เพิ่มจาก 180px เป็น 200px] ปรับให้สมส่วนกับการ์ดหลัก */
+    max-height: 240px; /* ✅ [เพิ่มจาก 220px เป็น 240px] */
+  }
+  
+  .featured-side .view-more-circle {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .featured-side .view-more-button-container {
+    bottom: -2.5rem; /* ✅ ปรับสำหรับ tablet */
+  }
+}
+
+/* ✅ [ปรับปรุงใหญ่] Mobile breakpoint - เปลี่ยนเป็น single column เพื่อรายละเอียดชัดเจน */
+@media (max-width: 768px) {
+  .featured-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem; /* ✅ [เพิ่มจาก 1rem เป็น 1.5rem] เพิ่มระยะห่างระหว่าง sections */
+    min-height: unset;
+    padding: 0;
+    max-width: 100%;
+  }
+  
+  .featured-main {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .featured-main .novel-card {
+    min-width: unset;
+    min-height: 380px; /* ✅ [เพิ่มจาก 320px เป็น 380px] เพิ่มความสูงเพื่อรองรับ aspect ratio ใหม่และข้อความ */
+    max-width: 350px; /* ✅ [เพิ่มจาก 300px เป็น 350px] ขยายความกว้างเพื่อรายละเอียดชัดเจน */
+    max-height: 450px; /* ✅ [เพิ่มจาก 400px เป็น 450px] เพิ่มความสูงสำหรับข้อความเพิ่มเติม */
+    width: 100%;
+    max-width: 400px; /* ✅ [เพิ่มใหม่] จำกัดความกว้างสูงสุดใน mobile */
+    display: flex; /* ✅ [เพิ่มใหม่] ให้แน่ใจว่าเป็น flex container */
+    flex-direction: column; /* ✅ [เพิ่มใหม่] จัดเรียงแนวตั้ง */
+  }
+  
+  .featured-side {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 0.75rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.75rem] เพิ่มระยะห่างเพื่อไม่ให้ชิดเกินไป */
+    width: 100%;
+    max-width: 450px; /* ✅ [เพิ่มจาก 400px เป็น 450px] ขยายความกว้างสำหรับการ์ดที่ใหญ่ขึ้น */
+    margin: 0 auto 3.5rem auto; /* ✅ [เพิ่ม margin-bottom] สำหรับปุ่มดูเพิ่มเติม */
+    position: relative;
+  }
+  
+  .featured-side .novel-card {
+    min-width: unset;
+    max-width: unset;
+    min-height: 200px; /* ✅ [เพิ่มจาก 160px เป็น 200px] เพิ่มความสูงเพื่อรายละเอียดชัดเจน */
+    max-height: 240px; /* ✅ [เพิ่มจาก 200px เป็น 240px] */
+    width: 100%;
+  }
+  
+  .featured-side .view-more-circle {
+    width: 42px; /* ✅ [เพิ่มจาก 40px เป็น 42px] ขยายขนาดเล็กน้อยเพื่อให้คลิกง่าย */
+    height: 42px;
+  }
+  
+  .featured-side .view-more-button-container {
+    bottom: -2.5rem; /* ✅ ปรับสำหรับ mobile */
+  }
+}
+
+/* ✅ [ปรับปรุง] Small mobile - ให้การ์ดยังคงมีขนาดที่เหมาะสม */
+@media (max-width: 480px) {
+  .featured-grid {
+    gap: 1.25rem; /* ✅ [เพิ่มจาก 0.75rem เป็น 1.25rem] เพิ่มระยะห่าง */
+    padding: 0 0.5rem; /* ✅ [เพิ่มใหม่] padding เล็กน้อยใน small mobile */
+  }
+  
+  .featured-main .novel-card {
+    min-height: 340px; /* ✅ [เพิ่มจาก 280px เป็น 340px] เพิ่มความสูงเพื่อรองรับ aspect ratio ใหม่และข้อความ */
+    max-height: 400px; /* ✅ [เพิ่มจาก 340px เป็น 400px] เพิ่มพื้นที่สำหรับรายละเอียด */
+    max-width: 380px; /* ✅ [เพิ่มจาก unset เป็น 380px] จำกัดความกว้างใน small screen */
+    display: flex; /* ✅ [เพิ่มใหม่] ให้แน่ใจว่าเป็น flex container */
+    flex-direction: column; /* ✅ [เพิ่มใหม่] จัดเรียงแนวตั้ง */
+  }
+  
+  .featured-side {
+    gap: 0.625rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.625rem] */
+    margin-bottom: 3rem; /* ✅ [เพิ่มจาก 2.5rem เป็น 3rem] ปรับ margin-bottom */
+    max-width: 400px; /* ✅ [เพิ่มใหม่] จำกัดความกว้างใน small mobile */
+  }
+  
+  .featured-side .novel-card {
+    min-height: 180px; /* ✅ [เพิ่มจาก 140px เป็น 180px] ยังคงให้รายละเอียดชัดเจน */
+    max-height: 220px; /* ✅ [เพิ่มจาก 180px เป็น 220px] */
+  }
+  
+  .featured-side .view-more-circle {
+    width: 38px; /* ✅ [เพิ่มจาก 36px เป็น 38px] ให้ใหญ่พอสำหรับการแตะ */
+    height: 38px;
+  }
+  
+  .featured-side .view-more-button-container {
+    bottom: -2rem; /* ✅ [เพิ่มจาก -1.5rem เป็น -2rem] ปรับสำหรับ mobile เล็ก */
+  }
+}
+
+/* View More Button Utilities - ✅ [ปรับปรุง] สำหรับปุ่มดูเพิ่มเติมแบบวงกลม */
+.view-more-circle {
+  width: 60px; /* ✅ [เพิ่มขนาดให้เหมาะสมกับ featured section] */
+  height: 60px;
+  border-radius: var(--border-radius-full);
+  background: hsl(var(--card) / 0.95); /* ✅ [ปรับปรุง] ทำให้ background ใส เล็กน้อยเพื่อ glassmorphism effect */
+  backdrop-filter: blur(8px); /* ✅ [เพิ่มใหม่] glassmorphism effect */
+  border: 2px solid hsl(var(--primary) / 0.2); /* ✅ [ปรับปรุง] ใช้ primary color เพื่อให้โดดเด่นขึ้น */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1); /* ✅ [ปรับปรุง] เงาชัดเจนขึ้น */
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+  text-decoration: none; /* ✅ ป้องกัน underline จาก Link */
+}
+
+.view-more-circle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    hsl(var(--primary) / 0.1) 0%, 
+    hsl(var(--primary) / 0.05) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.view-more-circle:hover {
+  transform: scale(1.1);
+  border-color: hsl(var(--primary) / 0.5); /* ✅ [ปรับปรุง] เพิ่มความเข้มของ primary color เมื่อ hover */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15); /* ✅ [ปรับปรุง] เงา hover ชัดเจนขึ้น */
+}
+
+.view-more-circle:hover::before {
+  opacity: 1;
+}
+
+.view-more-circle:active {
+  transform: scale(0.95);
+}
+
+.view-more-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: inherit;
+  text-decoration: none; /* ✅ ป้องกัน underline */
+}
+
+/* ✅ [ปรับปรุง] Responsive สำหรับ view-more-circle */
+@media (max-width: 1024px) {
+  .view-more-circle {
+    width: 50px;
+    height: 50px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15), 0 2px 5px rgba(0, 0, 0, 0.1); /* ✅ [เพิ่มใหม่] เงาปรับตามขนาดใน tablet */
+  }
+  
+  .view-more-circle:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2), 0 3px 10px rgba(0, 0, 0, 0.15); /* ✅ [เพิ่มใหม่] เงา hover ปรับตามขนาดใน tablet */
+  }
+  
+  .view-more-content {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .view-more-circle {
+    width: 45px;
+    height: 45px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1); /* ✅ [เพิ่มใหม่] เงาปรับตามขนาดใน mobile */
+  }
+  
+  .view-more-circle:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), 0 3px 8px rgba(0, 0, 0, 0.15); /* ✅ [เพิ่มใหม่] เงา hover ปรับตามขนาดใน mobile */
+  }
+  
+  .view-more-content {
+    font-size: 0.65rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .view-more-circle {
+    width: 40px;
+    height: 40px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1); /* ✅ [เพิ่มใหม่] เงาปรับตามขนาดใน small mobile */
+  }
+  
+  .view-more-circle:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.15); /* ✅ [เพิ่มใหม่] เงา hover ปรับตามขนาดใน small mobile */
+  }
+  
+  .view-more-content {
+    font-size: 0.6rem;
+  }
+}
+
+/* Performance optimizations - ✅ [ลดการใช้ animations] เพื่อความเร็วสูงสุด */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: auto; /* ✅ [เปลี่ยนจาก transform เป็น auto] ลด GPU usage */
+}
+
+.contain-layout {
+  contain: layout style;
+}
+
+/* ✅ [ลบ smooth-appear animation] เพื่อความเร็วสูงสุด */
+/* Enhanced transitions - ✅ [ลดลง] เหลือเฉพาะ essential */
+.hover-lift {
+  transition: box-shadow 0.2s ease; /* ✅ [ลด transition] เหลือเฉพาะ shadow */
+}
+
+.hover-lift:hover {
+  box-shadow: var(--shadow-lg);
 }

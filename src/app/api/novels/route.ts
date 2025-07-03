@@ -120,24 +120,22 @@ export async function GET(request: Request) {
       case "promoted":
         const now = new Date();
         const promotionConditions = {
-          $or: [ // ต้องเป็น isFeatured หรือมีโปรโมชันที่ active
-            { isFeatured: true },
-            {
-              "monetizationSettings.activePromotion.isActive": true,
-              "monetizationSettings.activePromotion.promotionalPriceCoins": { $exists: true, $ne: null },
-              $and: [ // ตรวจสอบวันเริ่มและสิ้นสุดโปรโมชัน
-                { $or: [{ "monetizationSettings.activePromotion.promotionStartDate": { $lte: now } }, { "monetizationSettings.activePromotion.promotionStartDate": { $exists: false } }] },
-                { $or: [{ "monetizationSettings.activePromotion.promotionEndDate": { $gte: now } }, { "monetizationSettings.activePromotion.promotionEndDate": { $exists: false } }] },
-              ],
-            },
-          ]
+          // ✅ [แก้ไขใหม่] เฉพาะนิยายที่มีโปรโมชันที่ active เท่านั้น ไม่ต้องพึ่งพา isFeatured
+          "monetizationSettings.activePromotion.isActive": true,
+          "monetizationSettings.activePromotion.promotionalPriceCoins": { $exists: true, $ne: null },
+          $and: [ // ตรวจสอบวันเริ่มและสิ้นสุดโปรโมชัน
+            { $or: [{ "monetizationSettings.activePromotion.promotionStartDate": { $lte: now } }, { "monetizationSettings.activePromotion.promotionStartDate": { $exists: false } }] },
+            { $or: [{ "monetizationSettings.activePromotion.promotionEndDate": { $gte: now } }, { "monetizationSettings.activePromotion.promotionEndDate": { $exists: false } }] },
+          ],
         };
         andConditions.push(promotionConditions);
-        // Sort สำหรับ promoted: อาจจะเรียงตาม isFeatured ก่อน, แล้วตามความนิยม หรือวันที่เผยแพร่
-        sort["isFeatured"] = -1; // ให้ isFeatured=true มาก่อน
-        sort["stats.trendingStats.trendingScore"] = -1; // แล้วตาม trending
-        sort["publishedAt"] = -1;
-        console.log(`ℹ️ [API /api/novels] Applying filter: promoted (featured or active promotions)`);
+        // Sort สำหรับ promoted: เรียงตามคะแนนความนิยมและวันที่เผยแพร่
+        sort["stats.trendingStats.trendingScore"] = -1; // เรียงตาม trending ก่อน
+        sort["stats.viewsCount"] = -1; // แล้วตามยอดวิว
+        sort["publishedAt"] = -1; // และวันที่เผยแพร่
+        console.log(`ℹ️ [API /api/novels] Applying filter: promoted (active promotions only)`);
+        console.log(`ℹ️ [API /api/novels] Promotion conditions:`, JSON.stringify(promotionConditions, null, 2));
+        console.log(`ℹ️ [API /api/novels] Current time for promotion check:`, now.toISOString());
         break;
       case "completed":
         query.isCompleted = true; // นิยายที่จบแล้ว
@@ -182,7 +180,7 @@ export async function GET(request: Request) {
           select: "name",
         model: CategoryModel,
       })
-        .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount") // เลือกเฉพาะ field ที่จำเป็นสำหรับการ์ด
+        .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount themeAssignment ageRatingCategoryId") // เลือกเฉพาะ field ที่จำเป็นสำหรับการ์ด รวม themeAssignment และ ageRatingCategoryId
       .sort(sort)
       .skip(skip)
       .limit(limit)

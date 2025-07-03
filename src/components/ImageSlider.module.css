@@ -1,181 +1,180 @@
 /* src/components/ImageSlider.module.css */
 
-/* -- Variables from global.css (ตัวอย่างการอ้างอิง) -- */
-/* :root { */
-/* --animation-fast: 150ms; */
-/* --animation-normal: 300ms; */
-/* --animation-slow: 500ms; */
-/* --radius-md: 0.375rem; */
-/* --radius-lg: 0.5rem; */
-/* --color-primary: var(--primary); /* อ้างอิงจาก global.css */
-/* --color-primary-foreground: var(--primary-foreground); */
-/* --color-background: var(--background); */
-/* --color-foreground: var(--foreground); */
-/* --color-muted-foreground: var(--muted-foreground); */
-/* --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); */
-/* } */
-
 /* --------------------------------------- */
 /* Carousel Container & Core Layout        */
 /* --------------------------------------- */
 .carousel {
   position: relative;
   width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  overflow: hidden; /* สำคัญมาก: ซ่อนส่วนที่เกินของ slideContainer ทำให้ peeking effect ทำงาน */
-  -webkit-tap-highlight-color: transparent; 
-  isolation: isolate; 
+  overflow: hidden;
+  /* ✅ [แก้ไข] ลบ radius และ shadow ออกจาก container หลัก */
+  border-radius: 0;
+  background: transparent; /* ทำให้พื้นหลังโปร่งใส */
+  box-shadow: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  /* ✅ [เพิ่ม] เพิ่ม margin ด้านล่างเพื่อเว้นที่ให้ component อื่น */
+  /* margin-bottom: 32px; 
+  /* ✅ [เพิ่ม fixed height] ป้องกัน layout shift */
+  height: 56.25vw; /* Default aspect ratio 16:9 */
+  max-height: 400px; 
+  min-height: 250px; 
 }
 
-.slideContainer {
-  display: flex; /* จัดเรียงสไลด์ในแนวนอน */
-  position: relative; 
-  height: 100%; 
-  /* transition property ถูกกำหนดใน JavaScript (setTransform) */
-}
-
-.dragging .slideContainer {
+.carousel:active {
   cursor: grabbing;
 }
 
-.slide {
-  flex: 0 0 auto; /* ไม่ยืด ไม่หด ขนาดตามที่กำหนดใน style prop ของ TSX */
-  position: relative; 
-  overflow: hidden; 
-  height: 100%; 
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  background-color: var(--secondary); /* สีพื้นหลังสำรอง */
+.carousel.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: 12px; /* เพิ่ม radius ให้ loading state ดูดี */
 }
 
-/* Peeking effect on desktop for non-active slides (controlled by JS data-attributes and width) */
-/* ถ้าต้องการให้สไลด์ข้างๆ มี opacity หรือ scale ต่างกัน สามารถทำได้ผ่าน data-position-in-loop */
-/* เช่น: .slide[data-position-in-loop="-1"], .slide[data-position-in-loop="1"] { opacity: 0.7; transform: scale(0.95); } */
-/* แต่ในที่นี้ เราจะให้มัน peeking ออกมาเฉยๆ โดยไม่ต้องปรับ opacity/scale เพื่อความเรียบง่าย */
+/* Slide Container */
+.slideContainer {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  height: 100%;
+  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform;
+  cursor: grab;
+}
+
+.slideContainer.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+/* ✅ [แก้ไข] slide item แต่ละอันจะมีความมนและมี shadow เอง */
+.slide {
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-background);
+  border-radius: 12px; /* ✅ เพิ่มความมนให้กับแต่ละสไลด์ */
+  box-shadow: var(--shadow-lg); /* ✅ ย้าย shadow มาไว้ที่นี่ */
+  /* ✅ เพิ่ม transition เพื่อให้ตอน resize ดูนุ่มนวลขึ้น */
+  transition: width 0.3s ease-in-out; 
+}
 
 .slideImage {
-  display: block; /* Remove extra space below image */
-  object-fit: cover; /* หรือ 'contain' ตามต้องการ */
-  width: 100%;
-  height: 100%;
-  user-select: none; /* ป้องกันการ select รูปภาพ */
-  pointer-events: none; /* ป้องกันการ drag รูปภาพโดย browser */
-  transition: opacity var(--animation-normal) ease-in-out; /* สำหรับ fade-in เมื่อโหลด */
+  object-fit: cover;
+  transition: transform 0.3s ease-in-out;
+  will-change: transform;
+}
+
+.slide:hover .slideImage {
+  transform: scale(1.02);
 }
 
 .slideOverlay {
   position: absolute;
-  inset: 0; /* top, right, bottom, left = 0 */
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.3) 40%, rgba(0, 0, 0, 0) 70%);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.4) 0%,
+    rgba(0, 0, 0, 0.2) 40%,
+    rgba(0, 0, 0, 0.1) 70%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
   z-index: 1;
-  pointer-events: none; /* ให้คลิกทะลุ overlay ไปยัง link ได้ */
-  border-radius: inherit; /* รับค่า border-radius จาก parent (.slide) ถ้ามี */
 }
 
-/* --------------------------------------- */
-/* Slide Content Styling                 */
-/* --------------------------------------- */
 .slideContent {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 1.5rem; /* 24px */
-  color: var(--primary-foreground); /* หรือสีขาว #fff */
+  padding: 1.5rem 2rem 2rem;
+  color: white;
   z-index: 2;
-  pointer-events: none; /* โดย default ให้ event ทะลุ */
-  /* text-shadow: var(--shadow-text-sm); ใช้ text-shadow จาก global.css */
-}
-
-.slideContent a,
-.slideContent button {
-  pointer-events: auto; /* ให้ link และ button คลิกได้ */
-}
-
-/* Animation for active slide content (fade-in + slight slide-up) */
-.slideContentEnter {
-  animation: slideContentFadeIn var(--animation-slow) ease-out forwards;
-  opacity: 0;
-}
-
-@keyframes slideContentFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.4) 50%,
+    transparent 100%
+  );
 }
 
 .slideCategory {
   display: inline-block;
-  padding: 0.25rem 0.6rem; /* 4px 8px */
-  font-size: 0.75rem; /* 12px */
+  padding: 0.375rem 0.875rem;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-size: 0.75rem;
   font-weight: 600;
-  border-radius: var(--radius-sm); /* 4px */
-  margin-bottom: 0.5rem; /* 8px */
-  background-color: var(--primary); /* ใช้สี primary จาก global */
-  color: var(--primary-foreground); /* สีตัวอักษรบน primary */
+  border-radius: 9999px;
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.025em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .slideTitle {
-  font-size: 1.5rem; /* 24px */
-  font-weight: 700;
+  font-size: 1.875rem;
+  font-weight: 800;
   line-height: 1.2;
-  margin-bottom: 0.5rem; /* 8px */
-  /* text-shadow: 0 1px 3px rgba(0,0,0,0.5); */
+  margin-bottom: 0.75rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
+
 .slideTitle a {
   color: inherit;
   text-decoration: none;
+  transition: all 0.2s ease-in-out;
 }
-.slideTitle a:hover, .slideTitle a:focus {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+
+.slideTitle a:hover {
+  color: var(--color-primary);
+  text-shadow: 0 0 20px rgba(84, 149, 255, 0.5);
 }
 
 .slideDescription {
-  font-size: 0.875rem; /* 14px */
+  font-size: 1rem;
   line-height: 1.5;
-  margin-bottom: 1rem; /* 16px */
-  max-width: 90%; /* ป้องกัน text ชิดขอบเกินไป */
-  /* สำหรับแสดง 2-3 บรรทัดแล้วตัดข้อความ (ถ้าต้องการ) */
-  display: -webkit-box;
-  -webkit-line-clamp: 3; /* จำนวนบรรทัดที่ต้องการ */
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 1rem;
+  opacity: 0.95;
+  max-width: 600px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
 }
 
 .slideButton {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem; /* 8px */
-  padding: 0.6rem 1.2rem; /* 8px 16px */
-  font-size: 0.875rem; /* 14px */
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-size: 0.875rem;
   font-weight: 600;
-  border-radius: var(--radius-md); /* 6px */
-  background-color: var(--primary-foreground); /* สีพื้นหลังปุ่ม (สว่าง) */
-  color: var(--primary); /* สีตัวอักษรปุ่ม (เข้ม) */
+  border-radius: 0.5rem;
   text-decoration: none;
-  transition: background-color var(--animation-fast) ease-in-out, transform var(--animation-fast) ease-in-out;
-  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 2px solid transparent;
 }
-.slideButton:hover, .slideButton:focus-visible {
-  background-color: var(--secondary); /* สีอ่อนลงเล็กน้อยเมื่อ hover */
+
+.slideButton:hover {
+  background: var(--color-primary-hover);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.2);
 }
-.slideButton:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+
+.slideButton:active {
+  transform: translateY(0);
 }
 
 /* --------------------------------------- */
@@ -185,139 +184,196 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 10; /* อยู่เหนือสไลด์ */
-  background-color: color-mix(in srgb, var(--background) 70%, transparent); /* สีพื้นหลังกึ่งโปร่งใส */
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full); /* ทำให้กลม */
-  width: 40px; /* 2.5rem */
-  height: 40px;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--animation-fast) ease-in-out, transform var(--animation-fast) ease-in-out, box-shadow var(--animation-fast) ease-in-out;
-  box-shadow: var(--shadow-md);
+  /* ✅ [แก้ไข] transition ให้ครอบคลุม opacity */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1);
+  color: #1a1a1a;
+  opacity: 1; /* ✅ [เพิ่ม] กำหนดค่าเริ่มต้นของ opacity */
 }
-.navButton:hover, .navButton:focus-visible {
-  background-color: var(--background);
-  transform: translateY(-50%) scale(1.05);
-  box-shadow: var(--shadow-lg);
+
+/* ✅ [เพิ่ม] class สำหรับซ่อนปุ่ม navigation */
+.navButtonHidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.9);
 }
+
+
+.navButton:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: var(--color-primary, #5495ff);
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2), 0 6px 15px rgba(0, 0, 0, 0.15);
+  color: var(--color-primary, #5495ff);
+}
+
+.navButton:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
 .navButton:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
-  transform: translateY(-50%); /* Reset scale */
-  box-shadow: var(--shadow-sm);
-}
-.navButton:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+  transform: translateY(-50%) scale(0.9);
 }
 
 .navButtonPrev {
-  left: 1rem; /* 16px */
+  left: 20px;
 }
 
 .navButtonNext {
-  right: 1rem; /* 16px */
+  right: 20px;
 }
 
+/* Dark theme support */
+.dark .navButton {
+  background: rgba(30, 30, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.dark .navButton:hover {
+  background: rgba(50, 50, 50, 1);
+  border-color: var(--color-primary, #60a5fa);
+  color: var(--color-primary, #60a5fa);
+}
+
+/* Dots Navigation */
 .dots {
   position: absolute;
-  bottom: 1rem; /* 16px */
+  bottom: 1.5rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 0.6rem; /* 8px */
-  z-index: 10; /* อยู่เหนือสไลด์ */
-  padding: 0.25rem;
-  background-color: color-mix(in srgb, var(--background) 60%, transparent);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-sm);
+  gap: 0.5rem;
+  z-index: 10;
 }
 
 .dot {
-  width: 10px; /* 0.625rem */
+  width: 10px;
   height: 10px;
-  border-radius: var(--radius-full); /* กลม */
-  background-color: var(--muted);
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  transition: background-color var(--animation-fast) ease-in-out, transform var(--animation-fast) ease-in-out;
+  transition: all 0.3s ease;
 }
+
 .dot:hover {
-  background-color: color-mix(in srgb, var(--accent) 80%, var(--foreground) 20%);
-}
-.dot.active {
-  background-color: var(--primary);
+  background: rgba(255, 255, 255, 0.8);
   transform: scale(1.2);
 }
+
+.dot.active {
+  background: white;
+  transform: scale(1.3);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
 .dot:disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.3;
 }
 
 /* --------------------------------------- */
-/* Loading State & Responsive Design       */
+/* Responsive Design       */
 /* --------------------------------------- */
-.loadingState {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px; /* หรือค่าที่เหมาะสม */
-  background-color: var(--secondary);
-  color: var(--muted-foreground);
-}
 
-/* Responsive adjustments */
-@media (max-width: 768px) { /* md breakpoint */
-  .slideTitle {
-    font-size: 1.25rem; /* 20px */
-  }
-  .slideDescription {
-    font-size: 0.875rem; /* 14px */
-    -webkit-line-clamp: 2; /* แสดง 2 บรรทัดบน mobile */
-    margin-bottom: 0.75rem; /* 12px */
-  }
-  .slideButton {
-    padding: 0.5rem 1rem; /* 8px 16px */
-    font-size: 0.875rem; /* 14px */
-  }
+@media (max-width: 1023px) {
+  /* ✅ [ปรับปรุง] บน mobile ปุ่มจะชิดขอบมากขึ้น และเนื้อหาปรับขนาดลง */
   .slideContent {
-    padding: 1rem; /* 16px */
+    padding: 1rem 1.5rem 1.5rem;
   }
+  
+  .slideTitle {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .slideDescription {
+    font-size: 0.875rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .slideButton {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.8rem;
+  }
+  
   .navButton {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
   }
+  
   .navButtonPrev {
-    left: 0.5rem; /* 8px */
+    left: 12px;
   }
+  
   .navButtonNext {
-    right: 0.5rem; /* 8px */
+    right: 12px;
   }
+  
   .dots {
-    bottom: 0.75rem; /* 12px */
+    bottom: 1rem;
   }
+  
   .dot {
     width: 8px;
     height: 8px;
   }
 }
 
-@media (max-width: 480px) { /* sm breakpoint (ประมาณ) */
+@media (max-width: 640px) {
+  .slideContent {
+    padding: 0.75rem 1rem 1rem;
+  }
+  
   .slideTitle {
-    font-size: 1.125rem; /* 18px */
+    font-size: 1.25rem;
   }
-   .slideDescription {
-    display: none; /* อาจซ่อน description บนจอเล็กมาก */
+  
+  .slideDescription {
+    font-size: 0.8rem;
+    line-height: 1.4;
   }
+  
   .slideButton {
-    font-size: 0.75rem; /* 12px */
-    padding: 0.4rem 0.8rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
   }
-  .slideButton svg { /* ถ้ามี SVG icon ในปุ่ม */
-    width: 14px;
-    height: 14px;
+  
+  .slideCategory {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.75rem;
+  }
+  
+  .navButton {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .carousel {
+    height: 300px; /* Fixed height สำหรับ desktop */
+  }
+}
+
+@media (max-width: 768px) {
+  .carousel {
+    height: 62vw; /* Mobile responsive height */
+    max-height: 300px;
+    min-height: 200px;
   }
 }

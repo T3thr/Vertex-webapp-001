@@ -4,8 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { memo } from "react";
-import { motion } from "framer-motion";
-import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, ThumbsUp } from "lucide-react";
+import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, ThumbsUp, BookOpen } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { th } from "date-fns/locale";
 import type { INovel, NovelStatus, IMonetizationSettings, INovelStats } from "@/backend/models/Novel"; 
@@ -73,13 +72,15 @@ interface NovelCardProps {
   priority?: boolean;
   className?: string;
   imageClassName?: string;
+  variant?: 'default' | 'large' | 'featured'; // เพิ่ม variant สำหรับการแสดงผลที่แตกต่าง
 }
 
-export function NovelCard({
+export const NovelCard = memo(function NovelCard({
   novel,
   priority = false,
   className = "",
-  imageClassName = "aspect-[2/3]", // ปรับเป็น 2:3 ให้เล็กลงเหมือน readawrite.com
+  imageClassName,
+  variant = 'default',
 }: NovelCardProps) {
 
   // ตรวจสอบข้อมูลนิยายและ slug
@@ -87,7 +88,7 @@ export function NovelCard({
     console.warn("[NovelCard] Novel data or slug is missing.", novel);
     return (
       <div
-        className={`bg-card rounded-lg shadow-sm overflow-hidden p-3 text-xs ${className} w-[120px] min-[400px]:w-[130px] sm:w-[140px] md:w-[150px]`}
+        className={`bg-card rounded-xl shadow-sm overflow-hidden p-4 text-sm text-muted-foreground flex items-center justify-center min-h-[280px] ${className}`}
       >
         ข้อมูลนิยายไม่ถูกต้อง
       </div>
@@ -120,14 +121,14 @@ export function NovelCard({
     statusBadges.push({ 
       label: "แนะนำ", 
       colorClass: "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm", 
-      icon: <Sparkles size={8} className="fill-current" /> 
+      icon: <Sparkles size={10} className="fill-current" /> 
     });
   }
   if (novel.isCompleted) {
     statusBadges.push({ 
       label: "จบแล้ว", 
       colorClass: "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-sm", 
-      icon: <CheckCircle size={8} className="fill-current" /> 
+      icon: <CheckCircle size={10} className="fill-current" /> 
     });
   }
 
@@ -144,7 +145,7 @@ export function NovelCard({
     statusBadges.push({
       label: "ลดราคา",
       colorClass: "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-sm",
-      icon: <ThumbsUp size={8} className="fill-current" />,
+      icon: <ThumbsUp size={10} className="fill-current" />,
       title: promo.promotionDescription || `พิเศษ ${promo.promotionalPriceCoins} เหรียญ/ตอน`,
     });
   }
@@ -154,43 +155,75 @@ export function NovelCard({
   const isAdultContent = ageRating?.name === "18+" || ageRating?.name?.includes("18");
   const ageRatingText = isAdultContent ? "18+" : null;
 
-  // อินิเชียลแอนิเมชันของการ์ด
-  const cardVariants = {
-    initial: { opacity: 0, y: 4 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" } },
-    hover: {
-      y: -2,
-      boxShadow: "var(--shadow-md)",
-      transition: { duration: 0.15, ease: "easeOut" },
-    },
-  };
-
   // รูปภาพสำรอง
   const placeholderCover = "/images/placeholder-cover.webp";
 
   // เข้ารหัส slug เพื่อรองรับภาษาไทยและ non-English
   const encodedSlug = encodeURIComponent(novel.slug);
 
+  // กำหนดขนาดตาม variant - ปรับปรุงเพื่อรองรับ responsive ใน mobile
+  const getCardSize = () => {
+    switch (variant) {
+      case 'large':
+        return {
+          wrapper: "w-full h-full", // ✅ ให้ยืดเต็มพื้นที่ที่กำหนดใน CSS
+          image: "aspect-[4/3] sm:aspect-[3/4]", // ✅ [แก้ไข] ใน mobile ให้ aspect ratio แนวนอนเพื่อเหลือพื้นที่สำหรับข้อความ
+          content: "p-3 sm:p-4 flex-1", // ✅ [ปรับปรุง] responsive padding เล็กลงใน mobile
+          title: "text-base sm:text-lg font-bold", // ✅ [ปรับปรุง] responsive text size
+          author: "text-sm",
+          genre: "text-sm",
+          stats: "text-xs" // ✅ [เพิ่มจาก text-[10px] เป็น text-xs] ให้อ่านง่ายขึ้น
+        };
+      case 'featured':
+        return {
+          wrapper: "w-full h-full", // ✅ ให้ยืดเต็มพื้นที่ grid cell
+          image: "aspect-square", // ✅ อัตราส่วนจัตุรัสเหมาะสำหรับการ์ดเล็ก
+          content: "p-2 sm:p-2.5 flex-1", // ✅ [ปรับปรุง] responsive padding เพิ่มขึ้นเล็กน้อยใน mobile
+          title: "text-xs sm:text-sm font-semibold", // ✅ [ปรับปรุง] ขยายขนาดตัวอักษรใน mobile เพื่อให้อ่านง่าย
+          author: "text-[10px] sm:text-xs", // ✅ [ปรับปรุง] responsive text size
+          genre: "text-[10px] sm:text-xs", // ✅ [ปรับปรุง] responsive text size
+          stats: "text-[9px] sm:text-[10px]" // ✅ [ปรับปรุง] responsive text size
+        };
+      default:
+        return {
+          wrapper: "w-[160px] min-[400px]:w-[170px] sm:w-[180px] md:w-[190px]", // ✅ [ขยายจาก 140-170px เป็น 160-190px] เพื่อรองรับข้อมูลเพิ่มเติม
+          image: "aspect-square",
+          content: "p-2.5",
+          title: "text-sm font-semibold",
+          author: "text-xs",
+          genre: "text-xs",
+          stats: "text-[10px]"
+        };
+    }
+  };
+
+  const cardSize = getCardSize();
+
   return (
-    <motion.div
-      variants={cardVariants}
-      initial="initial"
-      animate="animate"
-      whileHover="hover"
-      className={`bg-card rounded-lg shadow-sm hover:shadow-md overflow-hidden flex flex-col group border border-border/50 ${className}`}
+    <div
+      className={`bg-card rounded-xl shadow-sm hover:shadow-lg overflow-hidden flex flex-col group border border-border/30 hover:border-border/60 transition-all duration-300 ${cardSize.wrapper} ${className}`}
       role="article"
       aria-labelledby={`novel-title-${novel._id}`}
+      style={{ 
+        marginBottom: variant === 'default' ? '0.75rem' : '0' // ✅ [เฉพาะ default variant] ให้มี margin
+      }}
     >
       {/* ลิงก์ไปยังหน้าเรื่องโดยใช้ slug ที่เข้ารหัส */}
       <Link href={`/novels/${encodedSlug}`} className="block h-full flex flex-col" title={novel.title}>
-        {/* Image Container - ปรับให้เล็กลงตาม readawrite.com */}
-        <div className={`relative w-full overflow-hidden rounded-t-lg ${imageClassName}`}>
+        {/* Image Container - ปรับให้เป็นจัตุรัสเพื่อความสมมาตร */}
+        <div className={`relative w-full overflow-hidden rounded-t-xl ${cardSize.image}`}>
           <Image
             src={novel.coverImageUrl || placeholderCover}
             alt={`ปกนิยายเรื่อง ${novel.title}`}
             fill
-            sizes="(max-width: 640px) 25vw, (max-width: 768px) 20vw, (max-width: 1024px) 15vw, 12vw"
-            className="object-cover transition-transform duration-200 ease-in-out group-hover:scale-105"
+            sizes={
+              variant === 'large' 
+                ? "(max-width: 640px) 50vw, (max-width: 768px) 40vw, 320px"
+                : variant === 'featured'
+                ? "(max-width: 640px) 45vw, (max-width: 768px) 35vw, 280px"
+                : "(max-width: 640px) 35vw, (max-width: 768px) 25vw, (max-width: 1024px) 20vw, 170px"
+            }
+            className="object-cover transition-all duration-300 ease-in-out group-hover:scale-105"
             priority={priority}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
@@ -203,53 +236,53 @@ export function NovelCard({
           
           {/* Badges Area - ปรับตำแหน่งและขนาด */}
           {(statusBadges.length > 0 || ageRatingText) && (
-            <div className="absolute top-1 right-1 flex flex-col items-end gap-0.5 z-10">
+            <div className="absolute top-2 right-2 flex flex-col items-end gap-1 z-10">
               {statusBadges.map((badge, index) => (
                 <span
                   key={`${badge.label}-${index}-${novel._id}`}
                   title={badge.title || badge.label}
-                  className={`text-[7px] sm:text-[8px] font-semibold px-1 py-0.5 rounded-full flex items-center gap-0.5 ${badge.colorClass} backdrop-blur-sm leading-tight whitespace-nowrap`}
+                  className={`text-[8px] sm:text-[9px] font-semibold px-1.5 py-1 rounded-full flex items-center gap-1 ${badge.colorClass} backdrop-blur-sm leading-tight whitespace-nowrap`}
                 >
                   {badge.icon}{badge.label}
                 </span>
               ))}
               {ageRatingText && (
                 <span
-                  className="text-[7px] sm:text-[8px] font-semibold px-1 py-0.5 rounded-full flex items-center gap-0.5 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-sm backdrop-blur-sm leading-tight whitespace-nowrap"
+                  className="text-[8px] sm:text-[9px] font-semibold px-1.5 py-1 rounded-full flex items-center gap-1 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-sm backdrop-blur-sm leading-tight whitespace-nowrap"
                   title="เนื้อหาสำหรับผู้ใหญ่ 18 ปีขึ้นไป"
                 >
-                  <ShieldCheck size={8} className="flex-shrink-0 fill-current" />{ageRatingText}
+                  <ShieldCheck size={10} className="flex-shrink-0 fill-current" />{ageRatingText}
                 </span>
               )}
             </div>
           )}
         </div>
 
-        {/* Content Area - ปรับให้กระชับขึ้น */}
-        <div className="p-2 flex flex-col flex-grow text-xs">
-          {/* Title - ปรับขนาดให้เล็กลง */}
+        {/* Content Area - ปรับให้สมดุลกับรูปภาพจัตุรัส */}
+        <div className={`${cardSize.content} flex flex-col flex-grow justify-between`}>
+          {/* Title */}
           <h3
             id={`novel-title-${novel._id}`}
-            className="font-semibold text-xs sm:text-sm text-foreground hover:text-primary line-clamp-2 leading-snug mb-1"
+            className={`${cardSize.title} text-foreground hover:text-primary line-clamp-2 leading-snug mb-1.5 transition-colors duration-200`}
             title={novel.title}
           >
             {novel.title}
           </h3>
 
-          {/* Author - ปรับให้เล็กลง */}
+          {/* Author */}
           <p
-            className="text-[9px] sm:text-[10px] text-muted-foreground line-clamp-1 mb-1"
+            className={`${cardSize.author} text-muted-foreground line-clamp-1 mb-1.5`}
             title={authorDisplay}
           >
             {authorDisplay}
           </p>
 
-          {/* Genre - ปรับขนาดไอคอนและข้อความ */}
+          {/* Genre */}
           {mainGenreName && (
-            <div className="flex items-center gap-0.5 mb-1" title={mainGenreName}>
-              <Tag size={9} style={{ color: mainGenreColor }} className="flex-shrink-0" />
+            <div className="flex items-center gap-1 mb-2" title={mainGenreName}>
+              <Tag size={10} style={{ color: mainGenreColor }} className="flex-shrink-0" />
               <p
-                className="font-medium line-clamp-1 text-ellipsis text-[9px] sm:text-[10px]"
+                className={`${cardSize.genre} font-medium line-clamp-1 text-ellipsis`}
                 style={{ color: mainGenreColor }}
               >
                 {mainGenreName}
@@ -257,32 +290,38 @@ export function NovelCard({
             </div>
           )}
 
-          {/* Stats - ปรับให้เล็กลงและกระชับขึ้น */}
-          <div className="mt-auto pt-1 border-t border-border/50">
-            <div className="grid grid-cols-3 gap-x-0.5 text-muted-foreground/90 mb-0.5">
+          {/* Stats - ปรับให้กระชับขึ้นสำหรับการ์ดจัตุรัส */}
+          <div className="mt-auto">
+            <div className="grid grid-cols-2 gap-1 text-muted-foreground/90 mb-1">
               <div className="flex items-center gap-0.5 truncate" title={`ยอดเข้าชม: ${novel.stats?.viewsCount?.toLocaleString() || 0}`}>
-                <Eye size={9} className="text-sky-500 flex-shrink-0" />
-                <span className="truncate text-[8px] sm:text-[9px]">{formatNumber(novel.stats?.viewsCount)}</span>
+                <Eye size={10} className="text-sky-500 flex-shrink-0" />
+                <span className={`truncate ${cardSize.stats}`}>{formatNumber(novel.stats?.viewsCount)}</span>
               </div>
               <div className="flex items-center gap-0.5 truncate" title={`ถูกใจ: ${novel.stats?.likesCount?.toLocaleString() || 0}`}>
-                <Heart size={9} className="text-rose-500 flex-shrink-0" />
-                <span className="truncate text-[8px] sm:text-[9px]">{formatNumber(novel.stats?.likesCount)}</span>
-              </div>
-              <div className="flex items-center gap-0.5 truncate" title={`คะแนนเฉลี่ย: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
-                <Star size={9} className="text-amber-400 fill-amber-400 flex-shrink-0" />
-                <span className="truncate text-[8px] sm:text-[9px]">{novel.stats?.averageRating?.toFixed(1) || "-"}</span>
+                <Heart size={10} className="text-rose-500 flex-shrink-0" />
+                <span className={`truncate ${cardSize.stats}`}>{formatNumber(novel.stats?.likesCount)}</span>
               </div>
             </div>
-            <div className="flex items-center text-muted-foreground/70 text-[7px] sm:text-[8px]">
-              <Clock className="mr-0.5 flex-shrink-0" size={8} />
+            <div className="grid grid-cols-2 gap-1 text-muted-foreground/90 mb-1.5">
+              <div className="flex items-center gap-0.5 truncate" title={`คะแนนเฉลี่ย: ${novel.stats?.averageRating?.toFixed(1) || "N/A"}`}>
+                <Star size={10} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+                <span className={`truncate ${cardSize.stats}`}>{novel.stats?.averageRating?.toFixed(1) || "-"}</span>
+              </div>
+              <div className="flex items-center gap-0.5 truncate" title={`จำนวนตอน: ${novel.totalEpisodesCount || 0} ตอน`}>
+                <BookOpen size={10} className="text-blue-500 flex-shrink-0" />
+                <span className={`truncate ${cardSize.stats}`}>{novel.totalEpisodesCount || 0}</span>
+              </div>
+            </div>
+            <div className="flex items-center text-muted-foreground/70 text-[9px] sm:text-[10px]">
+              <Clock className="mr-0.5 flex-shrink-0" size={9} />
               <span className="truncate">{lastUpdatedText}</span>
             </div>
           </div>
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
-}
+});
 
 // ฟังก์ชันจัดรูปแบบตัวเลข
 function formatNumber(num?: number | null): string {
@@ -297,8 +336,9 @@ function formatNumber(num?: number | null): string {
   }
   if (Math.abs(num) >= 1000) {
     const result = (num / 1000).toFixed(1);
-    // แก้ไขจาก slice(-2) เป็น slice(0, -2)
     return result.endsWith(".0") ? result.slice(0, -2) + "k" : result + "k";
   }
   return num.toString();
 }
+
+export { NovelCard as default };
