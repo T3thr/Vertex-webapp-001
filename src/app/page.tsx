@@ -224,12 +224,12 @@ function FeaturedSection({ novels, viewAllLink, showViewAllButton }: {
             novel={mainNovel}
             priority={true}
             variant="large"
-            className="novel-card h-full w-full" /* ✅ [เพิ่ม w-full] เพื่อให้ยืดเต็มพื้นที่ใน mobile */
+            className="novel-card h-full w-full !m-0" /* ✅ [เพิ่ม !m-0] เพื่อลบ margin ทั้งหมดโดย override inline style */
           />
         </div>
 
         {/* Side Novels (ขวา 2x2) - สัดส่วน 1 ส่วน */}
-      <div className="featured-side">
+        <div className="featured-side">
           {/* Grid 2x2: แสดงการ์ด 4 ตัวหรือน้อยกว่า */}
           {sideNovels.map((novel, idx) => (
             <NovelCard

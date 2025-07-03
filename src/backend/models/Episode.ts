@@ -572,7 +572,7 @@ EpisodeSchema.pre<HydratedDocument<IEpisode>>("save", async function (next) {
       return slug.substring(0, 280);
     };
 
-    let baseSlug = generateSlug(this.title);
+    const baseSlug = generateSlug(this.title);
     let finalSlug = baseSlug;
     let count = 0;
     const EpisodeModelInstance = models.Episode || model<IEpisode>("Episode");

@@ -257,7 +257,7 @@ export default function ReaderSettings({
                   className="text-card-foreground leading-relaxed"
                   style={{ fontSize: `${fontSize}px` }}
                 >
-                  "วันนี้เป็นวันแรกที่ฉันมาถึงย่านเก่าของกรุงเทพฯ เพื่อทำวิจัยเรื่องประวัติศาสตร์ท้องถิ่น"
+                  &quot;วันนี้เป็นวันแรกที่ฉันมาถึงย่านเก่าของกรุงเทพฯ เพื่อทำวิจัยเรื่องประวัติศาสตร์ท้องถิ่น&quot;
                 </div>
                 <div className="text-muted-foreground text-sm mt-2 italic">
                   อริษามองดูสถานที่รอบๆ ด้วยความตื่นเต้น
