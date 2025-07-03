@@ -2,7 +2,7 @@
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
 // REVISED: สคริปต์นี้ถูกปรับปรุงให้ทำงานร่วมกับ admin-seed.ts และ novel-seed.ts
 // โดยจะค้นหานิยายและผู้เขียนที่มีอยู่แล้ว แทนที่จะสร้างใหม่
-// FIXED: แก้ไข mediaId ให้เป็น Types.ObjectId ที่ถูกต้องตาม Character และ Scene Schema
+// FIXED: แก้ไข mediaId ให้เป็น Types.ObjectId และลบ originNodeType ที่ไม่มีใน Schema
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -194,7 +194,6 @@ async function seedSpiritOfBangkokContent() {
         { instanceId: 'text_004', type: 'dialogue', speakerDisplayName: 'คนขับแท็กซี่', content: 'ใช่แล้วลูก... ที่นี่เก่าแก่มาตั้งแต่สมัยรัชกาลที่ 5 แล้ว คนแถวนี้เขาไม่ค่อยอยากให้เปลี่ยนแปลงอะไร เพราะกลัวจะทำลายสิ่งที่เขาคุ้นเคย', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
         { instanceId: 'text_005', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: '(ใจคิด) นั่นแหละที่ทำให้ที่นี่น่าสนใจ... ฉันสงสัยว่าจะมีเรื่องราวอะไรซ่อนอยู่บ้าง', fontFamily: 'Sarabun', fontSize: 16, color: '#666666' }
       ],
-      // FIXED: เปลี่ยน mediaId ใน audios ให้เป็น new Types.ObjectId()
       audios: [{ instanceId: 'bgm_001', type: 'background_music', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.3, loop: true }],
       choicePrompt: 'เมื่อถึงที่หมาย อริษาควรจะ...'
     });
@@ -205,7 +204,7 @@ async function seedSpiritOfBangkokContent() {
       novelId: novel._id,
       authorId: author._id,
       originStoryMapNodeId: scene1_1._id.toString(),
-      originNodeType: 'Scene',
+      // originNodeType: 'Scene', // FIXED: ลบบรรทัดนี้ออก
       choiceCode: 'EP1_S1_CHOICE1',
       text: 'ลงจากแท็กซี่และเริ่มสำรวจย่านทันที',
       hoverText: 'อริษาตัดสินใจสำรวจบริเวณทันทีที่มาถึง',
@@ -216,7 +215,7 @@ async function seedSpiritOfBangkokContent() {
       novelId: novel._id,
       authorId: author._id,
       originStoryMapNodeId: scene1_1._id.toString(),
-      originNodeType: 'Scene',
+      // originNodeType: 'Scene', // FIXED: ลบบรรทัดนี้ออก
       choiceCode: 'EP1_S1_CHOICE2',
       text: 'ไปที่บ้านพักก่อนแล้วค่อยวางแผน',
       hoverText: 'เตรียมตัวให้พร้อมก่อนเริ่มงานวิจัย',
@@ -236,7 +235,6 @@ async function seedSpiritOfBangkokContent() {
         { instanceId: 'explore_003', type: 'dialogue', speakerDisplayName: 'คุณป้าขายผลไม้', content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
         { instanceId: 'explore_004', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' }
       ],
-      // FIXED: เปลี่ยน mediaId ใน audios ให้เป็น new Types.ObjectId()
       audios: [{ instanceId: 'market_ambience', type: 'sound_effect', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.2, loop: true }],
     });
 
