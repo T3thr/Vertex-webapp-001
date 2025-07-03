@@ -2,7 +2,7 @@
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
 // REVISED: สคริปต์นี้ถูกปรับปรุงให้ทำงานร่วมกับ admin-seed.ts และ novel-seed.ts
 // โดยจะค้นหานิยายและผู้เขียนที่มีอยู่แล้ว แทนที่จะสร้างใหม่
-// FIXED: แก้ไข mediaId ให้เป็น Types.ObjectId ที่ถูกต้องตาม Character Schema
+// FIXED: แก้ไข mediaId ให้เป็น Types.ObjectId ที่ถูกต้องตาม Character และ Scene Schema
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -76,7 +76,6 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'main_protagonist',
         colorTheme: '#E8B4B8',
         expressions: [
-          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
           { expressionId: 'arisa_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
           { expressionId: 'arisa_surprised', name: 'ตกใจ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
           { expressionId: 'arisa_determined', name: 'มุ่งมั่น', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
@@ -111,7 +110,6 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'love_interest',
         colorTheme: '#4A90A4',
         expressions: [
-          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
           { expressionId: 'thana_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
           { expressionId: 'thana_serious', name: 'จริงจัง', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
           { expressionId: 'thana_smile', name: 'ยิ้ม', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
@@ -136,7 +134,6 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'mentor',
         colorTheme: '#8B4513',
         expressions: [
-          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
           { expressionId: 'granny_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
           { expressionId: 'granny_wise', name: 'ชาญฉลาด', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
         ],
@@ -154,7 +151,6 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'antagonist',
         colorTheme: '#663399',
         expressions: [
-          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
           { expressionId: 'spirit_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
           { expressionId: 'spirit_angry', name: 'โกรธ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
         ],
@@ -198,7 +194,8 @@ async function seedSpiritOfBangkokContent() {
         { instanceId: 'text_004', type: 'dialogue', speakerDisplayName: 'คนขับแท็กซี่', content: 'ใช่แล้วลูก... ที่นี่เก่าแก่มาตั้งแต่สมัยรัชกาลที่ 5 แล้ว คนแถวนี้เขาไม่ค่อยอยากให้เปลี่ยนแปลงอะไร เพราะกลัวจะทำลายสิ่งที่เขาคุ้นเคย', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
         { instanceId: 'text_005', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: '(ใจคิด) นั่นแหละที่ทำให้ที่นี่น่าสนใจ... ฉันสงสัยว่าจะมีเรื่องราวอะไรซ่อนอยู่บ้าง', fontFamily: 'Sarabun', fontSize: 16, color: '#666666' }
       ],
-      audios: [{ instanceId: 'bgm_001', type: 'background_music', mediaId: 'old_bangkok_theme.mp3', mediaSourceType: 'Media', volume: 0.3, loop: true }],
+      // FIXED: เปลี่ยน mediaId ใน audios ให้เป็น new Types.ObjectId()
+      audios: [{ instanceId: 'bgm_001', type: 'background_music', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.3, loop: true }],
       choicePrompt: 'เมื่อถึงที่หมาย อริษาควรจะ...'
     });
     console.log('    ...Created Scene 1.1');
@@ -212,7 +209,7 @@ async function seedSpiritOfBangkokContent() {
       choiceCode: 'EP1_S1_CHOICE1',
       text: 'ลงจากแท็กซี่และเริ่มสำรวจย่านทันที',
       hoverText: 'อริษาตัดสินใจสำรวจบริเวณทันทีที่มาถึง',
-      actions: [{ actionId: 'action_001', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_explore' }}], // targetNodeId จะถูกแทนที่ด้วย ID จริง
+      actions: [{ actionId: 'action_001', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_explore' }}],
       displayOrder: 1
     });
     const choice1_2 = await ChoiceModel.create({
@@ -223,7 +220,7 @@ async function seedSpiritOfBangkokContent() {
       choiceCode: 'EP1_S1_CHOICE2',
       text: 'ไปที่บ้านพักก่อนแล้วค่อยวางแผน',
       hoverText: 'เตรียมตัวให้พร้อมก่อนเริ่มงานวิจัย',
-      actions: [{ actionId: 'action_002', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_rest' } }], // targetNodeId จะถูกแทนที่ด้วย ID จริง
+      actions: [{ actionId: 'action_002', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_rest' } }],
       displayOrder: 2
     });
     console.log('    ...Created Choices for Scene 1.1');
@@ -231,7 +228,7 @@ async function seedSpiritOfBangkokContent() {
     // Scene 1.2a: เลือกสำรวจทันที
     const scene1_2a = await SceneModel.create({
       novelId: novel._id, episodeId: episode1._id, sceneOrder: 2, title: 'การสำรวจย่านเก่า',
-      sceneCode: 'scene_1_2_explore', // เพิ่ม sceneCode เพื่อให้ choice อ้างอิงได้
+      sceneCode: 'scene_1_2_explore',
       background: { type: 'image', value: '/images/background/old_market_day.png' },
       characters: [{ instanceId: 'arisa_exploring', characterId: characters.arisa._id, expressionId: 'arisa_normal', transform: { positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, opacity: 1 }, isVisible: true }],
       textContents: [
@@ -239,13 +236,14 @@ async function seedSpiritOfBangkokContent() {
         { instanceId: 'explore_003', type: 'dialogue', speakerDisplayName: 'คุณป้าขายผลไม้', content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
         { instanceId: 'explore_004', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' }
       ],
-      audios: [{ instanceId: 'market_ambience', type: 'sound_effect', mediaId: 'market_sounds.mp3', mediaSourceType: 'Media', volume: 0.2, loop: true }],
+      // FIXED: เปลี่ยน mediaId ใน audios ให้เป็น new Types.ObjectId()
+      audios: [{ instanceId: 'market_ambience', type: 'sound_effect', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.2, loop: true }],
     });
 
     // Scene 1.2b: เลือกกลับไปพัก
     const scene1_2b = await SceneModel.create({
         novelId: novel._id, episodeId: episode1._id, sceneOrder: 2, title: 'เข้าที่พัก',
-        sceneCode: 'scene_1_2_rest', // เพิ่ม sceneCode
+        sceneCode: 'scene_1_2_rest',
         background: { type: 'image', value: '/images/background/guesthouse_room.png' },
         textContents: [
           { instanceId: 'rest_001', type: 'narration', content: 'อริษาตัดสินใจเข้าที่พักก่อนเพื่อเก็บของและตั้งหลัก เธอวางแผนการสำรวจบนแผนที่กระดาษใบเก่า พลางจิบชาอุ่นๆ', fontFamily: 'Sarabun', fontSize: 18, color: '#333333' },
