@@ -1,8 +1,7 @@
 // src/scripts/seed-novel-read.ts
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
 // REVISED: สคริปต์นี้ถูกปรับปรุงให้ทำงานร่วมกับ admin-seed.ts และ novel-seed.ts
-// โดยจะค้นหานิยายและผู้เขียนที่มีอยู่แล้ว แทนที่จะสร้างใหม่
-// FIXED: แก้ไข mediaId ให้เป็น Types.ObjectId และลบ originNodeType ที่ไม่มีใน Schema
+// FIXED: เปลี่ยนวิธีการสร้างตัวละครเป็นแบบ insertMany เพื่อความเสถียรและป้องกัน E11000 duplicate key error
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -28,10 +27,9 @@ async function seedSpiritOfBangkokContent() {
     console.log('🌟 Starting seed for "วิญญาณเมืองกรุง" Visual Novel Content...');
 
     // ==================================================================================================
-    // SECTION 1: ค้นหาผู้เขียนและนิยายที่มีอยู่แล้ว (แก้ไขจากเดิมที่สร้างใหม่)
+    // SECTION 1: ค้นหาผู้เขียนและนิยายที่มีอยู่แล้ว
     // ==================================================================================================
 
-    // 1. ค้นหาผู้เขียน (Author) จาก AUTHOR_USERNAME ใน .env
     if (!AUTHOR_USERNAME) {
       throw new Error("AUTHOR_USERNAME environment variable is not set. Please run admin-seed.ts or set it in .env");
     }
@@ -41,7 +39,6 @@ async function seedSpiritOfBangkokContent() {
     }
     console.log(`✅ Found author: ${author.username} (ID: ${author._id})`);
 
-    // 2. ค้นหานิยาย (Novel) จาก Slug
     const novel = await NovelModel.findOne({ slug: NOVEL_SLUG, author: author._id });
     if (!novel) {
       throw new Error(`Novel with slug "${NOVEL_SLUG}" for author "${author.username}" not found. Please run novel-seed.ts first.`);
@@ -49,7 +46,7 @@ async function seedSpiritOfBangkokContent() {
     console.log(`✅ Found novel: "${novel.title}" (ID: ${novel._id})`);
 
     // ==================================================================================================
-    // SECTION 2: ล้างข้อมูลเนื้อหาเก่าของนิยายเรื่องนี้ (เพื่อให้รันสคริปต์ซ้ำได้)
+    // SECTION 2: ล้างข้อมูลเนื้อหาเก่าของนิยายเรื่องนี้
     // ==================================================================================================
     console.log(`🧹 Cleaning up old content for novel ID: ${novel._id}...`);
     await EpisodeModel.deleteMany({ novelId: novel._id });
@@ -60,104 +57,69 @@ async function seedSpiritOfBangkokContent() {
 
 
     // ==================================================================================================
-    // SECTION 3: สร้างตัวละคร (Characters) สำหรับนิยายเรื่องนี้
+    // SECTION 3: สร้างตัวละคร (Characters) สำหรับนิยายเรื่องนี้ (ปรับปรุงใหม่)
     // ==================================================================================================
-    console.log('👥 Creating characters...');
-    const characters = {
-      arisa: await CharacterModel.create({
-        novelId: novel._id,
-        authorId: author._id,
-        characterCode: 'ARISA_001',
-        name: 'อริษา',
-        fullName: 'อริษา สุริยงค์',
-        age: '22',
-        gender: 'female',
-        description: 'นักศึกษาโบราณคดีปีสุดท้าย มีความอยากรู้อยากเห็นสูง และไม่กลัวที่จะเผชิญหน้ากับสิ่งลึกลับ',
-        roleInStory: 'main_protagonist',
-        colorTheme: '#E8B4B8',
-        expressions: [
-          { expressionId: 'arisa_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'arisa_surprised', name: 'ตกใจ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'arisa_determined', name: 'มุ่งมั่น', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'arisa_scared', name: 'กลัว', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
-        ],
-        defaultExpressionId: 'arisa_normal',
-        physicalAttributes: {
-          heightCm: 165,
-          eyeColor: 'น้ำตาลเข้ม',
-          hairColor: 'ดำยาว',
-          distinguishingFeatures: ['แหวนโบราณที่สวมนิ้วกลาง', 'กระเป๋าเก่าที่ใช้ใส่เครื่องมือขุดค้น']
+    console.log('👥 Preparing character data...');
+
+    const characterData = [
+        {
+            novelId: novel._id, authorId: author._id, characterCode: 'ARISA_001', name: 'อริษา', fullName: 'อริษา สุริยงค์', age: '22', gender: 'female',
+            description: 'นักศึกษาโบราณคดีปีสุดท้าย มีความอยากรู้อยากเห็นสูง และไม่กลัวที่จะเผชิญหน้ากับสิ่งลึกลับ', roleInStory: 'main_protagonist', colorTheme: '#E8B4B8',
+            expressions: [
+                { expressionId: 'arisa_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'arisa_surprised', name: 'ตกใจ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'arisa_determined', name: 'มุ่งมั่น', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'arisa_scared', name: 'กลัว', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
+            ],
+            defaultExpressionId: 'arisa_normal',
+            physicalAttributes: { heightCm: 165, eyeColor: 'น้ำตาลเข้ม', hairColor: 'ดำยาว', distinguishingFeatures: ['แหวนโบราณที่สวมนิ้วกลาง', 'กระเป๋าเก่าที่ใช้ใส่เครื่องมือขุดค้น'] },
+            personalityTraits: { goals: ['ค้นหาความจริงเกี่ยวกับวิญญาณเมืองกรุง', 'ปกป้องมรดกทางวัฒนธรรม', 'จบการศึกษาด้วยเกียรตินิยม'], fears: ['การสูญเสียคนที่รัก', 'ความมืด', 'สิ่งเหนือธรรมชาติ'], strengths: ['ความกล้าหาญ', 'ปัญญาดี', 'มีสัญชาตญาณดี'], weaknesses: ['ดื้อ', 'ใจร้อน', 'เชื่อคนง่าย'], likes: ['หนังสือประวัติศาสตร์', 'กาแฟ', 'ดนตรีคลาสสิก'], dislikes: ['ความไม่ยุติธรรม', 'การโกหก', 'อาหารเผ็ด'], quotes: ['ความจริงมักซ่อนอยู่ในสิ่งที่เราไม่กล้ามอง', 'อดีตคือครู ปัจจุบันคือนักเรียน'] }
         },
-        personalityTraits: {
-          goals: ['ค้นหาความจริงเกี่ยวกับวิญญาณเมืองกรุง', 'ปกป้องมรดกทางวัฒนธรรม', 'จบการศึกษาด้วยเกียรตินิยม'],
-          fears: ['การสูญเสียคนที่รัก', 'ความมืด', 'สิ่งเหนือธรรมชาติ'],
-          strengths: ['ความกล้าหาญ', 'ปัญญาดี', 'มีสัญชาตญาณดี'],
-          weaknesses: ['ดื้อ', 'ใจร้อน', 'เชื่อคนง่าย'],
-          likes: ['หนังสือประวัติศาสตร์', 'กาแฟ', 'ดนตรีคลาสสิก'],
-          dislikes: ['ความไม่ยุติธรรม', 'การโกหก', 'อาหารเผ็ด'],
-          quotes: ['ความจริงมักซ่อนอยู่ในสิ่งที่เราไม่กล้ามอง', 'อดีตคือครู ปัจจุบันคือนักเรียน']
+        {
+            novelId: novel._id, authorId: author._id, characterCode: 'THANA_001', name: 'ธนา', fullName: 'ธนา วรรณศิลป์', age: '28', gender: 'male',
+            description: 'ช่างภาพท้องถิ่นที่มีความสามารถพิเศษในการมองเห็นวิญญาณ เป็นคนที่ช่วยเหลืออริษาในการค้นหาความจริง', roleInStory: 'love_interest', colorTheme: '#4A90A4',
+            expressions: [
+                { expressionId: 'thana_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'thana_serious', name: 'จริงจัง', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'thana_smile', name: 'ยิ้ม', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'thana_worried', name: 'กังวล', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
+            ],
+            defaultExpressionId: 'thana_normal',
+            personalityTraits: { goals: ['ปกป้องย่านเก่าจากการพัฒนา', 'ช่วยเหลือวิญญาณที่ติดค้างอยู่', 'ดูแลอริษา'], strengths: ['ใจเย็น', 'มีประสบการณ์', 'อ่านใจคนเก่ง'], weaknesses: ['ไม่ค่อยเปิดใจ', 'ขี้กังวล', 'กลัวการสูญเสีย'] }
+        },
+        {
+            novelId: novel._id, authorId: author._id, characterCode: 'GRANNY_001', name: 'ยายนิ่ม', fullName: 'นิ่มนวล จันทร์แก้ว', age: '78', gender: 'female',
+            description: 'ยายแก่ผู้เป็นเหมือนหัวหน้าชุมชนนอกทางการ มีความรู้เรื่องเก่าแก่และตำนานของย่านนี้มากมาย', roleInStory: 'mentor', colorTheme: '#8B4513',
+            expressions: [
+                { expressionId: 'granny_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'granny_wise', name: 'ชาญฉลาด', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
+            ],
+            defaultExpressionId: 'granny_normal'
+        },
+        {
+            novelId: novel._id, authorId: author._id, characterCode: 'SPIRIT_001', name: 'วิญญาณเมืองกรุง', fullName: 'พระยาศรีเมืองกรุง', age: 'เก่าแก่', gender: 'not_specified',
+            description: 'วิญญาณผู้คุมครองย่านเก่าของกรุงเทพฯ มีอำนาจลึกลับและปรากฏตัวเป็นครั้งคราว', roleInStory: 'antagonist', colorTheme: '#663399',
+            expressions: [
+                { expressionId: 'spirit_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+                { expressionId: 'spirit_angry', name: 'โกรธ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
+            ],
+            defaultExpressionId: 'spirit_normal'
         }
-      }),
-      thana: await CharacterModel.create({
-        novelId: novel._id,
-        authorId: author._id,
-        characterCode: 'THANA_001',
-        name: 'ธนา',
-        fullName: 'ธนา วรรณศิลป์',
-        age: '28',
-        gender: 'male',
-        description: 'ช่างภาพท้องถิ่นที่มีความสามารถพิเศษในการมองเห็นวิญญาณ เป็นคนที่ช่วยเหลืออริษาในการค้นหาความจริง',
-        roleInStory: 'love_interest',
-        colorTheme: '#4A90A4',
-        expressions: [
-          { expressionId: 'thana_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'thana_serious', name: 'จริงจัง', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'thana_smile', name: 'ยิ้ม', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'thana_worried', name: 'กังวล', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
-        ],
-        defaultExpressionId: 'thana_normal',
-        personalityTraits: {
-          goals: ['ปกป้องย่านเก่าจากการพัฒนา', 'ช่วยเหลือวิญญาณที่ติดค้างอยู่', 'ดูแลอริษา'],
-          strengths: ['ใจเย็น', 'มีประสบการณ์', 'อ่านใจคนเก่ง'],
-          weaknesses: ['ไม่ค่อยเปิดใจ', 'ขี้กังวล', 'กลัวการสูญเสีย']
-        }
-      }),
-      granny_nim: await CharacterModel.create({
-        novelId: novel._id,
-        authorId: author._id,
-        characterCode: 'GRANNY_001',
-        name: 'ยายนิ่ม',
-        fullName: 'นิ่มนวล จันทร์แก้ว',
-        age: '78',
-        gender: 'female',
-        description: 'ยายแก่ผู้เป็นเหมือนหัวหน้าชุมชนนอกทางการ มีความรู้เรื่องเก่าแก่และตำนานของย่านนี้มากมาย',
-        roleInStory: 'mentor',
-        colorTheme: '#8B4513',
-        expressions: [
-          { expressionId: 'granny_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'granny_wise', name: 'ชาญฉลาด', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
-        ],
-        defaultExpressionId: 'granny_normal'
-      }),
-      spirit: await CharacterModel.create({
-        novelId: novel._id,
-        authorId: author._id,
-        characterCode: 'SPIRIT_001',
-        name: 'วิญญาณเมืองกรุง',
-        fullName: 'พระยาศรีเมืองกรุง',
-        age: 'เก่าแก่',
-        gender: 'not_specified',
-        description: 'วิญญาณผู้คุมครองย่านเก่าของกรุงเทพฯ มีอำนาจลึกลับและปรากฏตัวเป็นครั้งคราว',
-        roleInStory: 'antagonist',
-        colorTheme: '#663399',
-        expressions: [
-          { expressionId: 'spirit_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
-          { expressionId: 'spirit_angry', name: 'โกรธ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
-        ],
-        defaultExpressionId: 'spirit_normal'
-      })
-    };
-    console.log('✅ Created characters');
+    ];
+
+    console.log(`Inserting ${characterData.length} characters...`);
+    const insertedCharacters = await CharacterModel.insertMany(characterData);
+
+    // สร้าง Object characters ขึ้นมาใหม่เพื่อให้โค้ดส่วนที่เหลือทำงานได้
+    const characters: { [key: string]: any } = {};
+    insertedCharacters.forEach(char => {
+        if (char.characterCode === 'ARISA_001') characters.arisa = char;
+        if (char.characterCode === 'THANA_001') characters.thana = char;
+        if (char.characterCode === 'GRANNY_001') characters.granny_nim = char;
+        if (char.characterCode === 'SPIRIT_001') characters.spirit = char;
+    });
+
+    console.log('✅ Created characters successfully.');
 
     // ==================================================================================================
     // SECTION 4: สร้าง Episodes, Scenes, และ Choices
@@ -204,23 +166,23 @@ async function seedSpiritOfBangkokContent() {
       novelId: novel._id,
       authorId: author._id,
       originStoryMapNodeId: scene1_1._id.toString(),
-      // originNodeType: 'Scene', // FIXED: ลบบรรทัดนี้ออก
       choiceCode: 'EP1_S1_CHOICE1',
       text: 'ลงจากแท็กซี่และเริ่มสำรวจย่านทันที',
       hoverText: 'อริษาตัดสินใจสำรวจบริเวณทันทีที่มาถึง',
-      actions: [{ actionId: 'action_001', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_explore' }}],
-      displayOrder: 1
+      actions: [{ actionId: 'action_001', type: 'go_to_node', parameters: { targetNodeId: 'scene_1_2_explore' }}],
+      displayOrder: 1,
+      version: 1 
     });
     const choice1_2 = await ChoiceModel.create({
       novelId: novel._id,
       authorId: author._id,
       originStoryMapNodeId: scene1_1._id.toString(),
-      // originNodeType: 'Scene', // FIXED: ลบบรรทัดนี้ออก
       choiceCode: 'EP1_S1_CHOICE2',
       text: 'ไปที่บ้านพักก่อนแล้วค่อยวางแผน',
       hoverText: 'เตรียมตัวให้พร้อมก่อนเริ่มงานวิจัย',
-      actions: [{ actionId: 'action_002', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_rest' } }],
-      displayOrder: 2
+      actions: [{ actionId: 'action_002', type: 'go_to_node', parameters: { targetNodeId: 'scene_1_2_rest' } }],
+      displayOrder: 2,
+      version: 1
     });
     console.log('    ...Created Choices for Scene 1.1');
 
@@ -322,7 +284,7 @@ async function seedSpiritOfBangkokContent() {
     console.log('📊 Summary:');
     console.log(`- Novel: ${novel.title}`);
     console.log(`- Author: ${author.username}`);
-    console.log(`- Characters Created: ${Object.keys(characters).length}`);
+    console.log(`- Characters Created: ${insertedCharacters.length}`);
     console.log(`- Episodes Created: ${episodes.length}`);
     console.log(`\n🔗 Access URLs:`);
     console.log(`- Novel Page: /novels/${novel.slug}`);
