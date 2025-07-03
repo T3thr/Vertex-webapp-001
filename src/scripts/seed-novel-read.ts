@@ -2,6 +2,7 @@
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
 // REVISED: สคริปต์นี้ถูกปรับปรุงให้ทำงานร่วมกับ admin-seed.ts และ novel-seed.ts
 // โดยจะค้นหานิยายและผู้เขียนที่มีอยู่แล้ว แทนที่จะสร้างใหม่
+// FIXED: แก้ไข mediaId ให้เป็น Types.ObjectId ที่ถูกต้องตาม Character Schema
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -75,10 +76,11 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'main_protagonist',
         colorTheme: '#E8B4B8',
         expressions: [
-          { expressionId: 'arisa_normal', name: 'ปกติ', mediaId: 'arisa_normal.png', mediaSourceType: 'Media' },
-          { expressionId: 'arisa_surprised', name: 'ตกใจ', mediaId: 'arisa_surprised.png', mediaSourceType: 'Media' },
-          { expressionId: 'arisa_determined', name: 'มุ่งมั่น', mediaId: 'arisa_determined.png', mediaSourceType: 'Media' },
-          { expressionId: 'arisa_scared', name: 'กลัว', mediaId: 'arisa_scared.png', mediaSourceType: 'Media' }
+          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
+          { expressionId: 'arisa_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'arisa_surprised', name: 'ตกใจ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'arisa_determined', name: 'มุ่งมั่น', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'arisa_scared', name: 'กลัว', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'arisa_normal',
         physicalAttributes: {
@@ -109,10 +111,11 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'love_interest',
         colorTheme: '#4A90A4',
         expressions: [
-          { expressionId: 'thana_normal', name: 'ปกติ', mediaId: 'thana_normal.png', mediaSourceType: 'Media' },
-          { expressionId: 'thana_serious', name: 'จริงจัง', mediaId: 'thana_serious.png', mediaSourceType: 'Media' },
-          { expressionId: 'thana_smile', name: 'ยิ้ม', mediaId: 'thana_smile.png', mediaSourceType: 'Media' },
-          { expressionId: 'thana_worried', name: 'กังวล', mediaId: 'thana_worried.png', mediaSourceType: 'Media' }
+          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
+          { expressionId: 'thana_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'thana_serious', name: 'จริงจัง', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'thana_smile', name: 'ยิ้ม', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'thana_worried', name: 'กังวล', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'thana_normal',
         personalityTraits: {
@@ -133,8 +136,9 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'mentor',
         colorTheme: '#8B4513',
         expressions: [
-          { expressionId: 'granny_normal', name: 'ปกติ', mediaId: 'granny_normal.png', mediaSourceType: 'Media' },
-          { expressionId: 'granny_wise', name: 'ชาญฉลาด', mediaId: 'granny_wise.png', mediaSourceType: 'Media' }
+          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
+          { expressionId: 'granny_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'granny_wise', name: 'ชาญฉลาด', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'granny_normal'
       }),
@@ -150,8 +154,9 @@ async function seedSpiritOfBangkokContent() {
         roleInStory: 'antagonist',
         colorTheme: '#663399',
         expressions: [
-          { expressionId: 'spirit_normal', name: 'ปกติ', mediaId: 'spirit_normal.png', mediaSourceType: 'Media' },
-          { expressionId: 'spirit_angry', name: 'โกรธ', mediaId: 'spirit_angry.png', mediaSourceType: 'Media' }
+          // FIXED: เปลี่ยน mediaId จาก string ชื่อไฟล์เป็น new Types.ObjectId()
+          { expressionId: 'spirit_normal', name: 'ปกติ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' },
+          { expressionId: 'spirit_angry', name: 'โกรธ', mediaId: new Types.ObjectId(), mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'spirit_normal'
       })
