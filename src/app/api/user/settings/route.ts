@@ -386,3 +386,148 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    // ตรวจสอบการ authentication
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'ไม่ได้รับอนุญาต กรุณาเข้าสู่ระบบ' },
+        { status: 401 }
+      );
+    }
+
+    // เชื่อมต่อฐานข้อมูล
+    await dbConnect();
+
+    // อ่านข้อมูลจาก request body
+    const body = await request.json();
+    const { readerSettings } = body;
+
+    if (!readerSettings) {
+      return NextResponse.json(
+        { error: 'ไม่พบข้อมูลการตั้งค่า' },
+        { status: 400 }
+      );
+    }
+
+    // ตรวจสอบข้อมูลที่จำเป็น
+    const {
+      textSpeed,
+      fontSize,
+      bgOpacity,
+      autoPlay
+    } = readerSettings;
+
+    if (
+      typeof textSpeed !== 'number' ||
+      typeof fontSize !== 'number' ||
+      typeof bgOpacity !== 'number' ||
+      typeof autoPlay !== 'boolean'
+    ) {
+      return NextResponse.json(
+        { error: 'ข้อมูลการตั้งค่าไม่ถูกต้อง' },
+        { status: 400 }
+      );
+    }
+
+    // ตรวจสอบช่วงค่าที่ยอมรับได้
+    if (
+      textSpeed < 1 || textSpeed > 5 ||
+      fontSize < 12 || fontSize > 24 ||
+      bgOpacity < 0 || bgOpacity > 1
+    ) {
+      return NextResponse.json(
+        { error: 'ค่าการตั้งค่าอยู่นอกช่วงที่ยอมรับได้' },
+        { status: 400 }
+      );
+    }
+
+    // อัพเดทการตั้งค่าผู้ใช้
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      session.user.id,
+      {
+        $set: {
+          'settings.readerSettings': {
+            textSpeed,
+            fontSize,
+            bgOpacity,
+            autoPlay,
+            updatedAt: new Date()
+          }
+        }
+      },
+      { 
+        new: true,
+        select: 'settings.readerSettings'
+      }
+    );
+
+    if (!updatedUser) {
+      return NextResponse.json(
+        { error: 'ไม่พบผู้ใช้' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      message: 'บันทึกการตั้งค่าสำเร็จ',
+      readerSettings: updatedUser.settings?.readerSettings
+    });
+
+  } catch (error) {
+    console.error('Error updating user settings:', error);
+    return NextResponse.json(
+      { error: 'เกิดข้อผิดพลาดในการบันทึกการตั้งค่า' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    // ตรวจสอบการ authentication
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'ไม่ได้รับอนุญาต กรุณาเข้าสู่ระบบ' },
+        { status: 401 }
+      );
+    }
+
+    // เชื่อมต่อฐานข้อมูล
+    await dbConnect();
+
+    // ดึงการตั้งค่าผู้ใช้
+    const user = await UserModel.findById(session.user.id)
+      .select('settings.readerSettings')
+      .lean();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'ไม่พบผู้ใช้' },
+        { status: 404 }
+      );
+    }
+
+    // ส่งกลับการตั้งค่า หรือค่าเริ่มต้นหากไม่มี
+    const defaultSettings = {
+      textSpeed: 2,
+      fontSize: 16,
+      bgOpacity: 0.8,
+      autoPlay: false
+    };
+
+    return NextResponse.json({
+      readerSettings: user.settings?.readerSettings || defaultSettings
+    });
+
+  } catch (error) {
+    console.error('Error fetching user settings:', error);
+    return NextResponse.json(
+      { error: 'เกิดข้อผิดพลาดในการดึงข้อมูลการตั้งค่า' },
+      { status: 500 }
+    );
+  }
+}

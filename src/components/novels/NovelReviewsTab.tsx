@@ -243,7 +243,7 @@ const NovelReviewsTab: React.FC<NovelReviewsTabProps> = ({ novel }) => {
           
           {/* ปุ่มส่งรีวิว */}
           <div className="flex justify-end">
-            <button
+          <button
               type="button"
               onClick={handleSubmitReview}
               disabled={userRating === 0}
@@ -252,9 +252,9 @@ const NovelReviewsTab: React.FC<NovelReviewsTabProps> = ({ novel }) => {
                   ? 'bg-secondary text-muted-foreground cursor-not-allowed'
                   : 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95'
               }`}
-            >
-              ส่งรีวิว
-            </button>
+          >
+            ส่งรีวิว
+          </button>
           </div>
         </div>
       </div>

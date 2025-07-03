@@ -156,12 +156,26 @@ export interface IEpisode extends Document {
   novelId: Types.ObjectId | INovel; // สามารถเป็น ObjectId หรือ populated INovel
   authorId: Types.ObjectId;
   title: string;
+  slug: string; // เพิ่ม slug สำหรับ SEO-friendly URL
   episodeOrder: number;
   volumeNumber?: number;
   firstSceneId?: Types.ObjectId;
   status: EpisodeStatus;
   accessType: EpisodeAccessType;
   priceCoins?: number;
+  originalPriceCoins?: number; // เพิ่มราคาเดิมสำหรับแสดงส่วนลด
+  promotions?: Array<{
+    promotionId: Types.ObjectId;
+    promotionType: 'percentage_discount' | 'fixed_discount' | 'early_bird' | 'bundle';
+    discountPercentage?: number;
+    discountAmount?: number;
+    startDate: Date;
+    endDate: Date;
+    description?: string;
+  }>; // เพิ่มโปรโมชั่นระดับตอน
+  earlyAccessDuration?: number; // จำนวนวันสำหรับ early access
+  earlyAccessStartDate?: Date;
+  earlyAccessEndDate?: Date;
   scheduledPublishAt?: Date;
   publishedAt?: Date;
   teaserText?: string;
@@ -176,6 +190,11 @@ export interface IEpisode extends Document {
   previousEpisodeId?: Types.ObjectId;
   isPreviewAllowed: boolean;
   wordCountLastCalculatedAt?: Date;
+  changelog?: Array<{
+    version: string;
+    date: Date;
+    changes: string;
+  }>; // เพิ่มประวัติการแก้ไข
   createdAt: Date;
   updatedAt: Date;
 
@@ -248,6 +267,14 @@ const EpisodeSchema = new Schema<IEpisode>(
       minlength: [1, "ชื่อตอนต้องมีอย่างน้อย 1 ตัวอักษร"],
       maxlength: [255, "ชื่อตอนต้องไม่เกิน 255 ตัวอักษร"],
     },
+    slug: {
+      type: String,
+      required: [true, "กรุณาระบุ Slug (Slug is required)"],
+      trim: true,
+      lowercase: true,
+      maxlength: [300, "Slug ต้องไม่เกิน 300 ตัวอักษร"],
+      index: true,
+    },
     episodeOrder: {
       type: Number,
       required: [true, "กรุณาระบุลำดับตอน (Episode order is required)"],
@@ -286,6 +313,29 @@ const EpisodeSchema = new Schema<IEpisode>(
         // message: "กรุณาระบุราคาเป็นเหรียญให้ถูกต้อง (>=0) สำหรับตอนที่ตั้งใจให้มีราคาเฉพาะ",
       },
     },
+    originalPriceCoins: {
+      type: Number,
+      min: 0,
+      default: function(this: HydratedDocument<IEpisode>) {
+        return this.priceCoins || 0;
+      },
+    },
+    promotions: [{
+      promotionId: { type: Schema.Types.ObjectId, default: () => new Types.ObjectId() },
+      promotionType: {
+        type: String,
+        enum: ['percentage_discount', 'fixed_discount', 'early_bird', 'bundle'],
+        required: true,
+      },
+      discountPercentage: { type: Number, min: 0, max: 100 },
+      discountAmount: { type: Number, min: 0 },
+      startDate: { type: Date, required: true },
+      endDate: { type: Date, required: true },
+      description: { type: String, trim: true, maxlength: 500 },
+    }],
+    earlyAccessDuration: { type: Number, min: 1 },
+    earlyAccessStartDate: { type: Date },
+    earlyAccessEndDate: { type: Date },
     scheduledPublishAt: { type: Date, index: true },
     publishedAt: { type: Date, index: true },
     teaserText: { type: String, trim: true, maxlength: [1000, "ข้อความเกริ่นนำต้องไม่เกิน 1000 ตัวอักษร"] },
@@ -300,6 +350,11 @@ const EpisodeSchema = new Schema<IEpisode>(
     previousEpisodeId: { type: Schema.Types.ObjectId, ref: "Episode", default: null },
     isPreviewAllowed: { type: Boolean, default: true }, // โดย default อนุญาตให้ดูตัวอย่างได้
     wordCountLastCalculatedAt: { type: Date },
+    changelog: [{
+      version: { type: String, required: true, trim: true },
+      date: { type: Date, required: true, default: Date.now },
+      changes: { type: String, required: true, trim: true, maxlength: 1000 },
+    }],
   },
   {
     timestamps: true, // เพิ่ม createdAt และ updatedAt โดยอัตโนมัติ
@@ -365,7 +420,23 @@ EpisodeSchema.methods.getEffectivePrice = async function (this: HydratedDocument
         return promo.promotionalPriceCoins;
     }
 
-    // ชั้นที่ 2: ราคาเฉพาะของตอน (Episode-specific Price)
+    // ชั้นที่ 2: โปรโมชั่นระดับตอน (Episode-level Promotions)
+    if (this.promotions && this.promotions.length > 0) {
+        const activePromotion = this.promotions.find(promo => {
+            return promo.startDate <= now && promo.endDate >= now;
+        });
+        
+        if (activePromotion) {
+            const basePrice = this.priceCoins || 0;
+            if (activePromotion.promotionType === 'percentage_discount' && activePromotion.discountPercentage) {
+                return Math.round(basePrice * (1 - activePromotion.discountPercentage / 100));
+            } else if (activePromotion.promotionType === 'fixed_discount' && activePromotion.discountAmount) {
+                return Math.max(0, basePrice - activePromotion.discountAmount);
+            }
+        }
+    }
+
+    // ชั้นที่ 3: ราคาเฉพาะของตอน (Episode-specific Price)
     // ใช้สำหรับตอนที่ต้องจ่ายเงิน (PAID_UNLOCK, EARLY_ACCESS_PAID)
     if (this.accessType === EpisodeAccessType.PAID_UNLOCK || this.accessType === EpisodeAccessType.EARLY_ACCESS_PAID) {
         if (this.priceCoins !== undefined && this.priceCoins > 0) {
@@ -428,6 +499,7 @@ EpisodeSchema.methods.getOriginalPrice = async function (this: HydratedDocument<
 // ==================================================================================================
 
 EpisodeSchema.index({ novelId: 1, episodeOrder: 1 }, { unique: true, name: "NovelEpisodeOrderUniqueIndex" });
+EpisodeSchema.index({ novelId: 1, slug: 1 }, { unique: true, name: "NovelEpisodeSlugUniqueIndex" });
 EpisodeSchema.index({ novelId: 1, status: 1, publishedAt: -1},{ name: "NovelPublishedEpisodesSortIndex" });
 EpisodeSchema.index({ novelId: 1, authorId: 1},{ name: "NovelAuthorEpisodesIndex" });
 EpisodeSchema.index({ novelId: 1, accessType: 1},{ name: "NovelEpisodeAccessTypeIndex" });
@@ -441,14 +513,13 @@ EpisodeSchema.index({ novelId: 1, "sentimentInfo.aiPreliminaryOverallSentiment":
 // ==================================================================================================
 
 EpisodeSchema.virtual("episodeUrl").get(function (this: HydratedDocument<IEpisode>) {
-  // หาก novelId ถูก populate และมี slug, ให้ใช้ slug นั้น
-  // มิฉะนั้น ใช้ novelId และ episodeOrder โดยตรง (เป็น fallback)
-  const novelObject = this.novelId as INovel; // Cast to INovel to check for slug
-  if (novelObject && novelObject.slug) {
-    return `/novels/${novelObject.slug}/episodes/${this.episodeOrder}`;
+  // Use the new URL structure with episode slug
+  const novelObject = this.novelId as INovel;
+  if (novelObject && novelObject.slug && this.slug) {
+    return `/read/${novelObject.slug}/${this.episodeOrder}-${this.slug}`;
   }
-  // Fallback URL if novelId is not populated or doesn't have a slug
-  return `/n/${this.novelId.toString()}/e/${this.episodeOrder}`;
+  // Fallback URL if novelId is not populated or doesn't have slugs
+  return `/read/${this.novelId.toString()}/${this.episodeOrder}`;
 });
 
 /**
@@ -479,6 +550,47 @@ EpisodeSchema.virtual("isTrulyFree").get(function (this: HydratedDocument<IEpiso
 // ==================================================================================================
 
 EpisodeSchema.pre<HydratedDocument<IEpisode>>("save", async function (next) {
+  // Generate slug from title if modified or new
+  if (this.isModified("title") || this.isNew) {
+    const generateSlug = (text: string): string => {
+      if (!text) return `episode-${new Types.ObjectId().toHexString().slice(-8)}`;
+
+      const slug = text
+        .toString()
+        .normalize('NFC')
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\p{L}\p{N}\p{M}-]+/gu, '')
+        .replace(/--+/g, '-')
+        .replace(/^-+/, '')
+        .replace(/-+$/, '');
+
+      if (!slug) {
+        return `episode-${new Types.ObjectId().toHexString().slice(-8)}`;
+      }
+
+      return slug.substring(0, 280);
+    };
+
+    let baseSlug = generateSlug(this.title);
+    let finalSlug = baseSlug;
+    let count = 0;
+    const EpisodeModelInstance = models.Episode || model<IEpisode>("Episode");
+
+    // Check uniqueness of slug within the novel
+    while (true) {
+      const existingEpisode = await EpisodeModelInstance.findOne({
+        slug: finalSlug,
+        novelId: this.novelId,
+        _id: { $ne: this._id }
+      });
+      if (!existingEpisode) break;
+      count++;
+      finalSlug = `${baseSlug}-${count}`;
+    }
+    this.slug = finalSlug;
+  }
+
   if (this.isModified("title") ||
       this.isModified("firstSceneId") || // หากมีการเปลี่ยนแปลงเนื้อหาหลัก (Scene แรก)
       this.isModified("teaserText") ||
@@ -501,6 +613,41 @@ EpisodeSchema.pre<HydratedDocument<IEpisode>>("save", async function (next) {
   // ถ้า status ไม่ใช่ SCHEDULED ให้ล้างค่า scheduledPublishAt (ถ้ามี)
   if (this.status !== EpisodeStatus.SCHEDULED) {
       this.scheduledPublishAt = undefined; // หรือ null
+  }
+
+  // Validate early access dates
+  if (this.accessType === EpisodeAccessType.EARLY_ACCESS_PAID) {
+    if (!this.earlyAccessStartDate || !this.earlyAccessEndDate) {
+      return next(new mongoose.Error.ValidatorError({ 
+        message: "Early access start and end dates are required for early access episodes." 
+      }));
+    }
+    if (this.earlyAccessEndDate <= this.earlyAccessStartDate) {
+      return next(new mongoose.Error.ValidatorError({ 
+        message: "Early access end date must be after start date." 
+      }));
+    }
+  }
+
+  // Validate promotions
+  if (this.promotions && this.promotions.length > 0) {
+    for (const promo of this.promotions) {
+      if (promo.endDate <= promo.startDate) {
+        return next(new mongoose.Error.ValidatorError({ 
+          message: "Promotion end date must be after start date." 
+        }));
+      }
+      if (promo.promotionType === 'percentage_discount' && !promo.discountPercentage) {
+        return next(new mongoose.Error.ValidatorError({ 
+          message: "Discount percentage is required for percentage discount promotions." 
+        }));
+      }
+      if (promo.promotionType === 'fixed_discount' && !promo.discountAmount) {
+        return next(new mongoose.Error.ValidatorError({ 
+          message: "Discount amount is required for fixed discount promotions." 
+        }));
+      }
+    }
   }
 
   next();

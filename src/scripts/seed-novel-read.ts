@@ -12,6 +12,7 @@ import SceneModel from '@/backend/models/Scene';
 import ChoiceModel from '@/backend/models/Choice';
 import { Types } from 'mongoose';
 import { config } from 'dotenv';
+import PurchaseModel from '@/backend/models/Purchase';
 
 // โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
 config({ path: '.env' });
@@ -53,6 +54,7 @@ async function seedSpiritOfBangkokContent() {
     await CharacterModel.deleteMany({ novelId: novel._id });
     await SceneModel.deleteMany({ novelId: novel._id });
     await ChoiceModel.deleteMany({ novelId: novel._id });
+    await PurchaseModel.deleteMany({ novelId: novel._id });
     console.log(`✅ Old content cleared successfully.`);
 
 
@@ -139,6 +141,7 @@ async function seedSpiritOfBangkokContent() {
       novelId: novel._id,
       authorId: author._id,
       title: 'การมาถึงย่านเก่า',
+      slug: 'the-arrival',
       episodeOrder: 1,
       status: 'published',
       accessType: 'free',
@@ -250,16 +253,92 @@ async function seedSpiritOfBangkokContent() {
     console.log('    ...Created more scenes for Episode 1');
 
 
-    // Episode 2
-    console.log('📖 Creating Episode 2...');
-    const episode2 = await EpisodeModel.create({
-      novelId: novel._id, authorId: author._id, title: 'ความลับของยายนิ่ม', episodeOrder: 2, status: 'published', accessType: 'ad_supported_free',
-      teaserText: 'ยายนิ่มเล่าเรื่องราวลึกลับเกี่ยวกับวิญญาณเมืองกรุง และอริษาเริ่มเข้าใจว่าเธอมาถูกที่แล้ว',
-      stats: { viewsCount: 95, uniqueViewersCount: 60, likesCount: 30, commentsCount: 8, totalWords: 920, estimatedReadingTimeMinutes: 4 },
-      publishedAt: new Date(), lastContentUpdatedAt: new Date()
-    });
+          // Episode 2: คฤหาสน์ผีสิง
+      const episode2 = await EpisodeModel.create({
+        novelId: novel._id,
+        authorId: author._id,
+        title: "คฤหาสน์ผีสิง",
+        slug: "haunted-mansion", 
+        episodeOrder: 2,
+        teaserText: "อริษาตามหลักฐานมาถึงคฤหาสน์เก่าแก่ แต่เธอไม่ได้มาคนเดียว",
+        status: "published",
+        accessType: "paid_unlock",
+        priceCoins: 50,
+        originalPriceCoins: 50,
+        promotions: [],
+        publishedAt: new Date(),
+        stats: {
+          wordCount: 6500,
+          estimatedReadingTimeMinutes: 26,
+          viewsCount: 3200,
+          likesCount: 410,
+          commentsCount: 82,
+          purchasesCount: 150
+        },
+        changelog: []
+      });
 
-    episodes.push(episode1, episode2);
+          // Episode 3: ความจริงที่ซ่อนเร้น
+      const episode3 = await EpisodeModel.create({
+        novelId: novel._id,
+        authorId: author._id,
+        title: "ความจริงที่ซ่อนเร้น",
+        slug: "hidden-truth",
+        episodeOrder: 3,
+        teaserText: "การเผชิญหน้าครั้งสุดท้ายกับวิญญาณเมืองกรุง ใครจะอยู่ใครจะไป",
+        status: "published",
+        accessType: "paid_unlock",
+        priceCoins: 75,
+        originalPriceCoins: 100,
+        promotions: [{
+          promotionId: new Types.ObjectId(),
+          promotionType: 'percentage_discount',
+          discountPercentage: 25,
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+          description: "โปรโมชั่นต้อนรับปีใหม่"
+        }],
+        publishedAt: new Date(),
+        stats: {
+          wordCount: 8000,
+          estimatedReadingTimeMinutes: 32,
+          viewsCount: 2100,
+          likesCount: 380,
+          commentsCount: 95,
+          purchasesCount: 120
+        },
+        changelog: []
+      });
+
+          // Episode 4: บทสรุปแห่งชะตากรรม (Premium/Early Access)
+      const episode4 = await EpisodeModel.create({
+        novelId: novel._id,
+        authorId: author._id,
+        title: "บทสรุปแห่งชะตากรรม",
+        slug: "fate-conclusion",
+        episodeOrder: 4,
+        teaserText: "ทุกคำถามจะได้รับคำตอบ ทุกความลับจะถูกเปิดเผย",
+        status: "published",
+        accessType: "early_access_paid",
+        priceCoins: 150,
+        originalPriceCoins: 150,
+        earlyAccessDuration: 7, // 7 days early access
+        earlyAccessStartDate: new Date(),
+        earlyAccessEndDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        promotions: [],
+        publishedAt: new Date(),
+        stats: {
+          wordCount: 10000,
+          estimatedReadingTimeMinutes: 40,
+          viewsCount: 800,
+          likesCount: 250,
+          commentsCount: 45,
+          purchasesCount: 80
+        },
+        changelog: []
+      });
+
+    episodes.push(episode1, episode2, episode3, episode4);
 
     // อัปเดต firstSceneId ของ episode1
     episode1.firstSceneId = scene1_1._id;
@@ -285,7 +364,71 @@ async function seedSpiritOfBangkokContent() {
           'stats.estimatedReadingTimeMinutes': totalEstimatedReadingTime
       },
       lastContentUpdatedAt: new Date()
-    });
+         });
+
+           // สร้าง Purchase records สำหรับทดสอบ (สำหรับ darkMystWriter ที่เป็นผู้แต่ง)
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substr(2, 9);
+      
+      await PurchaseModel.create({
+        purchaseReadableId: `EP-${timestamp}-${randomSuffix}-001`,
+        userId: author._id,
+        items: [{
+          itemId: episode2._id,
+          itemType: 'novel_episode',
+          title: `${novel.title} - ${episode2.title}`,
+          quantity: 1,
+          unitPrice: 0, // ฟรีสำหรับผู้แต่ง
+          currency: 'COIN',
+          subtotal: 0,
+          sellerId: author._id
+        }],
+        totalAmount: 0,
+        finalAmount: 0,
+        finalCurrency: 'COIN',
+        status: 'completed',
+        purchasedAt: new Date()
+      });
+
+      await PurchaseModel.create({
+        purchaseReadableId: `EP-${timestamp}-${randomSuffix}-002`,
+        userId: author._id,
+        items: [{
+          itemId: episode3._id,
+          itemType: 'novel_episode',
+          title: `${novel.title} - ${episode3.title}`,
+          quantity: 1,
+          unitPrice: 0,
+          currency: 'COIN',
+          subtotal: 0,
+          sellerId: author._id
+        }],
+        totalAmount: 0,
+        finalAmount: 0,
+        finalCurrency: 'COIN',
+        status: 'completed',
+        purchasedAt: new Date()
+      });
+
+      await PurchaseModel.create({
+        purchaseReadableId: `EP-${timestamp}-${randomSuffix}-003`,
+        userId: author._id,
+        items: [{
+          itemId: episode4._id,
+          itemType: 'novel_episode',
+          title: `${novel.title} - ${episode4.title}`,
+          quantity: 1,
+          unitPrice: 0,
+          currency: 'COIN',
+          subtotal: 0,
+          sellerId: author._id
+        }],
+        totalAmount: 0,
+        finalAmount: 0,
+        finalCurrency: 'COIN',
+        status: 'completed',
+        purchasedAt: new Date()
+      });
 
     console.log('✅ Updated novel stats.');
 
@@ -297,7 +440,10 @@ async function seedSpiritOfBangkokContent() {
     console.log(`- Episodes Created: ${episodes.length}`);
     console.log(`\n🔗 Access URLs:`);
     console.log(`- Novel Page: /novels/${novel.slug}`);
-    console.log(`- Read Episode 1: /read/${novel.slug}/${episode1._id}`);
+    console.log(`- Read Episode 1: /read/${novel.slug}/1-${episode1.slug || 'the-arrival'}`);
+    console.log(`- Read Episode 2: /read/${novel.slug}/2-${episode2.slug || 'haunted-mansion'}`);
+    console.log(`- Read Episode 3: /read/${novel.slug}/3-${episode3.slug || 'hidden-truth'}`);
+    console.log(`- Read Episode 4: /read/${novel.slug}/4-${episode4.slug || 'fate-conclusion'}`);
 
   } catch (error) {
     console.error('❌ Error seeding novel content:', error);

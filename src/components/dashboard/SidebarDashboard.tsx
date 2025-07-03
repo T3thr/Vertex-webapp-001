@@ -422,7 +422,7 @@ export default function SidebarDashboard({
         {isMobile && (
           <motion.button
             onClick={toggleSidebar}
-            className="fixed top-20 left-4 z-50 lg:hidden bg-background border border-border rounded-xl p-3 shadow-xl hover:shadow-2xl transition-all duration-200"
+            className="fixed top-20 left-4 z-30 lg:hidden bg-background border border-border rounded-xl p-3 shadow-xl hover:shadow-2xl transition-all duration-200"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             animate={{
@@ -463,7 +463,7 @@ export default function SidebarDashboard({
             <>
               {/* Backdrop สำหรับเนื้อหาหลัก - เริ่มจากใต้ navbar */}
               <motion.div
-                className="fixed z-35 lg:hidden backdrop-blur-md bg-black/20"
+                className="fixed z-20 lg:hidden backdrop-blur-md bg-black/20"
                 style={{ 
                   top: '5rem', // เริ่มจากใต้ navbar (navbar สูง 5rem)
                   bottom: '0',
@@ -479,20 +479,6 @@ export default function SidebarDashboard({
                   e.preventDefault();
                 }}
               />
-              {/* Overlay สำหรับพื้นที่ navbar - ไม่ blur แต่มี dark overlay เบาๆ */}
-              <motion.div
-                className="fixed z-35 lg:hidden bg-black/10"
-                style={{ 
-                  top: '0',
-                  height: '5rem', // ความสูงของ navbar
-                  left: '0',
-                  right: '0'
-                }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsSidebarOpen(false)}
-              />
             </>
           )}
         </AnimatePresence>
@@ -500,7 +486,7 @@ export default function SidebarDashboard({
         {/* Sidebar - รองรับ swipe gesture และ mobile optimization */}
         <motion.aside 
           className={`
-            ${isMobile ? 'fixed' : 'absolute'} z-40
+            ${isMobile ? 'fixed' : 'absolute'} z-25
             ${isMobile 
               ? 'top-20 left-0 w-80 max-w-[calc(100vw-1rem)]' 
               : 'top-6 left-6 w-72'
@@ -545,7 +531,7 @@ export default function SidebarDashboard({
           {!isMobile && (
             <motion.button
               onClick={toggleSidebar}
-              className="absolute top-6 -right-3 z-50 p-1.5 bg-background border border-border rounded-full shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              className="absolute top-6 -right-3 z-10 p-1.5 bg-background border border-border rounded-full shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
             >

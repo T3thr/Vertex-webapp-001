@@ -590,6 +590,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
           )}
 
           {/* Welcome Message for New Users */}
+          {/*}
           {!isWriter && (
             <motion.div
               className="mt-8 bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
@@ -609,7 +610,9 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
                 </div>
               </div>
             </motion.div>
+            
           )}
+          */}
         </div>
       </div>
     </motion.header>

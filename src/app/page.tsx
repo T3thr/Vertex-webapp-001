@@ -219,17 +219,17 @@ function FeaturedSection({ novels, viewAllLink, showViewAllButton }: {
     <div className="featured-section-wrapper"> {/* ✅ [เพิ่มใหม่] wrapper สำหรับเพิ่มพื้นที่ด้านล่าง */}
       <div className="featured-grid"> {/* ✅ [ลบ smooth-appear] เพื่อความเร็วสูงสุด */}
         {/* Main Novel (ใหญ่ ซ้าย) - สัดส่วน 2 ส่วน */}
-        <div className="featured-main">
-          <NovelCard
-            novel={mainNovel}
-            priority={true}
-            variant="large"
+      <div className="featured-main">
+        <NovelCard
+          novel={mainNovel}
+          priority={true}
+          variant="large"
             className="novel-card h-full w-full" /* ✅ [เพิ่ม w-full] เพื่อให้ยืดเต็มพื้นที่ใน mobile */
-          />
-        </div>
+        />
+      </div>
 
         {/* Side Novels (ขวา 2x2) - สัดส่วน 1 ส่วน */}
-        <div className="featured-side">
+      <div className="featured-side">
           {/* Grid 2x2: แสดงการ์ด 4 ตัวหรือน้อยกว่า */}
           {sideNovels.map((novel, idx) => (
             <NovelCard

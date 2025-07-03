@@ -89,10 +89,12 @@ interface PopulatedCharacterForDetailPage {
 interface PopulatedEpisodeForDetailPage {
   _id: string;
   title: string;
+  slug: string;
   episodeOrder: number;
   status: EpisodeStatus;
   accessType: EpisodeAccessType;
   priceCoins?: number;
+  originalPriceCoins?: number;
   publishedAt?: string;
   teaserText?: string;
   stats: {
@@ -286,7 +288,7 @@ export async function GET(
       novelId: novelFromDb._id,
       status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] },
     })
-      .select('_id title episodeOrder status accessType priceCoins publishedAt teaserText stats')
+      .select('_id title slug episodeOrder status accessType priceCoins originalPriceCoins publishedAt teaserText stats')
       .sort({ episodeOrder: 1 })
       .limit(10)
       .lean();
@@ -294,10 +296,12 @@ export async function GET(
     const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map((ep) => ({
       _id: ep._id.toString(),
       title: ep.title,
+      slug: ep.slug || 'no-slug',
       episodeOrder: ep.episodeOrder,
       status: ep.status as EpisodeStatus,
       accessType: ep.accessType as EpisodeAccessType,
       priceCoins: ep.priceCoins,
+      originalPriceCoins: ep.originalPriceCoins,
       publishedAt: ep.publishedAt?.toISOString(),
       teaserText: ep.teaserText,
       stats: {

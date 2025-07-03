@@ -361,6 +361,199 @@ html[data-theme-ready="true"] {
 }
 
 /* --------------------------------------- */
+/* Visual Novel Reader Theme */
+/* --------------------------------------- */
+.vn-reader {
+  --vn-primary: var(--primary);
+  --vn-background: var(--background);
+  --vn-foreground: var(--foreground);
+  --vn-card: var(--card);
+  --vn-card-foreground: var(--card-foreground);
+  --vn-border: var(--border);
+  --vn-muted: var(--muted);
+  --vn-muted-foreground: var(--muted-foreground);
+  --vn-accent: var(--accent);
+  --vn-secondary: var(--secondary);
+  
+  /* Visual Novel specific colors */
+  --vn-dialogue-bg: hsl(var(--card) / 0.95);
+  --vn-dialogue-border: hsl(var(--border) / 0.3);
+  --vn-character-name-bg: hsl(var(--primary));
+  --vn-character-name-fg: hsl(var(--primary-foreground));
+  --vn-choice-bg: hsl(var(--primary) / 0.1);
+  --vn-choice-border: hsl(var(--primary) / 0.3);
+  --vn-choice-hover-bg: hsl(var(--primary) / 0.2);
+  --vn-control-bg: hsl(var(--card) / 0.9);
+  --vn-control-border: hsl(var(--border) / 0.2);
+  --vn-progress-bg: hsl(var(--muted) / 0.3);
+  --vn-progress-fg: hsl(var(--primary));
+}
+
+/* Visual Novel Frame */
+.vn-frame {
+  background: var(--vn-background);
+  border: 1px solid var(--vn-border);
+}
+
+/* Visual Novel Dialogue Box */
+.vn-dialogue-box {
+  background: var(--vn-dialogue-bg);
+  border: 1px solid var(--vn-dialogue-border);
+  backdrop-filter: blur(12px);
+  color: var(--vn-foreground);
+}
+
+/* Character Name Badge */
+.vn-character-name {
+  background: var(--vn-character-name-bg);
+  color: var(--vn-character-name-fg);
+}
+
+/* Choice Buttons */
+.vn-choice {
+  background: var(--vn-choice-bg);
+  border: 1px solid var(--vn-choice-border);
+  color: var(--vn-foreground);
+  transition: all 0.2s ease-in-out;
+}
+
+.vn-choice:hover {
+  background: var(--vn-choice-hover-bg);
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+/* Control Panel */
+.vn-controls {
+  background: var(--vn-control-bg);
+  border: 1px solid var(--vn-control-border);
+  backdrop-filter: blur(8px);
+}
+
+.vn-control-button {
+  background: hsl(var(--card) / 0.8);
+  border: 1px solid var(--vn-border);
+  color: var(--vn-foreground);
+  transition: all 0.2s ease-in-out;
+}
+
+.vn-control-button:hover {
+  background: var(--vn-secondary);
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.vn-control-button.active {
+  background: var(--vn-primary);
+  color: var(--vn-character-name-fg);
+  border-color: var(--vn-primary);
+}
+
+/* Progress Bar */
+.vn-progress-track {
+  background: var(--vn-progress-bg);
+}
+
+.vn-progress-bar {
+  background: linear-gradient(90deg, var(--vn-progress-fg), hsl(var(--primary) / 0.8));
+}
+
+/* Modal Backgrounds */
+.vn-modal-backdrop {
+  background: hsl(var(--background) / 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.vn-modal {
+  background: var(--vn-card);
+  border: 1px solid var(--vn-border);
+  color: var(--vn-card-foreground);
+}
+
+/* Settings Panel Styles */
+.vn-settings-slider {
+  background: var(--vn-muted);
+  border-radius: var(--radius-lg);
+}
+
+.vn-settings-slider::-webkit-slider-thumb {
+  background: var(--vn-primary);
+  border: 2px solid var(--vn-background);
+  border-radius: 50%;
+  cursor: pointer;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.vn-settings-slider::-moz-range-thumb {
+  background: var(--vn-primary);
+  border: 2px solid var(--vn-background);
+  border-radius: 50%;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Episode Navigation Styles */
+.vn-episode-item {
+  background: hsl(var(--card) / 0.5);
+  border: 1px solid var(--vn-border);
+  color: var(--vn-card-foreground);
+}
+
+.vn-episode-item:hover {
+  background: var(--vn-secondary);
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.vn-episode-item.current {
+  background: hsl(var(--primary) / 0.1);
+  border-color: var(--vn-primary);
+}
+
+.vn-episode-badge {
+  background: hsl(var(--primary) / 0.2);
+  color: var(--vn-primary);
+  border: 1px solid hsl(var(--primary) / 0.3);
+}
+
+/* Text Styles */
+.vn-text-cursor {
+  background: var(--vn-foreground);
+  animation: vn-blink 1s infinite;
+}
+
+@keyframes vn-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Continue Indicator */
+.vn-continue-indicator {
+  color: var(--vn-muted-foreground);
+  animation: vn-bounce 1.5s infinite;
+}
+
+@keyframes vn-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
+}
+
+/* Dark theme specific adjustments */
+.dark .vn-reader {
+  --vn-dialogue-bg: hsl(var(--card) / 0.98);
+  --vn-control-bg: hsl(var(--card) / 0.95);
+}
+
+/* Sepia theme specific adjustments */
+.sepia .vn-reader {
+  --vn-dialogue-bg: hsl(var(--card) / 0.95);
+  --vn-character-name-bg: var(--accent);
+  --vn-character-name-fg: var(--accent-foreground);
+}
+
+/* --------------------------------------- */
 /* Dashboard Layout Utilities - ไม่บดบัง navbar/footer และลบช่องว่างล่าง */
 /* --------------------------------------- */
 
@@ -776,7 +969,7 @@ html[data-theme-ready="true"] {
   }
 }
 
-/* ✅ [ปรับปรุงใหญ่] Mobile breakpoint - เปลี่ยนเป็น single column เพื่อรายละเอียดชัดเจน */
+/* ✅ [ปรับปรุง] Mobile breakpoint - เปลี่ยนเป็น single column เพื่อรายละเอียดชัดเจน */
 @media (max-width: 768px) {
   .featured-grid {
     display: flex;
@@ -786,12 +979,12 @@ html[data-theme-ready="true"] {
     padding: 0;
     max-width: 100%;
   }
-  
+
   .featured-main {
     width: 100%;
     justify-content: center;
   }
-  
+
   .featured-main .novel-card {
     min-width: unset;
     min-height: 380px; /* ✅ [เพิ่มจาก 320px เป็น 380px] เพิ่มความสูงเพื่อรองรับ aspect ratio ใหม่และข้อความ */
@@ -802,7 +995,7 @@ html[data-theme-ready="true"] {
     display: flex; /* ✅ [เพิ่มใหม่] ให้แน่ใจว่าเป็น flex container */
     flex-direction: column; /* ✅ [เพิ่มใหม่] จัดเรียงแนวตั้ง */
   }
-  
+
   .featured-side {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -838,7 +1031,7 @@ html[data-theme-ready="true"] {
     gap: 1.25rem; /* ✅ [เพิ่มจาก 0.75rem เป็น 1.25rem] เพิ่มระยะห่าง */
     padding: 0 0.5rem; /* ✅ [เพิ่มใหม่] padding เล็กน้อยใน small mobile */
   }
-  
+
   .featured-main .novel-card {
     min-height: 340px; /* ✅ [เพิ่มจาก 280px เป็น 340px] เพิ่มความสูงเพื่อรองรับ aspect ratio ใหม่และข้อความ */
     max-height: 400px; /* ✅ [เพิ่มจาก 340px เป็น 400px] เพิ่มพื้นที่สำหรับรายละเอียด */
@@ -846,7 +1039,7 @@ html[data-theme-ready="true"] {
     display: flex; /* ✅ [เพิ่มใหม่] ให้แน่ใจว่าเป็น flex container */
     flex-direction: column; /* ✅ [เพิ่มใหม่] จัดเรียงแนวตั้ง */
   }
-  
+
   .featured-side {
     gap: 0.625rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.625rem] */
     margin-bottom: 3rem; /* ✅ [เพิ่มจาก 2.5rem เป็น 3rem] ปรับ margin-bottom */
@@ -932,8 +1125,8 @@ html[data-theme-ready="true"] {
     width: 50px;
     height: 50px;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15), 0 2px 5px rgba(0, 0, 0, 0.1); /* ✅ [เพิ่มใหม่] เงาปรับตามขนาดใน tablet */
-  }
-  
+}
+
   .view-more-circle:hover {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2), 0 3px 10px rgba(0, 0, 0, 0.15); /* ✅ [เพิ่มใหม่] เงา hover ปรับตามขนาดใน tablet */
   }
