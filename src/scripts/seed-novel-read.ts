@@ -1,7 +1,7 @@
 // src/scripts/seed-novel-read.ts
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
 // REVISED: เปลี่ยนจากการสร้างตัวละครด้วย insertMany เป็นการทำ Upsert (Update or Insert) ด้วย findOneAndUpdate
-// FIXED: แก้ไขค่า enum ของ audio type จาก 'sound_effect' เป็น 'audio_effect' ให้ตรงกับ SceneModel
+// FIXED: แก้ไขลำดับของ sceneOrder ที่ซ้ำกันภายใน Episode เดียวกัน
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -109,9 +109,9 @@ async function seedSpiritOfBangkokContent() {
 
     const upsertPromises = characterData.map(charData =>
         CharacterModel.findOneAndUpdate(
-            { novelId: charData.novelId, characterCode: charData.characterCode }, // เงื่อนไขในการค้นหา
-            charData, // ข้อมูลที่จะใส่/อัปเดต
-            { upsert: true, new: true, runValidators: true } // Options: upsert คือหัวใจสำคัญ
+            { novelId: charData.novelId, characterCode: charData.characterCode },
+            charData,
+            { upsert: true, new: true, runValidators: true }
         )
     );
 
@@ -204,13 +204,13 @@ async function seedSpiritOfBangkokContent() {
         { instanceId: 'explore_003', type: 'dialogue', speakerDisplayName: 'คุณป้าขายผลไม้', content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
         { instanceId: 'explore_004', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' }
       ],
-      // FIXED: เปลี่ยน 'sound_effect' เป็น 'audio_effect' ให้ตรงกับ Schema
       audios: [{ instanceId: 'market_ambience', type: 'audio_effect', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.2, loop: true }],
     });
 
     // Scene 1.2b: เลือกกลับไปพัก
     const scene1_2b = await SceneModel.create({
-        novelId: novel._id, episodeId: episode1._id, sceneOrder: 2, title: 'เข้าที่พัก',
+        // FIXED: เปลี่ยน sceneOrder เป็น 3 เพื่อไม่ให้ซ้ำกับ scene1_2a
+        novelId: novel._id, episodeId: episode1._id, sceneOrder: 3, title: 'เข้าที่พัก',
         sceneCode: 'scene_1_2_rest',
         background: { type: 'image', value: '/images/background/guesthouse_room.png' },
         textContents: [
@@ -227,7 +227,8 @@ async function seedSpiritOfBangkokContent() {
 
     // Scene 1.3: การพบกับธนา (เป็นฉากที่ตามมาไม่ว่าเลือกทางไหน)
     const scene1_3 = await SceneModel.create({
-      novelId: novel._id, episodeId: episode1._id, sceneOrder: 3, title: 'ช่างภาพลึกลับ',
+      // FIXED: เปลี่ยน sceneOrder เป็น 4 เพื่อไม่ให้ซ้ำ
+      novelId: novel._id, episodeId: episode1._id, sceneOrder: 4, title: 'ช่างภาพลึกลับ',
       background: { type: 'image', value: '/images/background/old_street_evening.png' },
       characters: [
         { instanceId: 'arisa_meeting', characterId: characters.arisa._id, expressionId: 'arisa_surprised', transform: { positionX: -0.3, positionY: 0, scaleX: 1, scaleY: 1, opacity: 1 }, isVisible: true },
