@@ -662,54 +662,53 @@ html[data-theme-ready="true"] {
 /* Asymmetrical Grid Utilities - ✅ [ปรับปรุงให้การ์ด grid เท่ากับ section อื่น] สำหรับ section แรก */
 .featured-grid {
   display: grid;
-  grid-template-columns: 3fr 2fr; /* ✅ [เปลี่ยนจาก 1fr 1fr เป็น 3fr 2fr] สัดส่วน 60%:40% ตามรูปตัวอย่าง */
-  gap: 0rem; /* ✅ [ลดจาก 0.5rem เป็น 0.25rem] ลดระยะห่างให้แคบมากๆ ตามที่ขอ */
+  grid-template-columns: 3fr 2fr; /* สัดส่วน 60%:40% */
+  gap: 0.8rem; /* ระยะห่างระหว่างกล่องซ้ายและขวา */
   align-items: stretch;
-  justify-content: space-between; /* ✅ [เปลี่ยนจาก flex-start เป็น space-between] ให้ชิดขอบทั้งสองข้าง */
-  max-width: 100%; /* ✅ [เปลี่ยนจาก 800px เป็น 100%] ให้ใช้พื้นที่เต็มที่ */
-  margin: 0; /* ✅ [เปลี่ยนจาก margin-left: 0, margin-right: auto เป็น margin: 0] */
-  min-height: 400px; /* ✅ [เพิ่มจาก 300px เป็น 400px] เพิ่มความสูงให้เหมือนในรูป */
-  padding: 0; /* ✅ [เปลี่ยนจาก 0 1rem 0 0 เป็น 0] ลบ padding ทั้งหมดเพื่อให้ชิดขอบ */
+  justify-content: space-between; /* ให้ชิดขอบทั้งสองข้าง */
+  max-width: 100%; /* ใช้พื้นที่เต็มที่ */
+  margin: 0;
+  min-height: 500px; /* เพิ่มความสูงให้มากขึ้น */
+  padding: 0;
 }
 
 .featured-main {
   grid-column: 1 / 2;
   display: flex;
   align-items: stretch;
-  justify-content: flex-start; /* ✅ [เพิ่มใหม่] ให้การ์ดหลักชิดซ้าย */
+  justify-content: flex-start; /* ให้การ์ดหลักชิดซ้าย */
   height: 100%;
 }
 
 .featured-main .novel-card {
   width: 100%;
   height: 100%;
-  min-width: 450px; /* ✅ [เพิ่มจาก 280px เป็น 350px] ให้การ์ดหลักใหญ่ขึ้นตามรูป */
-  min-height: 400px; /* ✅ [เพิ่มจาก 300px เป็น 400px] เพิ่มความสูงให้เหมือนรูป */
-  max-width: 650px; /* ✅ [เพิ่มจาก 380px เป็น 500px] ขยายขนาดสูงสุด */
-  max-height: 450px; /* ✅ [เพิ่มจาก 370px เป็น 450px] เพิ่มความสูงสูงสุด */
+  min-width: 450px; /* ความกว้างขั้นต่ำ */
+  min-height: 500px; /* เพิ่มความสูงให้มากขึ้น */
+  max-width: 650px; /* ความกว้างสูงสุด */
+  max-height: 550px; /* เพิ่มความสูงสูงสุด */
 }
 
 .featured-side {
   grid-column: 2 / 3;
   display: grid;
-  grid-template-columns: 1fr 1fr; /* ✅ Grid 2x2 */
+  grid-template-columns: 1fr 1fr; /* Grid 2x2 */
   grid-template-rows: 1fr 1fr;
-  gap: 0.75rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.75rem] เพิ่มระยะห่างเล็กน้อยให้เหมือนรูป */
+  gap: 0.75rem; /* ระยะห่างระหว่างการ์ด */
   height: 100%;
   align-items: stretch;
-  justify-content: end; /* ✅ [เพิ่มใหม่] ให้การ์ดฝั่งขวาชิดขวา */
-  position: relative; /* ✅ [เพิ่มใหม่] สำหรับจัดตำแหน่งปุ่มดูเพิ่มเติม */
+  justify-content: end; /* ให้การ์ดฝั่งขวาชิดขวา */
+  position: relative;
 }
 
-/* ✅ [ปรับใหม่] การ์ด default ใน featured section ให้มีขนาดเท่ากับ section อื่นทุกประการ */
+/* การ์ดด้านขวา */
 .featured-side .novel-card {
   width: 100%;
   height: 100%;
-  /* ✅ ปรับขนาดให้เหมาะสมกับสัดส่วนใหม่ */
-  min-width: 160px; /* ✅ [เพิ่มจาก 140px เป็น 160px] เพิ่มความกว้างตามที่ขอ */
-  max-width: 220px; /* ✅ [เพิ่มจาก 180px เป็น 220px] เพิ่มความกว้างสูงสุด */
-  min-height: 180px; /* ✅ [คงเดิม] คงความสูงเท่าเดิมตามที่ขอ */
-  max-height: 220px; /* ✅ [คงเดิม] คงความสูงเท่าเดิมตามที่ขอ */
+  min-width: 160px; /* ความกว้างขั้นต่ำ */
+  max-width: 220px; /* ความกว้างสูงสุด */
+  min-height: 230px; /* เพิ่มความสูงให้มากขึ้น */
+  max-height: 270px; /* เพิ่มความสูงสูงสุด */
 }
 
 /* ✅ [ปรับใหม่] ปุ่มดูเพิ่มเติมให้อยู่ใต้ grid 2x2 แบบสมมาตร */
