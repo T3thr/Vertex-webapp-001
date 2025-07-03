@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { config } from 'dotenv';
-import NovelModel from '@/backend/models/Novel';
-import EpisodeModel from '@/backend/models/Episode';
+import bcrypt from 'bcryptjs';
+import NovelModel, { NovelStatus, NovelAccessLevel, NovelEndingType, NovelContentType } from '@/backend/models/Novel';
+import EpisodeModel, { EpisodeStatus, EpisodeAccessType } from '@/backend/models/Episode';
 import SceneModel from '@/backend/models/Scene';
 import CharacterModel from '@/backend/models/Character';
 import ChoiceModel from '@/backend/models/Choice';
@@ -12,16 +13,34 @@ config({ path: '.env' });
 
 const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME;
 
-// ข้อมูลผู้แต่งจำลอง
+// ข้อมูลผู้แต่งจำลอง - ใช้ผู้ใช้ที่มีอยู่แล้วในฐานข้อมูล
 const createMockAuthor = async () => {
   const existingAuthor = await UserModel.findOne({ username: AUTHOR_USERNAME });
   if (existingAuthor) {
+    console.log(`✅ พบผู้แต่งในฐานข้อมูล: ${existingAuthor.username} (${existingAuthor._id})`);
     return existingAuthor._id;
   }
+
+  // ถ้าไม่พบผู้ใช้ ให้หาผู้ใช้คนแรกที่เป็น Writer
+  const anyWriter = await UserModel.findOne({ roles: { $in: ['Writer'] } });
+  if (anyWriter) {
+    console.log(`✅ ใช้ผู้เขียนที่มีอยู่: ${anyWriter.username} (${anyWriter._id})`);
+    return anyWriter._id;
+  }
+
+  // ถ้าไม่มีเลย ให้สร้างใหม่
+  const salt = await bcrypt.genSalt(12);
+  const hashedPassword = await bcrypt.hash('password123', salt);
 
   const author = new UserModel({
     username: AUTHOR_USERNAME || 'novelmaze_author',
     email: 'author@novelmaze.com',
+    password: hashedPassword,
+    accounts: [{
+      provider: 'credentials',
+      providerAccountId: 'author@novelmaze.com',
+      type: 'credentials'
+    }],
     roles: ['Writer'],
     primaryPenName: 'นักเขียนจำลอง',
     isEmailVerified: true,
@@ -31,6 +50,7 @@ const createMockAuthor = async () => {
   });
 
   await author.save();
+  console.log(`✅ สร้างผู้แต่งใหม่: ${author.username} (${author._id})`);
   return author._id;
 };
 
@@ -303,14 +323,14 @@ const createNowOrNeverChoices = async (novelId: mongoose.Types.ObjectId, authorI
       actions: [
         {
           actionId: 'action1',
-          type: 'GO_TO_NODE',
+          type: 'go_to_node',
           parameters: {
             targetNodeId: 'scene2a'
           }
         },
         {
           actionId: 'action2',
-          type: 'MODIFY_PLAYER_STAT',
+          type: 'modify_player_stat',
           parameters: {
             statName: 'courage',
             changeValue: 20,
@@ -335,14 +355,14 @@ const createNowOrNeverChoices = async (novelId: mongoose.Types.ObjectId, authorI
       actions: [
         {
           actionId: 'action1',
-          type: 'GO_TO_NODE',
+          type: 'go_to_node',
           parameters: {
             targetNodeId: 'scene1g'
           }
         },
         {
           actionId: 'action2',
-          type: 'MODIFY_PLAYER_STAT',
+          type: 'modify_player_stat',
           parameters: {
             statName: 'morality',
             changeValue: 10,
@@ -367,7 +387,7 @@ const createNowOrNeverChoices = async (novelId: mongoose.Types.ObjectId, authorI
       actions: [
         {
           actionId: 'action1',
-          type: 'GO_TO_NODE',
+          type: 'go_to_node',
           parameters: {
             targetNodeId: 'scene2k'
           }
@@ -389,14 +409,14 @@ const createNowOrNeverChoices = async (novelId: mongoose.Types.ObjectId, authorI
       actions: [
         {
           actionId: 'action1',
-          type: 'GO_TO_NODE',
+          type: 'go_to_node',
           parameters: {
             targetNodeId: 'scene2m'
           }
         },
         {
           actionId: 'action2',
-          type: 'MODIFY_PLAYER_STAT',
+          type: 'modify_player_stat',
           parameters: {
             statName: 'morality',
             changeValue: 20,
@@ -499,14 +519,14 @@ const createChosenOneChoices = async (novelId: mongoose.Types.ObjectId, authorId
       actions: [
         {
           actionId: 'action1',
-          type: 'GO_TO_NODE',
+          type: 'go_to_node',
           parameters: {
             targetNodeId: 'scene39'
           }
         },
         {
           actionId: 'action2',
-          type: 'MODIFY_PLAYER_STAT',
+          type: 'modify_player_stat',
           parameters: {
             statName: 'animal_love',
             changeValue: 10,
@@ -530,14 +550,14 @@ const createChosenOneChoices = async (novelId: mongoose.Types.ObjectId, authorId
       actions: [
         {
           actionId: 'action1',
-          type: 'GO_TO_NODE',
+          type: 'go_to_node',
           parameters: {
             targetNodeId: 'scene39'
           }
         },
         {
           actionId: 'action2',
-          type: 'MODIFY_PLAYER_STAT',
+          type: 'modify_player_stat',
           parameters: {
             statName: 'human_priority',
             changeValue: 10,
@@ -680,7 +700,7 @@ const createNowOrNeverScenes = async (
             {
               eventId: 'show_matthew',
               startTimeMs: 0,
-              eventType: 'SHOW_CHARACTER',
+              eventType: 'show_character',
               targetInstanceId: 'matthew_instance',
               parameters: {
                 transitionDurationMs: 1000
@@ -689,7 +709,7 @@ const createNowOrNeverScenes = async (
             {
               eventId: 'show_dialogue',
               startTimeMs: 1000,
-              eventType: 'SHOW_TEXT_BLOCK',
+              eventType: 'show_text_block',
               targetInstanceId: 'dialogue_1a',
               parameters: {
                 transitionDurationMs: 500
@@ -1415,37 +1435,117 @@ const createChosenOneScenes = async (
 // สร้างนิยาย "Now or Never"
 const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
   const novel = new NovelModel({
-    authorId,
     title: 'Now or Never',
     slug: 'now-or-never',
+    author: authorId,
     synopsis: 'เมื่อเอลล่า และแฟนหนุ่มรวมถึงผองเพื่อนต้องออกปล้นเพื่อใช้หนี้ที่คฤหาสน์แห่งหนึ่ง แต่พวกเขาหารู้ไม่ ... ว่าอาจมีอะไรบางอย่างกำลังรอพวกเขาอยู่',
-    description: 'นิยายระทึกขวัญเกี่ยวกับกลุ่มวัยรุ่นที่ต้องเลือกระหว่างความถูกและความผิด เมื่อความจำเป็นบังคับให้พวกเขาต้องทำสิ่งที่ไม่อยากทำ',
-    status: 'published',
-    genre: ['thriller', 'drama', 'crime'],
-    demographics: ['young_adult'],
-    isCompleted: false,
-    isPremium: false,
-    language: 'th',
-    contentRating: 'mature',
-    tags: ['การเลือก', 'วัยรุ่น', 'ศีลธรรม', 'อาชญากรรม', 'ความรัก'],
-    stats: {
-      viewsCount: 0,
-      uniqueReadersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      ratingsCount: 0,
-      averageRating: 0,
-      totalWords: 15000,
-      estimatedReadingTimeMinutes: 90,
-      sharesCount: 0,
-      bookmarksCount: 0
+    longDescription: 'นิยายระทึกขวัญที่จะพาคุณสำรวจความซับซ้อนของจิตใจมนุษย์ผ่านการเลือกที่ยากลำบาก เมื่อเอลล่าและแมทธิวพร้อมด้วยเพื่อนๆ ต้องเผชิญกับความจำเป็นที่บีบคั้นให้พวกเขาต้องก้าวข้ามเส้นแบ่งระหว่างความถูกและความผิด ในคืนที่ชะตากรรมจะเปลี่ยนแปลงชีวิตพวกเขาไปตลอดกาล',
+    coverImageUrl: 'https://picsum.photos/seed/now-or-never/400/600',
+    bannerImageUrl: 'https://picsum.photos/seed/now-or-never-banner/1200/400',
+    themeAssignment: {
+      mainTheme: {
+        categoryId: new mongoose.Types.ObjectId(),
+        customName: 'ระทึกขวัญจิตวิทยา'
+      },
+      subThemes: [
+        {
+          categoryId: new mongoose.Types.ObjectId(),
+          customName: 'การเลือกทางศีลธรรม'
+        },
+        {
+          categoryId: new mongoose.Types.ObjectId(),
+          customName: 'ความรักและการเสียสละ'
+        }
+      ],
+      moodAndTone: [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()],
+      contentWarnings: [new mongoose.Types.ObjectId()],
+      customTags: ['การเลือก', 'วัยรุ่น', 'ศีลธรรม', 'อาชญากรรม', 'ความรัก', 'ระทึกขวัญ']
     },
-    publishSettings: {
-      isPublic: true,
-      allowComments: true,
-      allowRatings: true,
-      requireAgeVerification: true
-    }
+    narrativeFocus: {
+      narrativePacingTags: [new mongoose.Types.ObjectId()],
+      primaryConflictTypes: [new mongoose.Types.ObjectId()],
+      narrativePerspective: new mongoose.Types.ObjectId(),
+      artStyle: new mongoose.Types.ObjectId(),
+      commonTropes: [new mongoose.Types.ObjectId()],
+      interactivityLevel: new mongoose.Types.ObjectId(),
+      lengthTag: new mongoose.Types.ObjectId(),
+      targetAudienceProfileTags: [new mongoose.Types.ObjectId()]
+    },
+    worldBuildingDetails: {
+      loreSummary: 'โลกแห่งการเลือกที่ยากลำบาก ที่ซึ่งทุกการตัดสินใจล้วนมีผลต่อชะตากรรม',
+      technologyPrinciples: 'สมัยใหม่ในเมืองใหญ่ที่เต็มไปด้วยโอกาสและอันตราย'
+    },
+    ageRatingCategoryId: new mongoose.Types.ObjectId(),
+    status: NovelStatus.PUBLISHED,
+    accessLevel: NovelAccessLevel.PUBLIC,
+    isCompleted: false,
+    endingType: NovelEndingType.MULTIPLE_ENDINGS,
+    sourceType: {
+      type: NovelContentType.INTERACTIVE_FICTION
+    },
+    language: new mongoose.Types.ObjectId(),
+    totalEpisodesCount: 3,
+    publishedEpisodesCount: 3,
+    stats: {
+      totalRevenueCoins: 45890,
+      viewsCount: 289450,
+      uniqueViewersCount: 198760,
+      likesCount: 24850,
+      commentsCount: 6845,
+      discussionThreadCount: 1234,
+      ratingsCount: 4567,
+      averageRating: 4.8,
+      followersCount: 32890,
+      sharesCount: 8945,
+      bookmarksCount: 38560,
+      totalWords: 45000,
+      estimatedReadingTimeMinutes: 180,
+      completionRate: 91.2,
+      purchasesCount: 9184,
+      lastPublishedEpisodeAt: new Date('2024-01-15'),
+      currentReaders: 678,
+      peakConcurrentReaders: 1245,
+      trendingStats: {
+        viewsLast24h: 8945,
+        viewsLast48h: 17820,
+        likesLast24h: 567,
+        likesLast3Days: 1245,
+        commentsLast24h: 234,
+        newFollowersLastWeek: 892,
+        trendingScore: 98.7,
+        lastTrendingScoreUpdate: new Date()
+      }
+    },
+    monetizationSettings: {
+      isCoinBasedUnlock: true,
+      defaultEpisodePriceCoins: 50,
+      allowDonations: true,
+      isAdSupported: false,
+      isPremiumExclusive: false,
+      activePromotion: {
+        promotionalPriceCoins: 35,
+        promotionStartDate: new Date('2024-01-01'),
+        promotionEndDate: new Date('2024-03-31'),
+        isActive: true,
+        promotionDescription: 'โปรโมชันพิเศษเนื่องในโอกาสปีใหม่!'
+      }
+    },
+    psychologicalAnalysisConfig: {
+      allowsPsychologicalAnalysis: true,
+      sensitiveChoiceCategoriesBlocked: [],
+      lastAnalysisDate: new Date('2024-01-10'),
+      analysisVersion: '2.1'
+    },
+    collaborationSettings: {
+      allowCoAuthorRequests: true,
+      pendingCoAuthors: []
+    },
+    isFeatured: true,
+    publishedAt: new Date('2023-12-01'),
+    lastContentUpdatedAt: new Date('2024-01-15'),
+    isDeleted: false,
+    createdAt: new Date('2023-11-15'),
+    updatedAt: new Date('2024-01-15')
   });
 
   await novel.save();
@@ -1466,21 +1566,31 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
     title: 'บทนำ',
     slug: 'intro',
     episodeOrder: 1,
-    status: 'published',
-    accessType: 'free',
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.FREE,
     teaserText: 'เมื่อเอลล่า และแฟนหนุ่มรวมถึงผองเพื่อนต้องออกปล้นเพื่อใช้หนี้ที่คฤหาสน์แห่งหนึ่ง แต่พวกเขาหารู้ไม่ ... ว่าอาจมีอะไรบางอย่างกำลังรอพวกเขาอยู่',
-    publishedAt: new Date(),
+    publishedAt: new Date('2023-12-01'),
     stats: {
-      viewsCount: 0,
-      uniqueViewersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      totalWords: 5000,
-      estimatedReadingTimeMinutes: 30,
-      purchasesCount: 0
+      viewsCount: 45230,
+      uniqueViewersCount: 32150,
+      likesCount: 3420,
+      commentsCount: 856,
+      totalWords: 15000,
+      estimatedReadingTimeMinutes: 60,
+      purchasesCount: 0,
+      averageReadingProgress: 89.5,
+      dropOffRate: 10.5
     },
+    sentimentInfo: {
+      authorDefinedEmotionTags: ['suspense', 'decision_making', 'friendship'],
+      authorDefinedIntensityScore: 4,
+      aiPreliminaryOverallSentiment: 'mixed',
+      aiPreliminarySentimentScore: 0.2
+    },
+    authorNotesBefore: 'ยินดีต้อนรับสู่โลกแห่งการเลือกที่ยากลำบาก เตรียมตัวให้พร้อมกับการตัดสินใจที่จะเปลี่ยนแปลงทุกสิ่ง',
+    authorNotesAfter: 'การเลือกที่คุณทำในตอนนี้จะส่งผลต่อเรื่องราวทั้งหมด อย่าลืมคิดให้รอบคอบ',
     isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date()
+    lastContentUpdatedAt: new Date('2024-01-15')
   });
 
   await episode1.save();
@@ -1496,21 +1606,31 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
     title: 'เพื่อนรัก',
     slug: 'friends',
     episodeOrder: 2,
-    status: 'published',
-    accessType: 'free',
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.FREE,
     teaserText: 'เมื่อความสัมพันธ์ลับถูกมองเห็นโดยใครบางคน เธอคนนั้นจะตัดสินใจอย่างไร ...',
-    publishedAt: new Date(),
+    publishedAt: new Date('2023-12-15'),
     stats: {
-      viewsCount: 0,
-      uniqueViewersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      totalWords: 6000,
-      estimatedReadingTimeMinutes: 35,
-      purchasesCount: 0
+      viewsCount: 38760,
+      uniqueViewersCount: 28420,
+      likesCount: 2890,
+      commentsCount: 745,
+      totalWords: 18000,
+      estimatedReadingTimeMinutes: 75,
+      purchasesCount: 0,
+      averageReadingProgress: 85.2,
+      dropOffRate: 14.8
     },
+    sentimentInfo: {
+      authorDefinedEmotionTags: ['betrayal', 'friendship', 'loyalty_conflict'],
+      authorDefinedIntensityScore: 5,
+      aiPreliminaryOverallSentiment: 'negative',
+      aiPreliminarySentimentScore: -0.3
+    },
+    authorNotesBefore: 'ความสัมพันธ์ที่แท้จริงจะถูกทดสอบในช่วงเวลาที่ยากลำบาก',
+    authorNotesAfter: 'บางครั้งคนที่เราไว้วางใจมากที่สุดกลับเป็นคนที่ทำร้ายเราได้มากที่สุด',
     isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date()
+    lastContentUpdatedAt: new Date('2024-01-10')
   });
 
   await episode2.save();
@@ -1523,23 +1643,41 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
     title: 'ผู้ถูกเลือก',
     slug: 'chosen-one',
     episodeOrder: 3,
-    status: 'published',
-    accessType: 'premium_access',
-    priceCoins: 50,
-    originalPriceCoins: 80,
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.PAID_UNLOCK,
+    priceCoins: 35,
+    originalPriceCoins: 50,
+    promotions: [{
+      promotionId: new mongoose.Types.ObjectId(),
+      promotionType: 'percentage_discount',
+      discountPercentage: 30,
+      startDate: new Date('2024-01-01'),
+      endDate: new Date('2024-03-31'),
+      description: 'โปรโมชันปีใหม่ ลด 30%!'
+    }],
     teaserText: 'เมื่อสถานการณ์ต้องบีบคั้นให้คุณกลายเป็นคนเลว คุณจะเลือกอะไรกันนะ :)',
-    publishedAt: new Date(),
+    publishedAt: new Date('2024-01-01'),
     stats: {
-      viewsCount: 0,
-      uniqueViewersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      totalWords: 4000,
-      estimatedReadingTimeMinutes: 25,
-      purchasesCount: 0
+      viewsCount: 42350,
+      uniqueViewersCount: 25680,
+      likesCount: 3635,
+      commentsCount: 555,
+      totalWords: 12000,
+      estimatedReadingTimeMinutes: 45,
+      purchasesCount: 3084,
+      averageReadingProgress: 93.7,
+      dropOffRate: 6.3
     },
+    sentimentInfo: {
+      authorDefinedEmotionTags: ['climax', 'moral_dilemma', 'consequence'],
+      authorDefinedIntensityScore: 5,
+      aiPreliminaryOverallSentiment: 'mixed',
+      aiPreliminarySentimentScore: 0.1
+    },
+    authorNotesBefore: 'ตอนสุดท้ายที่จะเปิดเผยผลลัพธ์ของการเลือกทั้งหมด พร้อมหรือยัง?',
+    authorNotesAfter: 'ขอบคุณที่ติดตามเรื่องราวของเอลล่าและเพื่อนๆ การเลือกของคุณจะอยู่ในใจเสมอ',
     isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date()
+    lastContentUpdatedAt: new Date('2024-01-15')
   });
 
   await episode3.save();
@@ -1551,37 +1689,113 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
 // สร้างนิยาย "The Chosen One"  
 const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
   const novel = new NovelModel({
-    authorId,
     title: 'The Chosen One',
     slug: 'the-chosen-one',
+    author: authorId,
     synopsis: 'ครอบครัวดัลลาสใช้ชีวิตอย่างปกติสุขมาโดยตลอด แต่ใครเล่าจะรู้... ว่าเหตุไม่คาดฝันที่มาจากความประมาทอาจเปลี่ยนชีวิตพวกเขาไปตลอดกาล',
-    description: 'เรื่องราวเกี่ยวกับการเลือกที่ยากลำบากระหว่างชีวิตมนุษย์และสัตว์ ผ่านสถานการณ์จำลองที่ทำให้เราตั้งคำถามเกี่ยวกับคุณค่าของชีวิต',
-    status: 'published',
-    genre: ['philosophical', 'drama', 'psychological'],
-    demographics: ['general'],
-    isCompleted: true,
-    isPremium: false,
-    language: 'th',
-    contentRating: 'general',
-    tags: ['จริยธรรม', 'การเลือก', 'ปรัชญา', 'จิตวิทยา', 'ครอบครัว'],
-    stats: {
-      viewsCount: 0,
-      uniqueReadersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      ratingsCount: 0,
-      averageRating: 0,
-      totalWords: 8000,
-      estimatedReadingTimeMinutes: 45,
-      sharesCount: 0,
-      bookmarksCount: 0
+    longDescription: 'นิยายปรัชญาที่จะท้าทายความคิดของคุณผ่านเรื่องราวของครอบครัวดัลลาส เมื่อเหตุการณ์ไม่คาดฝันเกิดขึ้น คุณจะต้องเลือกระหว่างการช่วยชีวิตเด็ก 4 คนหรือสุนัขตัวเดียว การเลือกของคุณจะสะท้อนให้เห็นถึงคุณค่าและความเชื่อที่แท้จริงของคุณ',
+    coverImageUrl: 'https://picsum.photos/seed/chosen-one/400/600',
+    bannerImageUrl: 'https://picsum.photos/seed/chosen-one-banner/1200/400',
+    themeAssignment: {
+      mainTheme: {
+        categoryId: new mongoose.Types.ObjectId(),
+        customName: 'ปรัชญาจริยธรรม'
+      },
+      subThemes: [
+        {
+          categoryId: new mongoose.Types.ObjectId(),
+          customName: 'ความสัมพันธ์ระหว่างมนุษย์กับสัตว์'
+        },
+        {
+          categoryId: new mongoose.Types.ObjectId(),
+          customName: 'การเลือกที่ยากลำบาก'
+        }
+      ],
+      moodAndTone: [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()],
+      contentWarnings: [],
+      customTags: ['จริยธรรม', 'การเลือก', 'ปรัชญา', 'จิตวิทยา', 'ครอบครัว', 'สัตว์']
     },
-    publishSettings: {
-      isPublic: true,
-      allowComments: true,
-      allowRatings: true,
-      requireAgeVerification: false
-    }
+    narrativeFocus: {
+      narrativePacingTags: [new mongoose.Types.ObjectId()],
+      primaryConflictTypes: [new mongoose.Types.ObjectId()],
+      narrativePerspective: new mongoose.Types.ObjectId(),
+      artStyle: new mongoose.Types.ObjectId(),
+      commonTropes: [new mongoose.Types.ObjectId()],
+      interactivityLevel: new mongoose.Types.ObjectId(),
+      lengthTag: new mongoose.Types.ObjectId(),
+      targetAudienceProfileTags: [new mongoose.Types.ObjectId()]
+    },
+    worldBuildingDetails: {
+      loreSummary: 'โลกที่เต็มไปด้วยการเลือกทางจริยธรรม ที่ซึ่งทุกการตัดสินใจสะท้อนถึงค่านิยมที่แท้จริง',
+      technologyPrinciples: 'สมัยปัจจุบันที่มีระบบรถไฟและเทคโนโลยีการขนส่งที่ทันสมัย'
+    },
+    ageRatingCategoryId: new mongoose.Types.ObjectId(),
+    status: NovelStatus.PUBLISHED,
+    accessLevel: NovelAccessLevel.PUBLIC,
+    isCompleted: true,
+    endingType: NovelEndingType.MULTIPLE_ENDINGS,
+    sourceType: {
+      type: NovelContentType.INTERACTIVE_FICTION
+    },
+    language: new mongoose.Types.ObjectId(),
+    totalEpisodesCount: 3,
+    publishedEpisodesCount: 3,
+    stats: {
+      totalRevenueCoins: 18950,
+      viewsCount: 398750,
+      uniqueViewersCount: 267890,
+      likesCount: 35680,
+      commentsCount: 9234,
+      discussionThreadCount: 1876,
+      ratingsCount: 6789,
+      averageRating: 4.9,
+      followersCount: 45680,
+      sharesCount: 12450,
+      bookmarksCount: 54320,
+      totalWords: 28000,
+      estimatedReadingTimeMinutes: 120,
+      completionRate: 95.7,
+      purchasesCount: 3790,
+      lastPublishedEpisodeAt: new Date('2024-01-20'),
+      currentReaders: 892,
+      peakConcurrentReaders: 1678,
+      trendingStats: {
+        viewsLast24h: 12450,
+        viewsLast48h: 24890,
+        likesLast24h: 834,
+        likesLast3Days: 1876,
+        commentsLast24h: 356,
+        newFollowersLastWeek: 1245,
+        trendingScore: 99.2,
+        lastTrendingScoreUpdate: new Date()
+      }
+    },
+    monetizationSettings: {
+      isCoinBasedUnlock: false,
+      defaultEpisodePriceCoins: 0,
+      allowDonations: true,
+      isAdSupported: true,
+      isPremiumExclusive: false,
+      activePromotion: {
+        isActive: false
+      }
+    },
+    psychologicalAnalysisConfig: {
+      allowsPsychologicalAnalysis: true,
+      sensitiveChoiceCategoriesBlocked: [],
+      lastAnalysisDate: new Date('2024-01-18'),
+      analysisVersion: '2.1'
+    },
+    collaborationSettings: {
+      allowCoAuthorRequests: false,
+      pendingCoAuthors: []
+    },
+    isFeatured: true,
+    publishedAt: new Date('2023-11-15'),
+    lastContentUpdatedAt: new Date('2024-01-20'),
+    isDeleted: false,
+    createdAt: new Date('2023-10-30'),
+    updatedAt: new Date('2024-01-20')
   });
 
   await novel.save();
@@ -1602,21 +1816,31 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
     title: 'ลางร้าย',
     slug: 'bad-omen',
     episodeOrder: 1,
-    status: 'published',
-    accessType: 'free',
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.FREE,
     teaserText: 'ครอบครัวดัลลาสใช้ชีวิตอย่างปกติสุขมาโดยตลอด แต่ใครเล่าจะรู้... ว่าเหตุไม่คาดฝันที่มาจากความประมาทอาจเปลี่ยนชีวิตพวกเขาไปตลอดกาล',
-    publishedAt: new Date(),
+    publishedAt: new Date('2023-11-15'),
     stats: {
-      viewsCount: 0,
-      uniqueViewersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      totalWords: 3000,
-      estimatedReadingTimeMinutes: 18,
-      purchasesCount: 0
+      viewsCount: 58420,
+      uniqueViewersCount: 42150,
+      likesCount: 4850,
+      commentsCount: 1245,
+      totalWords: 9500,
+      estimatedReadingTimeMinutes: 38,
+      purchasesCount: 0,
+      averageReadingProgress: 94.2,
+      dropOffRate: 5.8
     },
+    sentimentInfo: {
+      authorDefinedEmotionTags: ['peaceful_beginning', 'foreshadowing', 'family_bonds'],
+      authorDefinedIntensityScore: 2,
+      aiPreliminaryOverallSentiment: 'positive',
+      aiPreliminarySentimentScore: 0.6
+    },
+    authorNotesBefore: 'เรื่องราวเริ่มต้นด้วยความสงบสุข แต่จะจบลงอย่างไร?',
+    authorNotesAfter: 'ลางร้ายเริ่มปรากฏแล้ว เตรียมตัวให้พร้อมสำหรับการเลือกที่ยากลำบาก',
     isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date()
+    lastContentUpdatedAt: new Date('2024-01-18')
   });
 
   await episode1.save();
@@ -1632,21 +1856,31 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
     title: 'เหตุไม่คาดฝัน',
     slug: 'unexpected-event',
     episodeOrder: 2,
-    status: 'published',
-    accessType: 'free',
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.FREE,
     teaserText: 'เมื่อมีอา เจมส์ ไลล่า 3พี่น้องรวมถึงเพื่อนรักอองรี... สุนัขพันธุ์บีเกิ้ลแสนน่ารักที่ทุกคนรักเสมือนสมาชิกในครอบครัว กลับพบกับเหตุการณ์ไม่คาดฝันขึ้นที่พวกเขาจะไม่มีวันลืมไปตลอดกาล',
-    publishedAt: new Date(),
+    publishedAt: new Date('2023-12-01'),
     stats: {
-      viewsCount: 0,
-      uniqueViewersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      totalWords: 2500,
-      estimatedReadingTimeMinutes: 15,
-      purchasesCount: 0
+      viewsCount: 52680,
+      uniqueViewersCount: 38420,
+      likesCount: 4320,
+      commentsCount: 1189,
+      totalWords: 8500,
+      estimatedReadingTimeMinutes: 34,
+      purchasesCount: 0,
+      averageReadingProgress: 91.8,
+      dropOffRate: 8.2
     },
+    sentimentInfo: {
+      authorDefinedEmotionTags: ['tension_building', 'accident', 'crisis_moment'],
+      authorDefinedIntensityScore: 4,
+      aiPreliminaryOverallSentiment: 'negative',
+      aiPreliminarySentimentScore: -0.4
+    },
+    authorNotesBefore: 'ชีวิตสามารถเปลี่ยนแปลงได้ในพริบตา',
+    authorNotesAfter: 'เหตุการณ์ที่ไม่คาดฝันเกิดขึ้นแล้ว คุณจะรับมือกับมันอย่างไร?',
     isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date()
+    lastContentUpdatedAt: new Date('2024-01-20')
   });
 
   await episode2.save();
@@ -1659,21 +1893,31 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
     title: 'ถึงเวลาต้องเลือก',
     slug: 'time-to-choose',
     episodeOrder: 3,
-    status: 'published',
-    accessType: 'free',
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.FREE,
     teaserText: 'เมื่อโชคชะตาบังคับให้คุณต้องเลือก ระหว่างความถูกต้องกับความถูกใจ แล้วคุณล่ะ... เลือกอะไร?',
-    publishedAt: new Date(),
+    publishedAt: new Date('2023-12-15'),
     stats: {
-      viewsCount: 0,
-      uniqueViewersCount: 0,
-      likesCount: 0,
-      commentsCount: 0,
-      totalWords: 2500,
-      estimatedReadingTimeMinutes: 12,
-      purchasesCount: 0
+      viewsCount: 45320,
+      uniqueViewersCount: 31850,
+      likesCount: 3670,
+      commentsCount: 1220,
+      totalWords: 10000,
+      estimatedReadingTimeMinutes: 48,
+      purchasesCount: 0,
+      averageReadingProgress: 96.5,
+      dropOffRate: 3.5
     },
+    sentimentInfo: {
+      authorDefinedEmotionTags: ['moral_choice', 'climax', 'philosophy', 'life_value'],
+      authorDefinedIntensityScore: 5,
+      aiPreliminaryOverallSentiment: 'mixed',
+      aiPreliminarySentimentScore: 0.0
+    },
+    authorNotesBefore: 'การเลือกที่ยากที่สุดในชีวิต ไม่มีคำตอบที่ถูกหรือผิดแน่นอน',
+    authorNotesAfter: 'ขอบคุณที่ร่วมคิดและตัดสินใจไปกับเรา การเลือกของคุณสะท้อนถึงค่านิยมที่แท้จริงของคุณ',
     isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date()
+    lastContentUpdatedAt: new Date('2024-01-20')
   });
 
   await episode3.save();

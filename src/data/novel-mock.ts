@@ -1,5 +1,7 @@
 // data/gamestories.ts
 import { GameStory } from '@/types/game';
+import mongoose from 'mongoose';
+import { seedNovelData } from './seed-novel-data';
 
 export type Episode = {
   id: string;
@@ -115,7 +117,7 @@ export const gameStories: Record<string, GameData> = {
             },
           },
         ],
-        dialogue: '“ไม่เอาหน่าเอลล่า เลิกทำเหมือนโลกจะแตกสักทีเถอะ เดี๋ยวพอไปถึงหน้างานเธอก็ทำได้เองนั่นแหละ”  ชายหนุ่มเอ่ยกระแทกกระทั้นอย่างหัวเสีย',
+        dialogue: '"ไม่เอาหน่าเอลล่า เลิกทำเหมือนโลกจะแตกสักทีเถอะ เดี๋ยวพอไปถึงหน้างานเธอก็ทำได้เองนั่นแหละ"  ชายหนุ่มเอ่ยกระแทกกระทั้นอย่างหัวเสีย',
         backgroundProps: {
           visible: true,
           transform: { x: 0, y: 0, scale: 1, rotation: 0 },
@@ -162,7 +164,7 @@ export const gameStories: Record<string, GameData> = {
             },
           },
         ],
-        dialogue: 'หล่อนแค่นหัวเราะ “นายมันบ้าไปแล้วแมท ผีตัวไหนเข้าสิงนายกันล่ะตอนที่นายตัดสินใจส่งยาให้พวกใต้ดิน”',
+        dialogue: 'หล่อนแค่นหัวเราะ "นายมันบ้าไปแล้วแมท ผีตัวไหนเข้าสิงนายกันล่ะตอนที่นายตัดสินใจส่งยาให้พวกใต้ดิน"',
         backgroundProps: {
           visible: true,
           transform: { x: 0, y: 0, scale: 1, rotation: 0 },
@@ -209,7 +211,7 @@ export const gameStories: Record<string, GameData> = {
           },
         },
       ],
-      dialogue: '“ก็ถ้าชั้นไม่โดนปล้นยาระหว่างทาง ป่านนี้เราคงรวยเละกันไปแล้ว” ชายหนุ่มกัดฟันอย่างแค้นใจ',
+      dialogue: '"ก็ถ้าชั้นไม่โดนปล้นยาระหว่างทาง ป่านนี้เราคงรวยเละกันไปแล้ว" ชายหนุ่มกัดฟันอย่างแค้นใจ',
       backgroundProps: {
         visible: true,
         transform: { x: 0, y: 0, scale: 1, rotation: 0 },
@@ -1971,4 +1973,254 @@ export const gameStories: Record<string, GameData> = {
     ],
   },
   
+};
+
+// ประเภทข้อมูลที่ใช้ในแอป
+export interface MockNovelData {
+  author: {
+    _id: mongoose.Types.ObjectId;
+    username: string;
+    email: string;
+  };
+  novels: Array<{
+    _id: mongoose.Types.ObjectId;
+    title: string;
+    slug: string;
+    synopsis: string;
+    description: string;
+    genre: string[];
+    status: string;
+    isCompleted: boolean;
+    language: string;
+    contentRating: string;
+    tags: string[];
+  }>;
+  episodes: Array<{
+    _id: mongoose.Types.ObjectId;
+    novelId: mongoose.Types.ObjectId;
+    title: string;
+    slug: string;
+    episodeOrder: number;
+    status: string;
+    accessType: string;
+    teaserText: string;
+  }>;
+  characters: Array<{
+    _id: mongoose.Types.ObjectId;
+    novelId: mongoose.Types.ObjectId;
+    characterCode: string;
+    name: string;
+    description: string;
+    age: string;
+    gender: string;
+    roleInStory: string;
+  }>;
+  scenes: Array<{
+    _id: mongoose.Types.ObjectId;
+    novelId: mongoose.Types.ObjectId;
+    episodeId: mongoose.Types.ObjectId;
+    sceneOrder: number;
+    title: string;
+    background: any;
+    characters: any[];
+    textContents: any[];
+  }>;
+  choices: Array<{
+    _id: mongoose.Types.ObjectId;
+    novelId: mongoose.Types.ObjectId;
+    choiceCode: string;
+    text: string;
+    hoverText: string;
+    isMajorChoice: boolean;
+    actions: any[];
+  }>;
+}
+
+// Cache สำหรับข้อมูลที่โหลดแล้ว
+let cachedData: MockNovelData | null = null;
+
+// ฟังก์ชันโหลดข้อมูลจาก seed
+export const loadMockNovelData = async (): Promise<MockNovelData> => {
+  if (cachedData) {
+    return cachedData;
+  }
+
+  try {
+    console.log('🔄 กำลังโหลดข้อมูลนิยายจำลอง...');
+    
+    // สร้างข้อมูลจาก seed
+    const seedData = await seedNovelData();
+    
+    // แปลงข้อมูลให้อยู่ในรูปแบบที่แอปใช้งาน
+    cachedData = {
+      author: {
+        _id: seedData.author._id,
+        username: process.env.AUTHOR_USERNAME || 'novelmaze_author',
+        email: 'author@novelmaze.com'
+      },
+      novels: seedData.novels.map(novel => ({
+        _id: novel._id,
+        title: novel.title,
+        slug: novel.slug,
+        synopsis: novel.synopsis,
+        description: (novel as any).description || novel.synopsis,
+        genre: (novel as any).genre || [],
+        status: novel.status as string,
+        isCompleted: (novel as any).isCompleted || false,
+        language: typeof (novel as any).language === 'string' ? (novel as any).language : 'th',
+        contentRating: (novel as any).contentRating || 'general',
+        tags: (novel as any).tags || []
+      })),
+      episodes: seedData.episodes.map(episode => ({
+        _id: episode._id,
+        novelId: episode.novelId as mongoose.Types.ObjectId,
+        title: episode.title,
+        slug: episode.slug,
+        episodeOrder: episode.episodeOrder,
+        status: episode.status as string,
+        accessType: episode.accessType as string,
+        teaserText: episode.teaserText || ''
+      })),
+      characters: seedData.characters.map(character => ({
+        _id: character._id,
+        novelId: character.novelId as mongoose.Types.ObjectId,
+        characterCode: character.characterCode,
+        name: character.name,
+        description: character.description || '',
+        age: character.age || '',
+        gender: character.gender || '',
+        roleInStory: character.roleInStory || 'supporting'
+      })),
+      scenes: seedData.scenes.map(scene => ({
+        _id: scene._id,
+        novelId: scene.novelId,
+        episodeId: scene.episodeId,
+        sceneOrder: scene.sceneOrder,
+        title: scene.title || '',
+        background: scene.background || { type: 'color', value: '#000000' },
+        characters: scene.characters || [],
+        textContents: scene.textContents || []
+      })),
+      choices: seedData.choices.map(choice => ({
+        _id: choice._id,
+        novelId: choice.novelId,
+        choiceCode: choice.choiceCode,
+        text: choice.text,
+        hoverText: choice.hoverText || '',
+        isMajorChoice: choice.isMajorChoice || false,
+        actions: choice.actions || []
+      }))
+    };
+
+    console.log('✅ โหลดข้อมูลนิยายจำลองสำเร็จ');
+    return cachedData!;
+
+  } catch (error) {
+    console.error('❌ เกิดข้อผิดพลาดในการโหลดข้อมูล:', error);
+    
+    // หากไม่สามารถโหลดจาก seed ได้ ให้ใช้ข้อมูลพื้นฐาน
+    const fallbackData: MockNovelData = {
+      author: {
+        _id: new mongoose.Types.ObjectId(),
+        username: 'mock_author',
+        email: 'author@example.com'
+      },
+      novels: [
+        {
+          _id: new mongoose.Types.ObjectId(),
+          title: 'Now or Never',
+          slug: 'now-or-never',
+          synopsis: 'นิยายระทึกขวัญเกี่ยวกับการเลือกในชีวิต',
+          description: 'เมื่อเอลล่า และแฟนหนุ่มรวมถึงผองเพื่อนต้องออกปล้นเพื่อใช้หนี้ที่คฤหาสน์แห่งหนึ่ง',
+          genre: ['thriller', 'drama'],
+          status: 'published',
+          isCompleted: false,
+          language: 'th',
+          contentRating: 'mature',
+          tags: ['การเลือก', 'วัยรุ่น', 'ศีลธรรม']
+        }
+      ],
+      episodes: [],
+      characters: [],
+      scenes: [],
+      choices: []
+    };
+
+    cachedData = fallbackData;
+    return fallbackData;
+  }
+};
+
+// ฟังก์ชันหาข้อมูลนิยายตาม slug
+export const getNovelBySlug = async (slug: string) => {
+  const data = await loadMockNovelData();
+  return data.novels.find(novel => novel.slug === slug);
+};
+
+// ฟังก์ชันหาข้อมูลตอนตาม novelId และ slug
+export const getEpisodeBySlug = async (novelSlug: string, episodeSlug: string) => {
+  const data = await loadMockNovelData();
+  const novel = data.novels.find(n => n.slug === novelSlug);
+  if (!novel) return null;
+  
+  return data.episodes.find(episode => 
+    episode.novelId.equals(novel._id) && episode.slug === episodeSlug
+  );
+};
+
+// ฟังก์ชันหาข้อมูลฉากตาม episodeId
+export const getScenesByEpisodeId = async (episodeId: mongoose.Types.ObjectId) => {
+  const data = await loadMockNovelData();
+  return data.scenes.filter(scene => scene.episodeId.equals(episodeId))
+    .sort((a, b) => a.sceneOrder - b.sceneOrder);
+};
+
+// ฟังก์ชันหาข้อมูลตัวละครตาม novelId
+export const getCharactersByNovelId = async (novelId: mongoose.Types.ObjectId) => {
+  const data = await loadMockNovelData();
+  return data.characters.filter(character => character.novelId.equals(novelId));
+};
+
+// ฟังก์ชันหาข้อมูลตัวเลือกตาม novelId
+export const getChoicesByNovelId = async (novelId: mongoose.Types.ObjectId) => {
+  const data = await loadMockNovelData();
+  return data.choices.filter(choice => choice.novelId.equals(novelId));
+};
+
+// ฟังก์ชันรีเซ็ต cache
+export const resetMockDataCache = () => {
+  cachedData = null;
+};
+
+// Export ข้อมูลพื้นฐานสำหรับใช้งานทั่วไป
+export const mockNovels = {
+  async getAll() {
+    const data = await loadMockNovelData();
+    return data.novels;
+  },
+
+  async getBySlug(slug: string) {
+    return await getNovelBySlug(slug);
+  },
+
+  async getEpisodes(novelSlug: string) {
+    const data = await loadMockNovelData();
+    const novel = await getNovelBySlug(novelSlug);
+    if (!novel) return [];
+    
+    return data.episodes.filter(episode => episode.novelId.equals(novel._id))
+      .sort((a, b) => a.episodeOrder - b.episodeOrder);
+  }
+};
+
+// Export default
+export default {
+  loadMockNovelData,
+  getNovelBySlug,
+  getEpisodeBySlug,
+  getScenesByEpisodeId,
+  getCharactersByNovelId,
+  getChoicesByNovelId,
+  resetMockDataCache,
+  mockNovels
 };
