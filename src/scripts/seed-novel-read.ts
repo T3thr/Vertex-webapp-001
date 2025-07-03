@@ -1,142 +1,67 @@
 // src/scripts/seed-novel-read.ts
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
+// REVISED: สคริปต์นี้ถูกปรับปรุงให้ทำงานร่วมกับ admin-seed.ts และ novel-seed.ts
+// โดยจะค้นหานิยายและผู้เขียนที่มีอยู่แล้ว แทนที่จะสร้างใหม่
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
 import NovelModel from '@/backend/models/Novel';
-import CategoryModel from '@/backend/models/Category';
 import CharacterModel from '@/backend/models/Character';
 import EpisodeModel from '@/backend/models/Episode';
 import SceneModel from '@/backend/models/Scene';
 import ChoiceModel from '@/backend/models/Choice';
 import { Types } from 'mongoose';
+import { config } from 'dotenv';
 
-async function seedSpiritOfBangkokNovel() {
+// โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
+config({ path: '.env' });
+
+const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME;
+const NOVEL_TITLE = "วิญญาณเมืองกรุง";
+const NOVEL_SLUG = "วิญญาณเมืองกรุง".normalize('NFC').toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}\p{M}-]+/gu, '').replace(/--+/g, '-').replace(/^-+/, '').replace(/-+$/, '').substring(0, 280);
+
+
+async function seedSpiritOfBangkokContent() {
   try {
     await dbConnect();
-    console.log('🌟 Starting seed for "วิญญาณเมืองกรุง" Visual Novel...');
+    console.log('🌟 Starting seed for "วิญญาณเมืองกรุง" Visual Novel Content...');
 
-    // 1. สร้างผู้เขียน
-    const author = await UserModel.create({
-      username: 'darkmyst_writer',
-      email: 'darkmyst.writer@divwy.com',
-      password: 'hashedpassword123',
-      profile: {
-        displayName: 'ดาร์ค มิสต์',
-        penNames: ['ดาร์ค มิสต์', 'Dark Mystique'],
-        bio: 'นักเขียนผู้เชี่ยวชาญเรื่องลึกลับและสยองขวัญ มีประสบการณ์การเขียนมากว่า 10 ปี',
-        avatarUrl: '/images/character/author_darkmyst.png',
-        socialMediaLinks: {
-          facebook: 'https://facebook.com/darkmyst.writer',
-          twitter: 'https://twitter.com/darkmyst_writer'
-        }
-      },
-      writerStats: {
-        totalNovelsPublished: 5,
-        totalFollowers: 15420,
-        totalWordsPublished: 500000,
-        averageRating: 4.7
-      },
-      isVerified: true,
-      accountType: 'writer'
-    });
+    // ==================================================================================================
+    // SECTION 1: ค้นหาผู้เขียนและนิยายที่มีอยู่แล้ว (แก้ไขจากเดิมที่สร้างใหม่)
+    // ==================================================================================================
 
-    // 2. สร้างหมวดหมู่
-    const categories = {
-      horror: await CategoryModel.create({
-        name: 'สยองขวัญ',
-        slug: 'horror',
-        description: 'เรื่องราวที่น่าสะพรึงกลัวและลึกลับ',
-        color: '#8B0000',
-        type: 'GENRE'
-      }),
-      supernatural: await CategoryModel.create({
-        name: 'เหนือธรรมชาติ',
-        slug: 'supernatural',
-        description: 'เรื่องราวเกี่ยวกับสิ่งเหนือธรรมชาติ',
-        color: '#4B0082',
-        type: 'GENRE'
-      }),
-      bangkok: await CategoryModel.create({
-        name: 'กรุงเทพฯ',
-        slug: 'bangkok',
-        description: 'เรื่องราวที่เกิดขึ้นในกรุงเทพมหานคร',
-        color: '#FF6B35',
-        type: 'SETTING'
-      }),
-      thai: await CategoryModel.create({
-        name: 'ไทย',
-        slug: 'thai',
-        description: 'ภาษาไทย',
-        color: '#0066CC',
-        type: 'LANGUAGE'
-      })
-    };
+    // 1. ค้นหาผู้เขียน (Author) จาก AUTHOR_USERNAME ใน .env
+    if (!AUTHOR_USERNAME) {
+      throw new Error("AUTHOR_USERNAME environment variable is not set. Please run admin-seed.ts or set it in .env");
+    }
+    const author = await UserModel.findOne({ username: AUTHOR_USERNAME });
+    if (!author) {
+      throw new Error(`Author with username "${AUTHOR_USERNAME}" not found. Please run the admin-seed.ts script first.`);
+    }
+    console.log(`✅ Found author: ${author.username} (ID: ${author._id})`);
 
-    // 3. สร้างนิยาย
-    const novel = await NovelModel.create({
-      title: 'วิญญาณเมืองกรุง',
-      slug: 'spirit-of-bangkok',
-      author: author._id,
-      synopsis: 'ในย่านเก่าแก่ของกรุงเทพฯ ที่ความทันสมัยยังไม่เข้าไปแตะต้อง มีเรื่องราวลึกลับซ่อนอยู่ใต้ผิวหน้าของชีวิตประจำวัน เมื่อ "อริษา" นักศึกษาภาควิชาโบราณคดี ได้รับมอบหมายให้มาทำวิจัยเกี่ยวกับประวัติศาสตร์ย่านนี้ เธอก็ไม่เคยคิดว่าจะได้พบกับสิ่งที่เปลี่ยนแปลงชีวิตของเธอไปตลอดกาล...',
-      longDescription: `ในหัวใจของกรุงเทพมหานคร ซ่อนอยู่ในซอกซอยที่เวลาราวกับหยุดนิ่ง มีย่านเก่าแก่ที่เต็มไปด้วยบ้านไม้โบราณ วัดเก่า และตลาดที่ยังคงกลิ่นอายของอดีต
+    // 2. ค้นหานิยาย (Novel) จาก Slug
+    const novel = await NovelModel.findOne({ slug: NOVEL_SLUG, author: author._id });
+    if (!novel) {
+      throw new Error(`Novel with slug "${NOVEL_SLUG}" for author "${author.username}" not found. Please run novel-seed.ts first.`);
+    }
+    console.log(`✅ Found novel: "${novel.title}" (ID: ${novel._id})`);
 
-อริษา นักศึกษาโบราณคดีจากจุฬาลงกรณ์มหาวิทยาลัย ได้รับมอบหมายงานวิจัยพิเศษเกี่ยวกับการอนุรักษ์มรดกทางวัฒนธรรมในย่านนี้ สิ่งที่เธอคิดว่าจะเป็นเพียงงานรวบรวมข้อมูลประวัติศาสตร์ธรรมดา กลับกลายเป็นการเดินทางสู่โลกที่ซ่อนอยู่ระหว่างความเป็นจริงกับความลึกลับ
+    // ==================================================================================================
+    // SECTION 2: ล้างข้อมูลเนื้อหาเก่าของนิยายเรื่องนี้ (เพื่อให้รันสคริปต์ซ้ำได้)
+    // ==================================================================================================
+    console.log(`🧹 Cleaning up old content for novel ID: ${novel._id}...`);
+    await EpisodeModel.deleteMany({ novelId: novel._id });
+    await CharacterModel.deleteMany({ novelId: novel._id });
+    await SceneModel.deleteMany({ novelId: novel._id });
+    await ChoiceModel.deleteMany({ novelId: novel._id });
+    console.log(`✅ Old content cleared successfully.`);
 
-เมื่อเธอเริ่มสัมภาษณ์ผู้คนในย่าน อริษาก็ค่อยๆ ค้นพบว่าทุกคนล้วนมีเรื่องราวแปลกๆ ที่เกี่ยวข้องกับ "วิญญาณเมืองกรุง" - สิ่งที่ผู้คนเล่าขานกันว่าเป็นผู้คุมครองย่านนี้มาช้านาน
 
-แต่เมื่อเหตุการณ์แปลกประหลาดเริ่มเกิดขึ้นรอบตัวเธอ และเธอเริ่มเห็นสิ่งที่คนอื่นมองไม่เห็น อริษาจึงรู้ว่าเธอไม่ได้เป็นเพียงผู้สังเกตการณ์อีกต่อไป แต่เธอกำลังกลายเป็นส่วนหนึ่งของเรื่องราวลึกลับนี้
-
-ร่วมเดินทางไปกับอริษาในการค้นหาความจริงเบื้องหลังตำนานเก่าแก่ พบปะกับตัวละครที่น่าสนใจ และเผชิญหน้ากับทางเลือกที่จะเปลี่ยนแปลงโชคชะตาของทุกคนในย่านนี้
-
-การเลือกของคุณจะกำหนดว่า อริษาจะสามารถปกป้องสิ่งที่เธอรักได้หรือไม่ และความลับของวิญญาณเมืองกรุงจะถูกเปิดเผยอย่างไร`,
-      coverImageUrl: '/images/novels/spirit-bangkok-cover.png',
-      bannerImageUrl: '/images/novels/spirit-bangkok-banner.png',
-      themeAssignment: {
-        mainTheme: {
-          categoryId: categories.horror._id,
-          customName: 'สยองขวัญไทย'
-        },
-        subThemes: [
-          {
-            categoryId: categories.supernatural._id,
-            customName: 'เหนือธรรมชาติ'
-          },
-          {
-            categoryId: categories.bangkok._id,
-            customName: 'กรุงเทพ'
-          }
-        ],
-        customTags: ['วิญญาณ', 'กรุงเทพ', 'ลึกลับ', 'โบราณคดี', 'วัฒนธรรมไทย', 'สยองขวัญ', 'แฟนตาซี', 'รัก', 'ผจญภัย']
-      },
-      status: 'published',
-      accessLevel: 'public',
-      isCompleted: false,
-      endingType: 'multiple_endings',
-      sourceType: {
-        type: 'original'
-      },
-      language: categories.thai._id,
-      totalEpisodesCount: 5,
-      publishedEpisodesCount: 3,
-      stats: {
-        viewsCount: 45230,
-        uniqueViewersCount: 12800,
-        likesCount: 3420,
-        commentsCount: 890,
-        ratingsCount: 450,
-        averageRating: 4.8,
-        followersCount: 2100,
-        totalWords: 85000,
-        estimatedReadingTimeMinutes: 340
-      },
-      publishedAt: new Date('2024-01-15'),
-      lastContentUpdatedAt: new Date()
-    });
-
-    console.log(`✅ Created novel: ${novel.title}`);
-
-    // 4. สร้างตัวละคร
+    // ==================================================================================================
+    // SECTION 3: สร้างตัวละคร (Characters) สำหรับนิยายเรื่องนี้
+    // ==================================================================================================
+    console.log('👥 Creating characters...');
     const characters = {
       arisa: await CharacterModel.create({
         novelId: novel._id,
@@ -150,30 +75,10 @@ async function seedSpiritOfBangkokNovel() {
         roleInStory: 'main_protagonist',
         colorTheme: '#E8B4B8',
         expressions: [
-          {
-            expressionId: 'arisa_normal',
-            name: 'ปกติ',
-            mediaId: 'arisa_normal.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'arisa_surprised',
-            name: 'ตกใจ',
-            mediaId: 'arisa_surprised.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'arisa_determined',
-            name: 'มุ่งมั่น',
-            mediaId: 'arisa_determined.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'arisa_scared',
-            name: 'กลัว',
-            mediaId: 'arisa_scared.png',
-            mediaSourceType: 'Media'
-          }
+          { expressionId: 'arisa_normal', name: 'ปกติ', mediaId: 'arisa_normal.png', mediaSourceType: 'Media' },
+          { expressionId: 'arisa_surprised', name: 'ตกใจ', mediaId: 'arisa_surprised.png', mediaSourceType: 'Media' },
+          { expressionId: 'arisa_determined', name: 'มุ่งมั่น', mediaId: 'arisa_determined.png', mediaSourceType: 'Media' },
+          { expressionId: 'arisa_scared', name: 'กลัว', mediaId: 'arisa_scared.png', mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'arisa_normal',
         physicalAttributes: {
@@ -192,7 +97,6 @@ async function seedSpiritOfBangkokNovel() {
           quotes: ['ความจริงมักซ่อนอยู่ในสิ่งที่เราไม่กล้ามอง', 'อดีตคือครู ปัจจุบันคือนักเรียน']
         }
       }),
-
       thana: await CharacterModel.create({
         novelId: novel._id,
         authorId: author._id,
@@ -205,30 +109,10 @@ async function seedSpiritOfBangkokNovel() {
         roleInStory: 'love_interest',
         colorTheme: '#4A90A4',
         expressions: [
-          {
-            expressionId: 'thana_normal',
-            name: 'ปกติ',
-            mediaId: 'thana_normal.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'thana_serious',
-            name: 'จริงจัง',
-            mediaId: 'thana_serious.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'thana_smile',
-            name: 'ยิ้ม',
-            mediaId: 'thana_smile.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'thana_worried',
-            name: 'กังวล',
-            mediaId: 'thana_worried.png',
-            mediaSourceType: 'Media'
-          }
+          { expressionId: 'thana_normal', name: 'ปกติ', mediaId: 'thana_normal.png', mediaSourceType: 'Media' },
+          { expressionId: 'thana_serious', name: 'จริงจัง', mediaId: 'thana_serious.png', mediaSourceType: 'Media' },
+          { expressionId: 'thana_smile', name: 'ยิ้ม', mediaId: 'thana_smile.png', mediaSourceType: 'Media' },
+          { expressionId: 'thana_worried', name: 'กังวล', mediaId: 'thana_worried.png', mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'thana_normal',
         personalityTraits: {
@@ -237,7 +121,6 @@ async function seedSpiritOfBangkokNovel() {
           weaknesses: ['ไม่ค่อยเปิดใจ', 'ขี้กังวล', 'กลัวการสูญเสีย']
         }
       }),
-
       granny_nim: await CharacterModel.create({
         novelId: novel._id,
         authorId: author._id,
@@ -250,22 +133,11 @@ async function seedSpiritOfBangkokNovel() {
         roleInStory: 'mentor',
         colorTheme: '#8B4513',
         expressions: [
-          {
-            expressionId: 'granny_normal',
-            name: 'ปกติ',
-            mediaId: 'granny_normal.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'granny_wise',
-            name: 'ชาญฉลาด',
-            mediaId: 'granny_wise.png',
-            mediaSourceType: 'Media'
-          }
+          { expressionId: 'granny_normal', name: 'ปกติ', mediaId: 'granny_normal.png', mediaSourceType: 'Media' },
+          { expressionId: 'granny_wise', name: 'ชาญฉลาด', mediaId: 'granny_wise.png', mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'granny_normal'
       }),
-
       spirit: await CharacterModel.create({
         novelId: novel._id,
         authorId: author._id,
@@ -278,29 +150,21 @@ async function seedSpiritOfBangkokNovel() {
         roleInStory: 'antagonist',
         colorTheme: '#663399',
         expressions: [
-          {
-            expressionId: 'spirit_normal',
-            name: 'ปกติ',
-            mediaId: 'spirit_normal.png',
-            mediaSourceType: 'Media'
-          },
-          {
-            expressionId: 'spirit_angry',
-            name: 'โกรธ',
-            mediaId: 'spirit_angry.png',
-            mediaSourceType: 'Media'
-          }
+          { expressionId: 'spirit_normal', name: 'ปกติ', mediaId: 'spirit_normal.png', mediaSourceType: 'Media' },
+          { expressionId: 'spirit_angry', name: 'โกรธ', mediaId: 'spirit_angry.png', mediaSourceType: 'Media' }
         ],
         defaultExpressionId: 'spirit_normal'
       })
     };
-
     console.log('✅ Created characters');
 
-    // 5. สร้าง Episodes
+    // ==================================================================================================
+    // SECTION 4: สร้าง Episodes, Scenes, และ Choices
+    // ==================================================================================================
     const episodes = [];
-    
+
     // Episode 1: การเริ่มต้น
+    console.log('📖 Creating Episode 1...');
     const episode1 = await EpisodeModel.create({
       novelId: novel._id,
       authorId: author._id,
@@ -309,15 +173,8 @@ async function seedSpiritOfBangkokNovel() {
       status: 'published',
       accessType: 'free',
       teaserText: 'อริษาเดินทางมาถึงย่านเก่าของกรุงเทพฯ เพื่อเริ่มต้นงานวิจัย แต่เธอไม่รู้ว่าสิ่งที่รออยู่จะเปลี่ยนชีวิตเธอไปตลอดกาล',
-      stats: {
-        viewsCount: 15420,
-        uniqueViewersCount: 8900,
-        likesCount: 1250,
-        commentsCount: 340,
-        totalWords: 8500,
-        estimatedReadingTimeMinutes: 25
-      },
-      publishedAt: new Date('2024-01-15'),
+      stats: { viewsCount: 120, uniqueViewersCount: 80, likesCount: 45, commentsCount: 12, totalWords: 850, estimatedReadingTimeMinutes: 4 },
+      publishedAt: new Date(),
       lastContentUpdatedAt: new Date()
     });
 
@@ -327,460 +184,110 @@ async function seedSpiritOfBangkokNovel() {
       episodeId: episode1._id,
       sceneOrder: 1,
       title: 'ย่านเก่าในวันแรก',
-      background: {
-        type: 'image',
-        value: '/images/background/old_bangkok_street.png'
-      },
-      characters: [
-        {
-          instanceId: 'arisa_main',
-          characterId: characters.arisa._id,
-          expressionId: 'arisa_normal',
-          transform: {
-            positionX: 0,
-            positionY: 0,
-            scaleX: 1,
-            scaleY: 1,
-            opacity: 1
-          },
-          isVisible: true
-        }
-      ],
+      background: { type: 'image', value: '/images/background/old_bangkok_street.png' },
+      characters: [{ instanceId: 'arisa_main', characterId: characters.arisa._id, expressionId: 'arisa_normal', transform: { positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, opacity: 1 }, isVisible: true }],
       textContents: [
-        {
-          instanceId: 'text_001',
-          type: 'narration',
-          content: 'รถแท็กซี่สีเหลือง-เขียวคันเก่าแก่แล่นผ่านถนนลาดยางที่แคบ ข้างทางเต็มไปด้วยบ้านไม้โบราณที่ดูเหมือนจะเล่าเรื่องราวอันยาวนานได้',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#333333'
-        },
-        {
-          instanceId: 'text_002',
-          type: 'narration',
-          content: 'อริษามองออกไปนอกหน้าต่างด้วยความทึ่ง... นี่คือกรุงเทพฯ ที่เธอไม่เคยเห็นมาก่อน',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#333333'
-        },
-        {
-          instanceId: 'text_003',
-          type: 'dialogue',
-          characterId: characters.arisa._id,
-          speakerDisplayName: 'อริษา',
-          content: 'ลุงค่ะ ที่นี่คือย่านที่ยังไม่ถูกพัฒนาแบบที่ว่าใช่ไหม?',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'text_004',
-          type: 'dialogue',
-          speakerDisplayName: 'คนขับแท็กซี่',
-          content: 'ใช่แล้วลูก... ที่นี่เก่าแก่มาตั้งแต่สมัยรัชกาลที่ 5 แล้ว คนแถวนี้เขาไม่ค่อยอยากให้เปลี่ยนแปลงอะไร เพราะกลัวจะทำลายสิ่งที่เขาคุ้นเคย',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'text_005',
-          type: 'dialogue',
-          characterId: characters.arisa._id,
-          speakerDisplayName: 'อริษา',
-          content: '(ใจคิด) นั่นแหละที่ทำให้ที่นี่น่าสนใจ... ฉันสงสัยว่าจะมีเรื่องราวอะไรซ่อนอยู่บ้าง',
-          fontFamily: 'Sarabun',
-          fontSize: 16,
-          color: '#666666'
-        }
+        { instanceId: 'text_001', type: 'narration', content: 'รถแท็กซี่สีเหลือง-เขียวคันเก่าแก่แล่นผ่านถนนลาดยางที่แคบ ข้างทางเต็มไปด้วยบ้านไม้โบราณที่ดูเหมือนจะเล่าเรื่องราวอันยาวนานได้', fontFamily: 'Sarabun', fontSize: 18, color: '#333333' },
+        { instanceId: 'text_002', type: 'narration', content: 'อริษามองออกไปนอกหน้าต่างด้วยความทึ่ง... นี่คือกรุงเทพฯ ที่เธอไม่เคยเห็นมาก่อน', fontFamily: 'Sarabun', fontSize: 18, color: '#333333' },
+        { instanceId: 'text_003', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: 'ลุงคะ ที่นี่คือย่านที่ยังไม่ถูกพัฒนาแบบที่ว่าใช่ไหม?', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
+        { instanceId: 'text_004', type: 'dialogue', speakerDisplayName: 'คนขับแท็กซี่', content: 'ใช่แล้วลูก... ที่นี่เก่าแก่มาตั้งแต่สมัยรัชกาลที่ 5 แล้ว คนแถวนี้เขาไม่ค่อยอยากให้เปลี่ยนแปลงอะไร เพราะกลัวจะทำลายสิ่งที่เขาคุ้นเคย', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
+        { instanceId: 'text_005', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: '(ใจคิด) นั่นแหละที่ทำให้ที่นี่น่าสนใจ... ฉันสงสัยว่าจะมีเรื่องราวอะไรซ่อนอยู่บ้าง', fontFamily: 'Sarabun', fontSize: 16, color: '#666666' }
       ],
-      audios: [
-        {
-          instanceId: 'bgm_001',
-          type: 'background_music',
-          mediaId: 'old_bangkok_theme.mp3',
-          mediaSourceType: 'Media',
-          volume: 0.3,
-          loop: true
-        }
-      ],
-      defaultNextSceneId: null // จะใส่ scene ถัดไปภายหลัง
+      audios: [{ instanceId: 'bgm_001', type: 'background_music', mediaId: 'old_bangkok_theme.mp3', mediaSourceType: 'Media', volume: 0.3, loop: true }],
+      choicePrompt: 'เมื่อถึงที่หมาย อริษาควรจะ...'
     });
+    console.log('    ...Created Scene 1.1');
 
-    console.log('✅ Created first scene');
-
-    // สร้าง Choice สำหรับ scene แรก
+    // สร้าง Choice สำหรับ scene 1.1
     const choice1_1 = await ChoiceModel.create({
       novelId: novel._id,
       authorId: author._id,
       originStoryMapNodeId: scene1_1._id.toString(),
+      originNodeType: 'Scene',
       choiceCode: 'EP1_S1_CHOICE1',
       text: 'ลงจากแท็กซี่และเริ่มสำรวจย่านทันที',
       hoverText: 'อริษาตัดสินใจสำรวจบริเวณทันทีที่มาถึง',
-      actions: [
-        {
-          actionId: 'action_001',
-          type: 'GO_TO_NODE',
-          parameters: {
-            targetNodeId: 'scene_1_2_explore'
-          }
-        }
-      ],
+      actions: [{ actionId: 'action_001', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_explore' }}], // targetNodeId จะถูกแทนที่ด้วย ID จริง
       displayOrder: 1
     });
-
     const choice1_2 = await ChoiceModel.create({
       novelId: novel._id,
       authorId: author._id,
       originStoryMapNodeId: scene1_1._id.toString(),
+      originNodeType: 'Scene',
       choiceCode: 'EP1_S1_CHOICE2',
       text: 'ไปที่บ้านพักก่อนแล้วค่อยวางแผน',
       hoverText: 'เตรียมตัวให้พร้อมก่อนเริ่มงานวิจัย',
-      actions: [
-        {
-          actionId: 'action_002',
-          type: 'GO_TO_NODE',
-          parameters: {
-            targetNodeId: 'scene_1_2_rest'
-          }
-        }
-      ],
+      actions: [{ actionId: 'action_002', type: 'GO_TO_NODE', parameters: { targetNodeId: 'scene_1_2_rest' } }], // targetNodeId จะถูกแทนที่ด้วย ID จริง
       displayOrder: 2
     });
+    console.log('    ...Created Choices for Scene 1.1');
 
-    console.log('✅ Created choices for first scene');
-
-    // สร้าง Scene เพิ่มเติมสำหรับ Episode 1
-    
     // Scene 1.2a: เลือกสำรวจทันที
     const scene1_2a = await SceneModel.create({
-      novelId: novel._id,
-      episodeId: episode1._id,
-      sceneOrder: 2,
-      title: 'การสำรวจย่านเก่า',
-      background: {
-        type: 'image',
-        value: '/images/background/old_market_day.png'
-      },
-      characters: [
-        {
-          instanceId: 'arisa_exploring',
-          characterId: characters.arisa._id,
-          expressionId: 'arisa_normal',
-          transform: {
-            positionX: 0,
-            positionY: 0,
-            scaleX: 1,
-            scaleY: 1,
-            opacity: 1
-          },
-          isVisible: true
-        }
-      ],
+      novelId: novel._id, episodeId: episode1._id, sceneOrder: 2, title: 'การสำรวจย่านเก่า',
+      sceneCode: 'scene_1_2_explore', // เพิ่ม sceneCode เพื่อให้ choice อ้างอิงได้
+      background: { type: 'image', value: '/images/background/old_market_day.png' },
+      characters: [{ instanceId: 'arisa_exploring', characterId: characters.arisa._id, expressionId: 'arisa_normal', transform: { positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, opacity: 1 }, isVisible: true }],
       textContents: [
-        {
-          instanceId: 'explore_001',
-          type: 'narration',
-          content: 'อริษาเดินผ่านตลาดเก่าที่เต็มไปด้วยกลิ่นของอาหารไทยโบราณ เสียงของผู้คนที่พูดคุยกันด้วยสำเนียงกรุงเก่า และบรรยากาศที่เหมือนย้อนเวลากลับไปหลายสิบปี',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#333333'
-        },
-        {
-          instanceId: 'explore_002',
-          type: 'dialogue',
-          characterId: characters.arisa._id,
-          speakerDisplayName: 'อริษา',
-          content: '(ใจคิด) น่าแปลกจัง... ที่นี่ให้ความรู้สึกคุ้นเคยมากกว่าที่ควรจะเป็น แม้ว่าจะเป็นครั้งแรกที่มาก็ตาม',
-          fontFamily: 'Sarabun',
-          fontSize: 16,
-          color: '#666666'
-        },
-        {
-          instanceId: 'explore_003',
-          type: 'dialogue',
-          speakerDisplayName: 'คุณป้าขายผลไม้',
-          content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'explore_004',
-          type: 'dialogue',
-          characterId: characters.arisa._id,
-          speakerDisplayName: 'อริษา',
-          content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        }
+        { instanceId: 'explore_001', type: 'narration', content: 'อริษาเดินผ่านตลาดเก่าที่เต็มไปด้วยกลิ่นของอาหารไทยโบราณ เสียงของผู้คนที่พูดคุยกันด้วยสำเนียงกรุงเก่า และบรรยากาศที่เหมือนย้อนเวลากลับไปหลายสิบปี', fontFamily: 'Sarabun', fontSize: 18, color: '#333333' },
+        { instanceId: 'explore_003', type: 'dialogue', speakerDisplayName: 'คุณป้าขายผลไม้', content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
+        { instanceId: 'explore_004', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' }
       ],
-      audios: [
-        {
-          instanceId: 'market_ambience',
-          type: 'sound_effect',
-          mediaId: 'market_sounds.mp3',
-          mediaSourceType: 'Media',
-          volume: 0.2,
-          loop: true
-        }
-      ],
-      choicePrompt: 'อริษาควรทำอย่างไรต่อไป?',
-      defaultNextSceneId: null
+      audios: [{ instanceId: 'market_ambience', type: 'sound_effect', mediaId: 'market_sounds.mp3', mediaSourceType: 'Media', volume: 0.2, loop: true }],
     });
 
-    // Scene 1.3: การพบกับธนา
+    // Scene 1.2b: เลือกกลับไปพัก
+    const scene1_2b = await SceneModel.create({
+        novelId: novel._id, episodeId: episode1._id, sceneOrder: 2, title: 'เข้าที่พัก',
+        sceneCode: 'scene_1_2_rest', // เพิ่ม sceneCode
+        background: { type: 'image', value: '/images/background/guesthouse_room.png' },
+        textContents: [
+          { instanceId: 'rest_001', type: 'narration', content: 'อริษาตัดสินใจเข้าที่พักก่อนเพื่อเก็บของและตั้งหลัก เธอวางแผนการสำรวจบนแผนที่กระดาษใบเก่า พลางจิบชาอุ่นๆ', fontFamily: 'Sarabun', fontSize: 18, color: '#333333' },
+        ],
+    });
+
+    // อัปเดต Choice ให้ชี้ไปยัง Scene ที่ถูกต้อง
+    choice1_1.actions[0].parameters.targetNodeId = scene1_2a._id.toString();
+    await choice1_1.save();
+    choice1_2.actions[0].parameters.targetNodeId = scene1_2b._id.toString();
+    await choice1_2.save();
+
+
+    // Scene 1.3: การพบกับธนา (เป็นฉากที่ตามมาไม่ว่าเลือกทางไหน)
     const scene1_3 = await SceneModel.create({
-      novelId: novel._id,
-      episodeId: episode1._id,
-      sceneOrder: 3,
-      title: 'ช่างภาพลึกลับ',
-      background: {
-        type: 'image',
-        value: '/images/background/old_street_evening.png'
-      },
+      novelId: novel._id, episodeId: episode1._id, sceneOrder: 3, title: 'ช่างภาพลึกลับ',
+      background: { type: 'image', value: '/images/background/old_street_evening.png' },
       characters: [
-        {
-          instanceId: 'arisa_meeting',
-          characterId: characters.arisa._id,
-          expressionId: 'arisa_surprised',
-          transform: {
-            positionX: -0.3,
-            positionY: 0,
-            scaleX: 1,
-            scaleY: 1,
-            opacity: 1
-          },
-          isVisible: true
-        },
-        {
-          instanceId: 'thana_intro',
-          characterId: characters.thana._id,
-          expressionId: 'thana_normal',
-          transform: {
-            positionX: 0.3,
-            positionY: 0,
-            scaleX: 1,
-            scaleY: 1,
-            opacity: 1
-          },
-          isVisible: true
-        }
+        { instanceId: 'arisa_meeting', characterId: characters.arisa._id, expressionId: 'arisa_surprised', transform: { positionX: -0.3, positionY: 0, scaleX: 1, scaleY: 1, opacity: 1 }, isVisible: true },
+        { instanceId: 'thana_intro', characterId: characters.thana._id, expressionId: 'thana_normal', transform: { positionX: 0.3, positionY: 0, scaleX: 1, scaleY: 1, opacity: 1 }, isVisible: true }
       ],
       textContents: [
-        {
-          instanceId: 'meet_001',
-          type: 'narration',
-          content: 'ขณะที่อริษากำลังถ่ายรูปบ้านเก่าแก่ มีเสียงของชัตเตอร์กล้องดังขึ้นจากข้างหลัง เมื่อเธอหันไปมอง ก็พบกับชายหนุ่มที่ถือกล้องฟิล์มเก่า',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#333333'
-        },
-        {
-          instanceId: 'meet_002',
-          type: 'dialogue',
-          characterId: characters.thana._id,
-          speakerDisplayName: 'ธนา',
-          content: 'ขอโทษครับ ผมไม่ได้ตั้งใจจะแอบถ่าย แต่เห็นคุณถ่ายรูปบ้านหลังนั้น... คุณเห็นอะไรพิเศษมั้ย?',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'meet_003',
-          type: 'dialogue',
-          characterId: characters.arisa._id,
-          speakerDisplayName: 'อริษา',
-          content: 'เห็นอะไรพิเศษงั้นหรือคะ? ผมแค่คิดว่าสถาปัตยกรรมน่าสนใจดี... แล้วคุณล่ะ เห็นอะไรมั้ย?',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'meet_004',
-          type: 'dialogue',
-          characterId: characters.thana._id,
-          speakerDisplayName: 'ธนา',
-          content: '(มองไปที่บ้านแล้วกลับมามองอริษา) คุณ... เป็นคนพิเศษ ผมเดาว่าคุณมาที่นี่ไม่ใช่เพื่อท่องเที่ยวธรรมดา',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'meet_005',
-          type: 'dialogue',
-          characterId: characters.arisa._id,
-          speakerDisplayName: 'อริษา',
-          content: 'คุณพิเศษงั้นหรือคะ? ผมมาทำวิจัยเรื่องมรดกทางวัฒนธรรม... แต่คุณทำไมถึงบอกว่าผมพิเศษ?',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        },
-        {
-          instanceId: 'meet_006',
-          type: 'dialogue',
-          characterId: characters.thana._id,
-          speakerDisplayName: 'ธนา',
-          content: 'เพราะคุณเห็นใช่ไหม... เงาที่อยู่หน้าต่างชั้นสองของบ้านหลังนั้น',
-          fontFamily: 'Sarabun',
-          fontSize: 18,
-          color: '#4A4A4A'
-        }
+        { instanceId: 'meet_001', type: 'narration', content: 'ขณะที่อริษากำลังถ่ายรูปบ้านเก่าแก่ มีเสียงของชัตเตอร์กล้องดังขึ้นจากข้างหลัง เมื่อเธอหันไปมอง ก็พบกับชายหนุ่มที่ถือกล้องฟิล์มเก่า', fontFamily: 'Sarabun', fontSize: 18, color: '#333333' },
+        { instanceId: 'meet_002', type: 'dialogue', characterId: characters.thana._id, speakerDisplayName: 'ธนา', content: 'ขอโทษครับ ผมไม่ได้ตั้งใจจะแอบถ่าย แต่เห็นคุณถ่ายรูปบ้านหลังนั้น... คุณเห็นอะไรพิเศษมั้ย?', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
+        { instanceId: 'meet_006', type: 'dialogue', characterId: characters.thana._id, speakerDisplayName: 'ธนา', content: 'เพราะคุณเห็นใช่ไหม... เงาที่อยู่หน้าต่างชั้นสองของบ้านหลังนั้น', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' }
       ],
-      audios: [
-        {
-          instanceId: 'evening_mystery',
-          type: 'background_music',
-          mediaId: 'mysterious_encounter.mp3',
-          mediaSourceType: 'Media',
-          volume: 0.3,
-          loop: true
-        },
-        {
-          instanceId: 'camera_click',
-          type: 'sound_effect',
-          mediaId: 'camera_shutter.mp3',
-          mediaSourceType: 'Media',
-          volume: 0.5,
-          loop: false
-        }
-      ],
-      choicePrompt: 'ธนาพูดถึงเงาที่หน้าต่าง... อริษาจะตอบอย่างไร?',
-      defaultNextSceneId: null
+      choicePrompt: 'ธนาพูดถึงเงาที่หน้าต่าง... อริษาจะตอบอย่างไร?'
     });
+     // เชื่อม Scene ก่อนหน้าให้มาที่นี่
+    scene1_2a.defaultNextSceneId = scene1_3._id;
+    await scene1_2a.save();
+    scene1_2b.defaultNextSceneId = scene1_3._id;
+    await scene1_2b.save();
 
-    // เพิ่ม Choices เพิ่มเติม
-    const choice1_3_1 = await ChoiceModel.create({
-      novelId: novel._id,
-      authorId: author._id,
-      originStoryMapNodeId: scene1_3._id.toString(),
-      choiceCode: 'EP1_S3_CHOICE1',
-      text: 'ผมเห็น... และมันทำให้ผมกลัว',
-      hoverText: 'ยอมรับว่าเห็นสิ่งแปลกๆ และรู้สึกกลัว',
-      actions: [
-        {
-          actionId: 'action_003',
-          type: 'GO_TO_NODE',
-          parameters: {
-            targetNodeId: 'scene_1_4_scared'
-          }
-        },
-        {
-          actionId: 'action_004',
-          type: 'ADD_VARIABLE',
-          parameters: {
-            variableName: 'fear_level',
-            value: 1
-          }
-        }
-      ],
-      displayOrder: 1
-    });
+    console.log('    ...Created more scenes for Episode 1');
 
-    const choice1_3_2 = await ChoiceModel.create({
-      novelId: novel._id,
-      authorId: author._id,
-      originStoryMapNodeId: scene1_3._id.toString(),
-      choiceCode: 'EP1_S3_CHOICE2',
-      text: 'ผมไม่เห็นอะไรเลย คุณแหย่ผมเหรอ?',
-      hoverText: 'ปฏิเสธและคิดว่าธนากำลังล้อเล่น',
-      actions: [
-        {
-          actionId: 'action_005',
-          type: 'GO_TO_NODE',
-          parameters: {
-            targetNodeId: 'scene_1_4_deny'
-          }
-        },
-        {
-          actionId: 'action_006',
-          type: 'ADD_VARIABLE',
-          parameters: {
-            variableName: 'skepticism',
-            value: 1
-          }
-        }
-      ],
-      displayOrder: 2
-    });
-
-    const choice1_3_3 = await ChoiceModel.create({
-      novelId: novel._id,
-      authorId: author._id,
-      originStoryMapNodeId: scene1_3._id.toString(),
-      choiceCode: 'EP1_S3_CHOICE3',
-      text: 'ผมเห็น... และอยากรู้มากขึ้น',
-      hoverText: 'ยอมรับว่าเห็นและแสดงความสนใจที่จะเรียนรู้',
-      actions: [
-        {
-          actionId: 'action_007',
-          type: 'GO_TO_NODE',
-          parameters: {
-            targetNodeId: 'scene_1_4_curious'
-          }
-        },
-        {
-          actionId: 'action_008',
-          type: 'ADD_VARIABLE',
-          parameters: {
-            variableName: 'curiosity_level',
-            value: 2
-          }
-        },
-        {
-          actionId: 'action_009',
-          type: 'UNLOCK_CHARACTER',
-          parameters: {
-            characterId: characters.thana._id.toString()
-          }
-        }
-      ],
-      displayOrder: 3
-    });
 
     // Episode 2
+    console.log('📖 Creating Episode 2...');
     const episode2 = await EpisodeModel.create({
-      novelId: novel._id,
-      authorId: author._id,
-      title: 'การพบกับธนา',
-      episodeOrder: 2,
-      status: 'published',
-      accessType: 'free',
-      teaserText: 'อริษาได้พบกับธนา ช่างภาพลึกลับที่ดูเหมือนจะรู้เรื่องเก่าแก่ของย่านนี้มากกว่าที่คิด',
-      stats: {
-        viewsCount: 12350,
-        uniqueViewersCount: 7200,
-        likesCount: 980,
-        commentsCount: 280,
-        totalWords: 9200,
-        estimatedReadingTimeMinutes: 28
-      },
-      publishedAt: new Date('2024-01-22'),
-      lastContentUpdatedAt: new Date()
-    });
-
-    // Episode 3
-    const episode3 = await EpisodeModel.create({
-      novelId: novel._id,
-      authorId: author._id,
-      title: 'ความลับของยายนิ่ม',
-      episodeOrder: 3,
-      status: 'published',
-      accessType: 'ad_supported_free',
+      novelId: novel._id, authorId: author._id, title: 'ความลับของยายนิ่ม', episodeOrder: 2, status: 'published', accessType: 'ad_supported_free',
       teaserText: 'ยายนิ่มเล่าเรื่องราวลึกลับเกี่ยวกับวิญญาณเมืองกรุง และอริษาเริ่มเข้าใจว่าเธอมาถูกที่แล้ว',
-      stats: {
-        viewsCount: 10800,
-        uniqueViewersCount: 6100,
-        likesCount: 850,
-        commentsCount: 220,
-        totalWords: 8800,
-        estimatedReadingTimeMinutes: 26
-      },
-      publishedAt: new Date('2024-01-29'),
-      lastContentUpdatedAt: new Date()
+      stats: { viewsCount: 95, uniqueViewersCount: 60, likesCount: 30, commentsCount: 8, totalWords: 920, estimatedReadingTimeMinutes: 4 },
+      publishedAt: new Date(), lastContentUpdatedAt: new Date()
     });
 
-    episodes.push(episode1, episode2, episode3);
+    episodes.push(episode1, episode2);
 
     // อัปเดต firstSceneId ของ episode1
     episode1.firstSceneId = scene1_1._id;
@@ -788,51 +295,55 @@ async function seedSpiritOfBangkokNovel() {
 
     console.log(`✅ Created ${episodes.length} episodes`);
 
-    // อัปเดตสถิตินิยาย
+    // ==================================================================================================
+    // SECTION 5: อัปเดตข้อมูลสรุปของนิยาย
+    // ==================================================================================================
+    // คำนวณค่าสถิติใหม่จากตอนที่สร้างขึ้น
+    const totalWords = episodes.reduce((sum, ep) => sum + (ep.stats?.totalWords || 0), 0);
+    const totalEstimatedReadingTime = episodes.reduce((sum, ep) => sum + (ep.stats?.estimatedReadingTimeMinutes || 0), 0);
+
+    // อัปเดตข้อมูลใน Novel หลัก
     await NovelModel.findByIdAndUpdate(novel._id, {
       firstEpisodeId: episode1._id,
-      'stats.totalWords': episodes.reduce((sum, ep) => sum + (ep.stats?.totalWords || 0), 0),
-      'stats.estimatedReadingTimeMinutes': episodes.reduce((sum, ep) => sum + (ep.stats?.estimatedReadingTimeMinutes || 0), 0)
+      // เพิ่มจำนวนตอนที่สร้างเข้าไปในจำนวนที่มีอยู่แล้ว
+      $inc: {
+          totalEpisodesCount: episodes.length,
+          publishedEpisodesCount: episodes.filter(ep => ep.status === 'published').length,
+          'stats.totalWords': totalWords,
+          'stats.estimatedReadingTimeMinutes': totalEstimatedReadingTime
+      },
+      lastContentUpdatedAt: new Date()
     });
 
-    console.log('🎉 Successfully seeded "วิญญาณเมืองกรุง" Visual Novel!');
+    console.log('✅ Updated novel stats.');
+
+    console.log(`🎉 Successfully seeded content for "${NOVEL_TITLE}"!`);
     console.log('📊 Summary:');
     console.log(`- Novel: ${novel.title}`);
-    console.log(`- Author: ${author.profile.displayName}`);
-    console.log(`- Characters: ${Object.keys(characters).length}`);
-    console.log(`- Episodes: ${episodes.length}`);
-    console.log(`- Scenes: 1 (with more to be added)`);
-    console.log(`- Choices: 2`);
+    console.log(`- Author: ${author.username}`);
+    console.log(`- Characters Created: ${Object.keys(characters).length}`);
+    console.log(`- Episodes Created: ${episodes.length}`);
     console.log(`\n🔗 Access URLs:`);
     console.log(`- Novel Page: /novels/${novel.slug}`);
-    console.log(`- Read Episode 1: /novels/${novel.slug}/read/${episode1._id}`);
-
-    return {
-      novel,
-      author,
-      characters,
-      episodes,
-      scenes: [scene1_1],
-      choices: [choice1_1, choice1_2]
-    };
+    console.log(`- Read Episode 1: /read/${novel.slug}/${episode1._id}`);
 
   } catch (error) {
-    console.error('❌ Error seeding novel:', error);
+    console.error('❌ Error seeding novel content:', error);
     throw error;
   }
 }
 
 // Execute seeding
 if (require.main === module) {
-  seedSpiritOfBangkokNovel()
+  seedSpiritOfBangkokContent()
     .then(() => {
-      console.log('✅ Seeding completed successfully');
+      console.log('✅ Seeding completed successfully.');
       process.exit(0);
     })
     .catch((error) => {
-      console.error('❌ Seeding failed:', error);
+      console.error('❌ Seeding failed:', error.message);
       process.exit(1);
     });
 }
 
-export default seedSpiritOfBangkokNovel; 
+export default seedSpiritOfBangkokContent;
