@@ -319,7 +319,7 @@ function NovelRow({
             />
           </div>
         ))}
-
+        {/*}
         {showViewAllButton && (
           <div className={`novel-card-item ${cardWidthClasses} flex items-center justify-center`}>
             <Link
@@ -336,7 +336,7 @@ function NovelRow({
               </div>
             </Link>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );
@@ -400,31 +400,31 @@ export default async function HomePage() {
       id: "vn-discovery-slide",
       title: "โลกใบใหม่ใน Visual Novel",
       description: "ทุกการตัดสินใจของคุณ กำหนดเรื่องราวและปลายทางที่แตกต่าง ค้นหามหากาพย์ที่คุณเป็นผู้ลิขิต",
-      imageUrl: "https://res.cloudinary.com/dr0ao4k6a/image/upload/v1724012744/cld-sample-5.jpg",
-      link: "https://res.cloudinary.com/dr0ao4k6a/image/upload/v1724012744/cld-sample-5.jpg",
+      imageUrl: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571042/RPReplay_Final1660530696_xdfsau.gif",
+      link: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571042/RPReplay_Final1660530696_xdfsau.gif",
       category: "Visual Novels",
       highlightColor: "var(--color-primary)",
-      primaryAction: { label: "สำรวจวิชวลโนเวล", href: "https://res.cloudinary.com/dr0ao4k6a/image/upload/v1724012744/cld-sample-5.jpg" },
+      primaryAction: { label: "สำรวจวิชวลโนเวล", href: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571042/RPReplay_Final1660530696_xdfsau.gif" },
     },
     {
       id: "epic-adventure-awaits",
-      title: "ตำนานรักข้ามภพ",
-      description: "โชคชะตา ความรัก และการผจญภัยครั้งยิ่งใหญ่ในดินแดนที่ไม่เคยหลับใหล รอคุณมาสัมผัส",
-      imageUrl: "/images/featured/banner-fantasy-romance.webp",
-      link: "/novels/love-across-dimensions",
-      category: "โรแมนติกแฟนตาซี",
+      title: "สรรค์สร้างโลกนิยาย ดั่งใจนึก",
+      description: "เปลี่ยนพล็อตเรื่องในหัวของคุณให้กลายเป็นจริง ด้วยระบบที่ใช้งานง่ายและรวดเร็ว ไม่จำเป็นต้องมีพื้นฐานด้านเทคนิค ก็สร้างสรรค์ผลงานได้ดั่งมืออาชีพ",
+      imageUrl: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571038/767725075.680000_mffzzx.gif",
+      link: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571038/767725075.680000_mffzzx.gif",
+      category: "Visual Novels",
       highlightColor: "#ec4899",
-      primaryAction: { label: "อ่านตำนานรัก", href: "/novels/love-across-dimensions" },
+      primaryAction: { label: "สำรวจวิชวลโนเวล", href: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571038/767725075.680000_mffzzx.gif" },
     },
     {
       id: "author-spotlight-promo",
-      title: "นักเขียนไฟแรง สร้างสรรค์ไม่หยุด",
-      description: "พบกับผลงานล่าสุดจากนักเขียนดาวรุ่งที่กำลังมาแรงที่สุดใน NovelMaze คัดสรรมาเพื่อคุณโดยเฉพาะ",
-      imageUrl: "/images/featured/banner-new-authors.webp",
-      link: "/authors",
+      title: "The Chosen One",
+      description: "หากต้องเลือกช่วยชีวิตเพียงหนึ่งเดียว คุณจะเลือกใคร",
+      imageUrl: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751572113/train_jbodrw.png",
+      link: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751572113/train_jbodrw.png",
       category: "นักเขียนยอดนิยม",
       highlightColor: "#14b8a6",
-      primaryAction: { label: "ค้นหานักเขียน", href: "/authors" },
+      primaryAction: { label: "ค้นหานักเขียน", href: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751572113/train_jbodrw.png" },
     },
   ];
 
@@ -470,13 +470,13 @@ export default async function HomePage() {
   console.log('✅ [HomePage Server] Homepage setup complete, starting render...');
 
   return (
-    <div className="bg-background text-foreground min-h-screen">
+    <div className="bg-background text-foreground min-h-screen pt-5">
       <main className="pb-10 md:pb-16">
         {/* แสดง ImageSlider ทันทีโดยไม่ต้องรอ API */}
         <section className="w-full mb-8 md:mb-12 relative">
           <ImageSlider slides={imageSlideData} autoPlayInterval={7000} />
-          {/* ✅ [เพิ่มใหม่] พื้นที่พื้นหลังด้านล่าง banner เพื่อเพิ่มระยะห่างจาก component นิยาย */}
-          <div className="h-4 md:h-6 bg-background"></div>
+          {/* เพิ่มเส้น border ใต้ slide bar */}
+          <div className="h-4 md:h-6 bg-background mt-1 border-b border-border"></div>
         </section>
 
         <div className="container-custom space-y-8 md:space-y-12">

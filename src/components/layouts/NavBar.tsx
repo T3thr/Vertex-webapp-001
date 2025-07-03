@@ -314,8 +314,8 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
   // ลบ navBarDynamicClasses ออก เพราะ AuthModal จะจัดการ backdrop ของตัวเอง
   const navBarBaseClasses = `sticky top-0 z-30 w-full transition-all duration-300 border-b`; // ลด z-index ของ NavBar ลงเล็กน้อย
   const navBarScrollClasses = isScrolled
-      ? "bg-background/80 shadow-md backdrop-blur-md border-border/30" // ใช้สี background และ border จาก theme
-      : "bg-background border-transparent"; // กรณีไม่ได้ scroll
+      ? "bg-background/80 shadow-md backdrop-blur-md border-border" // เพิ่มเส้น border ชัดเจนขึ้น (ลบ /30)
+      : "bg-background border-border"; // เพิ่มเส้น border ให้แสดงตลอดเวลา
 
   return (
     <>
