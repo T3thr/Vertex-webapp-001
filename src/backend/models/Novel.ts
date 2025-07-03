@@ -218,6 +218,7 @@ const TrendingStatsSchema = new Schema<ITrendingStats>(
  * @property {number} averageRating - คะแนนเฉลี่ย **(อัปเดตจาก BoardModel ประเภท 'review')**
  */
 export interface INovelStats {
+  totalRevenueCoins: number;
   viewsCount: number; // ยอดเข้าชมทั้งหมด
   uniqueViewersCount: number; // จำนวนผู้อ่านที่ไม่ซ้ำกัน (อาจใช้สำหรับ totalReads ใน writerStats)
   likesCount: number; // จำนวนไลค์ทั้งหมด

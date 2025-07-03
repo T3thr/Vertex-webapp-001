@@ -69,7 +69,6 @@ export enum EpisodeAccessType {
  * @property {number} dropOffRate - อัตราการหยุดอ่านกลางคันสำหรับตอนนี้ (ถ้ามีการเก็บข้อมูล)
  */
 export interface IEpisodeStats {
-  [x: string]: number | undefined; 
   viewsCount: number;
   uniqueViewersCount: number;
   likesCount: number;
