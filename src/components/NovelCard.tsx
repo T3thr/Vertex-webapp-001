@@ -205,7 +205,7 @@ export const NovelCard = memo(function NovelCard({
       role="article"
       aria-labelledby={`novel-title-${novel._id}`}
       style={{ 
-        marginBottom: variant === 'default' ? '0.75rem' : '0' // ✅ [เฉพาะ default variant] ให้มี margin
+        marginBottom: variant === 'default' && !className?.includes('m-0') ? '0.75rem' : '0' // ✅ [เฉพาะ default variant และไม่มี m-0] ให้มี margin
       }}
     >
       {/* ลิงก์ไปยังหน้าเรื่องโดยใช้ slug ที่เข้ารหัส */}

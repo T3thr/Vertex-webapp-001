@@ -224,7 +224,7 @@ function FeaturedSection({ novels, viewAllLink, showViewAllButton }: {
             novel={mainNovel}
             priority={true}
             variant="large"
-            className="novel-card h-full w-full" /* ✅ [เพิ่ม w-full] เพื่อให้ยืดเต็มพื้นที่ใน mobile */
+            className="novel-card h-full w-full !m-0" /* ✅ [เพิ่ม !m-0] เพื่อลบ margin ทั้งหมดโดย override inline style */
           />
         </div>
 
@@ -237,26 +237,27 @@ function FeaturedSection({ novels, viewAllLink, showViewAllButton }: {
               novel={novel}
               priority={true}
               variant="featured" /* ✅ [แก้ไขจาก default เป็น featured] เพื่อให้ใช้ขนาดที่เหมาะสม */
-              className="novel-card h-full w-full" /* ✅ [เพิ่ม w-full] เพื่อให้ยืดเต็มพื้นที่ grid cell */
+              className="novel-card h-full w-full !m-0" /* ✅ [เพิ่ม !m-0] เพื่อลบ margin ทั้งหมดโดย override inline style */
             />
           ))}
           
           {/* ✅ [ปรับใหม่] ปุ่มดูเพิ่มเติมอยู่ใต้ grid แบบสมมาตร */}
-          {showViewAllButton && (
+          {/* ปิดการแสดงปุ่ม "ดูเพิ่ม" ชั่วคราว
+            {showViewAllButton && (
             <div className="view-more-button-container">
               <Link
                 href={viewAllLink}
-                className="view-more-circle" /* ✅ [ลบ gpu-accelerated hover-lift] เพื่อความเร็ว */
+                className="view-more-circle"
                 role="link"
                 aria-label="ดูนิยายทั้งหมดในหมวดผลงานยอดนิยม"
               >
                 <div className="view-more-content">
                   <ArrowRightCircle size={14} strokeWidth={1.5} className="text-primary mb-0.5" />
-                  <span className="text-[8px] sm:text-[9px] font-medium text-primary">ดูเพิ่ม</span> {/* ✅ [ปรับปรุง] responsive text size */}
+                  <span className="text-[8px] sm:text-[9px] font-medium text-primary">ดูเพิ่ม</span>
                 </div>
               </Link>
             </div>
-          )}
+          )} */}
         </div>
       </div>
     </div>

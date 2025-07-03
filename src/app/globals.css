@@ -248,21 +248,21 @@ body {
   max-width: var(--size-container-max-width); /* ใช้ตัวแปรจาก @theme */
   margin-left: auto;
   margin-right: auto;
-  padding-left: var(--spacing-container-padding); /* ใช้ตัวแปรจาก @theme */
-  padding-right: var(--spacing-container-padding);
+  padding-left: 3rem; /* เพิ่ม padding จาก 1rem เป็น 2rem */
+  padding-right: 3rem;
 }
 
 @media (min-width: 640px) { /* sm breakpoint (Tailwind default) */
   .container-custom {
-    padding-left: var(--spacing-container-padding-sm);
-    padding-right: var(--spacing-container-padding-sm);
+    padding-left: 4rem; /* เพิ่ม padding จาก 1.5rem เป็น 3rem */
+    padding-right: 4rem;
   }
 }
 
 @media (min-width: 1024px) { /* lg breakpoint (Tailwind default) */
   .container-custom {
-    padding-left: var(--spacing-container-padding-lg);
-    padding-right: var(--spacing-container-padding-lg);
+    padding-left: 5rem; /* เพิ่ม padding จาก 2rem เป็น 4rem */
+    padding-right: 5rem;
   }
 }
 
@@ -524,25 +524,12 @@ html[data-theme-ready="true"] {
 
 /* Custom horizontal scrollbar for novel rows */
 .custom-scrollbar-horizontal {
-  scrollbar-width: thin;
-  scrollbar-color: var(--primary) transparent;
+  scrollbar-width: none; /* ซ่อน scrollbar ใน Firefox */
+  -ms-overflow-style: none; /* ซ่อน scrollbar ใน IE/Edge */
 }
 
 .custom-scrollbar-horizontal::-webkit-scrollbar {
-  height: 4px;
-}
-
-.custom-scrollbar-horizontal::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar-horizontal::-webkit-scrollbar-thumb {
-  background-color: var(--primary);
-  border-radius: var(--border-radius-full);
-}
-
-.custom-scrollbar-horizontal::-webkit-scrollbar-thumb:hover {
-  background-color: var(--primary-hover);
+  display: none; /* ซ่อน scrollbar ใน Chrome, Safari, และ Opera */
 }
 
 .novel-row-nav-button {
@@ -675,30 +662,31 @@ html[data-theme-ready="true"] {
 /* Asymmetrical Grid Utilities - ✅ [ปรับปรุงให้การ์ด grid เท่ากับ section อื่น] สำหรับ section แรก */
 .featured-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr; /* ✅ สัดส่วน 2:1 (ซ้าย:ขวา) */
-  gap: 0.75rem; /* ✅ [ลดจาก 1rem เป็น 0.75rem] ลดระยะห่างระหว่างซ้าย-ขวาให้ใกล้ชิด */
+  grid-template-columns: 3fr 2fr; /* ✅ [เปลี่ยนจาก 1fr 1fr เป็น 3fr 2fr] สัดส่วน 60%:40% ตามรูปตัวอย่าง */
+  gap: 0rem; /* ✅ [ลดจาก 0.5rem เป็น 0.25rem] ลดระยะห่างให้แคบมากๆ ตามที่ขอ */
   align-items: stretch;
-  justify-content: center;
-  max-width: 800px;
-  margin: 0 auto;
-  min-height: 300px; /* ✅ [เพิ่มจาก 280px เป็น 300px] เพิ่มความสูงให้การ์ดหลักสูงขึ้นเล็กน้อย */
-  padding: 0 1rem;
+  justify-content: space-between; /* ✅ [เปลี่ยนจาก flex-start เป็น space-between] ให้ชิดขอบทั้งสองข้าง */
+  max-width: 100%; /* ✅ [เปลี่ยนจาก 800px เป็น 100%] ให้ใช้พื้นที่เต็มที่ */
+  margin: 0; /* ✅ [เปลี่ยนจาก margin-left: 0, margin-right: auto เป็น margin: 0] */
+  min-height: 400px; /* ✅ [เพิ่มจาก 300px เป็น 400px] เพิ่มความสูงให้เหมือนในรูป */
+  padding: 0; /* ✅ [เปลี่ยนจาก 0 1rem 0 0 เป็น 0] ลบ padding ทั้งหมดเพื่อให้ชิดขอบ */
 }
 
 .featured-main {
   grid-column: 1 / 2;
   display: flex;
   align-items: stretch;
+  justify-content: flex-start; /* ✅ [เพิ่มใหม่] ให้การ์ดหลักชิดซ้าย */
   height: 100%;
 }
 
 .featured-main .novel-card {
   width: 100%;
   height: 100%;
-  min-width: 280px;
-  min-height: 300px; /* ✅ [เพิ่มจาก 280px เป็น 300px] เพิ่มความสูงการ์ดหลักเล็กน้อย */
-  max-width: 380px;
-  max-height: 370px; /* ✅ [เพิ่มจาก 350px เป็น 370px] เพิ่มความสูงสูงสุด */
+  min-width: 450px; /* ✅ [เพิ่มจาก 280px เป็น 350px] ให้การ์ดหลักใหญ่ขึ้นตามรูป */
+  min-height: 400px; /* ✅ [เพิ่มจาก 300px เป็น 400px] เพิ่มความสูงให้เหมือนรูป */
+  max-width: 650px; /* ✅ [เพิ่มจาก 380px เป็น 500px] ขยายขนาดสูงสุด */
+  max-height: 450px; /* ✅ [เพิ่มจาก 370px เป็น 450px] เพิ่มความสูงสูงสุด */
 }
 
 .featured-side {
@@ -706,9 +694,10 @@ html[data-theme-ready="true"] {
   display: grid;
   grid-template-columns: 1fr 1fr; /* ✅ Grid 2x2 */
   grid-template-rows: 1fr 1fr;
-  gap: 0.5rem; /* ✅ [ลดจาก 0.75rem เป็น 0.5rem] ให้การ์ดใกล้ชิดกันมากขึ้น */
+  gap: 0.75rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.75rem] เพิ่มระยะห่างเล็กน้อยให้เหมือนรูป */
   height: 100%;
   align-items: stretch;
+  justify-content: end; /* ✅ [เพิ่มใหม่] ให้การ์ดฝั่งขวาชิดขวา */
   position: relative; /* ✅ [เพิ่มใหม่] สำหรับจัดตำแหน่งปุ่มดูเพิ่มเติม */
 }
 
@@ -716,11 +705,11 @@ html[data-theme-ready="true"] {
 .featured-side .novel-card {
   width: 100%;
   height: 100%;
-  /* ✅ ใช้ขนาดเดียวกับการ์ด default ปกติทุกประการ */
-  min-width: 160px; /* ✅ [เพิ่มจาก 140px เป็น 160px] ตรงกับ default wrapper ใหม่ */
-  max-width: 190px; /* ✅ [เพิ่มจาก 170px เป็น 190px] ตรงกับ default wrapper ใหม่ */
-  min-height: 200px; /* ✅ [เพิ่มจาก 180px เป็น 200px] ให้สูงพอสำหรับเนื้อหาครบถ้วน */
-  max-height: 240px; /* ✅ [เพิ่มจาก 220px เป็น 240px] */
+  /* ✅ ปรับขนาดให้เหมาะสมกับสัดส่วนใหม่ */
+  min-width: 160px; /* ✅ [เพิ่มจาก 140px เป็น 160px] เพิ่มความกว้างตามที่ขอ */
+  max-width: 220px; /* ✅ [เพิ่มจาก 180px เป็น 220px] เพิ่มความกว้างสูงสุด */
+  min-height: 180px; /* ✅ [คงเดิม] คงความสูงเท่าเดิมตามที่ขอ */
+  max-height: 220px; /* ✅ [คงเดิม] คงความสูงเท่าเดิมตามที่ขอ */
 }
 
 /* ✅ [ปรับใหม่] ปุ่มดูเพิ่มเติมให้อยู่ใต้ grid 2x2 แบบสมมาตร */
@@ -746,9 +735,9 @@ html[data-theme-ready="true"] {
 /* Responsive Design สำหรับ Featured Grid */
 @media (max-width: 1024px) {
   .featured-grid {
-    max-width: 95vw;
+    max-width: 100%; /* ✅ [เปลี่ยนจาก 95vw เป็น 100%] ให้ใช้พื้นที่เต็มที่ */
     gap: 0.625rem; /* ✅ [ลดจาก 0.875rem] ให้เหมาะสมกับหน้าจอเล็ก */
-    padding: 0 0.5rem;
+    padding: 0; /* ✅ [เปลี่ยนจาก 0 0.5rem 0 0 เป็น 0] ลบ padding เพื่อให้ชิดขอบ */
     min-height: 320px; /* ✅ [เพิ่มจาก 280px เป็น 320px] เพิ่มความสูงใน tablet เพื่อรายละเอียดชัดเจนขึ้น */
   }
   
@@ -789,7 +778,7 @@ html[data-theme-ready="true"] {
   
   .featured-main {
     width: 100%;
-    justify-content: center;
+    justify-content: flex-start; /* ✅ [เปลี่ยนจาก center เป็น flex-start] ให้ชิดซ้ายใน mobile */
   }
   
   .featured-main .novel-card {
@@ -810,7 +799,7 @@ html[data-theme-ready="true"] {
     gap: 0.75rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.75rem] เพิ่มระยะห่างเพื่อไม่ให้ชิดเกินไป */
     width: 100%;
     max-width: 450px; /* ✅ [เพิ่มจาก 400px เป็น 450px] ขยายความกว้างสำหรับการ์ดที่ใหญ่ขึ้น */
-    margin: 0 auto 3.5rem auto; /* ✅ [เพิ่ม margin-bottom] สำหรับปุ่มดูเพิ่มเติม */
+    margin: 0 auto 3.5rem 0; /* ✅ [เปลี่ยนจาก 0 auto 3.5rem auto เป็น 0 auto 3.5rem 0] ให้ชิดซ้าย */
     position: relative;
   }
   
@@ -836,7 +825,7 @@ html[data-theme-ready="true"] {
 @media (max-width: 480px) {
   .featured-grid {
     gap: 1.25rem; /* ✅ [เพิ่มจาก 0.75rem เป็น 1.25rem] เพิ่มระยะห่าง */
-    padding: 0 0.5rem; /* ✅ [เพิ่มใหม่] padding เล็กน้อยใน small mobile */
+    padding: 0; /* ✅ [เปลี่ยนจาก 0 0.5rem 0 0 เป็น 0] ลบ padding เพื่อให้ชิดขอบ */
   }
   
   .featured-main .novel-card {
@@ -849,7 +838,7 @@ html[data-theme-ready="true"] {
   
   .featured-side {
     gap: 0.625rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.625rem] */
-    margin-bottom: 3rem; /* ✅ [เพิ่มจาก 2.5rem เป็น 3rem] ปรับ margin-bottom */
+    margin: 0 auto 3rem 0; /* ✅ [เปลี่ยนจาก margin-bottom: 3rem เป็น margin: 0 auto 3rem 0] ให้ชิดซ้าย */
     max-width: 400px; /* ✅ [เพิ่มใหม่] จำกัดความกว้างใน small mobile */
   }
   
