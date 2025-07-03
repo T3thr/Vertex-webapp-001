@@ -1,7 +1,7 @@
 // src/scripts/seed-novel-read.ts
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
 // REVISED: เปลี่ยนจากการสร้างตัวละครด้วย insertMany เป็นการทำ Upsert (Update or Insert) ด้วย findOneAndUpdate
-// เพื่อป้องกันปัญหา E11000 duplicate key error อย่างถาวร
+// FIXED: แก้ไขค่า enum ของ audio type จาก 'sound_effect' เป็น 'audio_effect' ให้ตรงกับ SceneModel
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -49,7 +49,6 @@ async function seedSpiritOfBangkokContent() {
     // SECTION 2: ล้างข้อมูลเนื้อหาเก่าของนิยายเรื่องนี้
     // ==================================================================================================
     console.log(`🧹 Cleaning up old content for novel ID: ${novel._id}...`);
-    // การลบยังคงมีประโยชน์เพื่อจัดการกับข้อมูลที่อาจถูกลบออกจาก seed script ในอนาคต
     await EpisodeModel.deleteMany({ novelId: novel._id });
     await CharacterModel.deleteMany({ novelId: novel._id });
     await SceneModel.deleteMany({ novelId: novel._id });
@@ -58,7 +57,7 @@ async function seedSpiritOfBangkokContent() {
 
 
     // ==================================================================================================
-    // SECTION 3: สร้างหรืออัปเดตตัวละคร (Characters) ด้วยวิธี Upsert (ปรับปรุงใหม่)
+    // SECTION 3: สร้างหรืออัปเดตตัวละคร (Characters) ด้วยวิธี Upsert
     // ==================================================================================================
     console.log('👥 Upserting character data...');
 
@@ -130,7 +129,7 @@ async function seedSpiritOfBangkokContent() {
 
 
     // ==================================================================================================
-    // SECTION 4: สร้าง Episodes, Scenes, และ Choices (ส่วนนี้ยังใช้ create ได้ตามปกติเพราะถูกลบไปแล้ว)
+    // SECTION 4: สร้าง Episodes, Scenes, และ Choices
     // ==================================================================================================
     const episodes = [];
 
@@ -205,7 +204,8 @@ async function seedSpiritOfBangkokContent() {
         { instanceId: 'explore_003', type: 'dialogue', speakerDisplayName: 'คุณป้าขายผลไม้', content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' },
         { instanceId: 'explore_004', type: 'dialogue', characterId: characters.arisa._id, speakerDisplayName: 'อริษา', content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ', fontFamily: 'Sarabun', fontSize: 18, color: '#4A4A4A' }
       ],
-      audios: [{ instanceId: 'market_ambience', type: 'sound_effect', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.2, loop: true }],
+      // FIXED: เปลี่ยน 'sound_effect' เป็น 'audio_effect' ให้ตรงกับ Schema
+      audios: [{ instanceId: 'market_ambience', type: 'audio_effect', mediaId: new Types.ObjectId(), mediaSourceType: 'Media', volume: 0.2, loop: true }],
     });
 
     // Scene 1.2b: เลือกกลับไปพัก
