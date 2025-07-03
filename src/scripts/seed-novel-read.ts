@@ -1,7 +1,7 @@
 // src/scripts/seed-novel-read.ts
 // Seed script สำหรับนิยาย "วิญญาณเมืองกรุง" - Visual Novel แนวสยองขวัญแฟนตาซี
-// REVISED: สคริปต์นี้ถูกปรับปรุงให้ทำงานร่วมกับ admin-seed.ts และ novel-seed.ts
-// FIXED: เปลี่ยนวิธีการสร้างตัวละครเป็นแบบ insertMany เพื่อความเสถียรและป้องกัน E11000 duplicate key error
+// REVISED: เปลี่ยนจากการสร้างตัวละครด้วย insertMany เป็นการทำ Upsert (Update or Insert) ด้วย findOneAndUpdate
+// เพื่อป้องกันปัญหา E11000 duplicate key error อย่างถาวร
 
 import dbConnect from '@/backend/lib/mongodb';
 import UserModel from '@/backend/models/User';
@@ -49,6 +49,7 @@ async function seedSpiritOfBangkokContent() {
     // SECTION 2: ล้างข้อมูลเนื้อหาเก่าของนิยายเรื่องนี้
     // ==================================================================================================
     console.log(`🧹 Cleaning up old content for novel ID: ${novel._id}...`);
+    // การลบยังคงมีประโยชน์เพื่อจัดการกับข้อมูลที่อาจถูกลบออกจาก seed script ในอนาคต
     await EpisodeModel.deleteMany({ novelId: novel._id });
     await CharacterModel.deleteMany({ novelId: novel._id });
     await SceneModel.deleteMany({ novelId: novel._id });
@@ -57,9 +58,9 @@ async function seedSpiritOfBangkokContent() {
 
 
     // ==================================================================================================
-    // SECTION 3: สร้างตัวละคร (Characters) สำหรับนิยายเรื่องนี้ (ปรับปรุงใหม่)
+    // SECTION 3: สร้างหรืออัปเดตตัวละคร (Characters) ด้วยวิธี Upsert (ปรับปรุงใหม่)
     // ==================================================================================================
-    console.log('👥 Preparing character data...');
+    console.log('👥 Upserting character data...');
 
     const characterData = [
         {
@@ -107,22 +108,29 @@ async function seedSpiritOfBangkokContent() {
         }
     ];
 
-    console.log(`Inserting ${characterData.length} characters...`);
-    const insertedCharacters = await CharacterModel.insertMany(characterData);
+    const upsertPromises = characterData.map(charData =>
+        CharacterModel.findOneAndUpdate(
+            { novelId: charData.novelId, characterCode: charData.characterCode }, // เงื่อนไขในการค้นหา
+            charData, // ข้อมูลที่จะใส่/อัปเดต
+            { upsert: true, new: true, runValidators: true } // Options: upsert คือหัวใจสำคัญ
+        )
+    );
 
-    // สร้าง Object characters ขึ้นมาใหม่เพื่อให้โค้ดส่วนที่เหลือทำงานได้
+    const upsertedCharacters = await Promise.all(upsertPromises);
+
     const characters: { [key: string]: any } = {};
-    insertedCharacters.forEach(char => {
+    upsertedCharacters.forEach(char => {
         if (char.characterCode === 'ARISA_001') characters.arisa = char;
         if (char.characterCode === 'THANA_001') characters.thana = char;
         if (char.characterCode === 'GRANNY_001') characters.granny_nim = char;
         if (char.characterCode === 'SPIRIT_001') characters.spirit = char;
     });
 
-    console.log('✅ Created characters successfully.');
+    console.log(`✅ Upserted ${upsertedCharacters.length} characters successfully.`);
+
 
     // ==================================================================================================
-    // SECTION 4: สร้าง Episodes, Scenes, และ Choices
+    // SECTION 4: สร้าง Episodes, Scenes, และ Choices (ส่วนนี้ยังใช้ create ได้ตามปกติเพราะถูกลบไปแล้ว)
     // ==================================================================================================
     const episodes = [];
 
@@ -284,7 +292,7 @@ async function seedSpiritOfBangkokContent() {
     console.log('📊 Summary:');
     console.log(`- Novel: ${novel.title}`);
     console.log(`- Author: ${author.username}`);
-    console.log(`- Characters Created: ${insertedCharacters.length}`);
+    console.log(`- Characters Created: ${upsertedCharacters.length}`);
     console.log(`- Episodes Created: ${episodes.length}`);
     console.log(`\n🔗 Access URLs:`);
     console.log(`- Novel Page: /novels/${novel.slug}`);
