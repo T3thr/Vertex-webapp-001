@@ -121,14 +121,12 @@ export async function POST(
       await user.save({ session: dbSession });
 
       // 13. อัปเดตสถิติของตอน
-      // [FIXED] แก้ไขจาก purchaseCount เป็น purchasesCount เพื่อให้ตรงกับ Model
       episode.stats.purchasesCount += 1;
-      // [REMOVED] ลบการอัปเดต totalRevenue ใน episode.stats ออก เนื่องจาก Model ไม่ได้กำหนด field นี้ไว้
-      // รายรับจะถูกเก็บในระดับ Novel แทน
       await episode.save({ session: dbSession });
 
       // 14. อัปเดตสถิติของนิยาย (เพิ่มรายรับรวม)
-      novel.stats.totalRevenue += effectivePrice;
+      // [FIXED] แก้ไขจาก totalRevenue เป็น totalRevenueCoins เพื่อให้ตรงกับ Model
+      novel.stats.totalRevenueCoins += effectivePrice;
       await novel.save({ session: dbSession });
 
       // 15. Commit Transaction เมื่อทุกอย่างสำเร็จ
