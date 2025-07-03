@@ -449,6 +449,295 @@ async function seedSpiritOfBangkokNovel() {
 
     console.log('✅ Created choices for first scene');
 
+    // สร้าง Scene เพิ่มเติมสำหรับ Episode 1
+    
+    // Scene 1.2a: เลือกสำรวจทันที
+    const scene1_2a = await SceneModel.create({
+      novelId: novel._id,
+      episodeId: episode1._id,
+      sceneOrder: 2,
+      title: 'การสำรวจย่านเก่า',
+      background: {
+        type: 'image',
+        value: '/images/background/old_market_day.png'
+      },
+      characters: [
+        {
+          instanceId: 'arisa_exploring',
+          characterId: characters.arisa._id,
+          expressionId: 'arisa_normal',
+          transform: {
+            positionX: 0,
+            positionY: 0,
+            scaleX: 1,
+            scaleY: 1,
+            opacity: 1
+          },
+          isVisible: true
+        }
+      ],
+      textContents: [
+        {
+          instanceId: 'explore_001',
+          type: 'narration',
+          content: 'อริษาเดินผ่านตลาดเก่าที่เต็มไปด้วยกลิ่นของอาหารไทยโบราณ เสียงของผู้คนที่พูดคุยกันด้วยสำเนียงกรุงเก่า และบรรยากาศที่เหมือนย้อนเวลากลับไปหลายสิบปี',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#333333'
+        },
+        {
+          instanceId: 'explore_002',
+          type: 'dialogue',
+          characterId: characters.arisa._id,
+          speakerDisplayName: 'อริษา',
+          content: '(ใจคิด) น่าแปลกจัง... ที่นี่ให้ความรู้สึกคุ้นเคยมากกว่าที่ควรจะเป็น แม้ว่าจะเป็นครั้งแรกที่มาก็ตาม',
+          fontFamily: 'Sarabun',
+          fontSize: 16,
+          color: '#666666'
+        },
+        {
+          instanceId: 'explore_003',
+          type: 'dialogue',
+          speakerDisplayName: 'คุณป้าขายผลไม้',
+          content: 'หนูคนใหม่ใช่ไหม? ที่นี่ไม่ค่อยมีคนแปลกหน้ามาเดินเล่นหรอกลูก',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        },
+        {
+          instanceId: 'explore_004',
+          type: 'dialogue',
+          characterId: characters.arisa._id,
+          speakerDisplayName: 'อริษา',
+          content: 'ค่ะ หนูมาทำวิจัยเกี่ยวกับประวัติศาสตร์ของย่านนี้ แต่ดูเหมือนว่าที่นี่จะมีเรื่องราวมากกว่าที่อยู่ในหนังสือ',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        }
+      ],
+      audios: [
+        {
+          instanceId: 'market_ambience',
+          type: 'sound_effect',
+          mediaId: 'market_sounds.mp3',
+          mediaSourceType: 'Media',
+          volume: 0.2,
+          loop: true
+        }
+      ],
+      choicePrompt: 'อริษาควรทำอย่างไรต่อไป?',
+      defaultNextSceneId: null
+    });
+
+    // Scene 1.3: การพบกับธนา
+    const scene1_3 = await SceneModel.create({
+      novelId: novel._id,
+      episodeId: episode1._id,
+      sceneOrder: 3,
+      title: 'ช่างภาพลึกลับ',
+      background: {
+        type: 'image',
+        value: '/images/background/old_street_evening.png'
+      },
+      characters: [
+        {
+          instanceId: 'arisa_meeting',
+          characterId: characters.arisa._id,
+          expressionId: 'arisa_surprised',
+          transform: {
+            positionX: -0.3,
+            positionY: 0,
+            scaleX: 1,
+            scaleY: 1,
+            opacity: 1
+          },
+          isVisible: true
+        },
+        {
+          instanceId: 'thana_intro',
+          characterId: characters.thana._id,
+          expressionId: 'thana_normal',
+          transform: {
+            positionX: 0.3,
+            positionY: 0,
+            scaleX: 1,
+            scaleY: 1,
+            opacity: 1
+          },
+          isVisible: true
+        }
+      ],
+      textContents: [
+        {
+          instanceId: 'meet_001',
+          type: 'narration',
+          content: 'ขณะที่อริษากำลังถ่ายรูปบ้านเก่าแก่ มีเสียงของชัตเตอร์กล้องดังขึ้นจากข้างหลัง เมื่อเธอหันไปมอง ก็พบกับชายหนุ่มที่ถือกล้องฟิล์มเก่า',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#333333'
+        },
+        {
+          instanceId: 'meet_002',
+          type: 'dialogue',
+          characterId: characters.thana._id,
+          speakerDisplayName: 'ธนา',
+          content: 'ขอโทษครับ ผมไม่ได้ตั้งใจจะแอบถ่าย แต่เห็นคุณถ่ายรูปบ้านหลังนั้น... คุณเห็นอะไรพิเศษมั้ย?',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        },
+        {
+          instanceId: 'meet_003',
+          type: 'dialogue',
+          characterId: characters.arisa._id,
+          speakerDisplayName: 'อริษา',
+          content: 'เห็นอะไรพิเศษงั้นหรือคะ? ผมแค่คิดว่าสถาปัตยกรรมน่าสนใจดี... แล้วคุณล่ะ เห็นอะไรมั้ย?',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        },
+        {
+          instanceId: 'meet_004',
+          type: 'dialogue',
+          characterId: characters.thana._id,
+          speakerDisplayName: 'ธนา',
+          content: '(มองไปที่บ้านแล้วกลับมามองอริษา) คุณ... เป็นคนพิเศษ ผมเดาว่าคุณมาที่นี่ไม่ใช่เพื่อท่องเที่ยวธรรมดา',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        },
+        {
+          instanceId: 'meet_005',
+          type: 'dialogue',
+          characterId: characters.arisa._id,
+          speakerDisplayName: 'อริษา',
+          content: 'คุณพิเศษงั้นหรือคะ? ผมมาทำวิจัยเรื่องมรดกทางวัฒนธรรม... แต่คุณทำไมถึงบอกว่าผมพิเศษ?',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        },
+        {
+          instanceId: 'meet_006',
+          type: 'dialogue',
+          characterId: characters.thana._id,
+          speakerDisplayName: 'ธนา',
+          content: 'เพราะคุณเห็นใช่ไหม... เงาที่อยู่หน้าต่างชั้นสองของบ้านหลังนั้น',
+          fontFamily: 'Sarabun',
+          fontSize: 18,
+          color: '#4A4A4A'
+        }
+      ],
+      audios: [
+        {
+          instanceId: 'evening_mystery',
+          type: 'background_music',
+          mediaId: 'mysterious_encounter.mp3',
+          mediaSourceType: 'Media',
+          volume: 0.3,
+          loop: true
+        },
+        {
+          instanceId: 'camera_click',
+          type: 'sound_effect',
+          mediaId: 'camera_shutter.mp3',
+          mediaSourceType: 'Media',
+          volume: 0.5,
+          loop: false
+        }
+      ],
+      choicePrompt: 'ธนาพูดถึงเงาที่หน้าต่าง... อริษาจะตอบอย่างไร?',
+      defaultNextSceneId: null
+    });
+
+    // เพิ่ม Choices เพิ่มเติม
+    const choice1_3_1 = await ChoiceModel.create({
+      novelId: novel._id,
+      authorId: author._id,
+      originStoryMapNodeId: scene1_3._id.toString(),
+      choiceCode: 'EP1_S3_CHOICE1',
+      text: 'ผมเห็น... และมันทำให้ผมกลัว',
+      hoverText: 'ยอมรับว่าเห็นสิ่งแปลกๆ และรู้สึกกลัว',
+      actions: [
+        {
+          actionId: 'action_003',
+          type: 'GO_TO_NODE',
+          parameters: {
+            targetNodeId: 'scene_1_4_scared'
+          }
+        },
+        {
+          actionId: 'action_004',
+          type: 'ADD_VARIABLE',
+          parameters: {
+            variableName: 'fear_level',
+            value: 1
+          }
+        }
+      ],
+      displayOrder: 1
+    });
+
+    const choice1_3_2 = await ChoiceModel.create({
+      novelId: novel._id,
+      authorId: author._id,
+      originStoryMapNodeId: scene1_3._id.toString(),
+      choiceCode: 'EP1_S3_CHOICE2',
+      text: 'ผมไม่เห็นอะไรเลย คุณแหย่ผมเหรอ?',
+      hoverText: 'ปฏิเสธและคิดว่าธนากำลังล้อเล่น',
+      actions: [
+        {
+          actionId: 'action_005',
+          type: 'GO_TO_NODE',
+          parameters: {
+            targetNodeId: 'scene_1_4_deny'
+          }
+        },
+        {
+          actionId: 'action_006',
+          type: 'ADD_VARIABLE',
+          parameters: {
+            variableName: 'skepticism',
+            value: 1
+          }
+        }
+      ],
+      displayOrder: 2
+    });
+
+    const choice1_3_3 = await ChoiceModel.create({
+      novelId: novel._id,
+      authorId: author._id,
+      originStoryMapNodeId: scene1_3._id.toString(),
+      choiceCode: 'EP1_S3_CHOICE3',
+      text: 'ผมเห็น... และอยากรู้มากขึ้น',
+      hoverText: 'ยอมรับว่าเห็นและแสดงความสนใจที่จะเรียนรู้',
+      actions: [
+        {
+          actionId: 'action_007',
+          type: 'GO_TO_NODE',
+          parameters: {
+            targetNodeId: 'scene_1_4_curious'
+          }
+        },
+        {
+          actionId: 'action_008',
+          type: 'ADD_VARIABLE',
+          parameters: {
+            variableName: 'curiosity_level',
+            value: 2
+          }
+        },
+        {
+          actionId: 'action_009',
+          type: 'UNLOCK_CHARACTER',
+          parameters: {
+            characterId: characters.thana._id.toString()
+          }
+        }
+      ],
+      displayOrder: 3
+    });
+
     // Episode 2
     const episode2 = await EpisodeModel.create({
       novelId: novel._id,
