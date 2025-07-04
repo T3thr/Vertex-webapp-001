@@ -81,7 +81,7 @@ export default function VisualNovelFrameReader({
 }: VisualNovelFrameReaderProps) {
   const router = useRouter();
   const frameRef = useRef<HTMLDivElement>(null);
-  
+
   // สถานะของ reader
   const [isPlaying, setIsPlaying] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -93,13 +93,13 @@ export default function VisualNovelFrameReader({
   const [readingProgress, setReadingProgress] = useState(0);
   const [dialogueHistory, setDialogueHistory] = useState<DialogueHistoryItem[]>([]);
   const [allEpisodes, setAllEpisodes] = useState<Episode[]>([]);
-  
+
   // การตั้งค่าการอ่าน
   const [autoPlay, setAutoPlay] = useState(false);
   const [textSpeed, setTextSpeed] = useState(2);
   const [fontSize, setFontSize] = useState(16);
   const [bgOpacity, setBgOpacity] = useState(0.8);
-  
+
   // ตรวจสอบสถานะ bookmark
   useEffect(() => {
     if (userId) {
@@ -132,7 +132,7 @@ export default function VisualNovelFrameReader({
 
   const handleBookmark = useCallback(async () => {
     if (!userId) return;
-    
+
     try {
       // TODO: เรียก API สำหรับ bookmark
       setIsBookmarked(!isBookmarked);
@@ -156,9 +156,9 @@ export default function VisualNovelFrameReader({
 
   const handleNextEpisode = useCallback(() => {
     if (allEpisodes.length === 0) return;
-    
+
     const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === episode._id);
-    
+
     if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
         const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
         const nextEpisodeSlug = `${nextEpisode.episodeOrder}-${nextEpisode.slug}`;
@@ -185,14 +185,13 @@ export default function VisualNovelFrameReader({
   }, [allEpisodes, episode._id, novel.slug, router]);
 
   return (
-    <div className="vn-reader h-full bg-background">
-      {/* คอนเทนเนอร์หลักสำหรับ Frame */}
-      <div className="h-full flex items-center justify-center p-2 sm:p-4 lg:py-8">
-        {/* Visual Novel Frame - Responsive */}
+    <div className="vn-reader h-full w-full bg-background">
+      {/* คอนเทนเนอร์หลักสำหรับ Frame ใช้ flex เพื่อจัดกึ่งกลาง */}
+      <div className="h-full w-full flex items-center justify-center p-2 sm:p-4">
+        {/* Visual Novel Frame - แก้ไขให้มีอัตราส่วน 16:10 คงที่ */}
         <div 
           ref={frameRef}
-          className="vn-frame relative w-full h-full lg:max-w-6xl lg:aspect-video bg-card rounded-none lg:rounded-2xl overflow-hidden shadow-2xl border-0 lg:border border-border"
-          data-responsive="true"
+          className="vn-frame relative w-full max-w-6xl aspect-[16/10] bg-card rounded-none sm:rounded-2xl overflow-hidden shadow-2xl border-0 sm:border border-border"
         >
           {/* Header สำหรับเดสก์ท็อป */}
           <div className="hidden lg:block absolute top-0 left-0 right-0 z-30 bg-card/95 backdrop-blur-sm border-b border-border">
@@ -210,7 +209,7 @@ export default function VisualNovelFrameReader({
                   </div>
                 </button>
               </div>
-              
+
               {/* ตรงกลาง - ชื่อตอน */}
               <div className="flex-1 text-center mx-8">
                 <h1 className="text-card-foreground text-lg font-bold">{episode.title}</h1>
@@ -230,7 +229,7 @@ export default function VisualNovelFrameReader({
                   </span>
                 </div>
               </div>
-              
+
               {/* ฝั่งขวา - ปุ่มควบคุม */}
               <div className="flex items-center gap-3">
                 <button
@@ -243,7 +242,7 @@ export default function VisualNovelFrameReader({
                 >
                   {isBookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                 </button>
-                
+
                 <button
                   onClick={() => setShowEpisodeNav(true)}
                   className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-card-foreground transition-colors"
@@ -264,12 +263,12 @@ export default function VisualNovelFrameReader({
                 <ArrowLeft size={18} />
                 <span className="text-sm font-medium">กลับ</span>
               </button>
-              
+
               <div className="flex-1 text-center px-4">
                 <h1 className="text-card-foreground text-sm font-semibold truncate">{episode.title}</h1>
                 <p className="text-muted-foreground text-xs">ตอนที่ {episode.episodeOrder}</p>
               </div>
-              
+
               <button
                 onClick={() => setShowEpisodeNav(true)}
                 className="text-card-foreground hover:text-primary transition-colors p-2"
@@ -298,10 +297,9 @@ export default function VisualNovelFrameReader({
             />
           </div>
 
-          {/* แถบควบคุมด้านล่าง - ไม่รบกวนเนื้อหา */}
+          {/* แถบควบคุมด้านล่าง */}
           <div className="absolute bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm border-t border-border">
             <div className="px-6 py-4">
-              {/* ปุ่มควบคุม */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <button
@@ -311,7 +309,7 @@ export default function VisualNovelFrameReader({
                   >
                     <ChevronLeft size={20} />
                   </button>
-                  
+
                   <button
                     onClick={handlePlayPause}
                     className={`p-3 rounded-lg transition-colors ${
@@ -323,7 +321,7 @@ export default function VisualNovelFrameReader({
                   >
                     {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                   </button>
-                  
+
                   <button
                     onClick={handleNextEpisode}
                     className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-card-foreground transition-colors"
@@ -341,7 +339,7 @@ export default function VisualNovelFrameReader({
                   >
                     <MessageCircle size={18} />
                   </button>
-                  
+
                   <button
                     onClick={() => setIsMuted(!isMuted)}
                     className={`p-2 rounded-lg transition-colors ${
@@ -353,7 +351,7 @@ export default function VisualNovelFrameReader({
                   >
                     {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                   </button>
-                  
+
                   <button
                     onClick={() => setShowSettings(true)}
                     className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-card-foreground transition-colors"
@@ -405,4 +403,4 @@ export default function VisualNovelFrameReader({
       </AnimatePresence>
     </div>
   );
-} 
+}
