@@ -58,6 +58,14 @@ interface Episode {
   };
 }
 
+interface DialogueHistoryItem {
+    id: string;
+    sceneId: string;
+    sceneOrder: number;
+    characterName?: string;
+    dialogueText: string;
+}
+
 interface VisualNovelFrameReaderProps {
   novel: Novel;
   episode: Episode;
@@ -75,14 +83,16 @@ export default function VisualNovelFrameReader({
   const frameRef = useRef<HTMLDivElement>(null);
   
   // สถานะของ reader
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showEpisodeNav, setShowEpisodeNav] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
-  const [currentSceneId, setCurrentSceneId] = useState(initialSceneId);
+  const [currentSceneId, setCurrentSceneId] = useState(initialSceneId || episode.firstSceneId);
   const [readingProgress, setReadingProgress] = useState(0);
+  const [dialogueHistory, setDialogueHistory] = useState<DialogueHistoryItem[]>([]);
+  const [allEpisodes, setAllEpisodes] = useState<Episode[]>([]);
   
   // การตั้งค่าการอ่าน
   const [autoPlay, setAutoPlay] = useState(false);
@@ -97,6 +107,23 @@ export default function VisualNovelFrameReader({
       setIsBookmarked(false);
     }
   }, [userId, episode._id]);
+
+  // Fetch all episodes for navigation
+  useEffect(() => {
+    const fetchAllEpisodes = async () => {
+        try {
+            const response = await fetch(`/api/novels/${novel.slug}/episodes`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch episodes for navigation');
+            }
+            const data = await response.json();
+            setAllEpisodes(data.episodes);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+    fetchAllEpisodes();
+  }, [novel.slug]);
 
   // ฟังก์ชันการควบคุม
   const handlePlayPause = useCallback(() => {
@@ -118,55 +145,54 @@ export default function VisualNovelFrameReader({
     router.push(`/novels/${novel.slug}`);
   }, [router, novel.slug]);
 
-  const handleNextEpisode = useCallback(() => {
-    // TODO: นำทางไปตอนถัดไป
-    console.log('Navigate to next episode');
+  const handleDialogueEntry = useCallback((entry: DialogueHistoryItem) => {
+    setDialogueHistory(prev => {
+        if (prev.find(item => item.id === entry.id)) {
+            return prev;
+        }
+        return [...prev, entry];
+    });
   }, []);
+
+  const handleNextEpisode = useCallback(() => {
+    if (allEpisodes.length === 0) return;
+    
+    const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === episode._id);
+    
+    if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
+        const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
+        const nextEpisodeSlug = `${nextEpisode.episodeOrder}-${nextEpisode.slug}`;
+        router.push(`/read/${novel.slug}/${nextEpisodeSlug}`);
+    } else {
+        // End of the novel, navigate back to the novel's main page
+        router.push(`/novels/${novel.slug}`);
+    }
+  }, [allEpisodes, episode._id, novel.slug, router]);
 
   const handlePreviousEpisode = useCallback(() => {
-    // TODO: นำทางไปตอนก่อนหน้า
-    console.log('Navigate to previous episode');
-  }, []);
+    if (allEpisodes.length === 0) return;
+
+    const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === episode._id);
+
+    if (currentEpisodeIndex > 0) {
+        const prevEpisode = allEpisodes[currentEpisodeIndex - 1];
+        const prevEpisodeSlug = `${prevEpisode.episodeOrder}-${prevEpisode.slug}`;
+        router.push(`/read/${novel.slug}/${prevEpisodeSlug}`);
+    } else {
+        // Already at the first episode, do nothing or show a message
+        console.log('Already at the first episode.');
+    }
+  }, [allEpisodes, episode._id, novel.slug, router]);
 
   return (
-    <div className="vn-reader min-h-screen bg-background">
-      {/* Header สำหรับมือถือ */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border">
-        <div className="flex items-center justify-between px-4 py-3">
-          <button
-            onClick={handleBackToNovel}
-            className="flex items-center gap-2 text-card-foreground hover:text-primary transition-colors"
-          >
-            <ArrowLeft size={18} />
-            <span className="text-sm font-medium">กลับ</span>
-          </button>
-          
-          <div className="flex-1 text-center px-4">
-            <h1 className="text-card-foreground text-sm font-semibold truncate">{episode.title}</h1>
-            <p className="text-muted-foreground text-xs">ตอนที่ {episode.episodeOrder}</p>
-          </div>
-          
-          <button
-            onClick={() => setShowEpisodeNav(true)}
-            className="text-card-foreground hover:text-primary transition-colors p-2"
-          >
-            <List size={18} />
-          </button>
-        </div>
-      </div>
-
+    <div className="vn-reader h-full bg-background">
       {/* คอนเทนเนอร์หลักสำหรับ Frame */}
-      <div className="min-h-screen flex items-center justify-center px-4 py-4 lg:py-8 pt-16 lg:pt-8">
-        {/* Visual Novel Frame - ขนาดคงที่ */}
+      <div className="h-full flex items-center justify-center p-2 sm:p-4 lg:py-8">
+        {/* Visual Novel Frame - Responsive */}
         <div 
           ref={frameRef}
-          className="vn-frame relative w-full max-w-6xl aspect-video bg-card rounded-2xl overflow-hidden shadow-2xl border border-border"
-          style={{
-            minHeight: '600px',
-            maxHeight: '80vh',
-            transform: 'scale(1)', // ป้องกันการ zoom
-            transformOrigin: 'center'
-          }}
+          className="vn-frame relative w-full h-full lg:max-w-6xl lg:aspect-video bg-card rounded-none lg:rounded-2xl overflow-hidden shadow-2xl border-0 lg:border border-border"
+          data-responsive="true"
         >
           {/* Header สำหรับเดสก์ท็อป */}
           <div className="hidden lg:block absolute top-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm border-b border-border">
@@ -228,23 +254,51 @@ export default function VisualNovelFrameReader({
             </div>
           </div>
 
+          {/* Header สำหรับมือถือ - ติดกับ frame เท่านั้น */}
+          <div className="lg:hidden absolute top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border">
+            <div className="flex items-center justify-between px-4 py-3">
+              <button
+                onClick={handleBackToNovel}
+                className="flex items-center gap-2 text-card-foreground hover:text-primary transition-colors"
+              >
+                <ArrowLeft size={18} />
+                <span className="text-sm font-medium">กลับ</span>
+              </button>
+              
+              <div className="flex-1 text-center px-4">
+                <h1 className="text-card-foreground text-sm font-semibold truncate">{episode.title}</h1>
+                <p className="text-muted-foreground text-xs">ตอนที่ {episode.episodeOrder}</p>
+              </div>
+              
+              <button
+                onClick={() => setShowEpisodeNav(true)}
+                className="text-card-foreground hover:text-primary transition-colors p-2"
+              >
+                <List size={18} />
+              </button>
+            </div>
+          </div>
+
           {/* พื้นที่เนื้อหาหลัก */}
-          <div className="absolute inset-0 lg:top-16">
+          <div className="absolute inset-0 top-16 lg:top-[74px] bottom-[88px]">
             <VisualNovelContent
               novel={novel}
               episode={episode}
               currentSceneId={currentSceneId}
               isPlaying={isPlaying}
+              autoPlay={autoPlay}
               textSpeed={textSpeed}
               fontSize={fontSize}
               bgOpacity={bgOpacity}
               onSceneChange={setCurrentSceneId}
               onProgressChange={setReadingProgress}
+              onDialogueEntry={handleDialogueEntry}
+              onEpisodeEnd={handleNextEpisode}
               userId={userId}
             />
           </div>
 
-          {/* แถบควบคุมด้านล่าง */}
+          {/* แถบควบคุมด้านล่าง - ไม่รบกวนเนื้อหา */}
           <div className="absolute bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm border-t border-border">
             <div className="px-6 py-4">
               {/* ปุ่มควบคุม */}
@@ -335,7 +389,7 @@ export default function VisualNovelFrameReader({
           <DialogueHistory
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
-            episodeId={episode._id}
+            history={dialogueHistory}
           />
         )}
 

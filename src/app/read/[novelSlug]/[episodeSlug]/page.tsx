@@ -45,78 +45,59 @@ function parseEpisodeSlug(episodeSlug: string): { order: number; slug: string } 
 async function getNovelAndEpisode(novelSlug: string, episodeSlug: string) {
   await dbConnect();
   
-  // Parse episode information
   const episodeInfo = parseEpisodeSlug(episodeSlug);
   if (!episodeInfo) {
     return null;
   }
   
-  // Decode novel slug
   let decodedNovelSlug = novelSlug;
   try {
     decodedNovelSlug = decodeURIComponent(novelSlug);
   } catch (e) {
-    // ใช้ slug เดิมหากไม่สามารถ decode ได้
+    // Use original slug if decoding fails
   }
   
   try {
-    // ค้นหา novel และ episode พร้อมกัน
-    const [novel, episode] = await Promise.all([
-      NovelModel.findOne({ 
-        slug: decodedNovelSlug, 
-        isDeleted: { $ne: true },
-        status: { $in: ['published', 'completed'] }
-      })
-        .select('_id title author slug coverImageUrl synopsis')
-        .populate({
-          path: 'author',
-          select: '_id username primaryPenName avatarUrl',
-          model: UserModel
-        })
-        .lean(),
-      
-      // ค้นหา episode โดยใช้ novel slug เพื่อความเร็ว
-      EpisodeModel.findOne({
-        episodeOrder: episodeInfo.order,
-        status: 'published'
-      })
-        .populate({
-          path: 'novelId',
-          match: { slug: decodedNovelSlug, isDeleted: { $ne: true } },
-          select: '_id'
-        })
-        .select('_id title slug episodeOrder accessType priceCoins originalPriceCoins promotions earlyAccessStartDate earlyAccessEndDate firstSceneId teaserText stats novelId')
-        .lean()
-    ]);
+    // 1. Find the novel first. This is fast as slug should be indexed.
+    const novel = await NovelModel.findOne({
+      slug: decodedNovelSlug,
+      isDeleted: { $ne: true },
+      status: { $in: ['published', 'completed'] }
+    })
+    .select('_id title author slug coverImageUrl synopsis')
+    .populate({
+      path: 'author',
+      select: '_id username primaryPenName avatarUrl',
+      model: UserModel
+    })
+    .lean();
 
     if (!novel) {
-      return null;
+      return null; // Novel not found
     }
 
-    // ตรวจสอบว่า episode เป็นของ novel นี้
-    if (!episode || !episode.novelId || episode.novelId._id.toString() !== novel._id.toString()) {
-      // ลองหาด้วย novel ID
-      const correctEpisode = await EpisodeModel.findOne({
-        novelId: novel._id,
-        episodeOrder: episodeInfo.order,
-        status: 'published'
-      }).select('_id title slug episodeOrder accessType priceCoins originalPriceCoins promotions earlyAccessStartDate earlyAccessEndDate firstSceneId teaserText stats').lean();
-      
-      if (!correctEpisode) {
-        return null;
-      }
-      
-      // หาก slug ไม่ตรงให้ redirect
-      if (episodeInfo.slug && correctEpisode.slug && correctEpisode.slug !== episodeInfo.slug) {
-        const redirectUrl = `/read/${novel.slug}/${episodeInfo.order}-${correctEpisode.slug}`;
-        return { redirect: redirectUrl };
-      }
-      
-      return { novel, episode: correctEpisode };
+    // 2. Find the episode using the novel's ID. This is much more efficient.
+    const episode = await EpisodeModel.findOne({
+      novelId: novel._id,
+      episodeOrder: episodeInfo.order,
+      status: 'published'
+    })
+    .select('_id title slug episodeOrder accessType priceCoins originalPriceCoins promotions earlyAccessStartDate earlyAccessEndDate firstSceneId teaserText stats')
+    .lean();
+
+    if (!episode) {
+      return null; // Episode not found for this novel
+    }
+    
+    // 3. Handle slug mismatches and redirect if necessary.
+    if (episodeInfo.slug && episode.slug && episode.slug !== episodeInfo.slug) {
+      const redirectUrl = `/read/${novel.slug}/${episode.episodeOrder}-${episode.slug}`;
+      return { redirect: redirectUrl };
     }
 
     return { novel, episode };
   } catch (error) {
+    console.error("Error in getNovelAndEpisode:", error);
     return null;
   }
 }

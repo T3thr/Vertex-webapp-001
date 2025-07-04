@@ -127,6 +127,7 @@ export interface IEpisodeSentiment {
  * @property {number} episodeOrder - ลำดับของตอนในนิยาย (เช่น 1, 2, 3.1, 3.2) **ควร unique ภายใน novelId เดียวกัน**
  * @property {number} [volumeNumber] - (Optional) หมายเลขเล่มหรือภาคที่ตอนนี้สังกัดอยู่ (ถ้ามีการแบ่งเป็นเล่ม)
  * @property {Types.ObjectId} [firstSceneId] - ID ของ Scene แรกสุดในตอนนี้ (อ้างอิง Scene model, เป็นจุดเริ่มต้นของเนื้อหาตอน)
+ * @property {Types.ObjectId[]} sceneIds - IDs ของ Scenes ทั้งหมดในตอนนี้
  * @property {EpisodeStatus} status - สถานะปัจจุบันของตอน (เช่น "draft", "published", "scheduled")
  * @property {EpisodeAccessType} accessType - ประเภทการเข้าถึงเนื้อหาของตอน (เช่น "free", "paid_unlock")
  * @property {number} [priceCoins] - ราคาเป็นเหรียญสำหรับการปลดล็อกตอนนี้ (ถ้า accessType เป็น "paid_unlock")
@@ -149,7 +150,7 @@ export interface IEpisodeSentiment {
  * @property {Date} updatedAt - วันที่อัปเดตเอกสารตอนล่าสุด (Mongoose `timestamps`)
  *
  * @method getEffectivePrice - คำนวณราคาที่ต้องจ่ายจริงสำหรับตอนนี้ โดยพิจารณาทั้งโปรโมชันระดับนิยาย, ราคาเฉพาะตอน, และราคาดีฟอลต์ของนิยาย
- * @method getOriginalPrice - คำนวณราคาดั้งเดิมของตอนนี้ โดยไม่รวมโปรโมชันระดับนิยาย (สำหรับแสดงราคาขีดฆ่า)
+ * @method getOriginalPrice - คำนวณราคาดั้งเดิมของตอนนี้ โดยไม่รวมโปรโมชันระดับนิยาย
  */
 export interface IEpisode extends Document {
   _id: Types.ObjectId;
@@ -160,6 +161,7 @@ export interface IEpisode extends Document {
   episodeOrder: number;
   volumeNumber?: number;
   firstSceneId?: Types.ObjectId;
+  sceneIds: Types.ObjectId[];
   status: EpisodeStatus;
   accessType: EpisodeAccessType;
   priceCoins?: number;
@@ -281,7 +283,23 @@ const EpisodeSchema = new Schema<IEpisode>(
       min: 0, // อนุญาตให้มีตอนที่ 0 (เช่น Prologue) หรือตอนพิเศษที่ episodeOrder เป็น 0.x
     },
     volumeNumber: { type: Number, min: 1 },
-    firstSceneId: { type: Schema.Types.ObjectId, ref: "Scene" }, // อ้างอิง Scene model
+    firstSceneId: {
+      type: Schema.Types.ObjectId,
+      ref: "Scene",
+      index: true,
+      validate: {
+        validator: async function (value: Types.ObjectId) {
+          if (!value) return true;
+          const scene = await models.Scene.findById(value);
+          return !!scene;
+        },
+        message: "firstSceneId must be a valid Scene ID",
+      },
+    },
+    sceneIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Scene" }],
+      default: [],
+    },
     status: {
       type: String,
       enum: Object.values(EpisodeStatus),
@@ -600,7 +618,7 @@ EpisodeSchema.pre<HydratedDocument<IEpisode>>("save", async function (next) {
     this.lastContentUpdatedAt = new Date();
   }
 
-  // อัปเดต publishedAt เมื่อ status เปลี่ยนเป็น PUBLISHED ครั้งแรก
+  // อัปเดต publishedAt เมื่อ status เป็น PUBLISHED ครั้งแรก
   if (this.isModified("status") && this.status === EpisodeStatus.PUBLISHED && !this.publishedAt) {
     this.publishedAt = new Date();
     this.lastContentUpdatedAt = new Date(); // ถือว่ามีการอัปเดต "เนื้อหา" ที่เผยแพร่

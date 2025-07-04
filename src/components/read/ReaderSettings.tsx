@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Type, Gauge, Image, Play, Volume2 } from 'lucide-react';
+import { X, Type, Gauge, Image, Play, Volume2, Zap, Eye, Monitor } from 'lucide-react';
 
 interface ReaderSettingsProps {
   isOpen: boolean;
@@ -91,7 +91,7 @@ export default function ReaderSettings({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* พื้นหลังโปร่งแสง */}
+          {/* Backdrop */}
           <motion.div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             initial={{ opacity: 0 }}
@@ -100,192 +100,171 @@ export default function ReaderSettings({
             onClick={onClose}
           />
 
-          {/* หน้าต่างตั้งค่า */}
+          {/* Modal */}
           <motion.div
-            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-card border border-border rounded-2xl shadow-xl"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           >
-            {/* หัวข้อ */}
-            <div className="flex items-center justify-between p-6 border-b border-border">
-              <h2 className="text-card-foreground text-xl font-semibold flex items-center gap-2">
-                <div className="p-2 bg-primary/20 rounded-lg">
-                  <Volume2 size={20} className="text-primary" />
-                </div>
-                ตั้งค่าการอ่าน
-              </h2>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-card-foreground transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* เนื้อหา */}
-            <div className="p-6 space-y-6">
-              {/* ความเร็วข้อความ */}
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-primary/20 rounded-lg">
-                    <Gauge size={18} className="text-primary" />
-                  </div>
-                  <div>
-                    <label htmlFor="text-speed-slider" className="text-card-foreground font-medium">ความเร็วข้อความ</label>
-                    <p className="text-muted-foreground text-sm">{textSpeedLabels[textSpeed - 1]}</p>
-                  </div>
-                </div>
-                <div className="px-4">
-                  <input
-                    id="text-speed-slider"
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={textSpeed}
-                    onChange={(e) => onTextSpeedChange(Number(e.target.value))}
-                    className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
-                    aria-label="ความเร็วข้อความ"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                    {textSpeedLabels.map((label, index) => (
-                      <span key={index}>{label}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* ขนาดตัวอักษร */}
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-primary/20 rounded-lg">
-                    <Type size={18} className="text-primary" />
-                  </div>
-                  <div>
-                    <label htmlFor="font-size-slider" className="text-card-foreground font-medium">ขนาดตัวอักษร</label>
-                    <p className="text-muted-foreground text-sm">{fontSize}px - {fontSizeLabels[Math.floor((fontSize - 14) / 2)]}</p>
-                  </div>
-                </div>
-                <div className="px-4">
-                  <input
-                    id="font-size-slider"
-                    type="range"
-                    min="14"
-                    max="20"
-                    step="2"
-                    value={fontSize}
-                    onChange={(e) => onFontSizeChange(Number(e.target.value))}
-                    className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
-                    aria-label="ขนาดตัวอักษร"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                    {fontSizeLabels.map((label, index) => (
-                      <span key={index}>{label}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* ความโปร่งใสพื้นหลัง */}
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-primary/20 rounded-lg">
-                    <Image size={18} className="text-primary" />
-                  </div>
-                  <div>
-                    <label htmlFor="bg-opacity-slider" className="text-card-foreground font-medium">ความโปร่งใสพื้นหลัง</label>
-                    <p className="text-muted-foreground text-sm">{Math.round(bgOpacity * 100)}%</p>
-                  </div>
-                </div>
-                <div className="px-4">
-                  <input
-                    id="bg-opacity-slider"
-                    type="range"
-                    min="0.3"
-                    max="1"
-                    step="0.1"
-                    value={bgOpacity}
-                    onChange={(e) => onBgOpacityChange(Number(e.target.value))}
-                    className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
-                    aria-label="ความโปร่งใสพื้นหลัง"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                    <span>30%</span>
-                    <span>50%</span>
-                    <span>70%</span>
-                    <span>90%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* เล่นอัตโนมัติ */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/20 rounded-lg">
-                      <Play size={18} className="text-primary" />
-                    </div>
-                    <div>
-                      <label className="text-card-foreground font-medium">เล่นอัตโนมัติ</label>
-                      <p className="text-muted-foreground text-sm">ข้ามไปฉากถัดไปโดยอัตโนมัติ</p>
-                    </div>
-                  </div>
-                  <motion.button
-                    onClick={() => onAutoPlayChange(!autoPlay)}
-                    className={`
-                      relative w-12 h-6 rounded-full transition-colors
-                      ${autoPlay ? 'bg-primary' : 'bg-muted'}
-                    `}
-                    whileTap={{ scale: 0.95 }}
-                    aria-label="เปิด/ปิดการเล่นอัตโนมัติ"
-                  >
-                    <motion.div
-                      className="absolute top-1 w-4 h-4 bg-background rounded-full"
-                      animate={{ x: autoPlay ? 26 : 2 }}
-                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                    />
-                  </motion.button>
-                </div>
-              </div>
-
-              {/* ตัวอย่างข้อความ */}
-              <div className="border border-border rounded-lg p-4 bg-secondary/20">
-                <h4 className="text-primary text-sm font-medium mb-2">ตัวอย่าง</h4>
-                <div 
-                  className="text-card-foreground leading-relaxed"
-                  style={{ fontSize: `${fontSize}px` }}
-                >
-                  &quot;วันนี้เป็นวันแรกที่ฉันมาถึงย่านเก่าของกรุงเทพฯ เพื่อทำวิจัยเรื่องประวัติศาสตร์ท้องถิ่น&quot;
-                </div>
-                <div className="text-muted-foreground text-sm mt-2 italic">
-                  อริษามองดูสถานที่รอบๆ ด้วยความตื่นเต้น
-                </div>
-              </div>
-            </div>
-
-            {/* ส่วนท้าย */}
-            <div className="flex justify-between gap-3 p-6 border-t border-border">
-              <button
-                onClick={resetSettings}
-                className="px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors font-medium text-sm"
-              >
-                รีเซ็ต
-              </button>
-              <div className="flex gap-3">
+            <div className="bg-card rounded-2xl border border-border w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-border">
+                <h2 className="text-card-foreground text-xl font-bold">ตั้งค่าการอ่าน</h2>
                 <button
                   onClick={onClose}
-                  className="px-6 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors font-medium"
+                  className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-card-foreground transition-colors"
                 >
-                  ยกเลิก
+                  <X size={20} />
                 </button>
-                <button
-                  onClick={saveSettings}
-                  className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-                >
-                  บันทึก
-                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 space-y-6 overflow-y-auto">
+                {/* Text Speed */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-card-foreground font-medium flex items-center gap-2">
+                      <Zap size={18} className="text-primary" />
+                      ความเร็วข้อความ
+                    </label>
+                    <span className="text-muted-foreground text-sm">
+                      {textSpeed === 1 ? 'ช้า' : textSpeed === 5 ? 'เร็ว' : 'ปานกลาง'}
+                    </span>
+                  </div>
+                  <div className="px-3">
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={textSpeed}
+                      onChange={(e) => onTextSpeedChange(Number(e.target.value))}
+                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>ช้า</span>
+                      <span>เร็ว</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Font Size */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-card-foreground font-medium flex items-center gap-2">
+                      <Type size={18} className="text-primary" />
+                      ขนาดตัวอักษร
+                    </label>
+                    <span className="text-muted-foreground text-sm">{fontSize}px</span>
+                  </div>
+                  <div className="px-3">
+                    <input
+                      type="range"
+                      min="12"
+                      max="24"
+                      value={fontSize}
+                      onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>เล็ก</span>
+                      <span>ใหญ่</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Background Opacity */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-card-foreground font-medium flex items-center gap-2">
+                      <Eye size={18} className="text-primary" />
+                      ความโปร่งใสพื้นหลัง
+                    </label>
+                    <span className="text-muted-foreground text-sm">{Math.round(bgOpacity * 100)}%</span>
+                  </div>
+                  <div className="px-3">
+                    <input
+                      type="range"
+                      min="0.3"
+                      max="1"
+                      step="0.1"
+                      value={bgOpacity}
+                      onChange={(e) => onBgOpacityChange(Number(e.target.value))}
+                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>โปร่งใส</span>
+                      <span>ทึบ</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto Play */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-card-foreground font-medium flex items-center gap-2">
+                      <Play size={18} className="text-primary" />
+                      เล่นอัตโนมัติ
+                    </label>
+                    <button
+                      onClick={() => onAutoPlayChange(!autoPlay)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        autoPlay ? 'bg-primary' : 'bg-secondary'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          autoPlay ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-muted-foreground text-sm">
+                    เมื่อเปิดใช้งาน ข้อความจะเล่นต่อไปโดยอัตโนมัติ
+                  </p>
+                </div>
+
+                {/* Preview */}
+                <div className="space-y-3">
+                  <label className="text-card-foreground font-medium flex items-center gap-2">
+                    <Monitor size={18} className="text-primary" />
+                    ตัวอย่าง
+                  </label>
+                  <div 
+                    className="bg-black/90 rounded-lg p-4 border border-white/20"
+                    style={{ opacity: bgOpacity }}
+                  >
+                    <div className="text-white font-semibold mb-2 flex items-center">
+                      <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                      ตัวอย่างตัวละคร
+                    </div>
+                    <div 
+                      className="text-white leading-relaxed"
+                      style={{ fontSize: `${fontSize}px` }}
+                    >
+                      นี่คือตัวอย่างข้อความในเกม ที่จะแสดงผลตามการตั้งค่าของคุณ
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-border bg-secondary/30">
+                <div className="flex gap-3">
+                  <button
+                    onClick={resetSettings}
+                    className="flex-1 px-4 py-2 bg-secondary hover:bg-secondary/80 text-card-foreground rounded-lg transition-colors font-medium"
+                  >
+                    รีเซ็ต
+                  </button>
+                  <button
+                    onClick={saveSettings}
+                    className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-medium"
+                  >
+                    บันทึก
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

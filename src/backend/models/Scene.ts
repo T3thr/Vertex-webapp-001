@@ -983,6 +983,8 @@ const SceneTransitionSchema = new Schema<ISceneTransition>({
  */
 export interface IScene extends Document {
   _id: Types.ObjectId; novelId: Types.ObjectId; episodeId: Types.ObjectId; sceneOrder: number;
+  /** @description (ใหม่) Node ID สำหรับการอ้างอิงจาก Choice/Script (ควร unique ภายใน Novel) */
+  nodeId?: string;
   title?: string; background: IBackgroundSetting;
   version: number;
   layers: Types.DocumentArray<ISceneLayer>;
@@ -992,6 +994,8 @@ export interface IScene extends Document {
   videos: Types.DocumentArray<IVideoElement>;
   audios: Types.DocumentArray<IAudioElement>;
   choiceGroupsAvailable: Types.DocumentArray<IChoiceGroupInScene>;
+  /** @description (ใหม่) ID ของ Choices ที่พร้อมให้เลือกในฉากนี้ */
+  choiceIds: Types.ObjectId[];
   interactiveHotspots: Types.DocumentArray<IInteractiveHotspot>;
   statusUIElements: Types.DocumentArray<IStatusUIElement>;
   activeSceneEffects: Types.DocumentArray<ISceneEffectInstance>;
@@ -1029,6 +1033,11 @@ const SceneSchema = new Schema<IScene>(
       comment: "Version number of this scene document, incremented on each significant change.",
     },
     episodeId: { type: Schema.Types.ObjectId, ref: "Episode", required: [true, "Episode ID is required"], index: true },
+    nodeId: { 
+      type: String, 
+      trim: true,
+      sparse: true, // Allows multiple docs without this field, but if it exists, the index applies.
+    },
     sceneOrder: { type: Number, required: [true, "Scene order is required"], min: [0, "Scene order must be non-negative"] },
     title: { type: String, trim: true, maxlength: [255, "Scene title is too long"] },
     background: { type: BackgroundSettingSchema, required: [true, "Background settings are required"] },
@@ -1039,6 +1048,7 @@ const SceneSchema = new Schema<IScene>(
     videos: [VideoElementSchema],
     audios: [AudioElementSchema],
     choiceGroupsAvailable: [ChoiceGroupInSceneSchema],
+    choiceIds: { type: [Schema.Types.ObjectId], ref: 'Choice', default: [] }, // อ้างอิงตัวเลือกโดยตรง
     interactiveHotspots: [InteractiveHotspotSchema],
     statusUIElements: [StatusUIElementSchema],
     activeSceneEffects: [SceneEffectInstanceSchema],
@@ -1086,6 +1096,9 @@ SceneSchema.index({ novelId: 1, authorDefinedEmotionTags: 1 }, { name: "idx_nove
 SceneSchema.index({ novelId: 1, sceneTags: 1 }, { name: "idx_novel_scene_tags" });
 SceneSchema.index({ title: "text", "textContents.content": "text", editorNotes: "text" }, { name: "idx_scene_text_search", default_language: "none" });
 SceneSchema.index({ novelId: 1, "entryConditions.variableName": 1 }, { name: "idx_scene_entry_conditions_var", sparse: true });
+
+// เพิ่ม composite index เพื่อให้ nodeId unique ภายใน novel เดียวกัน
+SceneSchema.index({ novelId: 1, nodeId: 1 }, { unique: true, sparse: true });
 
 SceneSchema.virtual("estimatedTimelineDurationMs").get(function (this: IScene): number {
   if (!this.timelineTracks || this.timelineTracks.length === 0) return 0;

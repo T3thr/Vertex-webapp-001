@@ -600,6 +600,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 1,
+      nodeId: 'scene1',
       title: 'จุดเริ่มต้น',
       background: {
         type: 'image',
@@ -638,6 +639,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 2,
+      nodeId: 'scene1a',
       title: 'จุดเริ่มต้น (ต่อ)',
       background: {
         type: 'image',
@@ -725,6 +727,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 3,
+      nodeId: 'scene1b',
       title: 'สนทนา',
       background: {
         type: 'image',
@@ -786,6 +789,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 4,
+      nodeId: 'scene1c',
       title: 'สนทนา2',
       background: {
         type: 'image',
@@ -836,6 +840,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 5,
+      nodeId: 'scene1d',
       title: 'ความคิดของเอลล่า',
       background: {
         type: 'image',
@@ -884,6 +889,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 6,
+      nodeId: 'scene1e',
       title: 'ตัวเลือกสำคัญ',
       background: {
         type: 'image',
@@ -928,6 +934,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 7,
+      nodeId: 'scene1g',
       title: 'เลือกทางคุณธรรม',
       background: {
         type: 'image',
@@ -959,6 +966,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 8,
+      nodeId: 'scene1h',
       title: 'การเปลี่ยนเวลา',
       background: {
         type: 'image',
@@ -995,6 +1003,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 9,
+      nodeId: 'scene1i',
       title: 'ข่าวร้าย',
       background: {
         type: 'image',
@@ -1043,6 +1052,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 10,
+      nodeId: 'scene1j',
       title: 'รายละเอียดการฆาตกรรม',
       background: {
         type: 'image',
@@ -1074,6 +1084,7 @@ const createNowOrNeverScenes = async (
       novelId,
       episodeId,
       sceneOrder: 11,
+      nodeId: 'scene1k',
       title: 'จบข่าว',
       background: {
         type: 'image',
@@ -1145,6 +1156,7 @@ const createChosenOneScenes = async (
       novelId,
       episodeId,
       sceneOrder: 1,
+      nodeId: 'scene1',
       title: 'ลางร้าย',
       background: {
         type: 'image',
@@ -1204,6 +1216,7 @@ const createChosenOneScenes = async (
       novelId,
       episodeId,
       sceneOrder: 2,
+      nodeId: 'scene2',
       title: 'เด็กๆเล่นกัน',
       background: {
         type: 'image',
@@ -1251,6 +1264,7 @@ const createChosenOneScenes = async (
       novelId,
       episodeId,
       sceneOrder: 3,
+      nodeId: 'scene3',
       title: 'โทยะและอองรี',
       background: {
         type: 'image',
@@ -1300,6 +1314,7 @@ const createChosenOneScenes = async (
       novelId,
       episodeId,
       sceneOrder: 4,
+      nodeId: 'scene4-suspense',
       title: 'ก่อนเหตุการณ์',
       background: {
         type: 'image',
@@ -1331,11 +1346,12 @@ const createChosenOneScenes = async (
       }
     },
 
-    // Scene 2c - ตัวเลือกสุดท้าย
+    // Scene 5 - ตัวเลือกสุดท้าย
     {
       novelId,
       episodeId,
       sceneOrder: 5,
+      nodeId: 'scene5',
       title: 'การเลือกที่ยากลำบาก',
       background: {
         type: 'image',
@@ -1390,11 +1406,12 @@ const createChosenOneScenes = async (
       ]
     },
 
-    // Scene 39 - จบ
+    // Scene 6 - จบ
     {
       novelId,
       episodeId,
       sceneOrder: 6,
+      nodeId: 'scene39',
       title: 'ผลลัพธ์',
       background: {
         type: 'image',
@@ -1556,134 +1573,191 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
   // สร้างตัวเลือก
   const choices = await createNowOrNeverChoices(novel._id, authorId);
 
-  // สร้าง Episodes
-  const episodes = [];
+  // สร้าง Episodes ทั้งหมดก่อน
+  const episodeData = [
+    {
+      novelId: novel._id,
+      authorId,
+      title: 'บทนำ',
+      slug: 'intro',
+      episodeOrder: 1,
+      status: EpisodeStatus.PUBLISHED,
+      accessType: EpisodeAccessType.FREE,
+      teaserText: 'เมื่อเอลล่า และแฟนหนุ่มรวมถึงผองเพื่อนต้องออกปล้นเพื่อใช้หนี้ที่คฤหาสน์แห่งหนึ่ง แต่พวกเขาหารู้ไม่ ... ว่าอาจมีอะไรบางอย่างกำลังรอพวกเขาอยู่',
+      publishedAt: new Date('2023-12-01'),
+      stats: {
+        viewsCount: 45230,
+        uniqueViewersCount: 32150,
+        likesCount: 3420,
+        commentsCount: 856,
+        totalWords: 15000,
+        estimatedReadingTimeMinutes: 60,
+        purchasesCount: 0,
+        averageReadingProgress: 89.5,
+        dropOffRate: 10.5
+      },
+      sentimentInfo: {
+        authorDefinedEmotionTags: ['suspense', 'decision_making', 'friendship'],
+        authorDefinedIntensityScore: 4,
+        aiPreliminaryOverallSentiment: 'mixed',
+        aiPreliminarySentimentScore: 0.2
+      },
+      authorNotesBefore: 'ยินดีต้อนรับสู่โลกแห่งการเลือกที่ยากลำบาก เตรียมตัวให้พร้อมกับการตัดสินใจที่จะเปลี่ยนแปลงทุกสิ่ง',
+      authorNotesAfter: 'การเลือกที่คุณทำในตอนนี้จะส่งผลต่อเรื่องราวทั้งหมด อย่าลืมคิดให้รอบคอบ',
+      isPreviewAllowed: true,
+      lastContentUpdatedAt: new Date('2024-01-15')
+    },
+    {
+      novelId: novel._id,
+      authorId,
+      title: 'เพื่อนรัก',
+      slug: 'friends',
+      episodeOrder: 2,
+      status: EpisodeStatus.PUBLISHED,
+      accessType: EpisodeAccessType.FREE,
+      teaserText: 'เมื่อความสัมพันธ์ลับถูกมองเห็นโดยใครบางคน เธอคนนั้นจะตัดสินใจอย่างไร ...',
+      publishedAt: new Date('2023-12-15'),
+      stats: {
+        viewsCount: 38760,
+        uniqueViewersCount: 28420,
+        likesCount: 2890,
+        commentsCount: 745,
+        totalWords: 18000,
+        estimatedReadingTimeMinutes: 75,
+        purchasesCount: 0,
+        averageReadingProgress: 85.2,
+        dropOffRate: 14.8
+      },
+      sentimentInfo: {
+        authorDefinedEmotionTags: ['betrayal', 'friendship', 'loyalty_conflict'],
+        authorDefinedIntensityScore: 5,
+        aiPreliminaryOverallSentiment: 'negative',
+        aiPreliminarySentimentScore: -0.3
+      },
+      authorNotesBefore: 'ความสัมพันธ์ที่แท้จริงจะถูกทดสอบในช่วงเวลาที่ยากลำบาก',
+      authorNotesAfter: 'บางครั้งคนที่เราไว้วางใจมากที่สุดกลับเป็นคนที่ทำร้ายเราได้มากที่สุด',
+      isPreviewAllowed: true,
+      lastContentUpdatedAt: new Date('2024-01-10')
+    },
+    {
+      novelId: novel._id,
+      authorId,
+      title: 'ผู้ถูกเลือก',
+      slug: 'chosen-one',
+      episodeOrder: 3,
+      status: EpisodeStatus.PUBLISHED,
+      accessType: EpisodeAccessType.PAID_UNLOCK,
+      priceCoins: 35,
+      originalPriceCoins: 50,
+      promotions: [{
+        promotionId: new mongoose.Types.ObjectId(),
+        promotionType: 'percentage_discount',
+        discountPercentage: 30,
+        startDate: new Date('2024-01-01'),
+        endDate: new Date('2024-03-31'),
+        description: 'โปรโมชันปีใหม่ ลด 30%!'
+      }],
+      teaserText: 'เมื่อสถานการณ์ต้องบีบคั้นให้คุณกลายเป็นคนเลว คุณจะเลือกอะไรกันนะ :)',
+      publishedAt: new Date('2024-01-01'),
+      stats: {
+        viewsCount: 42350,
+        uniqueViewersCount: 25680,
+        likesCount: 3635,
+        commentsCount: 555,
+        totalWords: 12000,
+        estimatedReadingTimeMinutes: 45,
+        purchasesCount: 3084,
+        averageReadingProgress: 93.7,
+        dropOffRate: 6.3
+      },
+      sentimentInfo: {
+        authorDefinedEmotionTags: ['climax', 'moral_dilemma', 'consequence'],
+        authorDefinedIntensityScore: 5,
+        aiPreliminaryOverallSentiment: 'mixed',
+        aiPreliminarySentimentScore: 0.1
+      },
+      authorNotesBefore: 'ตอนสุดท้ายที่จะเปิดเผยผลลัพธ์ของการเลือกทั้งหมด พร้อมหรือยัง?',
+      authorNotesAfter: 'ขอบคุณที่ติดตามเรื่องราวของเอลล่าและเพื่อนๆ การเลือกของคุณจะอยู่ในใจเสมอ',
+      isPreviewAllowed: true,
+      lastContentUpdatedAt: new Date('2024-01-15')
+    }
+  ];
 
-  // Episode 1: บทนำ
-  const episode1 = new EpisodeModel({
-    novelId: novel._id,
-    authorId,
-    title: 'บทนำ',
-    slug: 'intro',
-    episodeOrder: 1,
-    status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.FREE,
-    teaserText: 'เมื่อเอลล่า และแฟนหนุ่มรวมถึงผองเพื่อนต้องออกปล้นเพื่อใช้หนี้ที่คฤหาสน์แห่งหนึ่ง แต่พวกเขาหารู้ไม่ ... ว่าอาจมีอะไรบางอย่างกำลังรอพวกเขาอยู่',
-    publishedAt: new Date('2023-12-01'),
-    stats: {
-      viewsCount: 45230,
-      uniqueViewersCount: 32150,
-      likesCount: 3420,
-      commentsCount: 856,
-      totalWords: 15000,
-      estimatedReadingTimeMinutes: 60,
-      purchasesCount: 0,
-      averageReadingProgress: 89.5,
-      dropOffRate: 10.5
-    },
-    sentimentInfo: {
-      authorDefinedEmotionTags: ['suspense', 'decision_making', 'friendship'],
-      authorDefinedIntensityScore: 4,
-      aiPreliminaryOverallSentiment: 'mixed',
-      aiPreliminarySentimentScore: 0.2
-    },
-    authorNotesBefore: 'ยินดีต้อนรับสู่โลกแห่งการเลือกที่ยากลำบาก เตรียมตัวให้พร้อมกับการตัดสินใจที่จะเปลี่ยนแปลงทุกสิ่ง',
-    authorNotesAfter: 'การเลือกที่คุณทำในตอนนี้จะส่งผลต่อเรื่องราวทั้งหมด อย่าลืมคิดให้รอบคอบ',
-    isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date('2024-01-15')
+  const episodes = await EpisodeModel.insertMany(episodeData);
+
+  // สร้างฉากทั้งหมด แล้วแจกจ่ายให้ episode
+  // โดยสร้างฉากทั้งหมดภายใต้ episode แรกก่อน เพื่อให้มี episodeId สำหรับสร้างฉาก
+  const allScenes = await createNowOrNeverScenes(novel._id, episodes[0]._id, characters);
+
+  // แจกจ่ายฉากตามสัดส่วนที่เหมาะสม (ตัวอย่าง: 4-4-3 สำหรับ 11 ฉาก)
+  const episode1Scenes = allScenes.slice(0, 4); 
+  const episode2Scenes = allScenes.slice(4, 8);
+  const episode3Scenes = allScenes.slice(8);   
+
+  // อัปเดต episodeId สำหรับฉากที่ไม่ใช่ของ episode 1
+  for (const scene of episode2Scenes) {
+    if (scene) await SceneModel.findByIdAndUpdate(scene._id, { episodeId: episodes[1]._id });
+  }
+  for (const scene of episode3Scenes) {
+    if (scene) await SceneModel.findByIdAndUpdate(scene._id, { episodeId: episodes[2]._id });
+  }
+
+  // อัปเดต Episodes ด้วย firstSceneId และ sceneIds
+  await EpisodeModel.findByIdAndUpdate(episodes[0]._id, {
+    firstSceneId: episode1Scenes[0]?._id,
+    sceneIds: episode1Scenes.map(s => s._id)
   });
-
-  await episode1.save();
-  episodes.push(episode1);
-
-  // สร้างฉากสำหรับ Episode 1
-  const episode1Scenes = await createNowOrNeverScenes(novel._id, episode1._id, characters);
-
-  // Episode 2: เพื่อนรัก
-  const episode2 = new EpisodeModel({
-    novelId: novel._id,
-    authorId,
-    title: 'เพื่อนรัก',
-    slug: 'friends',
-    episodeOrder: 2,
-    status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.FREE,
-    teaserText: 'เมื่อความสัมพันธ์ลับถูกมองเห็นโดยใครบางคน เธอคนนั้นจะตัดสินใจอย่างไร ...',
-    publishedAt: new Date('2023-12-15'),
-    stats: {
-      viewsCount: 38760,
-      uniqueViewersCount: 28420,
-      likesCount: 2890,
-      commentsCount: 745,
-      totalWords: 18000,
-      estimatedReadingTimeMinutes: 75,
-      purchasesCount: 0,
-      averageReadingProgress: 85.2,
-      dropOffRate: 14.8
-    },
-    sentimentInfo: {
-      authorDefinedEmotionTags: ['betrayal', 'friendship', 'loyalty_conflict'],
-      authorDefinedIntensityScore: 5,
-      aiPreliminaryOverallSentiment: 'negative',
-      aiPreliminarySentimentScore: -0.3
-    },
-    authorNotesBefore: 'ความสัมพันธ์ที่แท้จริงจะถูกทดสอบในช่วงเวลาที่ยากลำบาก',
-    authorNotesAfter: 'บางครั้งคนที่เราไว้วางใจมากที่สุดกลับเป็นคนที่ทำร้ายเราได้มากที่สุด',
-    isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date('2024-01-10')
+  await EpisodeModel.findByIdAndUpdate(episodes[1]._id, {
+    firstSceneId: episode2Scenes[0]?._id,
+    sceneIds: episode2Scenes.map(s => s._id)
   });
-
-  await episode2.save();
-  episodes.push(episode2);
-
-  // Episode 3: ผู้ถูกเลือก
-  const episode3 = new EpisodeModel({
-    novelId: novel._id,
-    authorId,
-    title: 'ผู้ถูกเลือก',
-    slug: 'chosen-one',
-    episodeOrder: 3,
-    status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.PAID_UNLOCK,
-    priceCoins: 35,
-    originalPriceCoins: 50,
-    promotions: [{
-      promotionId: new mongoose.Types.ObjectId(),
-      promotionType: 'percentage_discount',
-      discountPercentage: 30,
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2024-03-31'),
-      description: 'โปรโมชันปีใหม่ ลด 30%!'
-    }],
-    teaserText: 'เมื่อสถานการณ์ต้องบีบคั้นให้คุณกลายเป็นคนเลว คุณจะเลือกอะไรกันนะ :)',
-    publishedAt: new Date('2024-01-01'),
-    stats: {
-      viewsCount: 42350,
-      uniqueViewersCount: 25680,
-      likesCount: 3635,
-      commentsCount: 555,
-      totalWords: 12000,
-      estimatedReadingTimeMinutes: 45,
-      purchasesCount: 3084,
-      averageReadingProgress: 93.7,
-      dropOffRate: 6.3
-    },
-    sentimentInfo: {
-      authorDefinedEmotionTags: ['climax', 'moral_dilemma', 'consequence'],
-      authorDefinedIntensityScore: 5,
-      aiPreliminaryOverallSentiment: 'mixed',
-      aiPreliminarySentimentScore: 0.1
-    },
-    authorNotesBefore: 'ตอนสุดท้ายที่จะเปิดเผยผลลัพธ์ของการเลือกทั้งหมด พร้อมหรือยัง?',
-    authorNotesAfter: 'ขอบคุณที่ติดตามเรื่องราวของเอลล่าและเพื่อนๆ การเลือกของคุณจะอยู่ในใจเสมอ',
-    isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date('2024-01-15')
+  await EpisodeModel.findByIdAndUpdate(episodes[2]._id, {
+    firstSceneId: episode3Scenes[0]?._id,
+    sceneIds: episode3Scenes.map(s => s._id)
   });
+  
+  // --- New Logic: Associate Choices with Scenes ---
+  console.log('🔗 กำลังเชื่อมโยง Choices เข้ากับ Scenes ที่ถูกต้อง (Now or Never)...');
+  const sceneNodeMap = new Map(allScenes.map(s => [s.nodeId, s]));
 
-  await episode3.save();
-  episodes.push(episode3);
+  for (const choice of choices) {
+    const goToNodeAction = choice.actions.find(a => a.type === 'go_to_node');
+    if (!goToNodeAction || !goToNodeAction.parameters.targetNodeId) {
+      console.warn(`️️⚠️ Choice "${choice.text}" (${choice._id}) ไม่มี targetNodeId, จะถูกข้ามไป`);
+      continue;
+    }
 
-  return { novel, episodes, characters, choices, scenes: episode1Scenes };
+    const targetNodeId = goToNodeAction.parameters.targetNodeId;
+    const targetScene = sceneNodeMap.get(targetNodeId);
+
+    if (!targetScene) {
+      console.warn(`️⚠️ ไม่พบ Scene ที่มี nodeId: "${targetNodeId}" สำหรับ Choice "${choice.text}", จะถูกข้ามไป`);
+      continue;
+    }
+
+    let sourceScene = null;
+    for (const scene of allScenes) {
+      if (scene.sceneOrder === targetScene.sceneOrder - 1) {
+        sourceScene = scene;
+        break;
+      }
+    }
+
+    if (sourceScene) {
+      await SceneModel.findByIdAndUpdate(sourceScene._id, {
+        $addToSet: { choiceIds: choice._id }
+      });
+      console.log(`✅  เพิ่ม Choice "${choice.text}" -> Scene "${sourceScene.title}" (Order: ${sourceScene.sceneOrder})`);
+    } else {
+      console.warn(`️⚠️ ไม่พบ Source Scene สำหรับ Choice "${choice.text}" (Target: ${targetNodeId}), จะถูกข้ามไป`);
+    }
+  }
+  // --- End New Logic ---
+
+  // ดึงข้อมูล episode ที่อัปเดตแล้วเพื่อให้ข้อมูลสอดคล้องกัน
+  const updatedEpisodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 });
+
+  return { novel, episodes: updatedEpisodes, characters, choices, scenes: allScenes };
 };
 
 // สร้างนิยาย "The Chosen One"  
@@ -1806,124 +1880,181 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
   // สร้างตัวเลือก
   const choices = await createChosenOneChoices(novel._id, authorId);
 
-  // สร้าง Episodes
-  const episodes = [];
+  // สร้าง Episodes ทั้งหมดก่อน
+  const episodeData = [
+    {
+      novelId: novel._id,
+      authorId,
+      title: 'ลางร้าย',
+      slug: 'bad-omen',
+      episodeOrder: 1,
+      status: EpisodeStatus.PUBLISHED,
+      accessType: EpisodeAccessType.FREE,
+      teaserText: 'ครอบครัวดัลลาสใช้ชีวิตอย่างปกติสุขมาโดยตลอด แต่ใครเล่าจะรู้... ว่าเหตุไม่คาดฝันที่มาจากความประมาทอาจเปลี่ยนชีวิตพวกเขาไปตลอดกาล',
+      publishedAt: new Date('2023-11-15'),
+      stats: {
+        viewsCount: 58420,
+        uniqueViewersCount: 42150,
+        likesCount: 4850,
+        commentsCount: 1245,
+        totalWords: 9500,
+        estimatedReadingTimeMinutes: 38,
+        purchasesCount: 0,
+        averageReadingProgress: 94.2,
+        dropOffRate: 5.8
+      },
+      sentimentInfo: {
+        authorDefinedEmotionTags: ['peaceful_beginning', 'foreshadowing', 'family_bonds'],
+        authorDefinedIntensityScore: 2,
+        aiPreliminaryOverallSentiment: 'positive',
+        aiPreliminarySentimentScore: 0.6
+      },
+      authorNotesBefore: 'เรื่องราวเริ่มต้นด้วยความสงบสุข แต่จะจบลงอย่างไร?',
+      authorNotesAfter: 'ลางร้ายเริ่มปรากฏแล้ว เตรียมตัวให้พร้อมสำหรับการเลือกที่ยากลำบาก',
+      isPreviewAllowed: true,
+      lastContentUpdatedAt: new Date('2024-01-18')
+    },
+    {
+      novelId: novel._id,
+      authorId,
+      title: 'เหตุไม่คาดฝัน',
+      slug: 'unexpected-event',
+      episodeOrder: 2,
+      status: EpisodeStatus.PUBLISHED,
+      accessType: EpisodeAccessType.FREE,
+      teaserText: 'เมื่อมีอา เจมส์ ไลล่า 3พี่น้องรวมถึงเพื่อนรักอองรี... สุนัขพันธุ์บีเกิ้ลแสนน่ารักที่ทุกคนรักเสมือนสมาชิกในครอบครัว กลับพบกับเหตุการณ์ไม่คาดฝันขึ้นที่พวกเขาจะไม่มีวันลืมไปตลอดกาล',
+      publishedAt: new Date('2023-12-01'),
+      stats: {
+        viewsCount: 52680,
+        uniqueViewersCount: 38420,
+        likesCount: 4320,
+        commentsCount: 1189,
+        totalWords: 8500,
+        estimatedReadingTimeMinutes: 34,
+        purchasesCount: 0,
+        averageReadingProgress: 91.8,
+        dropOffRate: 8.2
+      },
+      sentimentInfo: {
+        authorDefinedEmotionTags: ['tension_building', 'accident', 'crisis_moment'],
+        authorDefinedIntensityScore: 4,
+        aiPreliminaryOverallSentiment: 'negative',
+        aiPreliminarySentimentScore: -0.4
+      },
+      authorNotesBefore: 'ชีวิตสามารถเปลี่ยนแปลงได้ในพริบตา',
+      authorNotesAfter: 'เหตุการณ์ที่ไม่คาดฝันเกิดขึ้นแล้ว คุณจะรับมือกับมันอย่างไร?',
+      isPreviewAllowed: true,
+      lastContentUpdatedAt: new Date('2024-01-20')
+    },
+    {
+      novelId: novel._id,
+      authorId,
+      title: 'ถึงเวลาต้องเลือก',
+      slug: 'time-to-choose',
+      episodeOrder: 3,
+      status: EpisodeStatus.PUBLISHED,
+      accessType: EpisodeAccessType.FREE,
+      teaserText: 'เมื่อโชคชะตาบังคับให้คุณต้องเลือก ระหว่างความถูกต้องกับความถูกใจ แล้วคุณล่ะ... เลือกอะไร?',
+      publishedAt: new Date('2023-12-15'),
+      stats: {
+        viewsCount: 45320,
+        uniqueViewersCount: 31850,
+        likesCount: 3670,
+        commentsCount: 1220,
+        totalWords: 10000,
+        estimatedReadingTimeMinutes: 48,
+        purchasesCount: 0,
+        averageReadingProgress: 96.5,
+        dropOffRate: 3.5
+      },
+      sentimentInfo: {
+        authorDefinedEmotionTags: ['moral_choice', 'climax', 'philosophy', 'life_value'],
+        authorDefinedIntensityScore: 5,
+        aiPreliminaryOverallSentiment: 'mixed',
+        aiPreliminarySentimentScore: 0.0
+      },
+      authorNotesBefore: 'การเลือกที่ยากที่สุดในชีวิต ไม่มีคำตอบที่ถูกหรือผิดแน่นอน',
+      authorNotesAfter: 'ขอบคุณที่ร่วมคิดและตัดสินใจไปกับเรา การเลือกของคุณสะท้อนถึงค่านิยมที่แท้จริงของคุณ',
+      isPreviewAllowed: true,
+      lastContentUpdatedAt: new Date('2024-01-20')
+    }
+  ];
 
-  // Episode 1: ลางร้าย
-  const episode1 = new EpisodeModel({
-    novelId: novel._id,
-    authorId,
-    title: 'ลางร้าย',
-    slug: 'bad-omen',
-    episodeOrder: 1,
-    status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.FREE,
-    teaserText: 'ครอบครัวดัลลาสใช้ชีวิตอย่างปกติสุขมาโดยตลอด แต่ใครเล่าจะรู้... ว่าเหตุไม่คาดฝันที่มาจากความประมาทอาจเปลี่ยนชีวิตพวกเขาไปตลอดกาล',
-    publishedAt: new Date('2023-11-15'),
-    stats: {
-      viewsCount: 58420,
-      uniqueViewersCount: 42150,
-      likesCount: 4850,
-      commentsCount: 1245,
-      totalWords: 9500,
-      estimatedReadingTimeMinutes: 38,
-      purchasesCount: 0,
-      averageReadingProgress: 94.2,
-      dropOffRate: 5.8
-    },
-    sentimentInfo: {
-      authorDefinedEmotionTags: ['peaceful_beginning', 'foreshadowing', 'family_bonds'],
-      authorDefinedIntensityScore: 2,
-      aiPreliminaryOverallSentiment: 'positive',
-      aiPreliminarySentimentScore: 0.6
-    },
-    authorNotesBefore: 'เรื่องราวเริ่มต้นด้วยความสงบสุข แต่จะจบลงอย่างไร?',
-    authorNotesAfter: 'ลางร้ายเริ่มปรากฏแล้ว เตรียมตัวให้พร้อมสำหรับการเลือกที่ยากลำบาก',
-    isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date('2024-01-18')
+  const episodes = await EpisodeModel.insertMany(episodeData);
+
+  // สร้างฉากทั้งหมด แล้วแจกจ่ายให้ episode
+  // โดยสร้างฉากทั้งหมดภายใต้ episode แรกก่อน เพื่อให้มี episodeId สำหรับสร้างฉาก
+  const allScenes = await createChosenOneScenes(novel._id, episodes[0]._id, characters);
+
+  // แจกจ่ายฉากตามที่ผู้ใช้ระบุ (ep2 เริ่มที่ scene order 4)
+  const episode1Scenes = allScenes.slice(0, 3); // Scenes 1-3
+  const episode2Scenes = allScenes.slice(3, 4); // Scene 4
+  const episode3Scenes = allScenes.slice(4);   // Scenes 5-6
+
+  // อัปเดต episodeId สำหรับฉากที่ไม่ใช่ของ episode 1
+  for (const scene of episode2Scenes) {
+    await SceneModel.findByIdAndUpdate(scene._id, { episodeId: episodes[1]._id });
+  }
+  for (const scene of episode3Scenes) {
+    await SceneModel.findByIdAndUpdate(scene._id, { episodeId: episodes[2]._id });
+  }
+
+  // อัปเดต Episodes ด้วย firstSceneId และ sceneIds
+  await EpisodeModel.findByIdAndUpdate(episodes[0]._id, {
+    firstSceneId: episode1Scenes[0]?._id,
+    sceneIds: episode1Scenes.map(s => s._id)
   });
-
-  await episode1.save();
-  episodes.push(episode1);
-
-  // สร้างฉากสำหรับ Episode 1
-  const episode1Scenes = await createChosenOneScenes(novel._id, episode1._id, characters);
-
-  // Episode 2: เหตุไม่คาดฝัน
-  const episode2 = new EpisodeModel({
-    novelId: novel._id,
-    authorId,
-    title: 'เหตุไม่คาดฝัน',
-    slug: 'unexpected-event',
-    episodeOrder: 2,
-    status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.FREE,
-    teaserText: 'เมื่อมีอา เจมส์ ไลล่า 3พี่น้องรวมถึงเพื่อนรักอองรี... สุนัขพันธุ์บีเกิ้ลแสนน่ารักที่ทุกคนรักเสมือนสมาชิกในครอบครัว กลับพบกับเหตุการณ์ไม่คาดฝันขึ้นที่พวกเขาจะไม่มีวันลืมไปตลอดกาล',
-    publishedAt: new Date('2023-12-01'),
-    stats: {
-      viewsCount: 52680,
-      uniqueViewersCount: 38420,
-      likesCount: 4320,
-      commentsCount: 1189,
-      totalWords: 8500,
-      estimatedReadingTimeMinutes: 34,
-      purchasesCount: 0,
-      averageReadingProgress: 91.8,
-      dropOffRate: 8.2
-    },
-    sentimentInfo: {
-      authorDefinedEmotionTags: ['tension_building', 'accident', 'crisis_moment'],
-      authorDefinedIntensityScore: 4,
-      aiPreliminaryOverallSentiment: 'negative',
-      aiPreliminarySentimentScore: -0.4
-    },
-    authorNotesBefore: 'ชีวิตสามารถเปลี่ยนแปลงได้ในพริบตา',
-    authorNotesAfter: 'เหตุการณ์ที่ไม่คาดฝันเกิดขึ้นแล้ว คุณจะรับมือกับมันอย่างไร?',
-    isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date('2024-01-20')
+  await EpisodeModel.findByIdAndUpdate(episodes[1]._id, {
+    firstSceneId: episode2Scenes[0]?._id,
+    sceneIds: episode2Scenes.map(s => s._id)
   });
-
-  await episode2.save();
-  episodes.push(episode2);
-
-  // Episode 3: ถึงเวลาต้องเลือก
-  const episode3 = new EpisodeModel({
-    novelId: novel._id,
-    authorId,
-    title: 'ถึงเวลาต้องเลือก',
-    slug: 'time-to-choose',
-    episodeOrder: 3,
-    status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.FREE,
-    teaserText: 'เมื่อโชคชะตาบังคับให้คุณต้องเลือก ระหว่างความถูกต้องกับความถูกใจ แล้วคุณล่ะ... เลือกอะไร?',
-    publishedAt: new Date('2023-12-15'),
-    stats: {
-      viewsCount: 45320,
-      uniqueViewersCount: 31850,
-      likesCount: 3670,
-      commentsCount: 1220,
-      totalWords: 10000,
-      estimatedReadingTimeMinutes: 48,
-      purchasesCount: 0,
-      averageReadingProgress: 96.5,
-      dropOffRate: 3.5
-    },
-    sentimentInfo: {
-      authorDefinedEmotionTags: ['moral_choice', 'climax', 'philosophy', 'life_value'],
-      authorDefinedIntensityScore: 5,
-      aiPreliminaryOverallSentiment: 'mixed',
-      aiPreliminarySentimentScore: 0.0
-    },
-    authorNotesBefore: 'การเลือกที่ยากที่สุดในชีวิต ไม่มีคำตอบที่ถูกหรือผิดแน่นอน',
-    authorNotesAfter: 'ขอบคุณที่ร่วมคิดและตัดสินใจไปกับเรา การเลือกของคุณสะท้อนถึงค่านิยมที่แท้จริงของคุณ',
-    isPreviewAllowed: true,
-    lastContentUpdatedAt: new Date('2024-01-20')
+  await EpisodeModel.findByIdAndUpdate(episodes[2]._id, {
+    firstSceneId: episode3Scenes[0]?._id,
+    sceneIds: episode3Scenes.map(s => s._id)
   });
+  
+  // --- New Logic: Associate Choices with Scenes ---
+  console.log('🔗 กำลังเชื่อมโยง Choices เข้ากับ Scenes ที่ถูกต้อง (The Chosen One)...');
+  const sceneNodeMap = new Map(allScenes.map(s => [s.nodeId, s]));
 
-  await episode3.save();
-  episodes.push(episode3);
+  for (const choice of choices) {
+    const goToNodeAction = choice.actions.find(a => a.type === 'go_to_node');
+    if (!goToNodeAction || !goToNodeAction.parameters.targetNodeId) {
+      console.warn(`️️⚠️ Choice "${choice.text}" (${choice._id}) ไม่มี targetNodeId, จะถูกข้ามไป`);
+      continue;
+    }
 
-  return { novel, episodes, characters, choices, scenes: episode1Scenes };
+    const targetNodeId = goToNodeAction.parameters.targetNodeId;
+    const targetScene = sceneNodeMap.get(targetNodeId);
+
+    if (!targetScene) {
+      console.warn(`️⚠️ ไม่พบ Scene ที่มี nodeId: "${targetNodeId}" สำหรับ Choice "${choice.text}", จะถูกข้ามไป`);
+      continue;
+    }
+
+    let sourceScene = null;
+    for (const scene of allScenes) {
+      if (scene.sceneOrder === targetScene.sceneOrder - 1) {
+        sourceScene = scene;
+        break;
+      }
+    }
+
+    if (sourceScene) {
+      await SceneModel.findByIdAndUpdate(sourceScene._id, {
+        $addToSet: { choiceIds: choice._id }
+      });
+      console.log(`✅  เพิ่ม Choice "${choice.text}" -> Scene "${sourceScene.title}" (Order: ${sourceScene.sceneOrder})`);
+    } else {
+      console.warn(`️⚠️ ไม่พบ Source Scene สำหรับ Choice "${choice.text}" (Target: ${targetNodeId}), จะถูกข้ามไป`);
+    }
+  }
+  // --- End New Logic ---
+
+  // ดึงข้อมูล episode ที่อัปเดตแล้วเพื่อให้ข้อมูลสอดคล้องกัน
+  const updatedEpisodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 });
+
+  return { novel, episodes: updatedEpisodes, characters, choices, scenes: allScenes };
 };
 
 // ฟังก์ชันหลักสำหรับสร้างข้อมูล seed ทั้งหมด

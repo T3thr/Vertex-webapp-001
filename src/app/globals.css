@@ -361,199 +361,6 @@ html[data-theme-ready="true"] {
 }
 
 /* --------------------------------------- */
-/* Visual Novel Reader Theme */
-/* --------------------------------------- */
-.vn-reader {
-  --vn-primary: var(--primary);
-  --vn-background: var(--background);
-  --vn-foreground: var(--foreground);
-  --vn-card: var(--card);
-  --vn-card-foreground: var(--card-foreground);
-  --vn-border: var(--border);
-  --vn-muted: var(--muted);
-  --vn-muted-foreground: var(--muted-foreground);
-  --vn-accent: var(--accent);
-  --vn-secondary: var(--secondary);
-  
-  /* Visual Novel specific colors */
-  --vn-dialogue-bg: hsl(var(--card) / 0.95);
-  --vn-dialogue-border: hsl(var(--border) / 0.3);
-  --vn-character-name-bg: hsl(var(--primary));
-  --vn-character-name-fg: hsl(var(--primary-foreground));
-  --vn-choice-bg: hsl(var(--primary) / 0.1);
-  --vn-choice-border: hsl(var(--primary) / 0.3);
-  --vn-choice-hover-bg: hsl(var(--primary) / 0.2);
-  --vn-control-bg: hsl(var(--card) / 0.9);
-  --vn-control-border: hsl(var(--border) / 0.2);
-  --vn-progress-bg: hsl(var(--muted) / 0.3);
-  --vn-progress-fg: hsl(var(--primary));
-}
-
-/* Visual Novel Frame */
-.vn-frame {
-  background: var(--vn-background);
-  border: 1px solid var(--vn-border);
-}
-
-/* Visual Novel Dialogue Box */
-.vn-dialogue-box {
-  background: var(--vn-dialogue-bg);
-  border: 1px solid var(--vn-dialogue-border);
-  backdrop-filter: blur(12px);
-  color: var(--vn-foreground);
-}
-
-/* Character Name Badge */
-.vn-character-name {
-  background: var(--vn-character-name-bg);
-  color: var(--vn-character-name-fg);
-}
-
-/* Choice Buttons */
-.vn-choice {
-  background: var(--vn-choice-bg);
-  border: 1px solid var(--vn-choice-border);
-  color: var(--vn-foreground);
-  transition: all 0.2s ease-in-out;
-}
-
-.vn-choice:hover {
-  background: var(--vn-choice-hover-bg);
-  border-color: hsl(var(--primary) / 0.5);
-}
-
-/* Control Panel */
-.vn-controls {
-  background: var(--vn-control-bg);
-  border: 1px solid var(--vn-control-border);
-  backdrop-filter: blur(8px);
-}
-
-.vn-control-button {
-  background: hsl(var(--card) / 0.8);
-  border: 1px solid var(--vn-border);
-  color: var(--vn-foreground);
-  transition: all 0.2s ease-in-out;
-}
-
-.vn-control-button:hover {
-  background: var(--vn-secondary);
-  border-color: hsl(var(--primary) / 0.3);
-}
-
-.vn-control-button.active {
-  background: var(--vn-primary);
-  color: var(--vn-character-name-fg);
-  border-color: var(--vn-primary);
-}
-
-/* Progress Bar */
-.vn-progress-track {
-  background: var(--vn-progress-bg);
-}
-
-.vn-progress-bar {
-  background: linear-gradient(90deg, var(--vn-progress-fg), hsl(var(--primary) / 0.8));
-}
-
-/* Modal Backgrounds */
-.vn-modal-backdrop {
-  background: hsl(var(--background) / 0.8);
-  backdrop-filter: blur(8px);
-}
-
-.vn-modal {
-  background: var(--vn-card);
-  border: 1px solid var(--vn-border);
-  color: var(--vn-card-foreground);
-}
-
-/* Settings Panel Styles */
-.vn-settings-slider {
-  background: var(--vn-muted);
-  border-radius: var(--radius-lg);
-}
-
-.vn-settings-slider::-webkit-slider-thumb {
-  background: var(--vn-primary);
-  border: 2px solid var(--vn-background);
-  border-radius: 50%;
-  cursor: pointer;
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.vn-settings-slider::-moz-range-thumb {
-  background: var(--vn-primary);
-  border: 2px solid var(--vn-background);
-  border-radius: 50%;
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-/* Episode Navigation Styles */
-.vn-episode-item {
-  background: hsl(var(--card) / 0.5);
-  border: 1px solid var(--vn-border);
-  color: var(--vn-card-foreground);
-}
-
-.vn-episode-item:hover {
-  background: var(--vn-secondary);
-  border-color: hsl(var(--primary) / 0.4);
-}
-
-.vn-episode-item.current {
-  background: hsl(var(--primary) / 0.1);
-  border-color: var(--vn-primary);
-}
-
-.vn-episode-badge {
-  background: hsl(var(--primary) / 0.2);
-  color: var(--vn-primary);
-  border: 1px solid hsl(var(--primary) / 0.3);
-}
-
-/* Text Styles */
-.vn-text-cursor {
-  background: var(--vn-foreground);
-  animation: vn-blink 1s infinite;
-}
-
-@keyframes vn-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-/* Continue Indicator */
-.vn-continue-indicator {
-  color: var(--vn-muted-foreground);
-  animation: vn-bounce 1.5s infinite;
-}
-
-@keyframes vn-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(5px); }
-}
-
-/* Dark theme specific adjustments */
-.dark .vn-reader {
-  --vn-dialogue-bg: hsl(var(--card) / 0.98);
-  --vn-control-bg: hsl(var(--card) / 0.95);
-}
-
-/* Sepia theme specific adjustments */
-.sepia .vn-reader {
-  --vn-dialogue-bg: hsl(var(--card) / 0.95);
-  --vn-character-name-bg: var(--accent);
-  --vn-character-name-fg: var(--accent-foreground);
-}
-
-/* --------------------------------------- */
 /* Dashboard Layout Utilities - ไม่บดบัง navbar/footer และลบช่องว่างล่าง */
 /* --------------------------------------- */
 
@@ -855,54 +662,53 @@ html[data-theme-ready="true"] {
 /* Asymmetrical Grid Utilities - ✅ [ปรับปรุงให้การ์ด grid เท่ากับ section อื่น] สำหรับ section แรก */
 .featured-grid {
   display: grid;
-  grid-template-columns: 3fr 2fr; /* ✅ [เปลี่ยนจาก 1fr 1fr เป็น 3fr 2fr] สัดส่วน 60%:40% ตามรูปตัวอย่าง */
-  gap: 0rem; /* ✅ [ลดจาก 0.5rem เป็น 0.25rem] ลดระยะห่างให้แคบมากๆ ตามที่ขอ */
+  grid-template-columns: 3fr 2fr; /* สัดส่วน 60%:40% */
+  gap: 0.8rem; /* ระยะห่างระหว่างกล่องซ้ายและขวา */
   align-items: stretch;
-  justify-content: space-between; /* ✅ [เปลี่ยนจาก flex-start เป็น space-between] ให้ชิดขอบทั้งสองข้าง */
-  max-width: 100%; /* ✅ [เปลี่ยนจาก 800px เป็น 100%] ให้ใช้พื้นที่เต็มที่ */
-  margin: 0; /* ✅ [เปลี่ยนจาก margin-left: 0, margin-right: auto เป็น margin: 0] */
-  min-height: 400px; /* ✅ [เพิ่มจาก 300px เป็น 400px] เพิ่มความสูงให้เหมือนในรูป */
-  padding: 0; /* ✅ [เปลี่ยนจาก 0 1rem 0 0 เป็น 0] ลบ padding ทั้งหมดเพื่อให้ชิดขอบ */
+  justify-content: space-between; /* ให้ชิดขอบทั้งสองข้าง */
+  max-width: 100%; /* ใช้พื้นที่เต็มที่ */
+  margin: 0;
+  min-height: 500px; /* เพิ่มความสูงให้มากขึ้น */
+  padding: 0;
 }
 
 .featured-main {
   grid-column: 1 / 2;
   display: flex;
   align-items: stretch;
-  justify-content: flex-start; /* ✅ [เพิ่มใหม่] ให้การ์ดหลักชิดซ้าย */
+  justify-content: flex-start; /* ให้การ์ดหลักชิดซ้าย */
   height: 100%;
 }
 
 .featured-main .novel-card {
   width: 100%;
   height: 100%;
-  min-width: 450px; /* ✅ [เพิ่มจาก 280px เป็น 350px] ให้การ์ดหลักใหญ่ขึ้นตามรูป */
-  min-height: 400px; /* ✅ [เพิ่มจาก 300px เป็น 400px] เพิ่มความสูงให้เหมือนรูป */
-  max-width: 650px; /* ✅ [เพิ่มจาก 380px เป็น 500px] ขยายขนาดสูงสุด */
-  max-height: 450px; /* ✅ [เพิ่มจาก 370px เป็น 450px] เพิ่มความสูงสูงสุด */
+  min-width: 450px; /* ความกว้างขั้นต่ำ */
+  min-height: 500px; /* เพิ่มความสูงให้มากขึ้น */
+  max-width: 650px; /* ความกว้างสูงสุด */
+  max-height: 550px; /* เพิ่มความสูงสูงสุด */
 }
 
 .featured-side {
   grid-column: 2 / 3;
   display: grid;
-  grid-template-columns: 1fr 1fr; /* ✅ Grid 2x2 */
+  grid-template-columns: 1fr 1fr; /* Grid 2x2 */
   grid-template-rows: 1fr 1fr;
-  gap: 0.75rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.75rem] เพิ่มระยะห่างเล็กน้อยให้เหมือนรูป */
+  gap: 0.75rem; /* ระยะห่างระหว่างการ์ด */
   height: 100%;
   align-items: stretch;
-  justify-content: end; /* ✅ [เพิ่มใหม่] ให้การ์ดฝั่งขวาชิดขวา */
-  position: relative; /* ✅ [เพิ่มใหม่] สำหรับจัดตำแหน่งปุ่มดูเพิ่มเติม */
+  justify-content: end; /* ให้การ์ดฝั่งขวาชิดขวา */
+  position: relative;
 }
 
-/* ✅ [ปรับใหม่] การ์ด default ใน featured section ให้มีขนาดเท่ากับ section อื่นทุกประการ */
+/* การ์ดด้านขวา */
 .featured-side .novel-card {
   width: 100%;
   height: 100%;
-  /* ✅ ปรับขนาดให้เหมาะสมกับสัดส่วนใหม่ */
-  min-width: 160px; /* ✅ [เพิ่มจาก 140px เป็น 160px] เพิ่มความกว้างตามที่ขอ */
-  max-width: 220px; /* ✅ [เพิ่มจาก 180px เป็น 220px] เพิ่มความกว้างสูงสุด */
-  min-height: 180px; /* ✅ [คงเดิม] คงความสูงเท่าเดิมตามที่ขอ */
-  max-height: 220px; /* ✅ [คงเดิม] คงความสูงเท่าเดิมตามที่ขอ */
+  min-width: 160px; /* ความกว้างขั้นต่ำ */
+  max-width: 220px; /* ความกว้างสูงสุด */
+  min-height: 230px; /* เพิ่มความสูงให้มากขึ้น */
+  max-height: 270px; /* เพิ่มความสูงสูงสุด */
 }
 
 /* ✅ [ปรับใหม่] ปุ่มดูเพิ่มเติมให้อยู่ใต้ grid 2x2 แบบสมมาตร */
@@ -968,12 +774,12 @@ html[data-theme-ready="true"] {
     padding: 0;
     max-width: 100%;
   }
-
+  
   .featured-main {
     width: 100%;
     justify-content: flex-start; /* ✅ [เปลี่ยนจาก center เป็น flex-start] ให้ชิดซ้ายใน mobile */
   }
-
+  
   .featured-main .novel-card {
     min-width: unset;
     min-height: 380px; /* ✅ [เพิ่มจาก 320px เป็น 380px] เพิ่มความสูงเพื่อรองรับ aspect ratio ใหม่และข้อความ */
@@ -984,7 +790,7 @@ html[data-theme-ready="true"] {
     display: flex; /* ✅ [เพิ่มใหม่] ให้แน่ใจว่าเป็น flex container */
     flex-direction: column; /* ✅ [เพิ่มใหม่] จัดเรียงแนวตั้ง */
   }
-
+  
   .featured-side {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1020,7 +826,7 @@ html[data-theme-ready="true"] {
     gap: 1.25rem; /* ✅ [เพิ่มจาก 0.75rem เป็น 1.25rem] เพิ่มระยะห่าง */
     padding: 0; /* ✅ [เปลี่ยนจาก 0 0.5rem 0 0 เป็น 0] ลบ padding เพื่อให้ชิดขอบ */
   }
-
+  
   .featured-main .novel-card {
     min-height: 340px; /* ✅ [เพิ่มจาก 280px เป็น 340px] เพิ่มความสูงเพื่อรองรับ aspect ratio ใหม่และข้อความ */
     max-height: 400px; /* ✅ [เพิ่มจาก 340px เป็น 400px] เพิ่มพื้นที่สำหรับรายละเอียด */
@@ -1028,7 +834,7 @@ html[data-theme-ready="true"] {
     display: flex; /* ✅ [เพิ่มใหม่] ให้แน่ใจว่าเป็น flex container */
     flex-direction: column; /* ✅ [เพิ่มใหม่] จัดเรียงแนวตั้ง */
   }
-
+  
   .featured-side {
     gap: 0.625rem; /* ✅ [เพิ่มจาก 0.5rem เป็น 0.625rem] */
     margin: 0 auto 3rem 0; /* ✅ [เปลี่ยนจาก margin-bottom: 3rem เป็น margin: 0 auto 3rem 0] ให้ชิดซ้าย */
@@ -1114,8 +920,8 @@ html[data-theme-ready="true"] {
     width: 50px;
     height: 50px;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15), 0 2px 5px rgba(0, 0, 0, 0.1); /* ✅ [เพิ่มใหม่] เงาปรับตามขนาดใน tablet */
-}
-
+  }
+  
   .view-more-circle:hover {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2), 0 3px 10px rgba(0, 0, 0, 0.15); /* ✅ [เพิ่มใหม่] เงา hover ปรับตามขนาดใน tablet */
   }
@@ -1175,4 +981,136 @@ html[data-theme-ready="true"] {
 
 .hover-lift:hover {
   box-shadow: var(--shadow-lg);
+}
+
+/* Visual Novel Reader Styles */
+.vn-reader {
+  position: relative;
+  overflow: hidden;
+}
+
+.vn-frame {
+  position: relative;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+}
+
+/* Desktop responsive styles */
+@media (min-width: 1024px) {
+  .vn-frame {
+    min-height: 600px !important;
+    max-height: 80vh !important;
+  }
+}
+
+/* Mobile responsive styles */
+@media (max-width: 1023px) {
+  .vn-frame {
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    width: 100vw !important;
+    max-width: none !important;
+  }
+}
+
+/* Slider Styles */
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-webkit-slider-track {
+  height: 8px;
+  border-radius: 4px;
+  background: hsl(var(--secondary));
+}
+
+.slider::-moz-range-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: hsl(var(--secondary));
+  border: none;
+}
+
+/* Dialogue Box Animation */
+.dialogue-box {
+  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Choice Button Hover Effects */
+.choice-button {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%);
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+}
+
+.choice-button:hover {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.9) 0%, rgba(29, 78, 216, 0.9) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+}
+
+/* Loading Animation */
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Character Animation */
+.character-enter {
+  animation: characterEnter 0.5s ease-out;
+}
+
+@keyframes characterEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Text Typewriter Effect */
+.typewriter-cursor {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }

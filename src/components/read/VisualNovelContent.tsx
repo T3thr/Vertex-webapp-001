@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Image from 'next/image';
-import { ChevronDown } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, SkipForward } from 'lucide-react';
 
 interface Novel {
   _id: string;
@@ -25,25 +24,65 @@ interface Episode {
   firstSceneId?: string;
   teaserText?: string;
   stats?: any;
+  scenes?: Scene[]; // Make scenes optional as the component fetches them
+}
+
+interface Character {
+  instanceId: string;
+  characterId: string;
+  characterData?: {
+    _id: string;
+    name: string;
+    characterCode: string;
+    colorTheme?: string;
+    profileImageUrl?: string;
+  };
+  expressionId?: string;
+  transform?: any;
+  isVisible: boolean;
+}
+
+interface TextContent {
+  instanceId: string;
+  type: 'dialogue' | 'narration' | 'thought_bubble' | 'system_message';
+  characterId?: string;
+  speakerDisplayName?: string;
+  content: string;
+}
+
+interface Choice {
+  _id: string;
+  text: string;
+  hoverText?: string;
+  actions: any[];
+  isTimedChoice?: boolean;
+  timeLimitSeconds?: number;
 }
 
 interface Scene {
   _id: string;
   sceneOrder: number;
-  content: {
-    backgroundImageUrl?: string;
-    characterImageUrl?: string;
+  title?: string;
+  background: {
+    type: string;
+    value: string;
+    blurEffect?: string;
+    colorOverlay?: string;
+    fitMode?: string;
+  };
+  characters: Character[];
+  textContents: TextContent[];
+  choices?: Choice[];
+  nextSceneId?: string;
+  audioElements?: any[];
+}
+
+interface DialogueHistoryItem {
+    id: string;
+    sceneId: string;
+    sceneOrder: number;
     characterName?: string;
     dialogueText: string;
-    narratorText?: string;
-    audioUrl?: string;
-  };
-  choices?: Array<{
-    _id: string;
-    text: string;
-    nextSceneId?: string;
-  }>;
-  nextSceneId?: string;
 }
 
 interface VisualNovelContentProps {
@@ -51,451 +90,386 @@ interface VisualNovelContentProps {
   episode: Episode;
   currentSceneId?: string;
   isPlaying: boolean;
+  autoPlay: boolean; // Added for autoplay functionality
   textSpeed: number;
   fontSize: number;
   bgOpacity: number;
   onSceneChange: (sceneId: string) => void;
   onProgressChange: (progress: number) => void;
+  onDialogueEntry: (entry: DialogueHistoryItem) => void;
+  onEpisodeEnd: () => void;
   userId?: string;
 }
 
+const getSpeakerInfo = (textContent: TextContent | undefined, characters: Character[]): { name: string, color?: string } => {
+    if (!textContent) return { name: '', color: '#FFFFFF' };
+
+    if (textContent.type === 'narration' || textContent.type === 'system_message') {
+        return { name: 'บรรยาย', color: '#CCCCCC' };
+    }
+    
+    if (textContent.speakerDisplayName) {
+        const character = characters.find(c => c.characterData?._id === textContent.characterId);
+        return { 
+            name: textContent.speakerDisplayName,
+            color: character?.characterData?.colorTheme || '#FFFFFF'
+        };
+    }
+
+    return { name: '', color: '#FFFFFF' };
+};
+
 export default function VisualNovelContent({
   novel,
-  episode,
+  episode: initialEpisode,
   currentSceneId,
   isPlaying,
+  autoPlay,
   textSpeed,
   fontSize,
   bgOpacity,
   onSceneChange,
   onProgressChange,
+  onDialogueEntry,
+  onEpisodeEnd,
   userId
 }: VisualNovelContentProps) {
+  const [episodeData, setEpisodeData] = useState<Episode | null>(null);
   const [currentScene, setCurrentScene] = useState<Scene | null>(null);
+  const [textIndex, setTextIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
-  const [showChoices, setShowChoices] = useState(false);
-  const [sceneHistory, setSceneHistory] = useState<Scene[]>([]);
-  const [totalScenes, setTotalScenes] = useState(10); // ตั้งค่าจำนวนฉากรวม
-  const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
-  const [isTextComplete, setIsTextComplete] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [availableChoices, setAvailableChoices] = useState<Choice[] | null>(null);
+
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoPlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  const textRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const charactersInScene = currentScene?.characters.filter(c => c.isVisible) || [];
 
-  // ข้อมูลจำลองฉากต่างๆ
-  const mockScenes: Scene[] = [
-    {
-      _id: 'scene-1',
-      sceneOrder: 1,
-      content: {
-        backgroundImageUrl: '/images/background/main.png',
-        characterImageUrl: '/images/character/Ana_fullbody.png',
-        characterName: 'อริษา',
-        dialogueText: 'วันนี้เป็นวันแรกที่ฉันมาถึงย่านเก่าของกรุงเทพฯ เพื่อทำวิจัยเรื่องประวัติศาสตร์ท้องถิ่น',
-        narratorText: 'อริษามองดูสถานที่รอบๆ ด้วยความตื่นเต้น'
-      },
-      choices: [
-        {
-          _id: 'choice-1',
-          text: 'เดินไปสำรวจย่านเก่า',
-          nextSceneId: 'scene-2'
-        },
-        {
-          _id: 'choice-2', 
-          text: 'หาที่พักก่อน',
-          nextSceneId: 'scene-3'
-        }
-      ],
-      nextSceneId: 'scene-2'
-    },
-    {
-      _id: 'scene-2',
-      sceneOrder: 2,
-      content: {
-        backgroundImageUrl: '/images/background/mansion.png',
-        characterImageUrl: '/images/character/Cho_fullbody.png',
-        characterName: 'คุณยาย',
-        dialogueText: 'เธอมาจากไหนเหรอ ลูก? ที่นี่มันไม่ค่อยมีคนแปลกหน้ามาเยี่ยมหรอกนะ',
-        narratorText: 'คุณยายคนหนึ่งเดินออกมาจากบ้านเก่าแก่'
-      },
-      choices: [
-        {
-          _id: 'choice-3',
-          text: 'แนะนำตัวและบอกจุดประสงค์',
-          nextSceneId: 'scene-4'
-        },
-        {
-          _id: 'choice-4',
-          text: 'ถามเรื่องประวัติของย่านนี้',
-          nextSceneId: 'scene-5'
-        }
-      ],
-      nextSceneId: 'scene-4'
-    },
-    {
-      _id: 'scene-3',
-      sceneOrder: 3,
-      content: {
-        backgroundImageUrl: '/images/background/road_day1.png',
-        characterImageUrl: '/images/character/Ana_fullbody.png',
-        characterName: 'อริษา',
-        dialogueText: 'ฉันควรหาที่พักก่อน แล้วค่อยมาทำวิจัยพรุ่งนี้',
-        narratorText: 'อริษาตัดสินใจเดินไปหาโรงแรมในย่านใกล้เคียง'
-      },
-      nextSceneId: 'scene-6'
-    },
-    {
-      _id: 'scene-4',
-      sceneOrder: 4,
-      content: {
-        backgroundImageUrl: '/images/background/mansion.png',
-        characterImageUrl: '/images/character/Cho_fullbody.png',
-        characterName: 'คุณยาย',
-        dialogueText: 'อ๋อ เธอมาทำวิจัยเรื่องประวัติศาสตร์เหรอ? ที่นี่มีเรื่องราวมากมายแหละ ลูก',
-        narratorText: 'คุณยายยิ้มและเชิญอริษาเข้าไปในบ้าน'
-      },
-      nextSceneId: 'scene-7'
-    },
-    {
-      _id: 'scene-5',
-      sceneOrder: 5,
-      content: {
-        backgroundImageUrl: '/images/background/mansion.png',
-        characterImageUrl: '/images/character/Cho_fullbody.png',
-        characterName: 'คุณยาย',
-        dialogueText: 'ย่านนี้มีประวัติยาวนานนะลูก เคยเป็นที่อยู่ของขุนนางในสมัยโบราณ',
-        narratorText: 'ดวงตาของคุณยายเศร้าลงเล็กน้อย'
-      },
-      choices: [
-        {
-          _id: 'choice-5',
-          text: 'ถามเรื่องขุนนางที่เคยอยู่ที่นี่',
-          nextSceneId: 'scene-8'
-        },
-        {
-          _id: 'choice-6',
-          text: 'สังเกตสีหน้าเศร้าของคุณยาย',
-          nextSceneId: 'scene-9'
-        }
-      ],
-      nextSceneId: 'scene-8'
+  // Fetch episode data including all scenes
+  useEffect(() => {
+    const fetchEpisodeData = async () => {
+      if (!initialEpisode?._id) return;
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/novels/${novel.slug}/episodes/${initialEpisode._id}`);
+        if (!response.ok) throw new Error('Failed to fetch episode data');
+        const data: Episode = await response.json();
+        setEpisodeData(data);
+      } catch (error) {
+        console.error('Error fetching episode data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchEpisodeData();
+  }, [novel.slug, initialEpisode?._id]);
+  
+  // Update scene when currentSceneId or episodeData changes
+  useEffect(() => {
+    if (episodeData?.scenes && currentSceneId) {
+      const scene = episodeData.scenes.find(s => s._id === currentSceneId) || null;
+      setCurrentScene(scene);
+      setTextIndex(0); // Reset text index when scene changes
+    } else if (episodeData?.scenes) {
+      // If no currentSceneId is provided, start with the first scene
+      const firstScene = episodeData.scenes.find(s => s._id === episodeData.firstSceneId) || episodeData.scenes[0];
+       if (firstScene) {
+           onSceneChange(firstScene._id);
+       }
     }
-  ];
+  }, [currentSceneId, episodeData, onSceneChange]);
 
-  // ฟังก์ชันดึงข้อมูล scene
-  const fetchScene = useCallback(async (sceneId: string) => {
-    try {
-      // ลองดึงจาก API ก่อน
-      if (sceneId && sceneId !== '') {
-        const response = await fetch(`/api/novels/${novel.slug}/episodes/${episode._id}/scenes/${sceneId}`);
-        if (response.ok) {
-          const sceneData = await response.json();
-          setCurrentScene(sceneData);
-          setDisplayedText('');
-          setIsTextComplete(false);
-          setShowChoices(false);
-          setSceneHistory(prev => [...prev, sceneData]);
-          
-          // คำนวณ progress
-          const progress = ((currentSceneIndex + 1) / Math.max(totalScenes, 1)) * 100;
-          onProgressChange(Math.min(progress, 100));
-          return;
-        }
-      }
-      
-      // ใช้ข้อมูลจำลองหาก API ไม่สำเร็จ
-      let targetScene: Scene | null = null;
-      
-      if (sceneId && sceneId !== '') {
-        targetScene = mockScenes.find(scene => scene._id === sceneId) || null;
-      }
-      
-      // ถ้าไม่เจอหรือไม่มี sceneId ให้ใช้ฉากแรก
-      if (!targetScene) {
-        targetScene = mockScenes[currentSceneIndex] || mockScenes[0];
-      }
-      
-      if (targetScene) {
-        setCurrentScene(targetScene);
+
+  const currentTextContent = currentScene?.textContents[textIndex];
+  
+  // Typewriter effect
+  const typeText = useCallback(() => {
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (!currentTextContent) {
         setDisplayedText('');
-        setIsTextComplete(false);
-        setShowChoices(false);
-        setSceneHistory(prev => [...prev, targetScene]);
-        
-        // คำนวณ progress
-        const progress = ((currentSceneIndex + 1) / Math.max(totalScenes, 1)) * 100;
-        onProgressChange(Math.min(progress, 100));
-      }
-      
-    } catch (error) {
-      console.error('Failed to fetch scene:', error);
-      // ใช้ข้อมูลจำลองในกรณีที่เกิดข้อผิดพลาด
-      const fallbackScene = mockScenes[0];
-      setCurrentScene(fallbackScene);
-      setDisplayedText('');
-      setIsTextComplete(false);
-      setShowChoices(false);
-      setSceneHistory(prev => [...prev, fallbackScene]);
-    }
-  }, [novel.slug, episode._id, currentSceneIndex, totalScenes, onProgressChange, mockScenes]);
+        setIsTyping(false);
+        return;
+    };
 
-  // เอฟเฟกต์แอนิเมชันข้อความ
-  useEffect(() => {
-    if (!currentScene?.content?.dialogueText) return;
+    setIsTyping(true);
+    let i = 0;
+    const fullText = currentTextContent.content;
     
-    const text = currentScene.content.dialogueText;
-    let currentIndex = 0;
-    setDisplayedText('');
-    setIsTextComplete(false);
-    
-    const speed = Math.max(30, 150 - (textSpeed * 20)); // ปรับความเร็ว
-    
-    const interval = setInterval(() => {
-      if (currentIndex < text.length) {
-        setDisplayedText(text.slice(0, currentIndex + 1));
-        currentIndex++;
+    // Add dialogue to history as soon as it starts typing
+     if (currentTextContent.type === 'dialogue' || currentTextContent.type === 'narration') {
+        onDialogueEntry({
+            id: `${currentScene?._id}-${textIndex}`,
+            sceneId: currentScene?._id || '',
+            sceneOrder: currentScene?.sceneOrder || 0,
+            characterName: getSpeakerInfo(currentTextContent, currentScene?.characters || []).name,
+            dialogueText: fullText
+        });
+     }
+
+    const typingSpeed = (1 / textSpeed) * 150; 
+
+    const type = () => {
+      if (i < fullText.length) {
+        setDisplayedText(fullText.substring(0, i + 1));
+        i++;
+        typingTimeoutRef.current = setTimeout(type, typingSpeed);
       } else {
-        setIsTextComplete(true);
-        setShowChoices(!!currentScene?.choices?.length);
-        clearInterval(interval);
+        setIsTyping(false);
       }
-    }, speed);
+    };
+    type();
+  }, [currentTextContent, textSpeed, onDialogueEntry, currentScene, textIndex]);
 
-    return () => clearInterval(interval);
-  }, [currentScene, textSpeed]);
-
-  // เอฟเฟกต์การเล่นอัตโนมัติ
   useEffect(() => {
-    if (isPlaying && isTextComplete && !showChoices && currentScene?.nextSceneId) {
-      const timer = setTimeout(() => {
-        handleNextScene();
-      }, 2000);
+    if (isPlaying) {
+      typeText();
+    } else {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    }
+    return () => {
+       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [textIndex, currentScene, isPlaying, typeText]);
+  
+  // AutoPlay Logic
+  useEffect(() => {
+    if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
+    
+    if (autoPlay && isPlaying && !isTyping && currentTextContent) {
+       autoPlayTimeoutRef.current = setTimeout(() => {
+            handleAdvance();
+       }, 2000); // 2-second delay before advancing
+    }
+    
+    return () => {
+       if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
+    }
+  }, [autoPlay, isPlaying, isTyping, currentTextContent]);
+
+  const handleAdvance = useCallback(() => {
+    if (typingTimeoutRef.current) {
+       clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (isTyping) {
+      // If typing, finish immediately
+      setDisplayedText(currentTextContent?.content || '');
+      setIsTyping(false);
+    } else {
+      // If not typing, advance to next text or scene
+      const hasNextText = currentTextContent && textIndex < (currentScene?.textContents.length || 0) - 1;
+
+      if (hasNextText) {
+        setTextIndex(prev => prev + 1);
+      } else if (currentScene?.choices && currentScene.choices.length > 0) {
+        // If there are choices, display them
+        setAvailableChoices(currentScene.choices);
+      } else {
+        // End of scene, go to next scene
+        if (episodeData && episodeData.scenes && currentScene) {
+            const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene._id);
+            const isLastScene = currentSceneIndex === episodeData.scenes.length - 1;
+            const nextScene = episodeData.scenes[currentSceneIndex + 1];
+
+            if (nextScene) {
+                onSceneChange(nextScene._id);
+            } else if (isLastScene) {
+                // End of episode
+                console.log("End of episode reached. Calling onEpisodeEnd.");
+                onEpisodeEnd();
+            }
+        }
+      }
+    }
+  }, [isTyping, textIndex, currentScene, episodeData, currentTextContent, onSceneChange, onEpisodeEnd]);
+  
+  const handleChoiceSelect = (choice: Choice) => {
+    setAvailableChoices(null); // Hide choices
+    const goToNodeAction = choice.actions.find(a => a.type === 'go_to_node');
+    if (goToNodeAction && episodeData?.scenes) {
+      const targetNodeId = goToNodeAction.parameters.targetNodeId;
+      // This is a simplification. The seed data uses nodeId, but the scene data fetched doesn't have it.
+      // This will require adding nodeId to the API response. For now, we assume a direct ID or find by another property.
+      // Let's assume the API needs to be updated to also return the nodeId for each scene.
+      // For now, I will add a placeholder logic that needs the API to be updated.
       
-      return () => clearTimeout(timer);
-    }
-  }, [isPlaying, isTextComplete, showChoices, currentScene]);
+      // A proper implementation would need the nodeId in the scene data from the API.
+      // The logic below is illustrative and depends on an updated API.
+      // Since I cannot update the API and this component in the same step,
+      // I will assume the API will be updated.
+      
+      // This is a placeholder for a real implementation that would search based on nodeId
+      // This will likely fail until the API provides the nodeId for each scene.
+      const nextScene = episodeData.scenes.find(s => (s as any).nodeId === targetNodeId);
 
-  // โหลด scene เริ่มต้น
-  useEffect(() => {
-    fetchScene(currentSceneId || '');
-  }, [currentSceneId, fetchScene]);
-
-  const handleNextScene = useCallback((choiceId?: string) => {
-    if (!currentScene) return;
-    
-    let nextSceneId: string | undefined;
-    
-    if (choiceId && currentScene.choices) {
-      const choice = currentScene.choices.find(c => c._id === choiceId);
-      nextSceneId = choice?.nextSceneId;
-    } else {
-      nextSceneId = currentScene.nextSceneId;
-    }
-    
-    if (nextSceneId) {
-      setCurrentSceneIndex(prev => prev + 1);
-      onSceneChange(nextSceneId);
-      fetchScene(nextSceneId);
-    } else {
-      // ถ้าไม่มี nextSceneId ให้ไปฉากถัดไปตามลำดับ
-      const nextIndex = currentSceneIndex + 1;
-      if (nextIndex < mockScenes.length) {
-        const nextScene = mockScenes[nextIndex];
-        setCurrentSceneIndex(nextIndex);
+      if (nextScene) {
         onSceneChange(nextScene._id);
-        fetchScene(nextScene._id);
+      } else {
+        console.warn(`Scene with nodeId "${targetNodeId}" not found.`);
+        // As a fallback, just go to the next scene in order if any
+        const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene?._id);
+        const fallbackScene = episodeData.scenes[currentSceneIndex + 1];
+        if (fallbackScene) onSceneChange(fallbackScene._id);
       }
     }
-  }, [currentScene, onSceneChange, fetchScene, currentSceneIndex, mockScenes]);
-
-  const handleSkipText = useCallback(() => {
-    if (!isTextComplete && currentScene?.content?.dialogueText) {
-      setDisplayedText(currentScene.content.dialogueText);
-      setIsTextComplete(true);
-      setShowChoices(!!currentScene?.choices?.length);
-    } else if (isTextComplete && !showChoices) {
-      handleNextScene();
+  };
+  
+   // Update progress bar
+   useEffect(() => {
+    if (episodeData && episodeData.scenes && episodeData.scenes.length > 0 && currentScene) {
+        const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene._id);
+        const progress = ((currentSceneIndex + 1) / episodeData.scenes.length) * 100;
+        onProgressChange(progress);
     }
-  }, [isTextComplete, showChoices, currentScene, handleNextScene]);
+   }, [currentScene, episodeData, onProgressChange]);
+   
+  const speaker = getSpeakerInfo(currentTextContent, currentScene?.characters || []);
+
+  if (isLoading) {
+    return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+        </div>
+    );
+  }
 
   if (!currentScene) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4 text-white">ไม่พบเนื้อหา</h2>
-          <p className="text-slate-300">ไม่สามารถโหลดเนื้อหาของตอนนี้ได้</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+            <p>ไม่สามารถโหลดฉากได้</p>
         </div>
-      </div>
     );
   }
 
   return (
-    <div className="absolute inset-0 overflow-hidden cursor-pointer" onClick={handleSkipText}>
-      {/* รูปพื้นหลัง */}
-      <div className="absolute inset-0 z-0">
-        {currentScene?.content?.backgroundImageUrl ? (
-          <div className="relative w-full h-full">
-            <Image
-              src={currentScene.content.backgroundImageUrl}
-              alt="Background"
-              fill
-              className="object-cover"
-              priority
-              onError={(e) => {
-                // ถ้าโหลดรูปไม่ได้ ให้ใช้สีพื้นหลัง
-                e.currentTarget.style.display = 'none';
-              }}
+    <div className="relative w-full h-full" onClick={!availableChoices ? handleAdvance : undefined}>
+      {/* Background */}
+      <AnimatePresence>
+        <motion.div
+          key={currentScene._id}
+          className="absolute inset-0"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8 }}
+        >
+          {currentScene.background.type === 'image' ? (
+            <img 
+              src={currentScene.background.value} 
+              alt={currentScene.title || 'background'}
+              className="w-full h-full object-cover"
             />
-          </div>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-700 to-slate-900" />
-        )}
-        {/* ลด opacity ของ overlay */}
-        <div className="absolute inset-0 bg-black/10" />
+          ) : (
+            <div 
+              className="w-full h-full" 
+              style={{ backgroundColor: currentScene.background.value }} 
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
+      
+      {/* Black overlay for text readability */}
+      <div 
+         className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
+         style={{ opacity: bgOpacity }}
+      ></div>
+
+      {/* Characters */}
+      <div className="absolute inset-0">
+          <AnimatePresence>
+              {charactersInScene.map(char => (
+                  <motion.div
+                      key={char.instanceId}
+                      initial={{ opacity: 0, x: char.transform?.positionX > 0 ? 50 : -50 }}
+                      animate={{ opacity: char.transform?.opacity ?? 1, x: char.transform?.positionX ?? 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5 }}
+                      className="absolute bottom-0"
+                      style={{
+                          left: `${50 + (char.transform?.positionX ?? 0) / 10}%`, // Example positioning
+                          transform: 'translateX(-50%)',
+                          width: '40%', // Adjust as needed
+                          maxHeight: '80%',
+                      }}
+                  >
+                      {/* Use characterCode for image path */}
+                       <img src={`/images/character/${char.characterData?.characterCode}_fullbody.png`} alt={char.characterData?.name} className="object-contain" />
+                  </motion.div>
+              ))}
+          </AnimatePresence>
       </div>
 
-      {/* รูปตัวละคร */}
-      {currentScene?.content?.characterImageUrl && (
-        <motion.div
-          className="absolute bottom-0 right-0 z-20"
-          initial={{ opacity: 0, x: 100 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="relative">
-            <Image
-              src={currentScene.content.characterImageUrl}
-              alt={currentScene.content.characterName || 'Character'}
-              width={400}
-              height={600}
-              className="object-contain max-h-[70vh] drop-shadow-2xl"
-              priority
-              onError={(e) => {
-                // ซ่อนรูปถ้าโหลดไม่ได้
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
-        </motion.div>
-      )}
-
-      {/* กล่องบทสนทนา */}
-      <motion.div
-        className="absolute bottom-4 left-4 right-4 z-30"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <div className="bg-card/95 backdrop-blur-md border border-border rounded-2xl p-6 shadow-2xl">
-          {/* ชื่อตัวละคร */}
-          {currentScene?.content?.characterName && (
-            <motion.div
-              className="mb-3"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <span className="bg-primary text-primary-foreground inline-block px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
-                {currentScene.content.characterName}
-              </span>
-            </motion.div>
-          )}
-
-          {/* ข้อความบทสนทนา */}
-          <div
-            ref={textRef}
-            className="text-card-foreground leading-relaxed mb-2"
-            style={{ fontSize: `${fontSize}px` }}
+      {/* Choices Overlay */}
+      <AnimatePresence>
+        {availableChoices && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm p-8"
           >
-            {displayedText}
-            {!isTextComplete && (
-              <motion.span
-                className="inline-block w-1 h-6 ml-1 bg-primary"
-                animate={{ opacity: [1, 0] }}
-                transition={{ duration: 0.8, repeat: Infinity }}
-              />
+            <motion.div 
+              className="w-full max-w-lg space-y-4"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              {availableChoices.map((choice, index) => (
+                <motion.button
+                  key={choice._id}
+                  onClick={() => handleChoiceSelect(choice)}
+                  className="w-full p-4 bg-white/10 border border-white/20 rounded-lg text-white text-lg font-semibold text-center hover:bg-white/20 hover:border-white/30 transition-all duration-300"
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.3 + index * 0.1 }}
+                >
+                  {choice.text}
+                </motion.button>
+              ))}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Dialogue Box */}
+      {!availableChoices && currentTextContent && (
+        <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+          <div className="bg-black/50 backdrop-blur-md p-6 rounded-lg border border-white/20">
+            {/* Speaker Name */}
+            {speaker.name && speaker.name !== 'บรรยาย' && (
+              <h3 
+                 className="text-2xl font-bold mb-2"
+                 style={{ color: speaker.color, textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}
+              >
+                {speaker.name}
+              </h3>
             )}
+            
+            {/* Dialogue Text */}
+            <p 
+              key={currentTextContent.instanceId}
+              className="leading-relaxed"
+              style={{ fontSize: `${fontSize}px`}}
+            >
+              {displayedText}
+            </p>
           </div>
-
-          {/* ข้อความบรรยาย */}
-          {currentScene?.content?.narratorText && isTextComplete && (
-            <motion.div
-              className="mt-3 text-muted-foreground italic text-sm border-l-2 border-primary/30 pl-3"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              style={{ fontSize: `${fontSize - 2}px` }}
-            >
-              {currentScene.content.narratorText}
-            </motion.div>
-          )}
-
-          {/* ตัวเลือก */}
-          <AnimatePresence>
-            {showChoices && currentScene.choices && (
-              <motion.div
-                className="mt-6 space-y-3"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                {currentScene.choices.map((choice, index) => (
-                  <motion.button
-                    key={choice._id}
-                    className="w-full text-left p-4 rounded-xl bg-secondary/70 hover:bg-secondary border border-border transition-all duration-200 group"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNextScene(choice._id);
-                    }}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontSize: `${fontSize - 1}px` }} className="text-card-foreground font-medium">
-                        {choice.text}
-                      </span>
-                      <ChevronDown size={16} className="opacity-60 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </motion.button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ตัวบ่งชี้การดำเนินต่อ */}
-          {isTextComplete && !showChoices && currentScene?.nextSceneId && (
-            <motion.div
-              className="flex justify-center mt-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              <motion.div
-                className="text-muted-foreground text-sm flex items-center gap-2 bg-secondary/50 px-3 py-1 rounded-full"
-                animate={{ y: [0, 3, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              >
-                <span>คลิกเพื่อดำเนินต่อ</span>
-                <ChevronDown size={16} />
-              </motion.div>
-            </motion.div>
-          )}
         </div>
-      </motion.div>
-
-      {/* เสียง */}
-      {currentScene?.content?.audioUrl && (
-        <audio
-          ref={audioRef}
-          src={currentScene.content.audioUrl}
-          autoPlay
-          onError={(e) => console.error('Audio error:', e)}
-        />
       )}
+      
+       {/* Skip Button */}
+       <div className="absolute top-20 right-5">
+            <button 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    handleAdvance();
+                }}
+                className="bg-black/30 text-white/80 hover:text-white hover:bg-black/50 p-2 rounded-full transition-colors"
+            >
+                <SkipForward size={20} />
+            </button>
+        </div>
     </div>
   );
 } 

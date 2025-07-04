@@ -76,6 +76,7 @@ export default function EpisodeNavigation({
   const [episodes, setEpisodes] = useState<EpisodeListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [purchasingEpisode, setPurchasingEpisode] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch episodes
   useEffect(() => {
@@ -85,74 +86,41 @@ export default function EpisodeNavigation({
   }, [isOpen, novel.slug]);
 
   const fetchEpisodes = async () => {
-    setIsLoading(true);
     try {
+      setIsLoading(true);
       const response = await fetch(`/api/novels/${novel.slug}/episodes`);
-      if (response.ok) {
-        const data = await response.json();
-        setEpisodes(data.episodes || []);
-      } else {
-        // ใช้ข้อมูลจำลองหาก API ไม่พร้อม
-        const mockEpisodes: EpisodeListItem[] = [
-          {
-            _id: 'episode-1',
-            title: 'การมาถึงย่านเก่า',
-            slug: 'การมาถึงย่านเก่า',
-            episodeOrder: 1,
-            accessType: 'free',
-            effectivePrice: 0,
-            originalPrice: 0,
-            hasAccess: true,
-            isOwned: false,
-            isFree: true,
-            teaserText: 'เรื่องราวเริ่มต้นเมื่ออริษาเดินทางมาถึงย่านเก่าแห่งหนึ่งในกรุงเทพฯ',
-            stats: {
-              viewsCount: 1250,
-              likesCount: 89,
-              estimatedReadingTimeMinutes: 8
-            }
-          },
-          {
-            _id: 'episode-2',
-            title: 'คฤหาสน์ผีสิง',
-            slug: 'คฤหาสน์ผีสิง',
-            episodeOrder: 2,
-            accessType: 'paid_unlock',
-            effectivePrice: 50,
-            originalPrice: 50,
-            hasAccess: false,
-            isOwned: false,
-            isFree: false,
-            teaserText: 'อริษาค้นพบคฤหาสน์เก่าแก่ที่ซ่อนความลับมากมาย',
-            stats: {
-              viewsCount: 890,
-              likesCount: 67,
-              estimatedReadingTimeMinutes: 12
-            }
-          },
-          {
-            _id: 'episode-3',
-            title: 'ความจริงที่ซ่อนเร้น',
-            slug: 'ความจริงที่ซ่อนเร้น',
-            episodeOrder: 3,
-            accessType: 'paid_unlock',
-            effectivePrice: 56,
-            originalPrice: 75,
-            hasAccess: false,
-            isOwned: false,
-            isFree: false,
-            teaserText: 'ความจริงเบื้องหลังคฤหาสน์ผีสิงเริ่มเผยออกมา',
-            stats: {
-              viewsCount: 654,
-              likesCount: 45,
-              estimatedReadingTimeMinutes: 15
-            }
+      if (!response.ok) throw new Error('Failed to fetch episodes');
+      
+      const data = await response.json();
+      
+      const processedEpisodes: EpisodeListItem[] = data.episodes.map((ep: any) => {
+        const effectivePrice = ep.priceCoins || 0;
+        const originalPrice = ep.originalPriceCoins || ep.priceCoins || 0;
+        
+        return {
+          _id: ep._id,
+          title: ep.title,
+          slug: ep.slug,
+          episodeOrder: ep.episodeOrder,
+          accessType: ep.accessType,
+          effectivePrice,
+          originalPrice,
+          hasAccess: ep.accessType === 'free' || ep.hasAccess || false,
+          isOwned: ep.isOwned || false,
+          isFree: ep.accessType === 'free',
+          teaserText: ep.teaserText,
+          stats: {
+            viewsCount: ep.stats?.viewsCount || 0,
+            likesCount: ep.stats?.likesCount || 0,
+            estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 10
           }
-        ];
-        setEpisodes(mockEpisodes);
-      }
+        };
+      });
+
+      setEpisodes(processedEpisodes);
     } catch (error) {
-      console.error('Failed to fetch episodes:', error);
+      console.error('Error fetching episodes:', error);
+      setError('ไม่สามารถโหลดรายการตอนได้');
     } finally {
       setIsLoading(false);
     }
@@ -168,35 +136,41 @@ export default function EpisodeNavigation({
     }
   };
 
-  const handlePurchase = async (episodeId: string) => {
+  const handlePurchase = async (episodeId: string, novelSlug: string) => {
     if (!userId) {
       router.push('/signin');
       return;
     }
 
     setPurchasingEpisode(episodeId);
+    setError(null);
     try {
-      // TODO: เรียก API สำหรับซื้อตอน
-      // const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}/purchase`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' }
-      // });
+      const response = await fetch(`/api/novels/${novelSlug}/episodes/${episodeId}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
 
-      // จำลองการซื้อสำเร็จ
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      alert('ซื้อตอนสำเร็จแล้ว!');
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'เกิดข้อผิดพลาดในการซื้อ');
+      }
+
+      // ซื้อสำเร็จ, โหลดข้อมูลตอนใหม่และนำทาง
       await fetchEpisodes();
       
-      const episode = episodes.find(ep => ep._id === episodeId);
-      if (episode) {
-        const readUrl = `/read/${novel.slug}/${episode.episodeOrder}-${episode.slug}`;
+      const purchasedEpisode = episodes.find(ep => ep._id === episodeId);
+      if (purchasedEpisode) {
+        const readUrl = `/read/${novel.slug}/${purchasedEpisode.episodeOrder}-${purchasedEpisode.slug}`;
         router.push(readUrl);
         onClose();
+      } else {
+        // หากไม่เจอใน state ปัจจุบัน อาจจะต้องรอ fetch ใหม่
+         await fetchEpisodes();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Purchase failed:', error);
-      alert('เกิดข้อผิดพลาดในการซื้อ');
+      setError(error.message || 'เกิดข้อผิดพลาดในการซื้อ');
     } finally {
       setPurchasingEpisode(null);
     }
@@ -364,7 +338,7 @@ export default function EpisodeNavigation({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handlePurchase(episode._id);
+                                    handlePurchase(episode._id, novel.slug);
                                   }}
                                   disabled={isPurchasing}
                                   className="px-3 py-1 bg-primary text-primary-foreground text-xs rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
