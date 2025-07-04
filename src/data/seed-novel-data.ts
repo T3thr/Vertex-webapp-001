@@ -108,7 +108,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'MATTHEW',
+      characterCode: 'Matthew',
       name: 'แมทธิว',
       fullName: 'แมทธิว โจนส์',
       description: 'แฟนของเอลล่า ชายหนุ่มที่พาเอลล่าหนีออกมาจากบ้าน เป็นคนที่เกี่ยวข้องกับธุรกิจยาเสพติด',
@@ -156,7 +156,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'JULIAN',
+      characterCode: 'Julian',
       name: 'จูเลียน',
       fullName: 'จูเลียน วิลสัน',
       description: 'เด็กหนุ่มวัย 19 ปี เป็นโรคหอบหืด เป็นคนฉลาดที่สุดในกลุ่ม แต่สุขภาพไม่แข็งแรง',
@@ -205,7 +205,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'GRACIE',
+      characterCode: 'Gracie',
       name: 'เกรซี่',
       fullName: 'เกรซี่ คาร์เตอร์',
       description: 'สาวน้อยที่หลงรักดีแลนแต่ไม่ได้รับการตอบสนอง มักจะเป็นคนร่าเริงแต่เปราะบาง',
@@ -253,7 +253,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'DYLAN',
+      characterCode: 'Dylan',
       name: 'ดีแลน',
       fullName: 'ดีแลน แบล็ก',
       description: 'ชายหนุ่มที่เก่งในการปลดล็อก มีบุคลิกเย็นชาและไม่ค่อยสนใจใคร โดยเฉพาะเกรซี่',
@@ -449,7 +449,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'TOYA',
+      characterCode: 'Toya',
       name: 'โทยะ',
       fullName: 'โทยะ ดัลลาส',
       description: 'เด็กชายที่รักสุนัขของเขามาก มีจิตใจดีและเสียสละ',
@@ -497,7 +497,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'ANA',
+      characterCode: 'Ana',
       name: 'อานะ',
       fullName: 'อานะ ซูซูกิ',
       description: 'หนึ่งในกลุ่มเด็กที่เล่นใกล้รางรถไฟ เป็นเด็กหญิงที่ร่าเริงและชอบผจญภัย',
@@ -518,7 +518,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'HOSHI',
+      characterCode: 'Hoshi',
       name: 'โฮชิ',
       fullName: 'โฮชิ ทานากะ',
       description: 'เด็กชายในกลุ่มเพื่อน มีความรอบคอบและมักจะคอยเตือนเพื่อนๆ',
@@ -539,7 +539,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'CHO',
+      characterCode: 'Cho',
       name: 'โช',
       fullName: 'โช ยามาโมโตะ',
       description: 'เด็กชายที่ตัวโตที่สุดในกลุ่ม ชอบเล่นอะไรแผลงๆ และเป็นผู้นำกลุ่ม',
@@ -560,7 +560,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'RIWSEY',
+      characterCode: 'Riwsey',
       name: 'ริวเซย์',
       fullName: 'ริวเซย์ อิโตะ',
       description: 'เด็กชายที่เงียบขรึมที่สุดในกลุ่ม แต่มีความคิดที่เฉียบแหลม',
@@ -581,7 +581,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'DOG',
+      characterCode: 'Dog',
       name: 'อองรี',
       fullName: 'อองรี',
       description: 'สุนัขพันธุ์บีเกิ้ลแสนน่ารักและซื่อสัตย์ของโทยะ',

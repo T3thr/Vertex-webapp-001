@@ -141,6 +141,13 @@ export default function VisualNovelContent({
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [availableChoices, setAvailableChoices] = useState<Choice[] | null>(null);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  const handleImageError = (characterCode: string) => {
+    if (characterCode) {
+      setImageErrors(prev => ({ ...prev, [characterCode]: true }));
+    }
+  };
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -391,10 +398,23 @@ export default function VisualNovelContent({
                 transform: 'translateX(-50%)',
                           width: '40%', // Adjust as needed
                           maxHeight: '80%',
+                          zIndex: char.transform?.zIndex ?? 1,
                       }}
                   >
                       {/* Use characterCode for image path */}
-                       <img src={`/images/character/${char.characterData?.characterCode}_fullbody.png`} alt={char.characterData?.name} className="object-contain" />
+                       <img
+                         src={
+                           imageErrors[char.characterData?.characterCode || ''] || !char.characterData?.characterCode
+                             ? '/images/default-avatar.png' // Fallback image
+                             : `/images/character/${char.characterData.characterCode}_fullbody.png`
+                         }
+                         alt={char.characterData?.name || 'Character'}
+                         className="h-full w-auto object-contain object-bottom mx-auto"
+                         style={{
+                           transform: 'translateX(-50%)', // Center the image within the motion div
+                         }}
+                         onError={() => handleImageError(char.characterData?.characterCode || '')}
+                       />
                   </motion.div>
               ))}
           </AnimatePresence>
