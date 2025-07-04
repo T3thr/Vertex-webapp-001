@@ -455,7 +455,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
       description: 'เด็กชายที่รักสุนัขของเขามาก มีจิตใจดีและเสียสละ',
       age: '12',
       gender: 'male',
-      roleInStory: 'main_protagonist',
+      roleInStory: 'supporting_character',
       colorTheme: '#4A90E2',
       expressions: [
         {
@@ -492,6 +492,107 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
         likes: ['สุนัข', 'การเล่นกลางแจ้ง'],
         dislikes: ['ความรุนแรง', 'การเห็นสัตว์ทุกข์']
       },
+      isArchived: false
+    },
+    {
+      novelId,
+      authorId,
+      characterCode: 'ANA',
+      name: 'อานะ',
+      fullName: 'อานะ ซูซูกิ',
+      description: 'หนึ่งในกลุ่มเด็กที่เล่นใกล้รางรถไฟ เป็นเด็กหญิงที่ร่าเริงและชอบผจญภัย',
+      age: '11',
+      gender: 'female',
+      roleInStory: 'supporting_character',
+      colorTheme: '#FF8C61',
+      expressions: [
+        { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'happy', name: 'มีความสุข', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'worried', name: 'กังวล', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' }
+      ],
+      defaultExpressionId: 'normal',
+      physicalAttributes: { heightCm: 145, eyeColor: 'น้ำตาล', hairColor: 'ดำ', ageAppearance: 'วัยเด็ก' },
+      personalityTraits: { goals: ['เล่นสนุกกับเพื่อนๆ'], fears: ['การถูกทิ้งให้อยู่คนเดียว'], strengths: ['ร่าเริง', 'กล้าแสดงออก'], weaknesses: ['ไม่ค่อยระวังตัว'], likes: ['ของหวาน', 'การผจญภัย'], dislikes: ['การอยู่นิ่งๆ'] },
+      isArchived: false
+    },
+    {
+      novelId,
+      authorId,
+      characterCode: 'HOSHI',
+      name: 'โฮชิ',
+      fullName: 'โฮชิ ทานากะ',
+      description: 'เด็กชายในกลุ่มเพื่อน มีความรอบคอบและมักจะคอยเตือนเพื่อนๆ',
+      age: '12',
+      gender: 'male',
+      roleInStory: 'supporting_character',
+      colorTheme: '#61D4FF',
+      expressions: [
+        { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'happy', name: 'มีความสุข', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'worried', name: 'กังวล', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' }
+      ],
+      defaultExpressionId: 'normal',
+      physicalAttributes: { heightCm: 150, eyeColor: 'น้ำตาลเข้ม', hairColor: 'น้ำตาล', ageAppearance: 'วัยเด็ก' },
+      personalityTraits: { goals: ['ดูแลเพื่อนๆ'], fears: ['เพื่อนๆได้รับอันตราย'], strengths: ['รอบคอบ', 'ใจดี'], weaknesses: ['ขี้กังวล'], likes: ['การอ่านหนังสือ', 'ดูดาว'], dislikes: ['ความวุ่นวาย'] },
+      isArchived: false
+    },
+    {
+      novelId,
+      authorId,
+      characterCode: 'CHO',
+      name: 'โช',
+      fullName: 'โช ยามาโมโตะ',
+      description: 'เด็กชายที่ตัวโตที่สุดในกลุ่ม ชอบเล่นอะไรแผลงๆ และเป็นผู้นำกลุ่ม',
+      age: '12',
+      gender: 'male',
+      roleInStory: 'supporting_character',
+      colorTheme: '#FF6161',
+      expressions: [
+        { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'happy', name: 'มีความสุข', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'worried', name: 'กังวล', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' }
+      ],
+      defaultExpressionId: 'normal',
+      physicalAttributes: { heightCm: 155, eyeColor: 'ดำ', hairColor: 'ดำ', ageAppearance: 'วัยเด็ก' },
+      personalityTraits: { goals: ['เป็นที่หนึ่งเสมอ'], fears: ['ความพ่ายแพ้'], strengths: ['มีความเป็นผู้นำ', 'แข็งแรง'], weaknesses: ['ใจร้อน', 'ไม่ฟังใคร'], likes: ['กีฬา', 'การแข่งขัน'], dislikes: ['การอยู่นิ่งๆ'] },
+      isArchived: false
+    },
+    {
+      novelId,
+      authorId,
+      characterCode: 'RIWSEY',
+      name: 'ริวเซย์',
+      fullName: 'ริวเซย์ อิโตะ',
+      description: 'เด็กชายที่เงียบขรึมที่สุดในกลุ่ม แต่มีความคิดที่เฉียบแหลม',
+      age: '11',
+      gender: 'male',
+      roleInStory: 'supporting_character',
+      colorTheme: '#A861FF',
+      expressions: [
+        { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'happy', name: 'มีความสุข', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+        { expressionId: 'worried', name: 'กังวล', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' }
+      ],
+      defaultExpressionId: 'normal',
+      physicalAttributes: { heightCm: 148, eyeColor: 'ดำ', hairColor: 'ดำ', ageAppearance: 'วัยเด็ก' },
+      personalityTraits: { goals: ['เข้าใจโลก'], fears: ['การเข้าสังคม'], strengths: ['ช่างสังเกต', 'ฉลาด'], weaknesses: ['พูดน้อย', 'เก็บตัว'], likes: ['หมากรุก', 'ปริศนา'], dislikes: ['ที่ๆมีคนเยอะ'] },
+      isArchived: false
+    },
+    {
+      novelId,
+      authorId,
+      characterCode: 'DOG',
+      name: 'อองรี',
+      fullName: 'อองรี',
+      description: 'สุนัขพันธุ์บีเกิ้ลแสนน่ารักและซื่อสัตย์ของโทยะ',
+      age: '3',
+      gender: 'male',
+      roleInStory: 'animal_companion',
+      colorTheme: '#9B7B56',
+      expressions: [
+        { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' }
+      ],
+      defaultExpressionId: 'normal',
       isArchived: false
     }
   ];
@@ -649,17 +750,32 @@ const createNowOrNeverScenes = async (
       },
       characters: [
         {
-          instanceId: 'matthew_instance',
-          characterId: characterMap.MATTHEW,
-          expressionId: 'normal',
+          instanceId: 'ella_listening_1a',
+          characterId: characterMap.ELLA,
+          expressionId: 'worried',
           transform: {
-            positionX: 0,
-            positionY: -50,
+            positionX: -200,
+            positionY: -20,
             scaleX: 1,
             scaleY: 1,
             rotation: 0,
             opacity: 1,
             zIndex: 1
+          },
+          isVisible: true
+        },
+        {
+          instanceId: 'matthew_speaking_1a',
+          characterId: characterMap.MATTHEW,
+          expressionId: 'frustrated',
+          transform: {
+            positionX: 200,
+            positionY: -50,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2 // Make speaker slightly in front
           },
           isVisible: true
         }
@@ -737,17 +853,32 @@ const createNowOrNeverScenes = async (
       },
       characters: [
         {
-          instanceId: 'ella_instance',
-          characterId: characterMap.ELLA,
-          expressionId: 'normal',
+          instanceId: 'matthew_listening_1b',
+          characterId: characterMap.MATTHEW,
+          expressionId: 'frustrated',
           transform: {
-            positionX: 0,
-            positionY: -20,
+            positionX: 200,
+            positionY: -50,
             scaleX: 1,
             scaleY: 1,
             rotation: 0,
             opacity: 1,
             zIndex: 1
+          },
+          isVisible: true
+        },
+        {
+          instanceId: 'ella_speaking_1b',
+          characterId: characterMap.ELLA,
+          expressionId: 'angry',
+          transform: {
+            positionX: -200,
+            positionY: -20,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2
           },
           isVisible: true
         }
@@ -799,17 +930,32 @@ const createNowOrNeverScenes = async (
       },
       characters: [
         {
-          instanceId: 'matthew_instance2',
-          characterId: characterMap.MATTHEW,
-          expressionId: 'angry',
+          instanceId: 'ella_listening_1c',
+          characterId: characterMap.ELLA,
+          expressionId: 'worried',
           transform: {
-            positionX: 0,
-            positionY: -40,
+            positionX: -200,
+            positionY: -20,
             scaleX: 1,
             scaleY: 1,
             rotation: 0,
             opacity: 1,
             zIndex: 1
+          },
+          isVisible: true
+        },
+        {
+          instanceId: 'matthew_speaking_1c',
+          characterId: characterMap.MATTHEW,
+          expressionId: 'angry',
+          transform: {
+            positionX: 200,
+            positionY: -40,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2
           },
           isVisible: true
         }
@@ -850,12 +996,27 @@ const createNowOrNeverScenes = async (
       },
       characters: [
         {
-          instanceId: 'ella_instance2',
+          instanceId: 'ella_thinking_1d',
           characterId: characterMap.ELLA,
           expressionId: 'worried',
           transform: {
-            positionX: 0,
+            positionX: -200,
             positionY: -20,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2
+          },
+          isVisible: true
+        },
+        {
+          instanceId: 'matthew_present_1d',
+          characterId: characterMap.MATTHEW,
+          expressionId: 'normal',
+          transform: {
+            positionX: 200,
+            positionY: -40,
             scaleX: 1,
             scaleY: 1,
             rotation: 0,
@@ -1164,23 +1325,7 @@ const createChosenOneScenes = async (
         isOfficialMedia: true,
         fitMode: 'cover'
       },
-      characters: [
-        {
-          instanceId: 'old_woman',
-          characterId: characterMap.TOYA, // ใช้ตัวละครที่มีแทน
-          expressionId: 'worried',
-          transform: {
-            positionX: -50,
-            positionY: -40,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
-          isVisible: true
-        }
-      ],
+      characters: [],
       textContents: [
         {
           instanceId: 'warning_dialogue',
@@ -1226,18 +1371,31 @@ const createChosenOneScenes = async (
       },
       characters: [
         {
-          instanceId: 'children_group',
-          characterId: characterMap.TOYA,
+          instanceId: 'ana_playing_s2',
+          characterId: characterMap.ANA,
           expressionId: 'happy',
-          transform: {
-            positionX: 0,
-            positionY: -40,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
+          transform: { positionX: -300, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
+          isVisible: true
+        },
+        {
+          instanceId: 'hoshi_playing_s2',
+          characterId: characterMap.HOSHI,
+          expressionId: 'happy',
+          transform: { positionX: -100, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
+          isVisible: true
+        },
+        {
+          instanceId: 'cho_playing_s2',
+          characterId: characterMap.CHO,
+          expressionId: 'happy',
+          transform: { positionX: 100, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
+          isVisible: true
+        },
+        {
+          instanceId: 'riwsey_playing_s2',
+          characterId: characterMap.RIWSEY,
+          expressionId: 'happy',
+          transform: { positionX: 300, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         }
       ],
@@ -1286,6 +1444,13 @@ const createChosenOneScenes = async (
             opacity: 1,
             zIndex: 1
           },
+          isVisible: true
+        },
+        {
+          instanceId: 'dog_main',
+          characterId: characterMap.DOG,
+          expressionId: 'normal',
+          transform: { positionX: 100, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         }
       ],
@@ -1361,18 +1526,38 @@ const createChosenOneScenes = async (
       },
       characters: [
         {
-          instanceId: 'children_trapped',
-          characterId: characterMap.TOYA,
+          instanceId: 'ana_trapped_s5',
+          characterId: characterMap.ANA,
           expressionId: 'worried',
-          transform: {
-            positionX: 200,
-            positionY: -40,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
+          transform: { x: 400, y: -40, scale: 1, rotation: 0 },
+          isVisible: true
+        },
+        {
+          instanceId: 'hoshi_trapped_s5',
+          characterId: characterMap.HOSHI,
+          expressionId: 'worried',
+          transform: { x: 300, y: -40, scale: 1, rotation: 0 },
+          isVisible: true
+        },
+        {
+          instanceId: 'cho_trapped_s5',
+          characterId: characterMap.CHO,
+          expressionId: 'worried',
+          transform: { x: 180, y: -40, scale: 1, rotation: 0 },
+          isVisible: true
+        },
+        {
+          instanceId: 'riwsey_trapped_s5',
+          characterId: characterMap.RIWSEY,
+          expressionId: 'worried',
+          transform: { x: 90, y: -40, scale: 1, rotation: 0 },
+          isVisible: true
+        },
+        {
+          instanceId: 'dog_trapped_s5',
+          characterId: characterMap.DOG,
+          expressionId: 'normal',
+          transform: { x: -170, y: 0, scale: 1, rotation: 0 },
           isVisible: true
         }
       ],
