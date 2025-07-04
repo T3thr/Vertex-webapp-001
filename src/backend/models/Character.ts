@@ -334,10 +334,18 @@ const CharacterSchema = new Schema<ICharacter>(
     },
     characterCode: {
       type: String,
-      required: [true, "กรุณาระบุรหัสตัวละคร (Character code is required)"],
+      required: [true, "กรุณาระบุรหัสตัวละคร (Character Code is required)"],
       trim: true,
-      uppercase: true,
-      maxlength: [50, "รหัสตัวละครยาวเกินไป"],
+      unique: true,
+      index: true,
+      maxlength: [50, "รหัสตัวละครยาวเกินไป (Character Code is too long)"],
+      validate: {
+        validator: function (v: string) {
+          return /^[a-zA-Z0-9_]+$/.test(v);
+        },
+        message: (props) =>
+          `${props.value} ไม่ใช่รหัสตัวละครที่ถูกต้อง (Character Code must be letters, numbers, and underscores only)`,
+      },
     },
     name: {
       type: String,
