@@ -376,50 +376,28 @@ export default function VisualNovelContent({
       ></div>
 
       {/* Characters */}
-      <div className="absolute inset-0 overflow-hidden">
-        <AnimatePresence>
-          {charactersInScene.map(char => {
-            const transform = char.transform || {};
-            const positionX = transform.positionX ?? transform.x ?? 0;
-            const positionY = transform.positionY ?? transform.y ?? 0;
-            const scale = transform.scale ?? transform.scaleX ?? 1;
-
-            return (
-              <motion.div
-                key={char.instanceId}
-                className="absolute bottom-0 h-full"
-                initial={{ opacity: 0, x: positionX > 0 ? 50 : -50 }}
-                animate={{
-                  opacity: transform.opacity ?? 1,
-                  x: positionX,
-                  y: positionY,
-                  scale: scale,
-                  rotate: transform.rotation ?? 0,
-                }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
-                style={{
-                  left: '50%', // Center the origin for translateX
-                  // Use a base width and adjust with scale.
-                  // e.g., width: '30vw', maxWidth: '400px'
-                  // The exact values may need tweaking based on art assets.
-                  width: transform.width ? `${transform.width}%` : 'auto',
-                  height: '90%', // Character image height relative to container
-                  zIndex: transform.zIndex ?? 1,
-                }}
-              >
-                <img
-                  src={`/images/character/${char.characterData?.characterCode}_fullbody.png`}
-                  alt={char.characterData?.name}
-                  className="h-full w-auto object-contain object-bottom mx-auto"
-                  style={{
-                    transform: 'translateX(-50%)', // Center the image within the motion div
-                  }}
-                />
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+      <div className="absolute inset-0">
+      <AnimatePresence>
+              {charactersInScene.map(char => (
+        <motion.div
+                      key={char.instanceId}
+                      initial={{ opacity: 0, x: char.transform?.positionX > 0 ? 50 : -50 }}
+                      animate={{ opacity: char.transform?.opacity ?? 1, x: char.transform?.positionX ?? 0 }}
+                      exit={{ opacity: 0 }}
+          transition={{ duration: 0.5 }}
+                      className="absolute bottom-0"
+              style={{
+                          left: `${50 + (char.transform?.positionX ?? 0) / 10}%`, // Example positioning
+                transform: 'translateX(-50%)',
+                          width: '40%', // Adjust as needed
+                          maxHeight: '80%',
+                      }}
+                  >
+                      {/* Use characterCode for image path */}
+                       <img src={`/images/character/${char.characterData?.characterCode}_fullbody.png`} alt={char.characterData?.name} className="object-contain" />
+                  </motion.div>
+              ))}
+          </AnimatePresence>
       </div>
 
       {/* Choices Overlay */}

@@ -195,7 +195,7 @@ export default function VisualNovelFrameReader({
           data-responsive="true"
         >
           {/* Header สำหรับเดสก์ท็อป */}
-          <div className="hidden lg:block absolute top-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm border-b border-border">
+          <div className="hidden lg:block absolute top-0 left-0 right-0 z-30 bg-card/95 backdrop-blur-sm border-b border-border">
             <div className="flex items-center justify-between px-6 py-4">
               {/* ฝั่งซ้าย - ปุ่มกลับ */}
               <div className="flex items-center">

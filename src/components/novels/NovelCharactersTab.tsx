@@ -71,13 +71,13 @@ const NovelCharactersTab: React.FC<NovelCharactersTabProps> = ({ novel }) => {
             animate="visible"
             className="bg-card border border-border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-300 group"
           >
-            <div className="relative aspect-[4/3] bg-secondary overflow-hidden">
+            <div className="relative aspect-[3/4] bg-secondary overflow-hidden">
               <Image
-                src={character.profileImageUrl || '/images/default-avatar.png'}
+                src={character.name ? `/images/character/${character.name}_fullbody.png` : '/images/default-avatar.png'}
                 alt={`รูปตัวละคร ${character.name}`}
-                width={300}
-                height={225}
-                className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                fill
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-300"
               />
               {character.colorTheme && (
                 <div 

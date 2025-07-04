@@ -119,6 +119,16 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
       </div>
     );
   }
+
+  // ค้นหาตอนแรกเพื่อสร้างลิงก์ "เริ่มอ่าน"
+  const firstEpisode = novel.episodes && novel.episodes.length > 0
+    ? [...novel.episodes].sort((a, b) => a.episodeOrder - b.episodeOrder)[0]
+    : null;
+  
+  const startReadingUrl = firstEpisode
+    ? `/read/${novel.slug}/${firstEpisode.episodeOrder}-${firstEpisode.slug || 'no-slug'}`
+    : `/novels/${novel.slug}`; // URL สำรองหากไม่มีตอน
+
   // เตรียมข้อมูลที่จะแสดง
   const authorName = novel.author?.profile?.penNames?.join(', ') || 
                     novel.author?.profile?.displayName || 
@@ -386,7 +396,7 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
               variants={itemVariants}
             >
               {/* ปุ่มเริ่มอ่าน */}
-              <Link href={`/novels/${novel.slug}/read`}>
+              <Link href={startReadingUrl}>
                 <motion.button 
                   className="bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
                   whileHover={{ scale: 1.02 }}

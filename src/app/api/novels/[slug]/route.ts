@@ -76,6 +76,7 @@ interface PopulatedThemeAssignment {
 interface PopulatedCharacterForDetailPage {
   _id: string;
   name: string;
+  characterCode: string;
   profileImageUrl?: string;
   description?: string;
   roleInStory?: CharacterRoleInStory;
@@ -258,30 +259,24 @@ export async function GET(
     };
 
     // ดึงข้อมูลตัวละครของนิยาย (จำกัด 6 ตัวแรก)
-    const charactersFromDb = await CharacterModel.find({
-      novelId: novelFromDb._id,
-      isArchived: false,
-    })
-      .select('_id name description roleInStory colorTheme profileImageMediaId profileImageSourceType')
-      .sort({ createdAt: 1 })
-      .limit(6)
-      .lean();
-
-    const characters: PopulatedCharacterForDetailPage[] = charactersFromDb.map((char) => {
-      let imageUrl = '/images/default-avatar.png';
-      if (char.profileImageMediaId && char.profileImageSourceType) {
-        imageUrl = `/api/media_placeholder/${char.profileImageSourceType}/${char.profileImageMediaId.toString()}`;
-      }
-
+    const toPopulatedCharacter = (char: any): PopulatedCharacterForDetailPage | undefined => {
+      if (!char || typeof char !== 'object' || !('_id' in char)) return undefined;
+      // สร้าง URL รูปโปรไฟล์ (ถ้ามี)
+      const imageUrl = char.profileImageUrl || (char.characterCode ? `/images/character/${char.characterCode}_fullbody.png` : '/images/default-avatar.png');
       return {
         _id: char._id.toString(),
         name: char.name,
+        characterCode: char.characterCode,
         profileImageUrl: imageUrl,
         description: char.description,
-        roleInStory: char.roleInStory as CharacterRoleInStory,
+        roleInStory: char.roleInStory,
         colorTheme: char.colorTheme,
       };
-    });
+    };
+    
+    const characters = (await CharacterModel.find({ novelId: novelFromDb._id }).lean())
+      .map(toPopulatedCharacter)
+      .filter((c): c is PopulatedCharacterForDetailPage => c !== undefined);
 
     // ดึงข้อมูลตอนของนิยาย (จำกัด 10 ตอนแรก)
     const episodesFromDb = await EpisodeModel.find({

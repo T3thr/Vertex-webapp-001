@@ -30,6 +30,7 @@ export enum CharacterRoleInStory {
   NARRATOR = "narrator",
   CAMEO = "cameo",
   MINOR_CHARACTER = "minor_character",
+  ANIMAL_COMPANION = "animal_companion",
   CUSTOM = "custom",
 }
 
