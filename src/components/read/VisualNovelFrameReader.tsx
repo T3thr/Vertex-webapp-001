@@ -163,7 +163,7 @@ export default function VisualNovelFrameReader({
   }, [debouncedSaveSettings]);
 
   const handleBackToNovel = useCallback(() => {
-    router.push(`/novels/${novel.slug}/overview`);
+    router.push(`/novels/${novel.slug}`);
   }, [router, novel.slug]);
 
   const handleDialogueEntry = useCallback((entry: DialogueHistoryItem) => {

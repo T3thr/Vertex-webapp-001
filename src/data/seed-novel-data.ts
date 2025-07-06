@@ -60,7 +60,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'Ella',
+      characterCode: 'ella',
       name: 'เอลล่า',
       fullName: 'เอลล่า มาร์ติเนซ',
       description: 'นักศึกษาสาววัย 20 ปี ที่หนีตามแฟนมาใช้ชีวิตในเมืองตั้งแต่อายุ 14 แฟนคือแมทธิว',
@@ -108,7 +108,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'Matthew',
+      characterCode: 'matthew',
       name: 'แมทธิว',
       fullName: 'แมทธิว โจนส์',
       description: 'แฟนของเอลล่า ชายหนุ่มที่พาเอลล่าหนีออกมาจากบ้าน เป็นคนที่เกี่ยวข้องกับธุรกิจยาเสพติด',
@@ -156,7 +156,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'Julian',
+      characterCode: 'julian',
       name: 'จูเลียน',
       fullName: 'จูเลียน วิลสัน',
       description: 'เด็กหนุ่มวัย 19 ปี เป็นโรคหอบหืด เป็นคนฉลาดที่สุดในกลุ่ม แต่สุขภาพไม่แข็งแรง',
@@ -205,7 +205,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'Gracie',
+      characterCode: 'gracie',
       name: 'เกรซี่',
       fullName: 'เกรซี่ คาร์เตอร์',
       description: 'สาวน้อยที่หลงรักดีแลนแต่ไม่ได้รับการตอบสนอง มักจะเป็นคนร่าเริงแต่เปราะบาง',
@@ -253,7 +253,7 @@ const createNowOrNeverCharacters = async (novelId: mongoose.Types.ObjectId, auth
     {
       novelId,
       authorId,
-      characterCode: 'Dylan',
+      characterCode: 'dylan',
       name: 'ดีแลน',
       fullName: 'ดีแลน แบล็ก',
       description: 'ชายหนุ่มที่เก่งในการปลดล็อก มีบุคลิกเย็นชาและไม่ค่อยสนใจใคร โดยเฉพาะเกรซี่',
@@ -449,7 +449,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'Toya',
+      characterCode: 'toya',
       name: 'โทยะ',
       fullName: 'โทยะ ดัลลาส',
       description: 'เด็กชายที่รักสุนัขของเขามาก มีจิตใจดีและเสียสละ',
@@ -497,7 +497,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'Ana',
+      characterCode: 'ana',
       name: 'อานะ',
       fullName: 'อานะ ซูซูกิ',
       description: 'หนึ่งในกลุ่มเด็กที่เล่นใกล้รางรถไฟ เป็นเด็กหญิงที่ร่าเริงและชอบผจญภัย',
@@ -518,7 +518,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'Hoshi',
+      characterCode: 'hoshi',
       name: 'โฮชิ',
       fullName: 'โฮชิ ทานากะ',
       description: 'เด็กชายในกลุ่มเพื่อน มีความรอบคอบและมักจะคอยเตือนเพื่อนๆ',
@@ -539,7 +539,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'Cho',
+      characterCode: 'cho',
       name: 'โช',
       fullName: 'โช ยามาโมโตะ',
       description: 'เด็กชายที่ตัวโตที่สุดในกลุ่ม ชอบเล่นอะไรแผลงๆ และเป็นผู้นำกลุ่ม',
@@ -560,7 +560,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'Riwsey',
+      characterCode: 'riwsey',
       name: 'ริวเซย์',
       fullName: 'ริวเซย์ อิโตะ',
       description: 'เด็กชายที่เงียบขรึมที่สุดในกลุ่ม แต่มีความคิดที่เฉียบแหลม',
@@ -581,7 +581,7 @@ const createChosenOneCharacters = async (novelId: mongoose.Types.ObjectId, autho
     {
       novelId,
       authorId,
-      characterCode: 'Dog',
+      characterCode: 'dog',
       name: 'อองรี',
       fullName: 'อองรี',
       description: 'สุนัขพันธุ์บีเกิ้ลแสนน่ารักและซื่อสัตย์ของโทยะ',
@@ -693,7 +693,7 @@ const createNowOrNeverScenes = async (
   const characterMap = characters.reduce((acc, char) => {
     acc[char.characterCode] = char._id;
     return acc;
-  }, {});
+  }, {} as Record<string, mongoose.Types.ObjectId>);
 
   const scenes = [
     // Scene 1 - จุดเริ่มต้น
@@ -751,7 +751,7 @@ const createNowOrNeverScenes = async (
       characters: [
         {
           instanceId: 'ella_listening_1a',
-          characterId: characterMap.Ella,
+          characterId: characterMap.ella,
           expressionId: 'worried',
           transform: {
             positionX: -150,
@@ -766,7 +766,7 @@ const createNowOrNeverScenes = async (
         },
         {
           instanceId: 'matthew_speaking_1a',
-          characterId: characterMap.Matthew,
+          characterId: characterMap.matthew,
           expressionId: 'frustrated',
           transform: {
             positionX: 150,
@@ -784,7 +784,7 @@ const createNowOrNeverScenes = async (
         {
           instanceId: 'dialogue_1a',
           type: 'dialogue',
-          characterId: characterMap.Matthew,
+          characterId: characterMap.matthew,
           speakerDisplayName: 'แมทธิว',
           content: '"ไม่เอาหน่าเอลล่า เลิกทำเหมือนโลกจะแตกสักทีเถอะ เดี๋ยวพอไปถึงหน้างานเธอก็ทำได้เองนั่นแหละ" ชายหนุ่มเอ่ยกระแทกกระทั้นอย่างหัวเสีย',
           fontSize: 16,
@@ -854,7 +854,7 @@ const createNowOrNeverScenes = async (
       characters: [
         {
           instanceId: 'matthew_listening_1b',
-          characterId: characterMap.Matthew,
+          characterId: characterMap.matthew,
           expressionId: 'frustrated',
           transform: {
             positionX: 150,
@@ -869,7 +869,7 @@ const createNowOrNeverScenes = async (
         },
         {
           instanceId: 'ella_speaking_1b',
-          characterId: characterMap.Ella,
+          characterId: characterMap.ella,
           expressionId: 'angry',
           transform: {
             positionX: -150,
@@ -887,7 +887,7 @@ const createNowOrNeverScenes = async (
         {
           instanceId: 'dialogue_1b',
           type: 'dialogue',
-          characterId: characterMap.Ella,
+          characterId: characterMap.ella,
           speakerDisplayName: 'เอลล่า',
           content: 'หล่อนแค่นหัวเราะ "นายมันบ้าไปแล้วแมท ผีตัวไหนเข้าสิงนายกันล่ะตอนที่นายตัดสินใจส่งยาให้พวกใต้ดิน"',
           fontSize: 16,
@@ -931,7 +931,7 @@ const createNowOrNeverScenes = async (
       characters: [
         {
           instanceId: 'ella_listening_1c',
-          characterId: characterMap.Ella,
+          characterId: characterMap.ella,
           expressionId: 'worried',
           transform: {
             positionX: -150,
@@ -946,7 +946,7 @@ const createNowOrNeverScenes = async (
         },
         {
           instanceId: 'matthew_speaking_1c',
-          characterId: characterMap.Matthew,
+          characterId: characterMap.matthew,
           expressionId: 'angry',
           transform: {
             positionX: 150,
@@ -964,7 +964,7 @@ const createNowOrNeverScenes = async (
         {
           instanceId: 'dialogue_1c',
           type: 'dialogue',
-          characterId: characterMap.Matthew,
+          characterId: characterMap.matthew,
           speakerDisplayName: 'แมทธิว',
           content: '"ก็ถ้าชั้นไม่โดนปล้นยาระหว่างทาง ป่านนี้เราคงรวยเละกันไปแล้ว" ชายหนุ่มกัดฟันอย่างแค้นใจ',
           fontSize: 16,
@@ -997,7 +997,7 @@ const createNowOrNeverScenes = async (
       characters: [
         {
           instanceId: 'ella_thinking_1d',
-          characterId: characterMap.Ella,
+          characterId: characterMap.ella,
           expressionId: 'worried',
           transform: {
             positionX: -150,
@@ -1012,7 +1012,7 @@ const createNowOrNeverScenes = async (
         },
         {
           instanceId: 'matthew_present_1d',
-          characterId: characterMap.Matthew,
+          characterId: characterMap.matthew,
           expressionId: 'normal',
           transform: {
             positionX: 150,
@@ -1175,7 +1175,7 @@ const createNowOrNeverScenes = async (
       characters: [
         {
           instanceId: 'news_anchor',
-          characterId: characterMap.Ella, // ใช้ตัวละครที่มีอยู่เป็นผู้ประกาศข่าว
+          characterId: characterMap.ella, // ใช้ตัวละครที่มีอยู่เป็นผู้ประกาศข่าว
           expressionId: 'normal',
           transform: {
             positionX: 0,
@@ -1256,7 +1256,7 @@ const createNowOrNeverScenes = async (
       characters: [
         {
           instanceId: 'news_anchor2',
-          characterId: characterMap.Ella,
+          characterId: characterMap.ella,
           expressionId: 'normal',
           transform: {
             positionX: 0,
@@ -1309,7 +1309,7 @@ const createChosenOneScenes = async (
   const characterMap = characters.reduce((acc, char) => {
     acc[char.characterCode] = char._id;
     return acc;
-  }, {});
+  }, {} as Record<string, mongoose.Types.ObjectId>);
 
   const scenes = [
     // Scene 1 - จุดเริ่มต้น
@@ -1372,28 +1372,28 @@ const createChosenOneScenes = async (
       characters: [
         {
           instanceId: 'ana_playing_s2',
-          characterId: characterMap.Ana,
+          characterId: characterMap.ana,
           expressionId: 'happy',
           transform: { positionX: -180, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'hoshi_playing_s2',
-          characterId: characterMap.Hoshi,
+          characterId: characterMap.hoshi,
           expressionId: 'happy',
           transform: { positionX: -60, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'cho_playing_s2',
-          characterId: characterMap.Cho,
+          characterId: characterMap.cho,
           expressionId: 'happy',
           transform: { positionX: 60, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'riwsey_playing_s2',
-          characterId: characterMap.Riwsey,
+          characterId: characterMap.riwsey,
           expressionId: 'happy',
           transform: { positionX: 180, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
@@ -1433,7 +1433,7 @@ const createChosenOneScenes = async (
       characters: [
         {
           instanceId: 'toya_main',
-          characterId: characterMap.Toya,
+          characterId: characterMap.toya,
           expressionId: 'happy',
           transform: {
             positionX: -100,
@@ -1448,7 +1448,7 @@ const createChosenOneScenes = async (
         },
         {
           instanceId: 'dog_main',
-          characterId: characterMap.Dog,
+          characterId: characterMap.dog,
           expressionId: 'normal',
           transform: { positionX: 100, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
@@ -1458,7 +1458,7 @@ const createChosenOneScenes = async (
         {
           instanceId: 'toya_playing',
           type: 'dialogue',
-          characterId: characterMap.Toya,
+          characterId: characterMap.toya,
           speakerDisplayName: 'โทยะ',
           content: '"ฮ่าๆๆๆ อองรี! อย่ากระโดดใส่ชั้นสิ" เด็กชายเล่นกับลูกบอลและสุนัขของเขาอย่างสนุกสนานที่ริมทางด้านใน',
           fontSize: 16,
@@ -1527,37 +1527,37 @@ const createChosenOneScenes = async (
       characters: [
         {
           instanceId: 'ana_trapped_s5',
-          characterId: characterMap.Ana,
+          characterId: characterMap.ana,
           expressionId: 'worried',
           transform: { positionX: -200, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'hoshi_trapped_s5',
-          characterId: characterMap.Hoshi,
+          characterId: characterMap.hoshi,
           expressionId: 'worried',
-          transform: { positionX: -100, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: -120, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'cho_trapped_s5',
-          characterId: characterMap.Cho,
+          characterId: characterMap.cho,
+          expressionId: 'worried',
+          transform: { positionX: -40, positionY: -40, scale: 1, rotation: 0 },
+          isVisible: true
+        },
+        {
+          instanceId: 'riwsey_trapped_s5',
+          characterId: characterMap.riwsey,
           expressionId: 'worried',
           transform: { positionX: 0, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
-          instanceId: 'riwsey_trapped_s5',
-          characterId: characterMap.Riwsey,
-          expressionId: 'worried',
-          transform: { positionX: 100, positionY: -40, scale: 1, rotation: 0 },
-          isVisible: true
-        },
-        {
           instanceId: 'dog_trapped_s5',
-          characterId: characterMap.Dog,
+          characterId: characterMap.dog,
           expressionId: 'normal',
-          transform: { positionX: 200, positionY: 0, scale: 1, rotation: 0 },
+          transform: { positionX: -420, positionY: 0, scale: 1, rotation: 0 },
           isVisible: true
         }
       ],
