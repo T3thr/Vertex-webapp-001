@@ -15,9 +15,11 @@ export const DEFAULT_USER_SETTINGS: IReaderSettings = {
       textContrastMode: false,
     },
     uiVisibility: {
+      theme: 'system_default',
       textBoxOpacity: 80, // percentage
       backgroundBrightness: 100,
       textBoxBorder: true,
+      isDialogueBoxVisible: true,
     },
     // Add other display defaults if necessary
   },

@@ -128,9 +128,11 @@ export interface IUserAccessibilityDisplayPreferences {
 }
 
 export interface IUserUIVisibilityPreferences {
-  textBoxOpacity: number; // 0-100
-  backgroundBrightness: number; // 0-100
+  theme: 'light' | 'dark' | 'sepia' | 'system_default';
+  textBoxOpacity: number; // percentage
+  backgroundBrightness: number; // percentage
   textBoxBorder: boolean;
+  isDialogueBoxVisible: boolean;
 }
 
 export interface IUserVisualEffectsPreferences {
@@ -441,6 +443,7 @@ const UserAccessibilityDisplayPreferencesSchema = new Schema<IUserAccessibilityD
 }, { _id: false });
 
 const UserUIVisibilityPreferencesSchema = new Schema<IUserUIVisibilityPreferences>({
+  theme: { type: String, enum: ['light', 'dark', 'sepia', 'system_default'], required: true },
   textBoxOpacity: { 
     type: Number, 
     min: 0, 
@@ -453,7 +456,8 @@ const UserUIVisibilityPreferencesSchema = new Schema<IUserUIVisibilityPreference
     max: 100, 
     default: DEFAULT_VALUES.BACKGROUND_BRIGHTNESS 
   },
-  textBoxBorder: { type: Boolean, default: true }
+  textBoxBorder: { type: Boolean, default: true },
+  isDialogueBoxVisible: { type: Boolean, default: true }
 }, { _id: false });
 
 const UserVisualEffectsPreferencesSchema = new Schema<IUserVisualEffectsPreferences>({

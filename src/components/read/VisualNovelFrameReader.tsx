@@ -13,7 +13,9 @@ import {
   Eye,
   EyeOff,
   SkipForward,
-  Swords
+  Swords,
+  MessageSquare,
+  MessageSquareOff
 } from 'lucide-react';
 import VisualNovelContent, { DialogueHistoryItem } from './VisualNovelContent';
 import DialogueHistory from './DialogueHistory';
@@ -92,6 +94,7 @@ export default function VisualNovelFrameReader({
   const [showHistory, setShowHistory] = useState(false);
   const [showEpisodeNav, setShowEpisodeNav] = useState(false);
   const [showStoryStatus, setShowStoryStatus] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
 
   // Settings State
   const [settings, setSettings] = useState<IReaderSettings>(DEFAULT_USER_SETTINGS);
@@ -178,10 +181,29 @@ export default function VisualNovelFrameReader({
     if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
       const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
       router.push(`/read/${novel.slug}/${nextEpisode.episodeOrder}-${nextEpisode.slug}`);
+    } else if (currentEpisodeIndex !== -1 && currentEpisodeIndex === allEpisodes.length - 1) {
+      setShowSummary(true);
     } else {
       router.push(`/novels/${novel.slug}`);
     }
   }, [allEpisodes, episode._id, novel.slug, router]);
+
+  const handleToggleDialogue = () => {
+    const newSettings: IReaderSettings = {
+      ...settings,
+      display: {
+        ...settings.display,
+        uiVisibility: {
+          theme: settings.display?.uiVisibility?.theme ?? 'system_default',
+          textBoxOpacity: settings.display?.uiVisibility?.textBoxOpacity ?? 80,
+          backgroundBrightness: settings.display?.uiVisibility?.backgroundBrightness ?? 100,
+          textBoxBorder: settings.display?.uiVisibility?.textBoxBorder ?? true,
+          isDialogueBoxVisible: !(settings.display?.uiVisibility?.isDialogueBoxVisible ?? true),
+        },
+      },
+    };
+    handleSettingsChange(newSettings);
+  };
 
   return (
     <div className="w-full h-full bg-black text-white flex flex-col relative">
@@ -194,6 +216,7 @@ export default function VisualNovelFrameReader({
                 currentSceneId={currentSceneId}
                 isPlaying={isPlaying}
                 userSettings={settings}
+                isDialogueVisible={settings.display?.uiVisibility?.isDialogueBoxVisible ?? true}
                 onSceneChange={setCurrentSceneId}
                 onSceneDataChange={setCurrentSceneData}
                 onDialogueEntry={handleDialogueEntry}
@@ -238,7 +261,10 @@ export default function VisualNovelFrameReader({
                                 </div>
                             </motion.button>
                             
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={handleToggleDialogue} className="p-2 rounded-full hover:bg-white/20 transition-colors" aria-label="Toggle Dialogue">
+                                  {(settings.display.uiVisibility?.isDialogueBoxVisible ?? true) ? <MessageSquareOff size={18} /> : <MessageSquare size={18} />}
+                                </motion.button>
                                 <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowStoryStatus(true)} className="p-2 rounded-full hover:bg-white/20 transition-colors"><Swords size={18} /></motion.button>
                             </div>
                         </div>
@@ -266,7 +292,71 @@ export default function VisualNovelFrameReader({
             {showEpisodeNav && <EpisodeNavigation isOpen={showEpisodeNav} onClose={() => setShowEpisodeNav(false)} novel={novel} currentEpisode={episode} userId={userId}/>}
             {showSettings && <ReaderSettings isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} onSettingsChange={handleSettingsChange} onSave={handleSaveAndCloseSettings} onReset={handleResetSettings} />}
             {showStoryStatus && <StoryStatusPanel isOpen={showStoryStatus} onClose={() => setShowStoryStatus(false)} scene={currentSceneData} />}
+            {showSummary && (
+                <EndSummaryScreen 
+                    novel={novel} 
+                    backgroundUrl={currentSceneData?.background?.value}
+                />
+            )}
         </AnimatePresence>
     </div>
   );
+}
+
+// A new component for the end summary screen
+function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backgroundUrl?: string }) {
+    const router = useRouter();
+
+    return (
+        <motion.div
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+        >
+            {backgroundUrl && (
+                <img
+                    src={backgroundUrl}
+                    alt="Final Scene Background"
+                    className="absolute inset-0 w-full h-full object-cover opacity-30"
+                />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+            
+            <div className="relative z-10 text-center text-white p-8 rounded-lg max-w-2xl">
+                <motion.h1 
+                    className="text-4xl md:text-5xl font-bold mb-4"
+                    initial={{ y: -20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
+                >
+                    บทสรุปการเดินทาง
+                </motion.h1>
+                <motion.p 
+                    className="text-lg md:text-xl text-white/80 mb-8"
+                    initial={{ y: -20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
+                >
+                    และนี่คือผลลัพธ์อุปนิสัยของคุณแบบคร่าวๆ ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา PATHY!
+                </motion.p>
+                <motion.div 
+                    className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                    initial={{ y: -20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1, transition: { delay: 0.6 } }}
+                >
+                    <button
+                        onClick={() => router.push(`/novels/${novel.slug}`)}
+                        className="w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground font-semibold rounded-full hover:bg-primary-hover transition-all duration-300 transform hover:scale-105"
+                    >
+                        กลับไปหน้าเลือกตอน
+                    </button>
+                    <button
+                        onClick={() => router.push('/')}
+                        className="w-full sm:w-auto px-8 py-3 bg-secondary text-secondary-foreground font-semibold rounded-full hover:bg-white/20 transition-all duration-300 transform hover:scale-105"
+                    >
+                        กลับหน้าหลัก
+                    </button>
+                </motion.div>
+            </div>
+        </motion.div>
+    );
 }

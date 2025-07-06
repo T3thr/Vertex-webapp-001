@@ -110,6 +110,7 @@ interface VisualNovelContentProps {
   currentSceneId?: string;
   isPlaying: boolean;
   userSettings: UserSettings;
+  isDialogueVisible: boolean;
   advanceTrigger: number;
   onSceneChange: (sceneId: string) => void;
   onSceneDataChange: (scene: SerializedScene | null) => void;
@@ -204,6 +205,7 @@ export default function VisualNovelContent({
   currentSceneId,
   isPlaying,
   userSettings,
+  isDialogueVisible,
   advanceTrigger,
   onSceneChange,
   onSceneDataChange,
@@ -536,7 +538,7 @@ export default function VisualNovelContent({
       </AnimatePresence>
 
       {/* Dialogue Box */}
-      {!availableChoices && currentScene?.textContents[textIndex] && (
+      {isDialogueVisible && !availableChoices && currentScene?.textContents[textIndex] && (
         <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 text-white z-30 pointer-events-none">
           <div 
             className="backdrop-blur-md p-4 sm:p-6 md:p-8 rounded-lg border border-white/20 min-h-[150px] sm:min-h-[180px] md:min-h-[220px] flex flex-col justify-center"

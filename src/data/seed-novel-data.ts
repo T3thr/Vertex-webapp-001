@@ -1536,28 +1536,28 @@ const createChosenOneScenes = async (
           instanceId: 'hoshi_trapped_s5',
           characterId: characterMap.hoshi,
           expressionId: 'worried',
-          transform: { positionX: -120, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: -80, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'cho_trapped_s5',
           characterId: characterMap.cho,
           expressionId: 'worried',
-          transform: { positionX: -40, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: 20, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'riwsey_trapped_s5',
           characterId: characterMap.riwsey,
           expressionId: 'worried',
-          transform: { positionX: 0, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: 140, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'dog_trapped_s5',
           characterId: characterMap.dog,
           expressionId: 'normal',
-          transform: { positionX: -420, positionY: 0, scale: 1, rotation: 0 },
+          transform: { positionX: -520, positionY: 0, scale: 1, rotation: 0 },
           isVisible: true
         }
       ],
