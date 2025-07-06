@@ -7,9 +7,8 @@ import EpisodeModel from '@/backend/models/Episode';
 import PurchaseModel from '@/backend/models/Purchase';
 import UserModel, { IUser } from '@/backend/models/User';
 import PaywallDialog from './PaywallDialog';
-import VisualNovelFrameReader, { SerializedScene } from '@/components/read/VisualNovelFrameReader';
+import VisualNovelFrameReader from '@/components/read/VisualNovelFrameReader';
 import type { Metadata } from 'next';
-import SceneModel from '@/backend/models/Scene';
 
 interface ReadPageProps {
   params: Promise<{ novelSlug: string; episodeSlug: string }>;
@@ -41,46 +40,6 @@ function parseEpisodeSlug(episodeSlug: string): { order: number; slug: string } 
   }
   
   return null;
-}
-
-// ✅ [ปรับปรุง] ดึงข้อมูล Episode ทั้งหมดที่เข้าถึงได้ในครั้งเดียว
-async function getAllAccessibleEpisodes(novelId: string, userId?: string) {
-  const allEpisodes = await EpisodeModel.find({
-    novelId: novelId,
-    status: 'published'
-  }).sort({ episodeOrder: 1 }).lean();
-
-  const accessibleEpisodesData = [];
-  const purchaseCheck = new Set();
-
-  if (userId) {
-    const purchases = await PurchaseModel.find({
-      userId,
-      'items.itemType': 'novel_episode',
-      status: 'completed'
-    }).select('items.itemId').lean();
-    purchases.forEach(p => p.items.forEach(item => purchaseCheck.add(item.itemId.toString())));
-  }
-
-  const novel = await NovelModel.findById(novelId).select('author').lean();
-  const isAuthor = novel?.author?.toString() === userId;
-
-  for (const episode of allEpisodes) {
-    let hasAccess = false;
-    if (episode.accessType === 'free' || isAuthor || purchaseCheck.has(episode._id.toString())) {
-        hasAccess = true;
-    }
-
-    if (hasAccess) {
-      // ดึงข้อมูลฉากทั้งหมดสำหรับตอนนี้
-      const scenes = await SceneModel.find({ episodeId: episode._id }).sort({ sceneOrder: 1 }).lean();
-      accessibleEpisodesData.push({ ...episode, scenes });
-    } else {
-      // ยังคงเพิ่มตอนที่เข้าถึงไม่ได้ แต่ไม่มีข้อมูลฉาก
-      accessibleEpisodesData.push(episode);
-    }
-  }
-  return accessibleEpisodesData;
 }
 
 async function getNovelAndEpisode(novelSlug: string, episodeSlug: string) {
@@ -136,10 +95,7 @@ async function getNovelAndEpisode(novelSlug: string, episodeSlug: string) {
       return { redirect: redirectUrl };
     }
 
-    // ✅ [เพิ่มใหม่] ดึงข้อมูล Episodes ทั้งหมด
-    const allEpisodes = await getAllAccessibleEpisodes(novel._id.toString(), undefined); // userId will be handled later
-
-    return { novel, episode, allEpisodes };
+    return { novel, episode };
   } catch (error) {
     console.error("Error in getNovelAndEpisode:", error);
     return null;
@@ -287,13 +243,10 @@ export default async function ReadPage({ params, searchParams }: ReadPageProps) 
     redirect(data.redirect!);
   }
   
-  const { novel, episode, allEpisodes } = data;
+  const { novel, episode } = data;
   
   // ตรวจสอบสิทธิ์การเข้าถึง
   const accessResult = await checkEpisodeAccess(userId, episode, novel);
-  
-  // ✅ [เพิ่มใหม่] โหลดข้อมูล Episode ทั้งหมดพร้อมการตรวจสอบสิทธิ์
-  const allEpisodesWithAccess = await getAllAccessibleEpisodes(novel._id.toString(), userId);
   
   // หากไม่มีสิทธิ์ แสดง paywall
   if (!accessResult.hasAccess) {
@@ -377,9 +330,6 @@ export default async function ReadPage({ params, searchParams }: ReadPageProps) 
     }
   };
 
-  // ✅ [เพิ่มใหม่] Serialize ข้อมูล allEpisodes
-  const serializedAllEpisodes = toPlainObject(allEpisodesWithAccess);
-
   // แสดง reader โดยไม่มี loading
   return (
     <div className="flex items-center justify-center w-screen h-screen bg-black p-2 sm:p-4">
@@ -387,16 +337,10 @@ export default async function ReadPage({ params, searchParams }: ReadPageProps) 
         <VisualNovelFrameReader
           novel={serializedNovel}
           episode={serializedEpisode}
-          allEpisodes={serializedAllEpisodes}
           initialSceneId={sceneId || episode.firstSceneId?.toString()}
           userId={userId}
         />
       </div>
     </div>
   );
-}
-
-// ✅ [เพิ่มใหม่] Helper function to serialize complex objects
-function toPlainObject(obj: any): any {
-  return JSON.parse(JSON.stringify(obj));
 } 

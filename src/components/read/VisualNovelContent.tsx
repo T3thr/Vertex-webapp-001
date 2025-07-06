@@ -93,8 +93,8 @@ type FullEpisode = Pick<IEpisode, 'slug' | 'title' | 'episodeOrder' | 'accessTyp
   stats?: IEpisodeStats;
 };
 
-// This type is now for the detailed episode data fetched *within* this component
-export type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
+// This type is now for the detailed episode data fetched and passed from the parent
+type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
     _id: string;
     novelId: string;
     authorId: string;
@@ -106,7 +106,7 @@ export type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 's
 
 interface VisualNovelContentProps {
   novel: DisplayNovel;
-  episode: DetailedEpisode;
+  episodeData: DetailedEpisode | null;
   currentSceneId?: string;
   isPlaying: boolean;
   userSettings: UserSettings;
@@ -201,7 +201,7 @@ const getSpeakerInfo = (textContent: SerializedTextContent | undefined, characte
 
 export default function VisualNovelContent({
   novel,
-  episode: episodeData,
+  episodeData,
   currentSceneId,
   isPlaying,
   userSettings,
@@ -241,7 +241,7 @@ export default function VisualNovelContent({
     setTextIndex(0);
     setDisplayedText('');
     setIsTyping(false);
-    setAvailableChoices(null);
+    setAvailableChoices(null); // Reset choices when scene changes
   }, [currentSceneId, episodeData, onSceneDataChange]);
 
 
@@ -392,12 +392,12 @@ export default function VisualNovelContent({
 
   if (!episodeData) {
     return (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
-            <p>ไม่พบข้อมูลตอน</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
-  
+
   if (!currentScene) {
     return (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
@@ -422,6 +422,8 @@ export default function VisualNovelContent({
               src={currentScene.background.value} 
               alt={currentScene.title || 'background'}
               className="w-full h-full object-cover" // Changed to object-cover for better fit
+              onContextMenu={(e) => e.preventDefault()}
+              draggable={false}
             />
           ) : (
             <div 
@@ -468,8 +470,10 @@ export default function VisualNovelContent({
                          : `/images/character/${char.characterData.characterCode}_fullbody.png`
                      }
                      alt={char.characterData?.name || 'Character'}
-                     className="h-full w-auto object-contain object-bottom no-right-click-img"
+                     className="h-full w-auto object-contain object-bottom"
                      onError={() => handleImageError(char.characterData?.characterCode || '')}
+                     onContextMenu={(e) => e.preventDefault()}
+                     draggable={false}
                    />
               </motion.div>
             );

@@ -238,6 +238,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility; /* ปรับปรุงการแสดงผลตัวอักษร */
   overflow-x: hidden; /* ป้องกัน horizontal scroll ที่ไม่ต้องการบน body */
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE 10+ */
+  user-select: none; /* Standard syntax */
 }
 
 /* --------------------------------------- */
@@ -1113,16 +1117,4 @@ html[data-theme-ready="true"] {
 @keyframes blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
-}
-
-/* ✅ [เพิ่มใหม่] Content Protection Utilities */
-.no-select {
-  -webkit-user-select: none; /* Safari */
-  -moz-user-select: none; /* Firefox */
-  -ms-user-select: none; /* IE10+ */
-  user-select: none; /* Standard */
-}
-
-.no-right-click-img {
-  pointer-events: none;
 }
