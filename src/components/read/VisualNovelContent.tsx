@@ -535,13 +535,15 @@ export default function VisualNovelContent({
               </h3>
             )}
             
-            <p 
-              key={currentScene.textContents[textIndex].instanceId}
-              className="leading-normal sm:leading-relaxed text-base sm:text-lg md:text-xl"
-              style={{ fontSize: `${fontSize}px`}}
-            >
-              {displayedText}
-            </p>
+            {displayedText && (
+              <p 
+                key={currentScene.textContents[textIndex].instanceId}
+                className="leading-normal sm:leading-relaxed text-base sm:text-lg md:text-xl"
+                style={{ fontSize: `${fontSize}px`}}
+              >
+                {displayedText}
+              </p>
+            )}
           </div>
         </div>
       )}

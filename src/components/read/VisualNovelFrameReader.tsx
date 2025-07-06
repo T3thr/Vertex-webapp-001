@@ -255,7 +255,7 @@ export default function VisualNovelFrameReader({
       }
        
       // Fallback for non-accessible or non-loaded episodes
-      router.push(`/novels/${novel.slug}/overview`);
+      router.push(`/novels/${novel.slug}`);
 
     } else if (currentEpisodeIndex !== -1 && currentEpisodeIndex === allEpisodes.length - 1) {
       // This is the last episode of the novel
