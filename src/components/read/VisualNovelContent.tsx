@@ -537,9 +537,9 @@ export default function VisualNovelContent({
 
       {/* Dialogue Box */}
       {!availableChoices && currentScene?.textContents[textIndex] && (
-        <div className="absolute bottom-0 left-0 right-0 p-6 text-white z-30 pointer-events-none">
+        <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 text-white z-30 pointer-events-none">
           <div 
-            className="backdrop-blur-md p-8 rounded-lg border border-white/20 min-h-[220px] flex flex-col justify-center"
+            className="backdrop-blur-md p-4 sm:p-6 md:p-8 rounded-lg border border-white/20 min-h-[150px] sm:min-h-[180px] md:min-h-[220px] flex flex-col justify-center"
             style={{ 
               backgroundColor: `rgba(0, 0, 0, ${textBoxOpacity * 0.6})`,
               transition: 'background-color 0.3s'
@@ -548,7 +548,7 @@ export default function VisualNovelContent({
             {/* Speaker Name */}
             {speakerInfo.name && (
               <h3 
-                 className="text-3xl font-bold mb-3"
+                 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2"
                  style={{ color: speakerInfo.color, textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}
               >
                 {speakerInfo.name}
@@ -557,7 +557,7 @@ export default function VisualNovelContent({
             
             <p 
               key={currentScene.textContents[textIndex].instanceId}
-              className="leading-relaxed text-xl"
+              className="leading-normal sm:leading-relaxed text-base sm:text-lg md:text-xl"
               style={{ fontSize: `${fontSize}px`}}
             >
               {displayedText}

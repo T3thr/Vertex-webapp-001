@@ -184,7 +184,7 @@ export default function VisualNovelFrameReader({
   }, [allEpisodes, episode._id, novel.slug, router]);
 
   return (
-    <div className="w-full h-full bg-black text-foreground flex flex-col relative">
+    <div className="w-full h-full bg-black text-white flex flex-col relative">
         {/* Main Content - Always visible */}
         <main className="flex-1 w-full h-full">
             {isSettingsLoaded && (
