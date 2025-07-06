@@ -16,6 +16,8 @@ export const DEFAULT_USER_SETTINGS: IReaderSettings = {
     },
     uiVisibility: {
       textBoxOpacity: 80, // percentage
+      backgroundBrightness: 100,
+      textBoxBorder: true,
     },
     // Add other display defaults if necessary
   },
