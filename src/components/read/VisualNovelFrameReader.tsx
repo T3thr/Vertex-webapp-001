@@ -108,6 +108,7 @@ export default function VisualNovelFrameReader({
   const [allEpisodes, setAllEpisodes] = useState<FullEpisode[]>([]);
   const [loadedEpisodesData, setLoadedEpisodesData] = useState<Record<string, DetailedEpisode>>({});
   const [isEpisodeLoading, setIsEpisodeLoading] = useState(true);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   
   // Advance Trigger
   const [advanceTrigger, setAdvanceTrigger] = useState(0);
@@ -234,37 +235,47 @@ export default function VisualNovelFrameReader({
     });
   }, []);
 
-  const handleEpisodeEnd = useCallback(() => {
+  const handleEpisodeEnd = useCallback(async () => {
     const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === activeEpisode._id);
 
     if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
       const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
 
-      // Seamless transition if the next episode is accessible and its data is pre-loaded
-      if (nextEpisode.hasAccess && loadedEpisodesData[nextEpisode._id]) {
-        setDialogueHistory([]); // Clear history for the new episode
-        setActiveEpisode(nextEpisode);
-        setCurrentSceneId(loadedEpisodesData[nextEpisode._id].firstSceneId);
-
-        // Update URL without a full page reload
-        const newUrl = `/read/${novel.slug}/${nextEpisode.episodeOrder}-${nextEpisode.slug}`;
-        window.history.pushState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
-        
-        // This resets internal state of VisualNovelContent via key prop change or useEffects
-        return; 
+      if (!nextEpisode.hasAccess) {
+        router.push(`/novels/${novel.slug}`);
+        return;
       }
-       
-      // Fallback for non-accessible or non-loaded episodes
-      router.push(`/novels/${novel.slug}`);
 
+      const performTransition = (nextEp: FullEpisode, nextEpData: DetailedEpisode) => {
+        setDialogueHistory([]);
+        setActiveEpisode(nextEp);
+        setCurrentSceneId(nextEpData.firstSceneId);
+        
+        const newUrl = `/read/${novel.slug}/${nextEp.episodeOrder}-${nextEp.slug}`;
+        window.history.pushState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+        setIsTransitioning(false);
+      };
+
+      if (loadedEpisodesData[nextEpisode._id]) {
+        performTransition(nextEpisode, loadedEpisodesData[nextEpisode._id]);
+      } else {
+        setIsTransitioning(true);
+        const nextEpisodeData = await fetchEpisodeDetails(nextEpisode._id);
+        if (nextEpisodeData) {
+          setLoadedEpisodesData(prev => ({ ...prev, [nextEpisode._id]: nextEpisodeData }));
+          performTransition(nextEpisode, nextEpisodeData);
+        } else {
+          console.error("Failed to load next episode, returning to novel page.");
+          setIsTransitioning(false);
+          router.push(`/novels/${novel.slug}`);
+        }
+      }
     } else if (currentEpisodeIndex !== -1 && currentEpisodeIndex === allEpisodes.length - 1) {
-      // This is the last episode of the novel
       setShowSummary(true);
     } else {
-      // Fallback to novel page if something went wrong
       router.push(`/novels/${novel.slug}`);
     }
-  }, [allEpisodes, activeEpisode._id, novel.slug, router, loadedEpisodesData]);
+  }, [allEpisodes, activeEpisode, novel.slug, router, loadedEpisodesData, fetchEpisodeDetails]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {
@@ -384,6 +395,18 @@ export default function VisualNovelFrameReader({
                 />
             )}
         </AnimatePresence>
+
+        {isTransitioning && (
+          <motion.div
+              className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+          >
+              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+              <p className="mt-4 text-white">กำลังโหลดตอนต่อไป...</p>
+          </motion.div>
+        )}
     </div>
   );
 }
