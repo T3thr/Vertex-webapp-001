@@ -318,14 +318,15 @@ function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backg
                 <img
                     src={backgroundUrl}
                     alt="Final Scene Background"
-                    className="absolute inset-0 w-full h-full object-cover opacity-30"
+                    className="absolute inset-0 w-full h-full object-cover"
                 />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent" />
             
             <div className="relative z-10 text-center text-white p-8 rounded-lg max-w-2xl">
                 <motion.h1 
                     className="text-4xl md:text-5xl font-bold mb-4"
+                    style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
                     initial={{ y: -20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
                 >
@@ -333,6 +334,7 @@ function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backg
                 </motion.h1>
                 <motion.p 
                     className="text-lg md:text-xl text-white/80 mb-8"
+                    style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
                     initial={{ y: -20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
                 >
