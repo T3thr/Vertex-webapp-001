@@ -93,8 +93,8 @@ type FullEpisode = Pick<IEpisode, 'slug' | 'title' | 'episodeOrder' | 'accessTyp
   stats?: IEpisodeStats;
 };
 
-// This type is now for the detailed episode data fetched and passed from the parent
-type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
+// This type is now for the detailed episode data fetched *within* this component
+export type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
     _id: string;
     novelId: string;
     authorId: string;
@@ -241,7 +241,6 @@ export default function VisualNovelContent({
     setTextIndex(0);
     setDisplayedText('');
     setIsTyping(false);
-    setAvailableChoices(null); // Reset choices when scene changes
   }, [currentSceneId, episodeData, onSceneDataChange]);
 
 
@@ -418,12 +417,10 @@ export default function VisualNovelContent({
           transition={{ duration: 0.8 }}
         >
           {currentScene.background.type === 'image' ? (
-            <img 
-              src={currentScene.background.value} 
-              alt={currentScene.title || 'background'}
-              className="w-full h-full object-cover" // Changed to object-cover for better fit
-              onContextMenu={(e) => e.preventDefault()}
-              draggable={false}
+            <div
+              className="w-full h-full bg-cover bg-center"
+              style={{ backgroundImage: `url(${currentScene.background.value})` }}
+              aria-label={currentScene.title || 'background'}
             />
           ) : (
             <div 
@@ -470,10 +467,8 @@ export default function VisualNovelContent({
                          : `/images/character/${char.characterData.characterCode}_fullbody.png`
                      }
                      alt={char.characterData?.name || 'Character'}
-                     className="h-full w-auto object-contain object-bottom"
+                     className="h-full w-auto object-contain object-bottom protected-image"
                      onError={() => handleImageError(char.characterData?.characterCode || '')}
-                     onContextMenu={(e) => e.preventDefault()}
-                     draggable={false}
                    />
               </motion.div>
             );

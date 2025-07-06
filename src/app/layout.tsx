@@ -11,6 +11,7 @@ import dbConnect from "@/backend/lib/mongodb";
 import UserModel from "@/backend/models/User";
 import UserSettingsModel from "@/backend/models/UserSettings";
 import { Toaster } from 'sonner';
+import DisableContextMenu from "@/components/layouts/DisableContextMenu";
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
@@ -224,6 +225,7 @@ export default async function RootLayout({
         suppressHydrationWarning={true}
       >
         <GlobalProvider>
+          <DisableContextMenu />
           <NavBarWrapper user={user} />
           <main className="flex-grow w-full">
             {children}
