@@ -17,7 +17,7 @@ import {
   MessageSquare,
   MessageSquareOff
 } from 'lucide-react';
-import VisualNovelContent, { DialogueHistoryItem } from './VisualNovelContent';
+import VisualNovelContent, { DialogueHistoryItem, DetailedEpisode } from './VisualNovelContent';
 import DialogueHistory from './DialogueHistory';
 import EpisodeNavigation from './EpisodeNavigation';
 import ReaderSettings, { IReaderSettings } from './ReaderSettings';
@@ -40,6 +40,8 @@ type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis'
     primaryPenName: string;
     avatarUrl: string;
   };
+  firstSceneId?: string;
+  stats?: IEpisodeStats;
 };
 
 // The page provides a serialized, populated version of IEpisode
@@ -70,21 +72,25 @@ type EpisodeListItem = Pick<IEpisode, 'title' | 'slug' | 'episodeOrder' | 'acces
 interface VisualNovelFrameReaderProps {
   novel: DisplayNovel;
   episode: FullEpisode;
+  allEpisodes: DetailedEpisode[];
   initialSceneId?: string;
   userId?: string;
 }
 
 export default function VisualNovelFrameReader({ 
   novel, 
-  episode, 
+  episode: initialEpisode, 
+  allEpisodes,
   initialSceneId, 
   userId 
 }: VisualNovelFrameReaderProps) {
   const router = useRouter();
+  const readerRef = useRef<HTMLDivElement>(null);
 
   // Core Reader State
   const [isPlaying, setIsPlaying] = useState(true);
-  const [currentSceneId, setCurrentSceneId] = useState(initialSceneId || episode.firstSceneId?.toString());
+  const [currentEpisode, setCurrentEpisode] = useState<DetailedEpisode>(() => allEpisodes.find(ep => ep._id === initialEpisode._id)!);
+  const [currentSceneId, setCurrentSceneId] = useState(initialSceneId || initialEpisode.firstSceneId?.toString());
   const [currentSceneData, setCurrentSceneData] = useState<SerializedScene | null>(null);
   const [dialogueHistory, setDialogueHistory] = useState<DialogueHistoryItem[]>([]);
   
@@ -100,8 +106,25 @@ export default function VisualNovelFrameReader({
   const [settings, setSettings] = useState<IReaderSettings>(DEFAULT_USER_SETTINGS);
   const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
   
-  // Episode Data
-  const [allEpisodes, setAllEpisodes] = useState<EpisodeListItem[]>([]);
+  // Episode data is now from props
+  const episodeListForNav = allEpisodes.map((ep: DetailedEpisode) => ({
+      _id: ep._id,
+      title: ep.title,
+      slug: ep.slug,
+      episodeOrder: ep.episodeOrder,
+      accessType: ep.accessType,
+      effectivePrice: ep.priceCoins || 0,
+      originalPrice: ep.originalPriceCoins || ep.priceCoins || 0,
+      hasAccess: !!ep.scenes, // Has scenes means has access
+      isOwned: !!ep.scenes && ep.accessType !== 'free', // A simplification
+      isFree: ep.accessType === 'free',
+      teaserText: ep.teaserText,
+      stats: {
+          viewsCount: ep.stats?.viewsCount || 0,
+          likesCount: ep.stats?.likesCount || 0,
+          estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 10
+      }
+  }));
   
   // Advance Trigger
   const [advanceTrigger, setAdvanceTrigger] = useState(0);
@@ -115,24 +138,40 @@ export default function VisualNovelFrameReader({
     });
   }, [userId]);
 
-  // Fetch all episodes for navigation
+  // ✅ Disable context menu on the reader
   useEffect(() => {
-    const fetchAllEpisodes = async () => {
-        try {
-            const res = await fetch(`/api/novels/${novel.slug}/episodes`);
-            if (res.ok) {
-                const data = await res.json();
-                // Ensure IDs are strings for comparison
-                const episodesWithStringIds = data.episodes.map((ep: any) => ({...ep, _id: ep._id.toString() }));
-                setAllEpisodes(episodesWithStringIds);
-            }
-        } catch (error) {
-            console.error("Failed to fetch episodes for auto-navigation:", error);
-        }
-    };
-    fetchAllEpisodes();
-  }, [userId, novel.slug]);
-  
+    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
+    const readerElement = readerRef.current;
+    if (readerElement) {
+      readerElement.addEventListener('contextmenu', handleContextMenu);
+      return () => {
+        readerElement.removeEventListener('contextmenu', handleContextMenu);
+      };
+    }
+  }, []);
+
+  const handleRefreshData = () => {
+    router.refresh();
+  };
+
+  const handleEpisodeChange = useCallback((episodeId: string) => {
+    const newEpisode = allEpisodes.find(ep => ep._id === episodeId);
+    
+    if (newEpisode && newEpisode.scenes && newEpisode.scenes.length > 0) {
+      setCurrentEpisode(newEpisode);
+      setCurrentSceneId(newEpisode.firstSceneId?.toString());
+      setDialogueHistory([]); // Reset history
+
+      // Update URL without full page reload
+      const newUrl = `/read/${novel.slug}/${newEpisode.episodeOrder}-${newEpisode.slug}`;
+      window.history.pushState({ path: newUrl }, '', newUrl);
+    } else {
+      console.warn(`Attempted to switch to inaccessible or invalid episode: ${episodeId}`);
+      // Optionally, show a paywall or an error message
+    }
+  }, [allEpisodes, novel.slug]);
+
+  // ✅ [แก้ไข] นำ logic การ save settings กลับมา
   const debouncedSaveSettings = useDebouncedCallback(async (newSettings: IReaderSettings) => {
     if (!userId) {
       localStorage.setItem('divwy-reader-settings', JSON.stringify(newSettings));
@@ -161,8 +200,9 @@ export default function VisualNovelFrameReader({
   }, [debouncedSaveSettings]);
   
   const handleResetSettings = useCallback(() => {
-    setSettings(DEFAULT_USER_SETTINGS);
-    debouncedSaveSettings(DEFAULT_USER_SETTINGS);
+    const newSettings = DEFAULT_USER_SETTINGS;
+    setSettings(newSettings);
+    debouncedSaveSettings(newSettings);
   }, [debouncedSaveSettings]);
 
   const handleBackToNovel = useCallback(() => {
@@ -177,16 +217,21 @@ export default function VisualNovelFrameReader({
   }, []);
 
   const handleEpisodeEnd = useCallback(() => {
-    const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === episode._id);
+    const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === currentEpisode._id);
     if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
       const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
-      router.push(`/read/${novel.slug}/${nextEpisode.episodeOrder}-${nextEpisode.slug}`);
+      // Check if the next episode is accessible (has scenes)
+      if (nextEpisode.scenes && nextEpisode.scenes.length > 0) {
+        handleEpisodeChange(nextEpisode._id);
+      } else {
+        setShowSummary(true); // Or show paywall for next episode
+      }
     } else if (currentEpisodeIndex !== -1 && currentEpisodeIndex === allEpisodes.length - 1) {
       setShowSummary(true);
     } else {
       router.push(`/novels/${novel.slug}`);
     }
-  }, [allEpisodes, episode._id, novel.slug, router]);
+  }, [allEpisodes, currentEpisode._id, novel.slug, router, handleEpisodeChange]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {
@@ -202,17 +247,18 @@ export default function VisualNovelFrameReader({
         },
       },
     };
+    setSettings(newSettings);
     handleSettingsChange(newSettings);
   };
 
   return (
-    <div className="w-full h-full bg-black text-white flex flex-col relative">
+    <div ref={readerRef} className="w-full h-full bg-black text-white flex flex-col relative no-select">
         {/* Main Content - Always visible */}
         <main className="flex-1 w-full h-full">
-            {isSettingsLoaded && (
+            {isSettingsLoaded && currentEpisode && (
             <VisualNovelContent
                 novel={novel}
-                episode={episode}
+                episode={currentEpisode}
                 currentSceneId={currentSceneId}
                 isPlaying={isPlaying}
                 userSettings={settings}
@@ -256,7 +302,7 @@ export default function VisualNovelFrameReader({
                             >
                                 <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
                                 <div className="text-left">
-                                <h1 className="text-sm font-bold truncate">{episode.title}</h1>
+                                <h1 className="text-sm font-bold truncate">{currentEpisode.title}</h1>
                                 <p className="text-xs text-white/80 truncate">{novel.title}</p>
                                 </div>
                             </motion.button>
@@ -289,8 +335,8 @@ export default function VisualNovelFrameReader({
         {/* Panels */}
         <AnimatePresence>
             {showHistory && <DialogueHistory isOpen={showHistory} onClose={() => setShowHistory(false)} history={dialogueHistory} />}
-            {showEpisodeNav && <EpisodeNavigation isOpen={showEpisodeNav} onClose={() => setShowEpisodeNav(false)} novel={novel} currentEpisode={episode} userId={userId}/>}
-            {showSettings && <ReaderSettings isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} onSettingsChange={handleSettingsChange} onSave={handleSaveAndCloseSettings} onReset={handleResetSettings} />}
+            {showEpisodeNav && <EpisodeNavigation isOpen={showEpisodeNav} onClose={() => setShowEpisodeNav(false)} novel={novel} currentEpisode={initialEpisode} userId={userId} episodes={episodeListForNav} onEpisodeSelect={handleEpisodeChange} onRefresh={handleRefreshData} />}
+            {showSettings && <ReaderSettings isOpen={showSettings} onClose={handleSaveAndCloseSettings} settings={settings} onSettingsChange={handleSettingsChange} onSave={handleSaveAndCloseSettings} onReset={handleResetSettings} />}
             {showStoryStatus && <StoryStatusPanel isOpen={showStoryStatus} onClose={() => setShowStoryStatus(false)} scene={currentSceneData} />}
             {showSummary && (
                 <EndSummaryScreen 

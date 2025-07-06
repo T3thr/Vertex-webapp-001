@@ -94,19 +94,19 @@ type FullEpisode = Pick<IEpisode, 'slug' | 'title' | 'episodeOrder' | 'accessTyp
 };
 
 // This type is now for the detailed episode data fetched *within* this component
-type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
+export type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
     _id: string;
     novelId: string;
     authorId: string;
     scenes?: SerializedScene[];
     firstSceneId?: string;
     nextEpisodeId?: string;
-    previousSceneId?: string;
+    previousEpisodeId?: string;
 };
 
 interface VisualNovelContentProps {
   novel: DisplayNovel;
-  episode: FullEpisode;
+  episode: DetailedEpisode;
   currentSceneId?: string;
   isPlaying: boolean;
   userSettings: UserSettings;
@@ -201,7 +201,7 @@ const getSpeakerInfo = (textContent: SerializedTextContent | undefined, characte
 
 export default function VisualNovelContent({
   novel,
-  episode: initialEpisode,
+  episode: episodeData,
   currentSceneId,
   isPlaying,
   userSettings,
@@ -212,12 +212,10 @@ export default function VisualNovelContent({
   onDialogueEntry,
   onEpisodeEnd,
 }: VisualNovelContentProps) {
-  const [episodeData, setEpisodeData] = useState<DetailedEpisode | null>(null);
   const [currentScene, setCurrentScene] = useState<SerializedScene | null>(null);
   const [textIndex, setTextIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [availableChoices, setAvailableChoices] = useState<SerializedChoice[] | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
@@ -237,32 +235,13 @@ export default function VisualNovelContent({
   const charactersInScene = currentScene?.characters.filter(c => c.isVisible) || [];
 
   useEffect(() => {
-    const fetchEpisodeData = async () => {
-      if (!initialEpisode?._id) return;
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/novels/${novel.slug}/episodes/${initialEpisode._id}`);
-        if (!response.ok) throw new Error('Failed to fetch episode data');
-        const data: DetailedEpisode = await response.json();
-        setEpisodeData(data);
-      } catch (error) {
-        console.error('Error fetching episode data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    if (initialEpisode) {
-        fetchEpisodeData();
-    }
-  }, [novel.slug, initialEpisode?._id]);
-  
-  useEffect(() => {
     const scene = episodeData?.scenes?.find(s => s._id === currentSceneId) ?? null;
     setCurrentScene(scene);
     onSceneDataChange(scene);
     setTextIndex(0);
     setDisplayedText('');
     setIsTyping(false);
+    setAvailableChoices(null);
   }, [currentSceneId, episodeData, onSceneDataChange]);
 
 
@@ -411,14 +390,14 @@ export default function VisualNovelContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTrigger]);
 
-  if (isLoading) {
+  if (!episodeData) {
     return (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+            <p>ไม่พบข้อมูลตอน</p>
       </div>
     );
   }
-
+  
   if (!currentScene) {
     return (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
@@ -489,7 +468,7 @@ export default function VisualNovelContent({
                          : `/images/character/${char.characterData.characterCode}_fullbody.png`
                      }
                      alt={char.characterData?.name || 'Character'}
-                     className="h-full w-auto object-contain object-bottom"
+                     className="h-full w-auto object-contain object-bottom no-right-click-img"
                      onError={() => handleImageError(char.characterData?.characterCode || '')}
                    />
               </motion.div>

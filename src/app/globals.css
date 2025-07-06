@@ -1114,3 +1114,15 @@ html[data-theme-ready="true"] {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
 }
+
+/* ✅ [เพิ่มใหม่] Content Protection Utilities */
+.no-select {
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE10+ */
+  user-select: none; /* Standard */
+}
+
+.no-right-click-img {
+  pointer-events: none;
+}

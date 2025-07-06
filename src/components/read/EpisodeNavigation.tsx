@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { X, Play, Lock, Crown, Clock, Eye, Heart, Coins } from 'lucide-react';
@@ -31,9 +31,12 @@ interface EpisodeNavigationProps {
   novel: DisplayNovel;
   currentEpisode: FullEpisode;
   userId?: string;
+  episodes: EpisodeListItem[];
+  onEpisodeSelect: (episodeId: string) => void;
+  onRefresh: () => void;
 }
 
-interface EpisodeListItem {
+export interface EpisodeListItem {
   _id: string;
   title: string;
   slug: string;
@@ -57,66 +60,19 @@ export default function EpisodeNavigation({
   onClose, 
   novel, 
   currentEpisode, 
-  userId 
+  userId,
+  episodes,
+  onEpisodeSelect,
+  onRefresh
 }: EpisodeNavigationProps) {
   const router = useRouter();
-  const [episodes, setEpisodes] = useState<EpisodeListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [purchasingEpisode, setPurchasingEpisode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch episodes
-  useEffect(() => {
-    if (isOpen) {
-      fetchEpisodes();
-    }
-  }, [isOpen, novel.slug]);
-
-  const fetchEpisodes = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`/api/novels/${novel.slug}/episodes`);
-      if (!response.ok) throw new Error('Failed to fetch episodes');
-      
-      const data = await response.json();
-      
-      const processedEpisodes: EpisodeListItem[] = data.episodes.map((ep: any) => {
-        const effectivePrice = ep.priceCoins || 0;
-        const originalPrice = ep.originalPriceCoins || ep.priceCoins || 0;
-        
-        return {
-          _id: ep._id,
-          title: ep.title,
-          slug: ep.slug,
-          episodeOrder: ep.episodeOrder,
-          accessType: ep.accessType,
-          effectivePrice,
-          originalPrice,
-          hasAccess: ep.accessType === 'free' || ep.hasAccess || false,
-          isOwned: ep.isOwned || false,
-          isFree: ep.accessType === 'free',
-          teaserText: ep.teaserText,
-          stats: {
-            viewsCount: ep.stats?.viewsCount || 0,
-            likesCount: ep.stats?.likesCount || 0,
-            estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 10
-          }
-        };
-      });
-
-      setEpisodes(processedEpisodes);
-    } catch (error) {
-      console.error('Error fetching episodes:', error);
-      setError('ไม่สามารถโหลดรายการตอนได้');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleEpisodeClick = (episode: EpisodeListItem) => {
     if (episode.hasAccess) {
-      const readUrl = `/read/${novel.slug}/${episode.episodeOrder}-${episode.slug}`;
-      router.push(readUrl);
+      onEpisodeSelect(episode._id);
       onClose();
     } else if (!userId) {
       router.push('/signin');
@@ -144,16 +100,14 @@ export default function EpisodeNavigation({
       }
 
       // ซื้อสำเร็จ, โหลดข้อมูลตอนใหม่และนำทาง
-      await fetchEpisodes();
+      onRefresh();
       
       const purchasedEpisode = episodes.find(ep => ep._id === episodeId);
       if (purchasedEpisode) {
-        const readUrl = `/read/${novel.slug}/${purchasedEpisode.episodeOrder}-${purchasedEpisode.slug}`;
-        router.push(readUrl);
+        onEpisodeSelect(episodeId);
         onClose();
       } else {
-        // หากไม่เจอใน state ปัจจุบัน อาจจะต้องรอ fetch ใหม่
-         await fetchEpisodes();
+        onRefresh();
       }
     } catch (error: any) {
       console.error('Purchase failed:', error);
@@ -239,7 +193,7 @@ export default function EpisodeNavigation({
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto">
-              {isLoading ? (
+              {episodes.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
                 </div>
