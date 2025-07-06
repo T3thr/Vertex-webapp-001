@@ -229,7 +229,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                 theme: "system",
                 reading: { fontSize: 16, readingModeLayout: "scrolling", fontFamily: "Sarabun", lineHeight: 1.6, textAlignment: "left", textContrastMode: false },
                 accessibility: { dyslexiaFriendlyFont: false, highContrastMode: false, epilepsySafeMode: false, reducedMotion: false },
-                uiVisibility: { textBoxOpacity: 100, backgroundBrightness: 100, textBoxBorder: true },
+                uiVisibility: { theme: 'system_default', textBoxOpacity: 100, backgroundBrightness: 100, textBoxBorder: true, isDialogueBoxVisible: true },
                 visualEffects: { sceneTransitionAnimations: true, actionSceneEffects: true, particleEffects: true },
                 characterDisplay: { showCharacters: true, characterMovementAnimations: true, hideCharactersDuringText: false },
                 characterVoiceDisplay: { voiceIndicatorIcon: true },
