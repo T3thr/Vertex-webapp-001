@@ -103,10 +103,18 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
   // และจะอัปเดตตามข้อมูลจาก client-side context (`authContextUser`) เมื่อมีการเปลี่ยนแปลง
   // เพื่อให้แน่ใจว่า UI ถูกต้องเสมอและไม่มีการกระพริบ
   const userDisplay = useMemo(() => authContextUser ?? initialUser, [authContextUser, initialUser]);
+  const isReadPage = pathname.startsWith('/read/');
 
-  const handleScroll = useCallback(() => setIsScrolled(window.scrollY > 20), []);
+  const handleScroll = useCallback(() => {
+    if (isReadPage) {
+      setIsScrolled(false);
+      return;
+    }
+    setIsScrolled(window.scrollY > 20);
+  }, [isReadPage]);
 
   useEffect(() => {
+    handleScroll(); // Set initial state
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
@@ -312,7 +320,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
 
   // NavBar header styling
   // ลบ navBarDynamicClasses ออก เพราะ AuthModal จะจัดการ backdrop ของตัวเอง
-  const navBarBaseClasses = `sticky top-0 z-30 w-full transition-all duration-300 border-b`; // ลด z-index ของ NavBar ลงเล็กน้อย
+  const navBarBaseClasses = `${!isReadPage ? 'sticky' : ''} top-0 z-30 w-full transition-all duration-300 border-b`; // ลด z-index ของ NavBar ลงเล็กน้อย
   const navBarScrollClasses = isScrolled
       ? "bg-background/80 shadow-md backdrop-blur-md border-border" // เพิ่มเส้น border ชัดเจนขึ้น (ลบ /30)
       : "bg-background border-border"; // เพิ่มเส้น border ให้แสดงตลอดเวลา

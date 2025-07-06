@@ -390,7 +390,8 @@ ChoiceSchema.post<IChoice>(/^(save|findOneAndDelete)$/ as any, async function (d
 
   if (currentDoc && currentDoc.novelId) {
     try {
-      const NovelModel = models.Novel || model("Novel");
+      // Defer model lookup using mongoose.model() to prevent circular dependency issues at module load time.
+      const NovelModel = mongoose.model("Novel");
       await NovelModel.findByIdAndUpdate(currentDoc.novelId, { $set: { lastContentUpdatedAt: new Date() } });
       console.log(`[ChoiceMiddleware] Updated lastContentUpdatedAt for Novel ${currentDoc.novelId} due to Choice ${currentDoc._id} change.`);
 

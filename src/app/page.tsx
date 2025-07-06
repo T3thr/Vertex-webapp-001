@@ -411,7 +411,7 @@ export default async function HomePage() {
       title: "สรรค์สร้างโลกนิยาย ดั่งใจนึก",
       description: "เปลี่ยนพล็อตเรื่องในหัวของคุณให้กลายเป็นจริง ด้วยระบบที่ใช้งานง่ายและรวดเร็ว ไม่จำเป็นต้องมีพื้นฐานด้านเทคนิค ก็สร้างสรรค์ผลงานได้ดั่งมืออาชีพ",
       imageUrl: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571038/767725075.680000_mffzzx.gif",
-      link: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571038/767725075.680000_mffzzx.gif",
+      link: "http://localhost:3000/novels/the-chosen-one",
       category: "Visual Novels",
       highlightColor: "#ec4899",
       primaryAction: { label: "สำรวจวิชวลโนเวล", href: "https://res.cloudinary.com/dzwjogkrz/image/upload/v1751571038/767725075.680000_mffzzx.gif" },

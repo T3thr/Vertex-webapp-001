@@ -9,9 +9,5 @@ interface NavBarWrapperProps {
 // NavBarWrapper - จัดการการแสดงผล NavBar และรองรับ Server Component
 // Wrapper นี้ไม่จำเป็นต้องเป็น Client Component อีกต่อไป
 export default function NavBarWrapper({ user }: NavBarWrapperProps) {
-  return (
-    <header className="sticky top-0 z-40 w-full transition-all">
-      <NavBar initialUser={user} />
-    </header>
-  );
+  return <NavBar initialUser={user} />;
 }

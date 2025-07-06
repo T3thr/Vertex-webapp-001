@@ -1,299 +1,250 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Type, Gauge, Image, Play, Volume2, Zap, Eye, Monitor } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, Type, Zap, Eye, Play, Volume2, Music, Waves, Mic, Monitor } from 'lucide-react';
+import { IVisualNovelGameplayPreferences, IUserDisplayPreferences } from '@/backend/models/UserSettings';
+
+// Combined settings interface for easier prop management
+export interface IReaderSettings {
+    display: Partial<IUserDisplayPreferences>;
+    gameplay: Partial<IVisualNovelGameplayPreferences>;
+}
 
 interface ReaderSettingsProps {
   isOpen: boolean;
   onClose: () => void;
-  textSpeed: number;
-  onTextSpeedChange: (speed: number) => void;
-  fontSize: number;
-  onFontSizeChange: (size: number) => void;
-  bgOpacity: number;
-  onBgOpacityChange: (opacity: number) => void;
-  autoPlay: boolean;
-  onAutoPlayChange: (autoPlay: boolean) => void;
+  settings: IReaderSettings;
+  onSettingsChange: (newSettings: IReaderSettings) => void;
+  onSave: () => void;
+  onReset: () => void;
 }
+
+const SettingRow = ({ icon, title, description, control }: { icon: React.ReactNode, title: string, description?: string, control: React.ReactNode }) => (
+    <div className="py-4 border-b border-border/50 last:border-b-0">
+        <div className="flex items-center justify-between">
+            <label className="text-card-foreground font-medium flex items-center gap-3">
+                {icon}
+                {title}
+            </label>
+            <div className="flex-shrink-0">
+              {control}
+            </div>
+        </div>
+        {description && <p className="text-muted-foreground text-sm mt-2 ml-9">{description}</p>}
+    </div>
+);
+
 
 export default function ReaderSettings({
   isOpen,
   onClose,
-  textSpeed,
-  onTextSpeedChange,
-  fontSize,
-  onFontSizeChange,
-  bgOpacity,
-  onBgOpacityChange,
-  autoPlay,
-  onAutoPlayChange
+  settings,
+  onSettingsChange,
+  onSave,
+  onReset
 }: ReaderSettingsProps) {
-  const textSpeedLabels = ['ช้า', 'ปกติ', 'เร็ว', 'เร็วมาก', 'ทันที'];
-  const fontSizeLabels = ['เล็ก', 'ปกติ', 'ใหญ่', 'ใหญ่มาก'];
+  
+  if (!isOpen) return null;
 
-  // ฟังก์ชันบันทึกการตั้งค่าลง MongoDB
-  const saveSettings = async () => {
-    try {
-      const settings = {
-        textSpeed,
-        fontSize,
-        bgOpacity,
-        autoPlay
-      };
-      
-      // เรียก API เพื่อบันทึกการตั้งค่า
-      const response = await fetch('/api/user/settings', {
-        method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          readerSettings: settings
-        })
+  const handleGameplayChange = (key: keyof IVisualNovelGameplayPreferences, value: any) => {
+    onSettingsChange({
+      ...settings,
+      gameplay: { ...settings.gameplay, [key]: value },
+    });
+  };
+
+  const handleDisplayChange = (path: string, value: any) => {
+      const [key1, key2] = path.split('.');
+      onSettingsChange({
+          ...settings,
+          display: {
+              ...settings.display,
+              [key1]: {
+                  ...(settings.display as any)[key1],
+                  [key2]: value,
+              }
+          }
       });
-      
-      if (response.ok) {
-        // บันทึกใน localStorage เป็น backup
-        localStorage.setItem('readerSettings', JSON.stringify(settings));
-        onClose();
-      } else {
-        const errorData = await response.json();
-        console.error('Failed to save settings:', errorData);
-        
-        // หากบันทึกใน database ไม่สำเร็จ ให้บันทึกใน localStorage
-        localStorage.setItem('readerSettings', JSON.stringify(settings));
-        onClose();
-      }
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      
-      // หากเกิดข้อผิดพลาด ให้บันทึกใน localStorage เป็นอย่างน้อย
-      const settings = {
-        textSpeed,
-        fontSize,
-        bgOpacity,
-        autoPlay
-      };
-      localStorage.setItem('readerSettings', JSON.stringify(settings));
-      onClose();
-    }
   };
 
-  // ฟังก์ชันรีเซ็ตการตั้งค่า
-  const resetSettings = () => {
-    onTextSpeedChange(2);
-    onFontSizeChange(16);
-    onBgOpacityChange(0.8);
-    onAutoPlayChange(false);
-  };
+  const textSpeed = settings.gameplay?.textSpeedValue ?? 50;
+  const fontSize = settings.display?.reading?.fontSize ?? 16;
+  const textBoxOpacity = settings.display?.uiVisibility?.textBoxOpacity ?? 80;
+  const autoPlayEnabled = settings.gameplay?.autoPlayEnabled ?? false;
+  
+  const masterVolume = settings.gameplay?.masterVolume ?? 100;
+  const bgmVolume = settings.gameplay?.bgmVolume ?? 70;
+  const sfxVolume = settings.gameplay?.sfxVolume ?? 80;
+  const voiceVolume = settings.gameplay?.voiceVolume ?? 100;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+        className="fixed inset-0 z-50 flex items-center justify-end"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-
-          {/* Modal */}
+      >
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          >
-            <div className="bg-card rounded-2xl border border-border w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl">
+            className="relative bg-card h-full w-full max-w-md border-l border-border shadow-2xl flex flex-col"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+        >
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
                 <h2 className="text-card-foreground text-xl font-bold">ตั้งค่าการอ่าน</h2>
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-card-foreground transition-colors"
+              className="p-2 rounded-full hover:bg-secondary text-card-foreground transition-colors"
                 >
                   <X size={20} />
                 </button>
               </div>
 
               {/* Content */}
-              <div className="p-6 space-y-6 overflow-y-auto">
-                {/* Text Speed */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-card-foreground font-medium flex items-center gap-2">
-                      <Zap size={18} className="text-primary" />
-                      ความเร็วข้อความ
-                    </label>
-                    <span className="text-muted-foreground text-sm">
-                      {textSpeed === 1 ? 'ช้า' : textSpeed === 5 ? 'เร็ว' : 'ปานกลาง'}
-                    </span>
-                  </div>
-                  <div className="px-3">
+          <div className="p-4 space-y-2 overflow-y-auto flex-grow">
+            <h3 className="text-sm font-semibold text-primary px-2 pt-2">การแสดงผล</h3>
+            <SettingRow
+              icon={<Type size={18} className="text-primary/80" />}
+              title="ขนาดตัวอักษร"
+              control={
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm w-8 text-right">{fontSize}px</span>
                     <input
-                      type="range"
-                      min="1"
-                      max="5"
-                      value={textSpeed}
-                      onChange={(e) => onTextSpeedChange(Number(e.target.value))}
-                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
+                      type="range" min="12" max="28" step="1" value={fontSize}
+                      onChange={(e) => handleDisplayChange('reading.fontSize', Number(e.target.value))}
+                      className="w-32 slider"
                     />
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>ช้า</span>
-                      <span>เร็ว</span>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Font Size */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-card-foreground font-medium flex items-center gap-2">
-                      <Type size={18} className="text-primary" />
-                      ขนาดตัวอักษร
-                    </label>
-                    <span className="text-muted-foreground text-sm">{fontSize}px</span>
-                  </div>
-                  <div className="px-3">
+              }
+            />
+             <SettingRow
+              icon={<Eye size={18} className="text-primary/80" />}
+              title="ความทึบกล่องข้อความ"
+              control={
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm w-8 text-right">{textBoxOpacity}%</span>
                     <input
-                      type="range"
-                      min="12"
-                      max="24"
-                      value={fontSize}
-                      onChange={(e) => onFontSizeChange(Number(e.target.value))}
-                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
+                      type="range" min="20" max="100" step="5" value={textBoxOpacity}
+                      onChange={(e) => handleDisplayChange('uiVisibility.textBoxOpacity', Number(e.target.value))}
+                      className="w-32 slider"
                     />
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>เล็ก</span>
-                      <span>ใหญ่</span>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Background Opacity */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-card-foreground font-medium flex items-center gap-2">
-                      <Eye size={18} className="text-primary" />
-                      ความโปร่งใสพื้นหลัง
-                    </label>
-                    <span className="text-muted-foreground text-sm">{Math.round(bgOpacity * 100)}%</span>
-                  </div>
-                  <div className="px-3">
+              }
+            />
+            
+            <h3 className="text-sm font-semibold text-primary px-2 pt-6">การเล่น</h3>
+            <SettingRow
+              icon={<Zap size={18} className="text-primary/80" />}
+              title="ความเร็วข้อความ"
+              control={
+                <div className="flex items-center gap-2">
                     <input
-                      type="range"
-                      min="0.3"
-                      max="1"
-                      step="0.1"
-                      value={bgOpacity}
-                      onChange={(e) => onBgOpacityChange(Number(e.target.value))}
-                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer slider"
+                      type="range" min="0" max="100" step="1" value={textSpeed}
+                      onChange={(e) => handleGameplayChange('textSpeedValue', Number(e.target.value))}
+                      className="w-32 slider"
                     />
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>โปร่งใส</span>
-                      <span>ทึบ</span>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Auto Play */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-card-foreground font-medium flex items-center gap-2">
-                      <Play size={18} className="text-primary" />
-                      เล่นอัตโนมัติ
-                    </label>
+              }
+            />
+            <SettingRow
+              icon={<Play size={18} className="text-primary/80" />}
+              title="เล่นอัตโนมัติ"
+              description="เมื่อเปิดใช้งาน ข้อความจะเล่นต่อไปโดยอัตโนมัติ"
+              control={
                     <button
-                      onClick={() => onAutoPlayChange(!autoPlay)}
+                    onClick={() => handleGameplayChange('autoPlayEnabled', !autoPlayEnabled)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        autoPlay ? 'bg-primary' : 'bg-secondary'
+                      autoPlayEnabled ? 'bg-primary' : 'bg-secondary'
                       }`}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          autoPlay ? 'translate-x-6' : 'translate-x-1'
+                        autoPlayEnabled ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
                     </button>
+              }
+            />
+            
+            <h3 className="text-sm font-semibold text-primary px-2 pt-6">เสียง</h3>
+             <SettingRow
+              icon={<Volume2 size={18} className="text-primary/80" />}
+              title="เสียงโดยรวม"
+              control={
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm w-8 text-right">{masterVolume}%</span>
+                    <input
+                      type="range" min="0" max="100" value={masterVolume}
+                      onChange={(e) => handleGameplayChange('masterVolume', Number(e.target.value))}
+                      className="w-32 slider"
+                    />
                   </div>
-                  <p className="text-muted-foreground text-sm">
-                    เมื่อเปิดใช้งาน ข้อความจะเล่นต่อไปโดยอัตโนมัติ
-                  </p>
+              }
+            />
+            <SettingRow
+              icon={<Music size={18} className="text-primary/80" />}
+              title="เพลงประกอบ (BGM)"
+              control={
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm w-8 text-right">{bgmVolume}%</span>
+                    <input
+                      type="range" min="0" max="100" value={bgmVolume}
+                      onChange={(e) => handleGameplayChange('bgmVolume', Number(e.target.value))}
+                      className="w-32 slider"
+                    />
                 </div>
+              }
+            />
+             <SettingRow
+              icon={<Waves size={18} className="text-primary/80" />}
+              title="เอฟเฟกต์ (SFX)"
+              control={
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm w-8 text-right">{sfxVolume}%</span>
+                    <input
+                      type="range" min="0" max="100" value={sfxVolume}
+                      onChange={(e) => handleGameplayChange('sfxVolume', Number(e.target.value))}
+                      className="w-32 slider"
+                    />
+                    </div>
+              }
+            />
+             <SettingRow
+              icon={<Mic size={18} className="text-primary/80" />}
+              title="เสียงพากย์"
+              control={
+                <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm w-8 text-right">{voiceVolume}%</span>
+                    <input
+                      type="range" min="0" max="100" value={voiceVolume}
+                      onChange={(e) => handleGameplayChange('voiceVolume', Number(e.target.value))}
+                      className="w-32 slider"
+                    />
+                </div>
+              }
+            />
 
-                {/* Preview */}
-                <div className="space-y-3">
-                  <label className="text-card-foreground font-medium flex items-center gap-2">
-                    <Monitor size={18} className="text-primary" />
-                    ตัวอย่าง
-                  </label>
-                  <div 
-                    className="bg-black/90 rounded-lg p-4 border border-white/20"
-                    style={{ opacity: bgOpacity }}
-                  >
-                    <div className="text-white font-semibold mb-2 flex items-center">
-                      <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
-                      ตัวอย่างตัวละคร
-                    </div>
-                    <div 
-                      className="text-white leading-relaxed"
-                      style={{ fontSize: `${fontSize}px` }}
-                    >
-                      นี่คือตัวอย่างข้อความในเกม ที่จะแสดงผลตามการตั้งค่าของคุณ
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* Footer */}
-              <div className="p-6 border-t border-border bg-secondary/30">
-                <div className="flex gap-3">
+          <div className="flex items-center justify-end gap-3 p-4 border-t border-border flex-shrink-0">
                   <button
-                    onClick={resetSettings}
-                    className="flex-1 px-4 py-2 bg-secondary hover:bg-secondary/80 text-card-foreground rounded-lg transition-colors font-medium"
+              onClick={onReset}
+              className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors text-sm font-semibold"
                   >
                     รีเซ็ต
                   </button>
                   <button
-                    onClick={saveSettings}
-                    className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors font-medium"
+              onClick={onSave}
+              className="px-6 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors text-sm font-semibold"
                   >
-                    บันทึก
+              บันทึกและปิด
                   </button>
                 </div>
-              </div>
-            </div>
+        </motion.div>
           </motion.div>
-        </>
-      )}
-
-      {/* CSS สำหรับ slider */}
-      <style jsx>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: hsl(var(--primary));
-          cursor: pointer;
-          border: 2px solid hsl(var(--background));
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .slider::-moz-range-thumb {
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: hsl(var(--primary));
-          cursor: pointer;
-          border: 2px solid hsl(var(--background));
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-      `}</style>
-    </AnimatePresence>
   );
 } 

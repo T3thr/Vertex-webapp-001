@@ -754,7 +754,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Ella,
           expressionId: 'worried',
           transform: {
-            positionX: -200,
+            positionX: -150,
             positionY: -20,
             scaleX: 1,
             scaleY: 1,
@@ -769,7 +769,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Matthew,
           expressionId: 'frustrated',
           transform: {
-            positionX: 200,
+            positionX: 150,
             positionY: -50,
             scaleX: 1,
             scaleY: 1,
@@ -857,7 +857,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Matthew,
           expressionId: 'frustrated',
           transform: {
-            positionX: 200,
+            positionX: 150,
             positionY: -50,
             scaleX: 1,
             scaleY: 1,
@@ -872,7 +872,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Ella,
           expressionId: 'angry',
           transform: {
-            positionX: -200,
+            positionX: -150,
             positionY: -20,
             scaleX: 1,
             scaleY: 1,
@@ -934,7 +934,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Ella,
           expressionId: 'worried',
           transform: {
-            positionX: -200,
+            positionX: -150,
             positionY: -20,
             scaleX: 1,
             scaleY: 1,
@@ -949,7 +949,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Matthew,
           expressionId: 'angry',
           transform: {
-            positionX: 200,
+            positionX: 150,
             positionY: -40,
             scaleX: 1,
             scaleY: 1,
@@ -1000,7 +1000,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Ella,
           expressionId: 'worried',
           transform: {
-            positionX: -200,
+            positionX: -150,
             positionY: -20,
             scaleX: 1,
             scaleY: 1,
@@ -1015,7 +1015,7 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.Matthew,
           expressionId: 'normal',
           transform: {
-            positionX: 200,
+            positionX: 150,
             positionY: -40,
             scaleX: 1,
             scaleY: 1,
@@ -1374,28 +1374,28 @@ const createChosenOneScenes = async (
           instanceId: 'ana_playing_s2',
           characterId: characterMap.Ana,
           expressionId: 'happy',
-          transform: { positionX: -225, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: -180, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'hoshi_playing_s2',
           characterId: characterMap.Hoshi,
           expressionId: 'happy',
-          transform: { positionX: -75, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: -60, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'cho_playing_s2',
           characterId: characterMap.Cho,
           expressionId: 'happy',
-          transform: { positionX: 75, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: 60, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'riwsey_playing_s2',
           characterId: characterMap.Riwsey,
           expressionId: 'happy',
-          transform: { positionX: 225, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: 180, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         }
       ],
@@ -1529,35 +1529,35 @@ const createChosenOneScenes = async (
           instanceId: 'ana_trapped_s5',
           characterId: characterMap.Ana,
           expressionId: 'worried',
-          transform: { x: -390, y: -40, scale: 1, rotation: 0 },
+          transform: { positionX: -200, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'hoshi_trapped_s5',
           characterId: characterMap.Hoshi,
           expressionId: 'worried',
-          transform: { x: -310, y: -40, scale: 1, rotation: 0 },
+          transform: { positionX: -100, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'cho_trapped_s5',
           characterId: characterMap.Cho,
           expressionId: 'worried',
-          transform: { x: -230, y: -40, scale: 1, rotation: 0 },
+          transform: { positionX: 0, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'riwsey_trapped_s5',
           characterId: characterMap.Riwsey,
           expressionId: 'worried',
-          transform: { x: -150, y: -40, scale: 1, rotation: 0 },
+          transform: { positionX: 100, positionY: -40, scale: 1, rotation: 0 },
           isVisible: true
         },
         {
           instanceId: 'dog_trapped_s5',
           characterId: characterMap.Dog,
           expressionId: 'normal',
-          transform: { x: 250, y: 0, scale: 1, rotation: 0 },
+          transform: { positionX: 200, positionY: 0, scale: 1, rotation: 0 },
           isVisible: true
         }
       ],

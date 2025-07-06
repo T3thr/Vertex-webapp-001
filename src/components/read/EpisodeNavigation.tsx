@@ -4,45 +4,32 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { X, Play, Lock, Crown, Clock, Eye, Heart, Coins } from 'lucide-react';
+import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
+import type { INovel } from '@/backend/models/Novel';
 
-interface Novel {
+// --- Aligned Types ---
+// These types match the props passed down from VisualNovelFrameReader.
+type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis'> & {
   _id: string;
-  title: string;
-  slug: string;
-  coverImageUrl?: string;
-  synopsis?: string;
   author: {
     _id: string;
     username: string;
     primaryPenName: string;
     avatarUrl: string;
   };
-}
+};
 
-interface Episode {
+type FullEpisode = Pick<IEpisode, 'slug' | 'title' | 'episodeOrder' | 'accessType' | 'priceCoins' | 'originalPriceCoins' | 'teaserText'> & {
   _id: string;
-  title: string;
-  slug: string;
-  episodeOrder: number;
-  accessType: string;
-  priceCoins?: number;
-  originalPriceCoins?: number;
   firstSceneId?: string;
-  teaserText?: string;
-  stats?: {
-    viewsCount: number;
-    likesCount: number;
-    commentsCount: number;
-    estimatedReadingTimeMinutes: number;
-    totalWords: number;
-  };
-}
+  stats?: IEpisodeStats;
+};
 
 interface EpisodeNavigationProps {
   isOpen: boolean;
   onClose: () => void;
-  novel: Novel;
-  currentEpisode: Episode;
+  novel: DisplayNovel;
+  currentEpisode: FullEpisode;
   userId?: string;
 }
 

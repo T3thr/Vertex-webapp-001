@@ -2,110 +2,189 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX, SkipForward } from 'lucide-react';
+import { SkipForward } from 'lucide-react';
 
-interface Novel {
-  _id: string;
-  title: string;
-  slug: string;
-  coverImageUrl?: string;
-  synopsis?: string;
-  author: any;
-}
+// --- Refactored to use types from models ---
+import type { 
+    IUserSettings, 
+    IUserDisplayPreferences, 
+    IVisualNovelGameplayPreferences 
+} from '@/backend/models/UserSettings';
+import type { IScene, ICharacterInScene, ITextContent, IAudioElement, IBackgroundSetting, IConfigurableAction } from '@/backend/models/Scene';
+import type { ICharacter } from '@/backend/models/Character';
+import type { INovel } from '@/backend/models/Novel';
+import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
+import type { IChoice, IChoiceAction, ChoiceActionType } from '@/backend/models/Choice';
 
-interface Episode {
-  _id: string;
-  title: string;
-  slug: string;
-  episodeOrder: number;
-  accessType: string;
-  priceCoins?: number;
-  originalPriceCoins?: number;
-  firstSceneId?: string;
-  teaserText?: string;
-  stats?: any;
-  scenes?: Scene[]; // Make scenes optional as the component fetches them
-}
+// --- Local, Serialized Types for Frontend ---
 
-interface Character {
-  instanceId: string;
-  characterId: string;
-  characterData?: {
+// The data from the API is serialized (e.g. ObjectIds become strings)
+// and populated. These types reflect the shape the component receives.
+
+type PopulatedCharacter = Omit<ICharacterInScene, 'characterId'> & {
+    characterId: string;
+    characterData?: Omit<ICharacter, '_id'> & { _id: string };
+};
+
+type SerializedTextContent = Omit<ITextContent, 'characterId' | 'voiceOverMediaId'> & {
+    characterId?: string;
+    voiceOverMediaId?: string;
+};
+
+type SerializedChoice = Omit<IChoice, '_id'> & { _id: string };
+
+type SerializedScene = Omit<IScene, '_id' | 'novelId' | 'episodeId' | 'characters' | 'textContents' | 'choiceIds' | 'audios' | 'defaultNextSceneId' | 'previousSceneId'> & {
     _id: string;
-    name: string;
-    characterCode: string;
-    colorTheme?: string;
-    profileImageUrl?: string;
-  };
-  expressionId?: string;
-  transform?: any;
-  isVisible: boolean;
-}
+    novelId: string;
+    episodeId: string;
+    characters: PopulatedCharacter[];
+    textContents: SerializedTextContent[];
+    choices: SerializedChoice[];
+    audios: IAudioElement[];
+    defaultNextSceneId?: string;
+    previousSceneId?: string;
+};
 
-interface TextContent {
-  instanceId: string;
-  type: 'dialogue' | 'narration' | 'thought_bubble' | 'system_message';
-  characterId?: string;
-  speakerDisplayName?: string;
-  content: string;
-}
+type SerializedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
+    _id: string;
+    novelId: string;
+    authorId: string;
+    scenes?: SerializedScene[]; // Scenes are fetched and embedded client-side
+    firstSceneId?: string;
+    nextEpisodeId?: string;
+    previousEpisodeId?: string;
+};
 
-interface Choice {
-  _id: string;
-  text: string;
-  hoverText?: string;
-  actions: any[];
-  isTimedChoice?: boolean;
-  timeLimitSeconds?: number;
-}
+type SerializedNovel = Omit<INovel, '_id' | 'authorId'> & {
+    _id: string;
+    authorId: string;
+};
 
-interface Scene {
-  _id: string;
+export interface DialogueHistoryItem {
+  id: string;
+  sceneId: string;
   sceneOrder: number;
-  title?: string;
-  background: {
-    type: string;
-    value: string;
-    blurEffect?: string;
-    colorOverlay?: string;
-    fitMode?: string;
-  };
-  characters: Character[];
-  textContents: TextContent[];
-  choices?: Choice[];
-  nextSceneId?: string;
-  audioElements?: any[];
+  characterName?: string;
+  dialogueText: string;
 }
 
-interface DialogueHistoryItem {
-    id: string;
-    sceneId: string;
-    sceneOrder: number;
-    characterName?: string;
-    dialogueText: string;
+// Combine user settings into a single object for easier management
+interface UserSettings {
+    display: Partial<IUserDisplayPreferences>;
+    gameplay: Partial<IVisualNovelGameplayPreferences>;
 }
+
+// --- Frontend-Specific Serialized Types ---
+// These types should match what VisualNovelFrameReader passes down.
+
+type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis'> & {
+  _id: string;
+  author: {
+    _id: string;
+    username: string;
+    primaryPenName: string;
+    avatarUrl: string;
+  };
+};
+
+type FullEpisode = Pick<IEpisode, 'slug' | 'title' | 'episodeOrder' | 'accessType' | 'priceCoins' | 'originalPriceCoins' | 'teaserText'> & {
+  _id: string;
+  firstSceneId?: string;
+  stats?: IEpisodeStats;
+};
+
+// This type is now for the detailed episode data fetched *within* this component
+type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
+    _id: string;
+    novelId: string;
+    authorId: string;
+    scenes?: SerializedScene[];
+    firstSceneId?: string;
+    nextEpisodeId?: string;
+    previousSceneId?: string;
+};
 
 interface VisualNovelContentProps {
-  novel: Novel;
-  episode: Episode;
+  novel: DisplayNovel;
+  episode: FullEpisode;
   currentSceneId?: string;
   isPlaying: boolean;
-  autoPlay: boolean; // Added for autoplay functionality
-  textSpeed: number;
-  fontSize: number;
-  bgOpacity: number;
+  userSettings: UserSettings;
+  advanceTrigger: number;
   onSceneChange: (sceneId: string) => void;
-  onProgressChange: (progress: number) => void;
+  onSceneDataChange: (scene: SerializedScene | null) => void;
   onDialogueEntry: (entry: DialogueHistoryItem) => void;
   onEpisodeEnd: () => void;
-  userId?: string;
 }
 
-const getSpeakerInfo = (textContent: TextContent | undefined, characters: Character[]): { name: string, color?: string } => {
+// --- Audio Hook ---
+const useAudio = (
+    scene: SerializedScene | null,
+    gameplaySettings: Partial<IVisualNovelGameplayPreferences>
+) => {
+    const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+
+    useEffect(() => {
+        const activeAudios: Record<string, HTMLAudioElement> = {};
+        const masterVolume = (gameplaySettings.masterVolume ?? 100) / 100;
+
+        scene?.audios?.forEach(audioConfig => {
+            const id = audioConfig.instanceId;
+            let audio = audioRefs.current[id];
+            if (!audio) {
+                // This assumes a convention for media URLs.
+                // In a real app, this might come from an API or a manifest.
+                const mediaUrl = audioConfig.mediaSourceType === 'OfficialMedia' 
+                  ? `/media/official/${audioConfig.mediaId}.mp3`
+                  : `/media/user/${audioConfig.mediaId}.mp3`;
+                audio = new Audio(mediaUrl); // Updated to handle media source
+                audioRefs.current[id] = audio;
+            }
+
+            const specificVolume = (
+              audioConfig.type === 'background_music'
+                ? gameplaySettings.bgmVolume ?? 70
+                : gameplaySettings.sfxVolume ?? 80
+            ) / 100;
+
+            audio.volume = masterVolume * (audioConfig.volume ?? 1) * specificVolume;
+            audio.loop = audioConfig.loop ?? false;
+            
+            if (audioConfig.autoplayOnLoad) {
+                audio.play().catch(e => console.error("Audio play failed:", e));
+            }
+            activeAudios[id] = audio;
+        });
+
+        // Cleanup: Stop audio from previous scenes
+        Object.keys(audioRefs.current).forEach(id => {
+            if (!activeAudios[id]) {
+                const oldAudio = audioRefs.current[id];
+                oldAudio.pause();
+                oldAudio.currentTime = 0;
+                delete audioRefs.current[id];
+            }
+        });
+
+        // Cleanup on component unmount
+        return () => {
+            Object.values(audioRefs.current).forEach(audio => {
+                audio.pause();
+                audio.currentTime = 0;
+            });
+        };
+
+    }, [scene, gameplaySettings]);
+
+    return audioRefs;
+};
+
+
+const getSpeakerInfo = (textContent: SerializedTextContent | undefined, characters: PopulatedCharacter[]): { name: string, color?: string } => {
     if (!textContent) return { name: '', color: '#FFFFFF' };
 
     if (textContent.type === 'narration' || textContent.type === 'system_message') {
-        return { name: 'บรรยาย', color: '#CCCCCC' };
+        return { name: '', color: '#CCCCCC' };
     }
     
     if (textContent.speakerDisplayName) {
@@ -124,37 +203,37 @@ export default function VisualNovelContent({
   episode: initialEpisode,
   currentSceneId,
   isPlaying,
-  autoPlay,
-  textSpeed,
-  fontSize,
-  bgOpacity,
+  userSettings,
+  advanceTrigger,
   onSceneChange,
-  onProgressChange,
+  onSceneDataChange,
   onDialogueEntry,
   onEpisodeEnd,
-  userId
 }: VisualNovelContentProps) {
-  const [episodeData, setEpisodeData] = useState<Episode | null>(null);
-  const [currentScene, setCurrentScene] = useState<Scene | null>(null);
+  const [episodeData, setEpisodeData] = useState<DetailedEpisode | null>(null);
+  const [currentScene, setCurrentScene] = useState<SerializedScene | null>(null);
   const [textIndex, setTextIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [availableChoices, setAvailableChoices] = useState<Choice[] | null>(null);
+  const [availableChoices, setAvailableChoices] = useState<SerializedChoice[] | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoPlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { gameplay: gameplaySettings, display: displaySettings } = userSettings;
+  
+  const audioPlayback = useAudio(currentScene, gameplaySettings);
+  
   const handleImageError = (characterCode: string) => {
     if (characterCode) {
       setImageErrors(prev => ({ ...prev, [characterCode]: true }));
     }
   };
-
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const autoPlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const charactersInScene = currentScene?.characters.filter(c => c.isVisible) || [];
 
-  // Fetch episode data including all scenes
   useEffect(() => {
     const fetchEpisodeData = async () => {
       if (!initialEpisode?._id) return;
@@ -162,7 +241,7 @@ export default function VisualNovelContent({
       try {
         const response = await fetch(`/api/novels/${novel.slug}/episodes/${initialEpisode._id}`);
         if (!response.ok) throw new Error('Failed to fetch episode data');
-        const data: Episode = await response.json();
+        const data: DetailedEpisode = await response.json();
         setEpisodeData(data);
       } catch (error) {
         console.error('Error fetching episode data:', error);
@@ -170,52 +249,45 @@ export default function VisualNovelContent({
         setIsLoading(false);
       }
     };
-    fetchEpisodeData();
+    if (initialEpisode) {
+        fetchEpisodeData();
+    }
   }, [novel.slug, initialEpisode?._id]);
   
-  // Update scene when currentSceneId or episodeData changes
   useEffect(() => {
-    if (episodeData?.scenes && currentSceneId) {
-      const scene = episodeData.scenes.find(s => s._id === currentSceneId) || null;
-      setCurrentScene(scene);
-      setTextIndex(0); // Reset text index when scene changes
-    } else if (episodeData?.scenes) {
-      // If no currentSceneId is provided, start with the first scene
-      const firstScene = episodeData.scenes.find(s => s._id === episodeData.firstSceneId) || episodeData.scenes[0];
-       if (firstScene) {
-           onSceneChange(firstScene._id);
-       }
-    }
-  }, [currentSceneId, episodeData, onSceneChange]);
+    const scene = episodeData?.scenes?.find(s => s._id === currentSceneId) ?? null;
+    setCurrentScene(scene);
+    onSceneDataChange(scene);
+    setTextIndex(0);
+    setDisplayedText('');
+    setIsTyping(false);
+  }, [currentSceneId, episodeData, onSceneDataChange]);
 
 
-  const currentTextContent = currentScene?.textContents[textIndex];
-  
-  // Typewriter effect
   const typeText = useCallback(() => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (!currentTextContent) {
-    setDisplayedText('');
-        setIsTyping(false);
-        return;
+    if (!currentScene?.textContents[textIndex]) {
+      setDisplayedText('');
+      setIsTyping(false);
+      return;
     };
 
     setIsTyping(true);
     let i = 0;
-    const fullText = currentTextContent.content;
+    const fullText = currentScene.textContents[textIndex].content;
     
-    // Add dialogue to history as soon as it starts typing
-     if (currentTextContent.type === 'dialogue' || currentTextContent.type === 'narration') {
+     if (currentScene.textContents[textIndex].type === 'dialogue' || currentScene.textContents[textIndex].type === 'narration') {
         onDialogueEntry({
-            id: `${currentScene?._id}-${textIndex}`,
-            sceneId: currentScene?._id || '',
-            sceneOrder: currentScene?.sceneOrder || 0,
-            characterName: getSpeakerInfo(currentTextContent, currentScene?.characters || []).name,
+            id: `${currentScene._id}-${textIndex}`,
+            sceneId: currentScene._id || '',
+            sceneOrder: currentScene.sceneOrder || 0,
+            characterName: getSpeakerInfo(currentScene.textContents[textIndex], currentScene.characters || []).name,
             dialogueText: fullText
         });
      }
 
-    const typingSpeed = (1 / textSpeed) * 150; 
+    const textSpeedValue = gameplaySettings.textSpeedValue ?? 50;
+    const typingSpeed = 150 - (textSpeedValue * 1.4); // Convert 0-100 scale to ms delay
 
     const type = () => {
       if (i < fullText.length) {
@@ -227,11 +299,11 @@ export default function VisualNovelContent({
       }
     };
     type();
-  }, [currentTextContent, textSpeed, onDialogueEntry, currentScene, textIndex]);
+  }, [currentScene, gameplaySettings.textSpeedValue, onDialogueEntry, textIndex]);
 
   useEffect(() => {
     if (isPlaying) {
-    typeText();
+      typeText();
     } else {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     }
@@ -240,20 +312,19 @@ export default function VisualNovelContent({
     };
   }, [textIndex, currentScene, isPlaying, typeText]);
 
-  // AutoPlay Logic
   useEffect(() => {
     if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     
-    if (autoPlay && isPlaying && !isTyping && currentTextContent) {
+    if (gameplaySettings.autoPlayEnabled && isPlaying && !isTyping && currentScene?.textContents[textIndex]) {
        autoPlayTimeoutRef.current = setTimeout(() => {
             handleAdvance();
-       }, 2000); // 2-second delay before advancing
+       }, gameplaySettings.autoPlayDelayMs ?? 2000);
     }
     
     return () => {
        if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     }
-  }, [autoPlay, isPlaying, isTyping, currentTextContent]);
+  }, [gameplaySettings.autoPlayEnabled, gameplaySettings.autoPlayDelayMs, isPlaying, isTyping, textIndex, currentScene]);
 
   const handleAdvance = useCallback(() => {
     if (typingTimeoutRef.current) {
@@ -261,78 +332,82 @@ export default function VisualNovelContent({
     }
 
     if (isTyping) {
-      // If typing, finish immediately
-      setDisplayedText(currentTextContent?.content || '');
+      setDisplayedText(currentScene?.textContents[textIndex]?.content || '');
       setIsTyping(false);
     } else {
-      // If not typing, advance to next text or scene
-      const hasNextText = currentTextContent && textIndex < (currentScene?.textContents.length || 0) - 1;
+      const hasNextText = textIndex < (currentScene?.textContents.length || 0) - 1;
 
       if (hasNextText) {
         setTextIndex(prev => prev + 1);
       } else if (currentScene?.choices && currentScene.choices.length > 0) {
-        // If there are choices, display them
         setAvailableChoices(currentScene.choices);
       } else {
-        // End of scene, go to next scene
-        if (episodeData && episodeData.scenes && currentScene) {
+        const nextSceneId = currentScene?.defaultNextSceneId;
+        if (nextSceneId && episodeData?.scenes) {
+            onSceneChange(nextSceneId);
+        } else if (episodeData?.scenes && currentScene) {
             const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene._id);
             const isLastScene = currentSceneIndex === episodeData.scenes.length - 1;
-            const nextScene = episodeData.scenes[currentSceneIndex + 1];
-
-            if (nextScene) {
-                onSceneChange(nextScene._id);
-            } else if (isLastScene) {
-                // End of episode
-                console.log("End of episode reached. Calling onEpisodeEnd.");
+            
+            if (!isLastScene) {
+                const nextScene = episodeData.scenes[currentSceneIndex + 1];
+                if (nextScene) onSceneChange(nextScene._id);
+            } else {
                 onEpisodeEnd();
             }
         }
       }
     }
-  }, [isTyping, textIndex, currentScene, episodeData, currentTextContent, onSceneChange, onEpisodeEnd]);
+  }, [isTyping, textIndex, currentScene, episodeData, onSceneChange, onEpisodeEnd]);
   
-  const handleChoiceSelect = (choice: Choice) => {
-    setAvailableChoices(null); // Hide choices
-    const goToNodeAction = choice.actions.find(a => a.type === 'go_to_node');
+  const handleChoiceSelect = (choice: SerializedChoice) => {
+    setAvailableChoices(null);
+    const goToNodeAction = choice.actions.find((a: IChoiceAction) => a.type === 'go_to_node');
+    
     if (goToNodeAction && episodeData?.scenes) {
       const targetNodeId = goToNodeAction.parameters.targetNodeId;
-      // This is a simplification. The seed data uses nodeId, but the scene data fetched doesn't have it.
-      // This will require adding nodeId to the API response. For now, we assume a direct ID or find by another property.
-      // Let's assume the API needs to be updated to also return the nodeId for each scene.
-      // For now, I will add a placeholder logic that needs the API to be updated.
-      
-      // A proper implementation would need the nodeId in the scene data from the API.
-      // The logic below is illustrative and depends on an updated API.
-      // Since I cannot update the API and this component in the same step,
-      // I will assume the API will be updated.
-      
-      // This is a placeholder for a real implementation that would search based on nodeId
-      // This will likely fail until the API provides the nodeId for each scene.
-      const nextScene = episodeData.scenes.find(s => (s as any).nodeId === targetNodeId);
+      const nextScene = episodeData.scenes.find(s => s.nodeId === targetNodeId);
 
       if (nextScene) {
         onSceneChange(nextScene._id);
       } else {
-        console.warn(`Scene with nodeId "${targetNodeId}" not found.`);
-        // As a fallback, just go to the next scene in order if any
-        const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene?._id);
-        const fallbackScene = episodeData.scenes[currentSceneIndex + 1];
-        if (fallbackScene) onSceneChange(fallbackScene._id);
+        console.warn(`Choice action "go_to_node" failed: Scene with node ID "${targetNodeId}" not found in this episode.`);
+        // As a fallback, try to go to the default next scene if it exists
+        const defaultNextSceneId = currentScene?.defaultNextSceneId;
+        if (defaultNextSceneId && episodeData.scenes.some(s => s._id === defaultNextSceneId)) {
+          onSceneChange(defaultNextSceneId);
+        } else {
+          // If no fallback, end the episode
+          onEpisodeEnd();
+        }
       }
+    } else {
+        // If no "go_to_node" action, assume it's the end or requires a different handler.
+        // For now, we just end the episode.
+        onEpisodeEnd();
     }
   };
   
-   // Update progress bar
    useEffect(() => {
-    if (episodeData && episodeData.scenes && episodeData.scenes.length > 0 && currentScene) {
+    if (episodeData?.scenes && episodeData.scenes.length > 0 && currentScene) {
         const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene._id);
         const progress = ((currentSceneIndex + 1) / episodeData.scenes.length) * 100;
-        onProgressChange(progress);
+        onSceneDataChange(currentScene);
     }
-   }, [currentScene, episodeData, onProgressChange]);
+   }, [currentScene, episodeData, onSceneDataChange]);
    
-  const speaker = getSpeakerInfo(currentTextContent, currentScene?.characters || []);
+  const speakerInfo = currentScene?.textContents[textIndex] ? getSpeakerInfo(currentScene.textContents[textIndex], currentScene.characters || []) : { name: '', color: undefined };
+  const fontSize = displaySettings.reading?.fontSize ?? 16;
+  const textBoxOpacity = (displaySettings.uiVisibility?.textBoxOpacity ?? 80) / 100;
+
+  // Effect to handle external advance trigger
+  useEffect(() => {
+    if (advanceTrigger > 0) {
+      handleAdvance();
+    }
+    // This effect should only run when the trigger value changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceTrigger]);
 
   if (isLoading) {
     return (
@@ -365,7 +440,7 @@ export default function VisualNovelContent({
             <img 
               src={currentScene.background.value} 
               alt={currentScene.title || 'background'}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover" // Changed to object-cover for better fit
             />
           ) : (
             <div 
@@ -376,50 +451,49 @@ export default function VisualNovelContent({
         </motion.div>
       </AnimatePresence>
       
-      {/* Black overlay for text readability */}
       <div 
          className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
-         style={{ opacity: bgOpacity }}
       ></div>
 
       {/* Characters */}
-      <div className="absolute inset-0 z-10">
-      <AnimatePresence>
-              {charactersInScene.map(char => {
-                return (
-                  <motion.div
-                      key={char.instanceId}
-                      initial={{ opacity: 0, x: char.transform?.positionX > 0 ? 50 : -50 }}
-                      animate={{ opacity: char.transform?.opacity ?? 1, x: char.transform?.positionX ?? 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.5 }}
-                      className="absolute bottom-0"
-                      style={{
-                          left: `${50 + (char.transform?.positionX ?? 0) / 10}%`, // Example positioning
-                          transform: 'translateX(-50%)',
-                          width: '40%', // Adjust as needed
-                          maxHeight: '80%',
-                          zIndex: char.transform?.zIndex ?? 1,
-                      }}
-                  >
-                      {/* Use characterCode for image path */}
-                       <img
-                         src={
-                           imageErrors[char.characterData?.characterCode || ''] || !char.characterData?.characterCode
-                             ? '/images/default-avatar.png' // Fallback image
-                             : `/images/character/${char.characterData.characterCode}_fullbody.png`
-                         }
-                         alt={char.characterData?.name || 'Character'}
-                         className="h-full w-auto object-contain object-bottom mx-auto"
-                         style={{
-                           transform: 'translateX(-50%)', // Center the image within the motion div
-                         }}
-                         onError={() => handleImageError(char.characterData?.characterCode || '')}
-                       />
-                  </motion.div>
-                );
-              })}
-          </AnimatePresence>
+      <div className="absolute inset-0 z-10 overflow-hidden">
+        <AnimatePresence>
+          {charactersInScene.map(char => {
+            const transform = char.transform ?? {};
+            return (
+              <motion.div
+                  key={char.instanceId}
+                  initial={{ opacity: 0, x: (transform.positionX ?? 0) > 0 ? '100%' : '-100%' }}
+                  animate={{ 
+                    opacity: transform.opacity ?? 1,
+                    x: transform.positionX ?? 0,
+                    y: transform.positionY ?? 0,
+                    scale: transform.scaleX ?? 1,
+                  }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="absolute bottom-0 h-[85%]" // Base height
+                  style={{
+                      width: 'auto',
+                      left: '50%', // Center horizontally
+                      zIndex: transform.zIndex ?? 1,
+                      transform: `translateX(-50%)`, // Offset by half its own width to truly center
+                  }}
+              >
+                   <img
+                     src={
+                       imageErrors[char.characterData?.characterCode || ''] || !char.characterData?.characterCode
+                         ? '/images/default-avatar.png'
+                         : `/images/character/${char.characterData.characterCode}_fullbody.png`
+                     }
+                     alt={char.characterData?.name || 'Character'}
+                     className="h-full w-auto object-contain object-bottom"
+                     onError={() => handleImageError(char.characterData?.characterCode || '')}
+                   />
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
       {/* Choices Overlay */}
@@ -433,18 +507,25 @@ export default function VisualNovelContent({
           >
             <motion.div 
               className="w-full max-w-lg space-y-4"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
+              variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                      opacity: 1,
+                      transition: { staggerChildren: 0.1 }
+                  }
+              }}
+              initial="hidden"
+              animate="visible"
             >
-              {availableChoices.map((choice, index) => (
+              {availableChoices.map((choice) => (
                 <motion.button
                   key={choice._id}
                   onClick={() => handleChoiceSelect(choice)}
-                  className="w-full p-4 bg-white/10 border border-white/20 rounded-lg text-white text-lg font-semibold text-center hover:bg-white/20 hover:border-white/30 transition-all duration-300"
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 + index * 0.1 }}
+                  className="w-full p-4 bg-white/10 border border-white/20 rounded-lg text-white text-lg font-semibold text-center hover:bg-white/20 transition-all duration-300"
+                  variants={{
+                      hidden: { y: 20, opacity: 0 },
+                      visible: { y: 0, opacity: 1 }
+                  }}
                 >
                   {choice.text}
                 </motion.button>
@@ -455,43 +536,35 @@ export default function VisualNovelContent({
       </AnimatePresence>
 
       {/* Dialogue Box */}
-      {!availableChoices && currentTextContent && (
-        <div className="absolute bottom-0 left-0 right-0 p-8 text-white z-30">
-          <div className="bg-black/50 backdrop-blur-md p-6 rounded-lg border border-white/20">
+      {!availableChoices && currentScene?.textContents[textIndex] && (
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 md:p-6 lg:p-8 text-white z-30 pointer-events-none">
+          <div 
+            className="backdrop-blur-md p-4 sm:p-6 md:p-8 rounded-lg border border-white/20 min-h-[180px] sm:min-h-[200px] md:min-h-[220px] flex flex-col justify-center"
+            style={{ 
+              backgroundColor: `rgba(0, 0, 0, ${textBoxOpacity * 0.6})`,
+              transition: 'background-color 0.3s'
+            }}
+          >
             {/* Speaker Name */}
-            {speaker.name && speaker.name !== 'บรรยาย' && (
+            {speakerInfo.name && (
               <h3 
-                 className="text-2xl font-bold mb-2"
-                 style={{ color: speaker.color, textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}
+                 className="text-2xl sm:text-3xl font-bold mb-3"
+                 style={{ color: speakerInfo.color, textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}
               >
-                {speaker.name}
+                {speakerInfo.name}
               </h3>
             )}
             
-            {/* Dialogue Text */}
             <p 
-              key={currentTextContent.instanceId}
-              className="leading-relaxed"
+              key={currentScene.textContents[textIndex].instanceId}
+              className="leading-loose text-lg sm:text-xl"
               style={{ fontSize: `${fontSize}px`}}
-          >
-            {displayedText}
+            >
+              {displayedText}
             </p>
           </div>
         </div>
       )}
-      
-       {/* Skip Button */}
-       <div className="absolute top-20 right-5 z-30">
-            <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                    handleAdvance();
-                }}
-                className="bg-black/30 text-white/80 hover:text-white hover:bg-black/50 p-2 rounded-full transition-colors"
-            >
-                <SkipForward size={20} />
-            </button>
-        </div>
     </div>
   );
 } 

@@ -387,99 +387,75 @@ export async function PUT(req: NextRequest) {
   }
 }
 
+/**
+ * Handles PATCH requests to update a user's settings.
+ * This is the primary endpoint for saving settings from the visual novel reader.
+ */
 export async function PATCH(request: NextRequest) {
   try {
-    // ตรวจสอบการ authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'ไม่ได้รับอนุญาต กรุณาเข้าสู่ระบบ' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.user.id;
 
-    // เชื่อมต่อฐานข้อมูล
     await dbConnect();
-
-    // อ่านข้อมูลจาก request body
     const body = await request.json();
-    const { readerSettings } = body;
 
-    if (!readerSettings) {
-      return NextResponse.json(
-        { error: 'ไม่พบข้อมูลการตั้งค่า' },
-        { status: 400 }
-      );
+    // The body should be the IReaderSettings object: { display: {...}, gameplay: {...} }
+    if (!body || (Object.keys(body.display).length === 0 && Object.keys(body.gameplay).length === 0)) {
+        return NextResponse.json({ error: 'No settings data provided' }, { status: 400 });
     }
-
-    // ตรวจสอบข้อมูลที่จำเป็น
-    const {
-      textSpeed,
-      fontSize,
-      bgOpacity,
-      autoPlay
-    } = readerSettings;
-
-    if (
-      typeof textSpeed !== 'number' ||
-      typeof fontSize !== 'number' ||
-      typeof bgOpacity !== 'number' ||
-      typeof autoPlay !== 'boolean'
-    ) {
-      return NextResponse.json(
-        { error: 'ข้อมูลการตั้งค่าไม่ถูกต้อง' },
-        { status: 400 }
-      );
-    }
-
-    // ตรวจสอบช่วงค่าที่ยอมรับได้
-    if (
-      textSpeed < 1 || textSpeed > 5 ||
-      fontSize < 12 || fontSize > 24 ||
-      bgOpacity < 0 || bgOpacity > 1
-    ) {
-      return NextResponse.json(
-        { error: 'ค่าการตั้งค่าอยู่นอกช่วงที่ยอมรับได้' },
-        { status: 400 }
-      );
-    }
-
-    // อัพเดทการตั้งค่าผู้ใช้
-    const updatedUser = await UserModel.findByIdAndUpdate(
-      session.user.id,
-      {
-        $set: {
-          'settings.readerSettings': {
-            textSpeed,
-            fontSize,
-            bgOpacity,
-            autoPlay,
-            updatedAt: new Date()
+    
+    // Flatten the nested object for MongoDB's $set operator
+    const updateFields: { [key: string]: any } = {};
+    const buildUpdateFields = (obj: any, prefix: string) => {
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          const value = obj[key];
+          const newPrefix = prefix ? `${prefix}.${key}` : key;
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            buildUpdateFields(value, newPrefix);
+          } else {
+            updateFields[newPrefix] = value;
           }
         }
-      },
+      }
+    };
+    
+    // The settings from the reader are under `visualNovelGameplay` and `display` in the main UserSettings document.
+    if (body.gameplay) {
+      buildUpdateFields(body.gameplay, 'visualNovelGameplay');
+    }
+    if (body.display) {
+      buildUpdateFields(body.display, 'display');
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+      return NextResponse.json({ message: 'No fields to update' }, { status: 200 });
+    }
+
+    const updatedSettings = await UserSettingsModel.findOneAndUpdate(
+      { userId: userId },
+      { $set: updateFields, $inc: { settingsVersion: 1 } },
       { 
-        new: true,
-        select: 'settings.readerSettings'
+        new: true, // Return the modified document
+        upsert: true, // Create it if it doesn't exist
+        runValidators: true,
+        lean: true
       }
     );
 
-    if (!updatedUser) {
-      return NextResponse.json(
-        { error: 'ไม่พบผู้ใช้' },
-        { status: 404 }
-      );
-    }
-
     return NextResponse.json({
-      message: 'บันทึกการตั้งค่าสำเร็จ',
-      readerSettings: updatedUser.settings?.readerSettings
+      success: true,
+      message: 'Settings updated successfully.',
+      settings: updatedSettings
     });
 
   } catch (error) {
-    console.error('Error updating user settings:', error);
+    console.error('❌ [API PATCH Settings] Error updating user settings:', error);
     return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการบันทึกการตั้งค่า' },
+      { error: 'An internal error occurred while saving settings.' },
       { status: 500 }
     );
   }

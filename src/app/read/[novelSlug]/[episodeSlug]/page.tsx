@@ -324,17 +324,23 @@ export default async function ReadPage({ params, searchParams }: ReadPageProps) 
       likesCount: episode.stats?.likesCount || 0,
       commentsCount: episode.stats?.commentsCount || 0,
       estimatedReadingTimeMinutes: episode.stats?.estimatedReadingTimeMinutes || 10,
-      totalWords: episode.stats?.totalWords || 0
+      totalWords: episode.stats?.totalWords || 0,
+      uniqueViewersCount: episode.stats?.uniqueViewersCount || 0,
+      purchasesCount: episode.stats?.purchasesCount || 0,
     }
   };
 
   // แสดง reader โดยไม่มี loading
   return (
-    <VisualNovelFrameReader
-      novel={serializedNovel}
-      episode={serializedEpisode}
-      initialSceneId={sceneId || episode.firstSceneId?.toString()}
-      userId={userId}
-    />
+    <div className="flex items-center justify-center w-full h-screen bg-black">
+      <div className="relative w-full h-full md:max-w-6xl md:h-auto md:shadow-2xl md:rounded-lg overflow-hidden md:aspect-[16/10]">
+        <VisualNovelFrameReader
+          novel={serializedNovel}
+          episode={serializedEpisode}
+          initialSceneId={sceneId || episode.firstSceneId?.toString()}
+          userId={userId}
+        />
+      </div>
+    </div>
   );
 } 
