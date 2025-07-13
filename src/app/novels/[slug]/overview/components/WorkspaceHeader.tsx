@@ -69,9 +69,9 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         </button>
         
         <button
-          onClick={() => router.push('/novels')}
+          onClick={() => router.push('/dashboard')}
           className="p-2 rounded-full hover:bg-accent"
-          title="กลับไปหน้านิยาย"
+          title="กลับไปหน้า Dashboard"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>

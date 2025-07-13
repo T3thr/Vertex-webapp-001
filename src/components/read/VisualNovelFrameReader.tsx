@@ -446,7 +446,7 @@ function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backg
                     initial={{ y: -20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
                 >
-                    และนี่คือผลลัพธ์อุปนิสัยของคุณแบบคร่าวๆ ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา PATHY!
+                    และนี่คือผลลัพธ์อุปนิสัยของคุณแบบคร่าวๆ ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา DIVWY!
                 </motion.p>
                 <motion.div 
                     className="flex flex-col sm:flex-row items-center justify-center gap-4"

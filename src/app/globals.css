@@ -994,6 +994,43 @@ html[data-theme-ready="true"] {
   background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
 }
 
+/* ปรับปรุงการแสดงผลรูปภาพใน Visual Novel */
+.vn-character-image {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  transition: all 0.3s ease;
+}
+
+.vn-character-image:hover {
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+  transform: scale(1.02);
+}
+
+/* ปรับปรุงการแสดงผลพื้นหลัง */
+.vn-background {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: opacity 0.8s ease;
+}
+
+/* ปรับปรุง gradient overlay ให้โปร่งใสมากขึ้น */
+.vn-gradient-overlay {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.3) 0%,
+    rgba(0, 0, 0, 0.1) 50%,
+    transparent 100%
+  );
+}
+
+/* ปรับปรุง dialogue box */
+.vn-dialogue-box {
+  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
 /* Desktop responsive styles */
 @media (min-width: 1024px) {
   .vn-frame {
@@ -1117,10 +1154,15 @@ html[data-theme-ready="true"] {
 }
 
 .protected-image {
-  pointer-events: none;
+  /* ลบ pointer-events: none ออก เพื่อให้สามารถคลิกได้ */
   -webkit-user-drag: none;
   -khtml-user-drag: none;
   -moz-user-drag: none;
   -o-user-drag: none;
   user-drag: none;
+  /* เพิ่มการป้องกันการเลือกข้อความ */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }

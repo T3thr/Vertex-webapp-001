@@ -418,7 +418,7 @@ export default function VisualNovelContent({
         >
           {currentScene.background.type === 'image' ? (
             <div
-              className="w-full h-full bg-cover bg-center"
+              className="w-full h-full vn-background"
               style={{ backgroundImage: `url(${currentScene.background.value})` }}
               aria-label={currentScene.title || 'background'}
             />
@@ -431,9 +431,8 @@ export default function VisualNovelContent({
         </motion.div>
       </AnimatePresence>
       
-      <div 
-         className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
-      ></div>
+      {/* ใช้ CSS class ใหม่สำหรับ gradient overlay */}
+      <div className="absolute inset-0 vn-gradient-overlay"></div>
 
       {/* Characters */}
       <div className="absolute inset-0 z-10 overflow-hidden">
@@ -467,7 +466,7 @@ export default function VisualNovelContent({
                          : `/images/character/${char.characterData.characterCode}_fullbody.png`
                      }
                      alt={char.characterData?.name || 'Character'}
-                     className="h-full w-auto object-contain object-bottom protected-image"
+                     className="h-full w-auto object-contain object-bottom protected-image vn-character-image"
                      onError={() => handleImageError(char.characterData?.characterCode || '')}
                    />
               </motion.div>
@@ -515,13 +514,13 @@ export default function VisualNovelContent({
         )}
       </AnimatePresence>
 
-      {/* Dialogue Box */}
+      {/* Dialogue Box - ใช้ CSS class ใหม่ */}
       {isDialogueVisible && !availableChoices && currentScene?.textContents[textIndex] && (
         <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 text-white z-30 pointer-events-none">
           <div 
-            className="backdrop-blur-md p-4 sm:p-6 md:p-8 rounded-lg border border-white/20 min-h-[150px] sm:min-h-[180px] md:min-h-[220px] flex flex-col justify-center"
+            className="vn-dialogue-box p-4 sm:p-6 md:p-8 rounded-lg min-h-[150px] sm:min-h-[180px] md:min-h-[220px] flex flex-col justify-center"
             style={{ 
-              backgroundColor: `rgba(0, 0, 0, ${textBoxOpacity * 0.6})`,
+              backgroundColor: `rgba(0, 0, 0, ${textBoxOpacity * 0.4})`, // ลดความเข้มลงจาก 0.6 เป็น 0.4
               transition: 'background-color 0.3s'
             }}
           >

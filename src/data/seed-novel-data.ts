@@ -705,7 +705,7 @@ const createNowOrNeverScenes = async (
       title: 'จุดเริ่มต้น',
       background: {
         type: 'image',
-        value: '/images/background/first.png',
+        value: '/images/background/main.png', // เปลี่ยนเป็นรูปที่มีอยู่จริง
         isOfficialMedia: true,
         fitMode: 'cover'
       },
@@ -1609,7 +1609,7 @@ const createChosenOneScenes = async (
         {
           instanceId: 'ending_message',
           type: 'narration',
-          content: 'และนี่คือผลลัพธ์อุปนิสัยของคุณแบบคร่าวๆ ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา PATHY!',
+          content: 'และนี่คือผลลัพธ์อุปนิสัยของคุณแบบคร่าวๆ ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา DIVWY!',
           fontSize: 16,
           color: '#ffffff',
           textAlign: 'center',
