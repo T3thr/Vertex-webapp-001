@@ -3,11 +3,11 @@ import { createClient, RedisClientType } from 'redis';
 
 // กำหนดค่า Redis configuration สำหรับ production performance optimization
 const redisConfig = {
-  username: process.env.REDIS_USERNAME ,
-  password: process.env.REDIS_PASSWORD ,
+  username: process.env.REDIS_USERNAME!,
+  password: process.env.REDIS_PASSWORD!,
   socket: {
-    host: process.env.REDIS_HOST ,
-    port: parseInt(process.env.REDIS_PORT ),
+    host: process.env.REDIS_HOST!,
+    port: parseInt(process.env.REDIS_PORT!),
     connectTimeout: 2000, // ลดจาก 5000 เป็น 2000ms
     commandTimeout: 1000, // ลดจาก 3000 เป็น 1000ms
     lazyConnect: true, // เชื่อมต่อเฉพาะเมื่อจำเป็น
