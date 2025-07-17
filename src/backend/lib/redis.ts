@@ -2,11 +2,11 @@ import { createClient, RedisClientType } from 'redis';
 
 // กำหนดค่า Redis configuration สำหรับ production performance optimization
 const redisConfig = {
-  username: process.env.REDIS_USERNAME!,
-  password: process.env.REDIS_PASSWORD!,
+  username: process.env.REDIS_USERNAME ?? 'default', // ให้ค่า default ถ้า undefined
+  password: process.env.REDIS_PASSWORD ?? '', // ให้ค่า default เป็น empty string
   socket: {
-    host: process.env.REDIS_HOST!,
-    port: parseInt(process.env.REDIS_PORT!),
+    host: process.env.REDIS_HOST ?? 'localhost', // ให้ค่า default
+    port: parseInt(process.env.REDIS_PORT ?? '6379'), // ให้ค่า default และ parseInt
     connectTimeout: 2000, // ลดจาก 5000 เป็น 2000ms
     commandTimeout: 1000, // ลดจาก 3000 เป็น 1000ms
     lazyConnect: true, // เชื่อมต่อเฉพาะเมื่อจำเป็น
@@ -22,16 +22,18 @@ const redisConfig = {
   legacyMode: false, // ใช้ Redis 4.0+ features
 };
 
+// --- Solution: Define a type for our global cache and assert it onto globalThis ---
+type GlobalWithRedis = typeof globalThis & {
+  __redis?: RedisClientType;
+  __redisConnectionPromise?: Promise<RedisClientType>;
+};
+
 // สร้าง Redis client instance
 const redis: RedisClientType = createClient(redisConfig);
 
 // Global cache สำหรับ connection ใน development
-declare global {
-  interface GlobalThis {
-    __redis: RedisClientType | undefined;
-    __redisConnectionPromise: Promise<RedisClientType> | undefined;
-  }
-}
+// We now cast globalThis to our specific type to inform TypeScript about our custom properties.
+const cachedGlobal = globalThis as GlobalWithRedis;
 
 let redisClient: RedisClientType;
 
@@ -39,10 +41,10 @@ if (process.env.NODE_ENV === 'production') {
   redisClient = redis;
 } else {
   // ใน development ใช้ global cache เพื่อไม่ให้สร้าง connection ใหม่เมื่อ hot reload
-  if (!globalThis.__redis) {
-    globalThis.__redis = redis;
+  if (!cachedGlobal.__redis) {
+    cachedGlobal.__redis = redis;
   }
-  redisClient = globalThis.__redis;
+  redisClient = cachedGlobal.__redis;
 }
 
 // Event handlers สำหรับ monitoring
@@ -74,8 +76,8 @@ const connectRedis = async (): Promise<RedisClientType> => {
   }
 
   // ใช้ global promise เพื่อป้องกัน concurrent connections
-  if (!globalThis.__redisConnectionPromise) {
-    globalThis.__redisConnectionPromise = (async () => {
+  if (!cachedGlobal.__redisConnectionPromise) {
+    cachedGlobal.__redisConnectionPromise = (async () => {
       if (isConnecting) {
         // รอให้การเชื่อมต่อปัจจุบันเสร็จสิ้น
         while (isConnecting && !redisClient.isReady) {
@@ -99,7 +101,7 @@ const connectRedis = async (): Promise<RedisClientType> => {
     })();
   }
 
-  return await globalThis.__redisConnectionPromise;
+  return await cachedGlobal.__redisConnectionPromise;
 };
 
 // Advanced Cache key generators พร้อม namespace และ versioning
