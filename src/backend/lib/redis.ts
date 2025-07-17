@@ -28,8 +28,8 @@ const redis: RedisClientType = createClient(redisConfig);
 
 // Global cache สำหรับ connection ใน development
 declare global {
-  var __redis: RedisClientType | undefined;
-  var __redisConnectionPromise: Promise<RedisClientType> | undefined;
+  const __redis: RedisClientType | undefined;
+  const __redisConnectionPromise: Promise<RedisClientType> | undefined;
 }
 
 let redisClient: RedisClientType;
