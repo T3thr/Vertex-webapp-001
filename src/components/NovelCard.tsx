@@ -72,8 +72,38 @@ interface NovelCardProps {
   priority?: boolean;
   className?: string;
   imageClassName?: string;
-  variant?: 'default' | 'large' | 'featured'; // เพิ่ม variant สำหรับการแสดงผลที่แตกต่าง
+  variant?: 'default' | 'large' | 'featured';
 }
+
+// ปรับปรุง image optimization
+const getOptimizedImageProps = (variant: string, priority: boolean) => {
+  const baseConfig = {
+    quality: 85, // เพิ่มจาก 75 เป็น 85 เพื่อ quality ที่ดีขึ้น
+    placeholder: 'blur' as const,
+    blurDataURL: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAhEQACAQIHAQAAAAAAAAAAAAABAgADBAUREiEiMVFhkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q==',
+  };
+
+  switch (variant) {
+    case 'large':
+      return {
+        ...baseConfig,
+        sizes: "(max-width: 640px) 90vw, (max-width: 768px) 70vw, (max-width: 1024px) 50vw, 400px",
+        priority: true, // Large cards always priority
+      };
+    case 'featured':
+      return {
+        ...baseConfig,
+        sizes: "(max-width: 640px) 45vw, (max-width: 768px) 35vw, (max-width: 1024px) 25vw, 200px",
+        priority,
+      };
+    default:
+      return {
+        ...baseConfig,
+        sizes: "(max-width: 640px) 35vw, (max-width: 768px) 25vw, (max-width: 1024px) 20vw, 180px",
+        priority,
+      };
+  }
+};
 
 export const NovelCard = memo(function NovelCard({
   novel,
@@ -156,7 +186,7 @@ export const NovelCard = memo(function NovelCard({
   const ageRatingText = isAdultContent ? "18+" : null;
 
   // รูปภาพสำรอง
-  const placeholderCover = "/images/placeholder-cover.webp";
+  const placeholderCover = "/images/default.png";
 
   // เข้ารหัส slug เพื่อรองรับภาษาไทยและ non-English
   const encodedSlug = encodeURIComponent(novel.slug);
@@ -166,27 +196,27 @@ export const NovelCard = memo(function NovelCard({
     switch (variant) {
       case 'large':
         return {
-          wrapper: "w-full h-full", // ✅ ให้ยืดเต็มพื้นที่ที่กำหนดใน CSS
-          image: "aspect-[4/3] sm:aspect-[3/4]", // ✅ [แก้ไข] ใน mobile ให้ aspect ratio แนวนอนเพื่อเหลือพื้นที่สำหรับข้อความ
-          content: "p-3 sm:p-4 flex-1", // ✅ [ปรับปรุง] responsive padding เล็กลงใน mobile
-          title: "text-base sm:text-lg font-bold", // ✅ [ปรับปรุง] responsive text size
+          wrapper: "w-full h-full",
+          image: "aspect-[4/3] sm:aspect-[3/4]",
+          content: "p-3 sm:p-4 flex-1",
+          title: "text-base sm:text-lg font-bold",
           author: "text-sm",
           genre: "text-sm",
-          stats: "text-xs" // ✅ [เพิ่มจาก text-[10px] เป็น text-xs] ให้อ่านง่ายขึ้น
+          stats: "text-xs"
         };
       case 'featured':
         return {
-          wrapper: "w-full h-full", // ✅ ให้ยืดเต็มพื้นที่ grid cell
-          image: "aspect-square", // ✅ อัตราส่วนจัตุรัสเหมาะสำหรับการ์ดเล็ก
-          content: "p-2 sm:p-2.5 flex-1", // ✅ [ปรับปรุง] responsive padding เพิ่มขึ้นเล็กน้อยใน mobile
-          title: "text-xs sm:text-sm font-semibold", // ✅ [ปรับปรุง] ขยายขนาดตัวอักษรใน mobile เพื่อให้อ่านง่าย
-          author: "text-[10px] sm:text-xs", // ✅ [ปรับปรุง] responsive text size
-          genre: "text-[10px] sm:text-xs", // ✅ [ปรับปรุง] responsive text size
-          stats: "text-[9px] sm:text-[10px]" // ✅ [ปรับปรุง] responsive text size
+          wrapper: "w-full h-full",
+          image: "aspect-square",
+          content: "p-2 sm:p-2.5 flex-1",
+          title: "text-xs sm:text-sm font-semibold",
+          author: "text-[10px] sm:text-xs",
+          genre: "text-[10px] sm:text-xs",
+          stats: "text-[9px] sm:text-[10px]"
         };
       default:
         return {
-          wrapper: "w-[160px] min-[400px]:w-[170px] sm:w-[180px] md:w-[190px]", // ✅ [ขยายจาก 140-170px เป็น 160-190px] เพื่อรองรับข้อมูลเพิ่มเติม
+          wrapper: "w-[160px] min-[400px]:w-[170px] sm:w-[180px] md:w-[190px]",
           image: "aspect-square",
           content: "p-2.5",
           title: "text-sm font-semibold",
@@ -198,6 +228,7 @@ export const NovelCard = memo(function NovelCard({
   };
 
   const cardSize = getCardSize();
+  const imageProps = getOptimizedImageProps(variant, priority);
 
   return (
     <div
@@ -205,26 +236,19 @@ export const NovelCard = memo(function NovelCard({
       role="article"
       aria-labelledby={`novel-title-${novel._id}`}
       style={{ 
-        marginBottom: variant === 'default' && !className?.includes('m-0') ? '0.75rem' : '0' // ✅ [เฉพาะ default variant และไม่มี m-0] ให้มี margin
+        marginBottom: variant === 'default' && !className?.includes('m-0') ? '0.75rem' : '0'
       }}
     >
       {/* ลิงก์ไปยังหน้าเรื่องโดยใช้ slug ที่เข้ารหัส */}
       <Link href={`/novels/${encodedSlug}`} className="block h-full flex flex-col" title={novel.title}>
-        {/* Image Container - ปรับให้เป็นจัตุรัสเพื่อความสมมาตร */}
+        {/* Image Container - ปรับปรุงการโหลดรูปภาพ */}
         <div className={`relative w-full overflow-hidden rounded-t-xl ${cardSize.image}`}>
           <Image
             src={novel.coverImageUrl || placeholderCover}
             alt={`ปกนิยายเรื่อง ${novel.title}`}
             fill
-            sizes={
-              variant === 'large' 
-                ? "(max-width: 640px) 50vw, (max-width: 768px) 40vw, 320px"
-                : variant === 'featured'
-                ? "(max-width: 640px) 45vw, (max-width: 768px) 35vw, 280px"
-                : "(max-width: 640px) 35vw, (max-width: 768px) 25vw, (max-width: 1024px) 20vw, 170px"
-            }
-            className="object-cover transition-all duration-300 ease-in-out group-hover:scale-105"
-            priority={priority}
+            {...imageProps}
+            className={`object-cover transition-all duration-300 ease-in-out group-hover:scale-105 ${imageClassName || ''}`}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               if (target.src !== placeholderCover && target.srcset !== placeholderCover) {
@@ -258,7 +282,7 @@ export const NovelCard = memo(function NovelCard({
           )}
         </div>
 
-        {/* Content Area - ปรับให้สมดุลกับรูปภาพจัตุรัส */}
+        {/* Content Area */}
         <div className={`${cardSize.content} flex flex-col flex-grow justify-between`}>
           {/* Title */}
           <h3
@@ -290,7 +314,7 @@ export const NovelCard = memo(function NovelCard({
             </div>
           )}
 
-          {/* Stats - ปรับให้กระชับขึ้นสำหรับการ์ดจัตุรัส */}
+          {/* Stats */}
           <div className="mt-auto">
             <div className="grid grid-cols-2 gap-1 text-muted-foreground/90 mb-1">
               <div className="flex items-center gap-0.5 truncate" title={`ยอดเข้าชม: ${novel.stats?.viewsCount?.toLocaleString() || 0}`}>

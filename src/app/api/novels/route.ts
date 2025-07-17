@@ -2,13 +2,13 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { NovelStatus, NovelAccessLevel, INovel, NovelContentType, IPromotionDetails, INovelStats } from "@/backend/models/Novel";
-import UserModel, { IUser } from "@/backend/models/User"; // UserModel ถูก import แต่ไม่ได้ใช้โดยตรงใน GET นี้ อาจใช้ใน POST/PUT
+import UserModel, { IUser } from "@/backend/models/User";
 import CategoryModel, { ICategory, CategoryType } from "@/backend/models/Category";
-import { NovelCardData, PopulatedAuthor, PopulatedCategory } from "@/components/NovelCard"; // ตรวจสอบ Path ให้ถูกต้อง
+import { NovelCardData, PopulatedAuthor, PopulatedCategory } from "@/components/NovelCard";
 import mongoose, { Types } from "mongoose";
+import { CacheManager, CacheKeys, CacheTTL } from "@/backend/lib/redis";
 
 // Helper function to safely convert value to ObjectId
-// ตรวจสอบว่า id ที่รับมาเป็น string และ valid ObjectId format ก่อนแปลง
 const toObjectId = (id: string | undefined | null): Types.ObjectId | null => {
   if (typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) {
     return new mongoose.Types.ObjectId(id);
@@ -16,14 +16,240 @@ const toObjectId = (id: string | undefined | null): Types.ObjectId | null => {
   return null;
 };
 
+// ฟังก์ชันสำหรับสร้าง cache key ที่ unique และ optimized
+const createCacheKey = (filter: string, limit: number, page: number, categorySlug?: string, novelType?: string): string => {
+  return CacheKeys.NOVELS_LIST(filter, page, limit, categorySlug || undefined, novelType || undefined);
+};
+
+// Advanced query builder สำหรับ performance
+function buildQuery(filter: string, categorySlug?: string, novelType?: string, languageIdParam?: string) {
+  // Query พื้นฐาน: ดึงเฉพาะนิยายที่เผยแพร่แล้วหรือจบแล้ว, เป็นสาธารณะ, และไม่ถูกลบ
+  const query: any = {
+    status: { $in: [NovelStatus.PUBLISHED, NovelStatus.COMPLETED] },
+    accessLevel: NovelAccessLevel.PUBLIC,
+    isDeleted: false,
+  };
+  const sort: any = {};
+  const andConditions: any[] = [];
+
+  // Filter ตาม sourceType
+  if (novelType && Object.values(NovelContentType).includes(novelType as NovelContentType)) {
+    query["sourceType.type"] = novelType;
+  }
+
+  // Logic การกรองและเรียงลำดับตาม filter parameter
+  switch (filter) {
+    case "trending":
+      sort["stats.trendingStats.trendingScore"] = -1;
+      sort["stats.viewsCount"] = -1;
+      break;
+    case "published":
+      sort["stats.lastPublishedEpisodeAt"] = -1;
+      sort["publishedAt"] = -1;
+      break;
+    case "promoted":
+      const now = new Date();
+      const promotionConditions = {
+        "monetizationSettings.activePromotion.isActive": true,
+        "monetizationSettings.activePromotion.promotionalPriceCoins": { $exists: true, $ne: null },
+        $and: [
+          { $or: [{ "monetizationSettings.activePromotion.promotionStartDate": { $lte: now } }, { "monetizationSettings.activePromotion.promotionStartDate": { $exists: false } }] },
+          { $or: [{ "monetizationSettings.activePromotion.promotionEndDate": { $gte: now } }, { "monetizationSettings.activePromotion.promotionEndDate": { $exists: false } }] },
+        ],
+      };
+      andConditions.push(promotionConditions);
+      sort["stats.trendingStats.trendingScore"] = -1;
+      sort["stats.viewsCount"] = -1;
+      sort["publishedAt"] = -1;
+      break;
+    case "completed":
+      query.isCompleted = true;
+      sort["stats.averageRating"] = -1;
+      sort["stats.viewsCount"] = -1;
+      sort["publishedAt"] = -1;
+      break;
+    default:
+      sort["stats.trendingStats.trendingScore"] = -1;
+      sort["stats.viewsCount"] = -1;
+  }
+
+  return { query, sort, andConditions };
+}
+
+// Optimized database fetch function พร้อม connection pooling
+async function fetchNovelsFromDB(
+  filter: string,
+  limit: number,
+  page: number,
+  categorySlug?: string,
+  novelType?: string,
+  languageIdParam?: string
+) {
+  const skip = (page - 1) * limit;
+  const { query, sort, andConditions } = buildQuery(filter, categorySlug, novelType, languageIdParam);
+
+  // Filter ตาม categorySlug
+  if (categorySlug) {
+    const category = await CategoryModel.findOne({ slug: categorySlug }).lean<ICategory>();
+    if (category && category._id) {
+      const categoryObjId = category._id;
+      const categoryConditions = {
+        $or: [
+          { "themeAssignment.mainTheme.categoryId": categoryObjId },
+          { "themeAssignment.subThemes.categoryId": categoryObjId },
+          { "themeAssignment.moodAndTone": categoryObjId },
+          { "themeAssignment.contentWarnings": categoryObjId },
+          { "narrativeFocus.artStyle": categoryObjId },
+          { "narrativeFocus.commonTropes": categoryObjId },
+          { "narrativeFocus.interactivityLevel": categoryObjId },
+          { "narrativeFocus.narrativePacingTags": categoryObjId },
+          { "narrativeFocus.primaryConflictTypes": categoryObjId },
+          { "narrativeFocus.targetAudienceProfileTags": categoryObjId },
+          { "narrativeFocus.lengthTag": categoryObjId },
+          { "narrativeFocus.playerAgencyLevel": categoryObjId },
+          { "narrativeFocus.storyArcStructure": categoryObjId },
+          { "narrativeFocus.narrativePerspective": categoryObjId },
+          { "sourceType.fandomCategoryId": categoryObjId },
+        ]
+      };
+      andConditions.push(categoryConditions);
+    } else {
+      return { novels: [], total: 0 };
+    }
+  }
+
+  // Filter ตาม languageId
+  if (languageIdParam) {
+    const langId = toObjectId(languageIdParam);
+    if (langId) {
+      query.language = langId;
+    }
+  }
+
+  // รวม $andConditions เข้ากับ query หลัก
+  if (andConditions.length > 0) {
+    query.$and = query.$and ? [...query.$and, ...andConditions] : andConditions;
+  }
+
+  // Optimized parallel fetch with lean queries
+  const [total, rawNovels] = await Promise.all([
+    NovelModel.countDocuments(query),
+    NovelModel.find(query)
+      .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
+        path: "author",
+        select: "username profile.displayName profile.penName profile.avatarUrl roles",
+        model: UserModel,
+      })
+      .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory } } }>({
+        path: "themeAssignment.mainTheme.categoryId",
+        select: "name slug iconUrl color",
+        model: CategoryModel,
+      })
+      .populate({
+        path: "language",
+        select: "name slug",
+        model: CategoryModel,
+      })
+      .populate({
+        path: "ageRatingCategoryId",
+        select: "name",
+        model: CategoryModel,
+      })
+      .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount themeAssignment ageRatingCategoryId")
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean({ virtuals: true })
+  ]);
+
+  return { novels: rawNovels, total };
+}
+
+// Helper functions สำหรับ transform ข้อมูล (optimized)
+const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
+  if (!cat || !cat._id) return undefined;
+  return {
+    _id: cat._id.toString(),
+    name: cat.name || 'Unknown Category',
+    slug: cat.slug,
+    localizations: cat.localizations,
+    iconUrl: cat.iconUrl,
+    color: cat.color,
+    categoryType: cat.categoryType,
+    description: cat.description,
+  };
+};
+
+const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
+  if (!Array.isArray(cats)) return [];
+  return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
+};
+
+// Optimized data transformation
+const transformNovels = (rawNovels: any[]): NovelCardData[] => {
+  return rawNovels.map((novel: any) => {
+    const transformedAuthor: PopulatedAuthor = {
+      _id: novel.author?._id?.toString() || '',
+      username: novel.author?.username,
+      profile: novel.author?.profile || {},
+      roles: novel.author?.roles || [],
+    };
+
+    const transformedNovel: NovelCardData = {
+      _id: novel._id.toString(),
+      title: novel.title || 'ไม่มีชื่อ',
+      slug: novel.slug || '',
+      synopsis: novel.synopsis || '',
+      coverImageUrl: novel.coverImageUrl,
+      isCompleted: novel.isCompleted || false,
+      isFeatured: novel.isFeatured || false,
+      publishedAt: novel.publishedAt?.toISOString(),
+      status: novel.status,
+      totalEpisodesCount: novel.totalEpisodesCount || 0,
+      publishedEpisodesCount: novel.publishedEpisodesCount || 0,
+      currentEpisodePriceCoins: novel.currentEpisodePriceCoins || 0,
+      author: transformedAuthor,
+      themeAssignment: {
+        mainTheme: novel.themeAssignment?.mainTheme?.categoryId
+          ? {
+              categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!,
+              customName: novel.themeAssignment.mainTheme.customName,
+            }
+          : undefined,
+        subThemes: novel.themeAssignment?.subThemes
+          ? novel.themeAssignment.subThemes.map((subTheme: any) => ({
+              categoryId: transformPopulatedCategory(subTheme.categoryId)!,
+              customName: subTheme.customName,
+            })).filter((st: any) => st.categoryId)
+          : [],
+        moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone || []),
+        contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings || []),
+        customTags: novel.themeAssignment?.customTags || [],
+      },
+      language: transformPopulatedCategory(novel.language)!,
+      ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId),
+      monetizationSettings: novel.monetizationSettings,
+      stats: {
+        viewsCount: novel.stats?.viewsCount || 0,
+        likesCount: novel.stats?.likesCount || 0,
+        averageRating: novel.stats?.averageRating || 0,
+        lastPublishedEpisodeAt: novel.stats?.lastPublishedEpisodeAt?.toISOString(),
+      },
+    };
+
+    return transformedNovel;
+  });
+};
+
 export async function GET(request: Request) {
   try {
-    await dbConnect(); // เชื่อมต่อฐานข้อมูล
+    // เชื่อมต่อ database
+    await dbConnect();
 
     const { searchParams } = new URL(request.url);
-    const filter = searchParams.get("filter") || "trending"; // default filter คือ trending
-    const limit = parseInt(searchParams.get("limit") || "7", 10); // default limit คือ 7 
-    const page = parseInt(searchParams.get("page") || "1", 10);
+    const filter = searchParams.get("filter") || "trending";
+    const limit = Math.min(parseInt(searchParams.get("limit") || "7", 10), 20); // จำกัดสูงสุด 20
+    const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1); // ขั้นต่ำ 1
     const categorySlug = searchParams.get("categorySlug");
     const languageIdParam = searchParams.get("languageId");
 
@@ -33,253 +259,88 @@ export async function GET(request: Request) {
       ? novelTypeParam as NovelContentType
       : null;
 
-    const skip = (page - 1) * limit;
-
     console.log(`📡 [API /api/novels] Called with URL: ${request.url}`);
-    console.log(`ℹ️ [API /api/novels] Params - filter: ${filter}, limit: ${limit}, page: ${page}, categorySlug: ${categorySlug}, languageId: ${languageIdParam}, novelType: ${novelType}`);
 
-    // Query พื้นฐาน: ดึงเฉพาะนิยายที่เผยแพร่แล้วหรือจบแล้ว, เป็นสาธารณะ, และไม่ถูกลบ
-    const query: any = {
-      status: { $in: [NovelStatus.PUBLISHED, NovelStatus.COMPLETED] },
-      accessLevel: NovelAccessLevel.PUBLIC,
-      isDeleted: false,
-    };
-    const sort: any = {};
+    // สร้าง cache key ที่ unique
+    const cacheKey = createCacheKey(filter, limit, page, categorySlug || undefined, novelType || undefined);
+    
+    console.log(`🔍 [API /api/novels] Cache key: ${cacheKey}`);
 
-    // Filter ตาม sourceType (เช่น interactive_fiction สำหรับ Visual Novels)
-    if (novelType) {
-      query["sourceType.type"] = novelType;
-      console.log(`ℹ️ [API /api/novels] Filtering for novelType: ${novelType}`);
-    }
+    try {
+      // ใช้ getWithFallback สำหรับ automatic caching
+      const result = await CacheManager.getWithFallback(
+        cacheKey,
+        async () => {
+          console.log(`❌ [API /api/novels] Cache MISS - fetching from database`);
+          const { novels: rawNovels, total } = await fetchNovelsFromDB(
+            filter, 
+            limit, 
+            page, 
+            categorySlug || undefined, 
+            novelType || undefined, 
+            languageIdParam || undefined
+          );
 
-    // Array สำหรับเก็บ $and conditions ถ้ามีหลายเงื่อนไขที่ต้องใช้ $and
-    const andConditions: any[] = [];
+          const novels: NovelCardData[] = transformNovels(rawNovels);
+          return { novels, total };
+        },
+        CacheTTL.NOVELS_LIST
+      );
 
-    // Filter ตาม categorySlug
-    if (categorySlug) {
-      const category = await CategoryModel.findOne({ slug: categorySlug }).lean<ICategory>();
-      if (category && category._id) {
-        console.log(`ℹ️ [API /api/novels] Filtering by category: ${category.name} (ID: ${category._id})`);
-        const categoryObjId = category._id; // lean() คืน ObjectId ถ้า schema เป็น ObjectId
-        const categoryConditions = {
-          $or: [ // นิยายต้องมี category นี้ใน field ใด field หนึ่งต่อไปนี้
-            { "themeAssignment.mainTheme.categoryId": categoryObjId },
-            { "themeAssignment.subThemes.categoryId": categoryObjId },
-            { "themeAssignment.moodAndTone": categoryObjId },
-            { "themeAssignment.contentWarnings": categoryObjId },
-            { "narrativeFocus.artStyle": categoryObjId },
-            { "narrativeFocus.commonTropes": categoryObjId },
-            { "narrativeFocus.interactivityLevel": categoryObjId },
-            { "narrativeFocus.narrativePacingTags": categoryObjId },
-            { "narrativeFocus.primaryConflictTypes": categoryObjId },
-            { "narrativeFocus.targetAudienceProfileTags": categoryObjId },
-            { "narrativeFocus.lengthTag": categoryObjId },
-            { "narrativeFocus.playerAgencyLevel": categoryObjId },
-            { "narrativeFocus.storyArcStructure": categoryObjId },
-            { "narrativeFocus.narrativePerspective": categoryObjId },
-            { "sourceType.fandomCategoryId": categoryObjId },
-          ]
-        };
-        andConditions.push(categoryConditions);
-      } else {
-        console.warn(`⚠️ [API /api/novels] Category with slug "${categorySlug}" not found. No novels will match this category slug.`);
-        // ถ้า categorySlug ระบุมาแต่หาไม่เจอ, ควรคืนค่าว่างเพื่อไม่ให้ user สับสน
-        return NextResponse.json({ novels: [], pagination: { total: 0, page, limit, totalPages: 0 } }, { 
+      const { novels, total } = result;
+      const totalPages = Math.ceil(total / limit);
+      const pagination = { total, page, limit, totalPages };
+
+      // ตรวจสอบว่ามีข้อมูลจาก cache หรือไม่
+      const isFromCache = await CacheManager.exists(cacheKey);
+      const cacheStatus = isFromCache ? 'HIT' : 'MISS';
+      
+      console.log(`✅ [API /api/novels] ${cacheStatus} - returning ${novels.length} novels`);
+
+      // Response headers optimized สำหรับ performance
+      const responseHeaders = {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // ลด cache time
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vary': 'Accept-Encoding, Accept',
+        'X-Cache-Status': cacheStatus,
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Content-Type': 'application/json; charset=utf-8',
+      };
+
+      return NextResponse.json(
+        { novels, pagination },
+        { status: 200, headers: responseHeaders }
+      );
+
+    } catch (cacheError) {
+      console.error(`⚠️ [API /api/novels] Cache error (fallback to DB):`, cacheError);
+      
+      // Fallback เมื่อ cache error
+      const { novels: rawNovels, total } = await fetchNovelsFromDB(
+        filter, 
+        limit, 
+        page, 
+        categorySlug || undefined, 
+        novelType || undefined, 
+        languageIdParam || undefined
+      );
+
+      const novels: NovelCardData[] = transformNovels(rawNovels);
+      const totalPages = Math.ceil(total / limit);
+      const pagination = { total, page, limit, totalPages };
+
+      return NextResponse.json(
+        { novels, pagination },
+        {
           status: 200,
           headers: {
-            'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // Cache 5 นาที
-            'CDN-Cache-Control': 'public, s-maxage=300'
+            'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+            'X-Cache-Status': 'ERROR-FALLBACK'
           }
-        });
-      }
-    }
-
-    // Filter ตาม languageId
-    if (languageIdParam) {
-      const langId = toObjectId(languageIdParam);
-      if (langId) {
-        query.language = langId; // language ใน NovelModel เป็น ObjectId อ้างอิง Category
-        console.log(`ℹ️ [API /api/novels] Filtering by languageId: ${languageIdParam}`);
-      } else {
-        console.warn(`⚠️ [API /api/novels] Invalid languageId format: "${languageIdParam}". Skipping language filter.`);
-      }
-    }
-
-    // Logic การกรองและเรียงลำดับตาม filter parameter
-    switch (filter) {
-      case "trending":
-        sort["stats.trendingStats.trendingScore"] = -1; // เรียงตามคะแนน trending สูงสุด
-        sort["stats.viewsCount"] = -1; // สำรองด้วยยอดวิว
-        console.log(`ℹ️ [API /api/novels] Applying filter: trending`);
-        break;
-      case "published":
-        sort["stats.lastPublishedEpisodeAt"] = -1; // ตอนล่าสุดที่เผยแพร่
-        sort["publishedAt"] = -1; // นิยายที่เผยแพร่ล่าสุด (fallback)
-        console.log(`ℹ️ [API /api/novels] Applying filter: published (latest episodes/novels)`);
-        break;
-      case "promoted":
-        const now = new Date();
-        const promotionConditions = {
-          // ✅ [แก้ไขใหม่] เฉพาะนิยายที่มีโปรโมชันที่ active เท่านั้น ไม่ต้องพึ่งพา isFeatured
-          "monetizationSettings.activePromotion.isActive": true,
-          "monetizationSettings.activePromotion.promotionalPriceCoins": { $exists: true, $ne: null },
-          $and: [ // ตรวจสอบวันเริ่มและสิ้นสุดโปรโมชัน
-            { $or: [{ "monetizationSettings.activePromotion.promotionStartDate": { $lte: now } }, { "monetizationSettings.activePromotion.promotionStartDate": { $exists: false } }] },
-            { $or: [{ "monetizationSettings.activePromotion.promotionEndDate": { $gte: now } }, { "monetizationSettings.activePromotion.promotionEndDate": { $exists: false } }] },
-          ],
-        };
-        andConditions.push(promotionConditions);
-        // Sort สำหรับ promoted: เรียงตามคะแนนความนิยมและวันที่เผยแพร่
-        sort["stats.trendingStats.trendingScore"] = -1; // เรียงตาม trending ก่อน
-        sort["stats.viewsCount"] = -1; // แล้วตามยอดวิว
-        sort["publishedAt"] = -1; // และวันที่เผยแพร่
-        console.log(`ℹ️ [API /api/novels] Applying filter: promoted (active promotions only)`);
-        console.log(`ℹ️ [API /api/novels] Promotion conditions:`, JSON.stringify(promotionConditions, null, 2));
-        console.log(`ℹ️ [API /api/novels] Current time for promotion check:`, now.toISOString());
-        break;
-      case "completed":
-        query.isCompleted = true; // นิยายที่จบแล้ว
-        sort["stats.averageRating"] = -1; // เรียงตามคะแนนเฉลี่ย
-        sort["stats.viewsCount"] = -1;
-        sort["publishedAt"] = -1;
-        console.log(`ℹ️ [API /api/novels] Applying filter: completed`);
-        break;
-      default:
-        // Fallback ไป trending ถ้า filter ไม่รู้จัก
-        sort["stats.trendingStats.trendingScore"] = -1;
-        sort["stats.viewsCount"] = -1;
-        console.warn(`⚠️ [API /api/novels] Invalid or missing filter parameter: "${filter}". Defaulting to 'trending'.`);
-    }
-
-    // รวม $andConditions เข้ากับ query หลัก
-    if (andConditions.length > 0) {
-      query.$and = query.$and ? [...query.$and, ...andConditions] : andConditions;
-    }
-
-    // ปรับปรุง: ใช้ countDocuments แบบ parallel กับ main query
-    const [total, rawNovels] = await Promise.all([
-      NovelModel.countDocuments(query),
-      NovelModel.find(query)
-      .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
-        path: "author",
-          select: "username profile.displayName profile.penName profile.avatarUrl roles", // เลือก field ที่จำเป็นเท่านั้น
-          model: UserModel,
-      })
-        .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory } } }>({
-        path: "themeAssignment.mainTheme.categoryId",
-          select: "name slug iconUrl color", // ลดข้อมูลที่ไม่จำเป็น
-        model: CategoryModel,
-      })
-      .populate({
-          path: "language",
-          select: "name slug",
-        model: CategoryModel,
-      })
-      .populate({
-        path: "ageRatingCategoryId",
-          select: "name",
-        model: CategoryModel,
-      })
-        .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount themeAssignment ageRatingCategoryId") // เลือกเฉพาะ field ที่จำเป็นสำหรับการ์ด รวม themeAssignment และ ageRatingCategoryId
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-        .lean({ virtuals: true }) // ใช้ lean เพื่อประสิทธิภาพที่ดีขึ้น
-    ]);
-
-    console.log(`ℹ️ [API /api/novels] Final Query: ${JSON.stringify(query)}, Sort: ${JSON.stringify(sort)}`);
-    console.log(`ℹ️ [API /api/novels] Found ${total} novels matching query, returning ${rawNovels.length} novels.`);
-
-    // ปรับปรุง: Helper functions สำหรับ transform ข้อมูล (เหมือนเดิม)
-      const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
-      if (!cat || !cat._id) return undefined;
-        return {
-        _id: cat._id.toString(),
-        name: cat.name || 'Unknown Category',
-          slug: cat.slug,
-          localizations: cat.localizations,
-          iconUrl: cat.iconUrl,
-          color: cat.color,
-          categoryType: cat.categoryType,
-          description: cat.description,
-        };
-      };
-      
-      const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
-        if (!Array.isArray(cats)) return [];
-        return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
-      };
-
-    // Transform ข้อมูลให้ตรงกับ interface ที่ต้องการ
-    const novels: NovelCardData[] = rawNovels.map((novel: any) => {
-      const transformedAuthor: PopulatedAuthor = {
-        _id: novel.author?._id?.toString() || '',
-        username: novel.author?.username,
-        profile: novel.author?.profile || {},
-        roles: novel.author?.roles || [],
-      };
-
-      const transformedNovel: NovelCardData = {
-        _id: novel._id.toString(),
-        title: novel.title || 'ไม่มีชื่อ',
-        slug: novel.slug || '',
-        synopsis: novel.synopsis || '',
-        coverImageUrl: novel.coverImageUrl,
-        isCompleted: novel.isCompleted || false,
-        isFeatured: novel.isFeatured || false,
-        publishedAt: novel.publishedAt?.toISOString(),
-        status: novel.status,
-        totalEpisodesCount: novel.totalEpisodesCount || 0,
-        publishedEpisodesCount: novel.publishedEpisodesCount || 0,
-        currentEpisodePriceCoins: novel.currentEpisodePriceCoins || 0,
-        author: transformedAuthor,
-        themeAssignment: {
-          mainTheme: novel.themeAssignment?.mainTheme?.categoryId
-            ? {
-                categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!,
-                customName: novel.themeAssignment.mainTheme.customName,
-              }
-            : undefined,
-          subThemes: novel.themeAssignment?.subThemes
-            ? novel.themeAssignment.subThemes.map((subTheme: any) => ({
-                categoryId: transformPopulatedCategory(subTheme.categoryId)!,
-                customName: subTheme.customName,
-              })).filter((st: any) => st.categoryId)
-            : [],
-          moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone || []),
-          contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings || []),
-          customTags: novel.themeAssignment?.customTags || [],
-        },
-        language: transformPopulatedCategory(novel.language)!,
-        ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId),
-        monetizationSettings: novel.monetizationSettings,
-        stats: {
-          viewsCount: novel.stats?.viewsCount || 0,
-          likesCount: novel.stats?.likesCount || 0,
-          averageRating: novel.stats?.averageRating || 0,
-          lastPublishedEpisodeAt: novel.stats?.lastPublishedEpisodeAt?.toISOString(),
-        },
-      };
-
-      return transformedNovel;
-    });
-
-    const totalPages = Math.ceil(total / limit);
-    const pagination = { total, page, limit, totalPages };
-
-    console.log(`✅ [API /api/novels] Returning ${novels.length} novels with pagination:`, pagination);
-
-    return NextResponse.json(
-      { novels, pagination },
-      {
-        status: 200,
-        headers: {
-          'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1200', // Cache 10 นาที, stale-while-revalidate 20 นาที
-          'CDN-Cache-Control': 'public, s-maxage=600',
-          'Vary': 'Accept-Encoding' // สำหรับ compression
         }
-      }
-    );
+      );
+    }
 
   } catch (error) {
     console.error('❌ [API /api/novels] Error:', error);
@@ -292,14 +353,15 @@ export async function GET(request: Request) {
       { 
         status: 500,
         headers: {
-          'Cache-Control': 'no-cache', // ไม่ cache error response
+          'Cache-Control': 'no-cache',
+          'X-Cache-Status': 'ERROR'
         }
       }
     );
   }
 }
 
-// POST method สำหรับสร้างนิยายใหม่
+// POST method สำหรับสร้างนิยายใหม่ (optimized)
 export async function POST(request: Request) {
   try {
     await dbConnect();
@@ -496,6 +558,13 @@ export async function POST(request: Request) {
 
     const savedNovel = await newNovel.save();
     console.log(`✅ [API /api/novels POST] Novel created successfully: ${savedNovel.title} (${savedNovel._id})`);
+
+    // Invalidate relevant cache patterns
+    await Promise.allSettled([
+      CacheManager.invalidatePattern('divwy:v2:novels:list:'),
+      CacheManager.invalidatePattern('divwy:v2:homepage:'),
+      CacheManager.invalidatePattern('divwy:v2:trending:'),
+    ]);
 
     // Populate ข้อมูลสำหรับส่งกลับ
     const populatedNovel = await NovelModel.findById(savedNovel._id)

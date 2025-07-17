@@ -31,20 +31,29 @@ const DESKTOP_FIXED_SLIDE_WIDTH = 600;
 const NUM_RENDERED_SLIDES = 5; // (prev, prev, current, next, next)
 const TRANSITION_DURATION = 500;
 const SLIDE_GAP = 32;
-const NAV_FADE_TIMEOUT = 2000; // ✅ [เพิ่ม] เวลา (ms) ก่อนที่ปุ่มจะจางหายไป
+const NAV_FADE_TIMEOUT = 2000;
+
+// Advanced image optimization
+const getSlideImageProps = (isCentral: boolean, isNearCenter: boolean) => ({
+  quality: isCentral ? 95 : 85, // Higher quality for central slide
+  priority: isCentral || isNearCenter,
+  placeholder: 'blur' as const,
+  blurDataURL: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAUAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAhEQACAQIHAQAAAAAAAAAAAAABAgADBAUREiEiMVFhkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q==',
+  sizes: "(max-width: 1023px) 100vw, 600px",
+});
 
 export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProps) {
-  const [currentIndex, setCurrentIndex] = useState(0); // ดัชนี "ตรรกะ" ของสไลด์ (0 ถึง totalSlides - 1)
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [isMobile, setIsMobile] = useState(false); // ✅ [เพิ่ม] State สำหรับตรวจสอบขนาดหน้าจอ
+  const [isMobile, setIsMobile] = useState(false);
 
   const [dragStartPos, setDragStartPos] = useState(0);
   const [currentTranslate, setCurrentTranslate] = useState(0);
   const [slideContainerOffset, setSlideContainerOffset] = useState(0);
   
-  // ✅ [เพิ่ม] State และ Ref สำหรับการซ่อน/แสดงปุ่ม Navigation
+  // Navigation visibility state
   const [showNavButtons, setShowNavButtons] = useState(true);
   const navVisibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -56,17 +65,15 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
 
   const totalSlides = slides.length;
 
-  // ✅ [ปรับปรุง] useCallback hook เพื่อ memoize ฟังก์ชันคำนวณความกว้างสไลด์ โดยแยกตามขนาดหน้าจอ
+  // Optimized slide width calculation
   const getEffectiveSlideWidth = useCallback((): number => {
     if (typeof window !== "undefined" && carouselRef.current) {
-      // สำหรับ Mobile: ความกว้างเต็มจอ ไม่มี gap
       if (isMobile || totalSlides <= 1) {
         return carouselRef.current.offsetWidth;
       }
-      // สำหรับ Desktop: ความกว้างคงที่ + gap
       return Math.min(DESKTOP_FIXED_SLIDE_WIDTH, carouselRef.current.offsetWidth) + SLIDE_GAP;
     }
-    return DESKTOP_FIXED_SLIDE_WIDTH + SLIDE_GAP; // Fallback for SSR
+    return DESKTOP_FIXED_SLIDE_WIDTH + SLIDE_GAP;
   }, [totalSlides, isMobile]);
 
   const getLoopedIndex = useCallback((index: number): number => {
@@ -83,7 +90,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     }
   }, []);
   
-  // ✅ [ปรับปรุง] ฟังก์ชันสำหรับรีเซ็ต timer การซ่อนปุ่ม
+  // Navigation visibility management
   const resetNavVisibilityTimer = useCallback(() => {
     if (navVisibilityTimeoutRef.current) clearTimeout(navVisibilityTimeoutRef.current);
     setShowNavButtons(true);
@@ -101,7 +108,6 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     const carouselWidth = carouselRef.current.offsetWidth;
     const centralSlideInDomIndex = Math.floor(NUM_RENDERED_SLIDES / 2);
 
-    // ✅ [ปรับปรุง] ถ้าเป็น mobile ไม่ต้องจัดกลางแบบ peeking
     if (isMobile) {
         return -(centralSlideInDomIndex * effectiveSlideWidth);
     }
@@ -113,7 +119,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   const goToNext = useCallback((isAutoPlay: boolean = false) => {
     if (isTransitioning || totalSlides <= 1) return;
     setIsTransitioning(true);
-    resetNavVisibilityTimer(); // ✅ [เพิ่ม] รีเซ็ต timer เมื่อเปลี่ยนสไลด์
+    resetNavVisibilityTimer();
 
     const effectiveSlideWidth = getEffectiveSlideWidth();
     setTransform(slideContainerOffset - effectiveSlideWidth, true);
@@ -130,7 +136,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   const goToPrevious = useCallback(() => {
     if (isTransitioning || totalSlides <= 1) return;
     setIsTransitioning(true);
-    resetNavVisibilityTimer(); // ✅ [เพิ่ม] รีเซ็ต timer เมื่อเปลี่ยนสไลด์
+    resetNavVisibilityTimer();
 
     const effectiveSlideWidth = getEffectiveSlideWidth();
     setTransform(slideContainerOffset + effectiveSlideWidth, true);
@@ -149,11 +155,10 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     const newLogicalIndex = getLoopedIndex(slideIndex);
     if (newLogicalIndex === currentIndex) return;
     
-    resetNavVisibilityTimer(); // ✅ [เพิ่ม] รีเซ็ต timer เมื่อเปลี่ยนสไลด์
+    resetNavVisibilityTimer();
     setIsTransitioning(true);
 
     const effectiveSlideWidth = getEffectiveSlideWidth();
-    // คำนวณจำนวนสไลด์ที่ต้องเลื่อน (จัดการเรื่องการวนลูป)
     const diff = newLogicalIndex - currentIndex;
     const slidesToMove = (Math.abs(diff) > totalSlides / 2) 
         ? (diff > 0 ? diff - totalSlides : diff + totalSlides) 
@@ -172,7 +177,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
 
   }, [isTransitioning, totalSlides, currentIndex, getLoopedIndex, getEffectiveSlideWidth, setTransform, calculateCenteringOffset, resetNavVisibilityTimer]);
 
-  // useEffect สำหรับ Autoplay
+  // Autoplay management
   useEffect(() => {
     if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     if (autoPlayInterval && !isHovering && !isDragging && !isTransitioning && totalSlides > 1) {
@@ -183,7 +188,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     };
   }, [currentIndex, goToNext, autoPlayInterval, isHovering, isDragging, isTransitioning, totalSlides]);
   
-  // ✅ [เพิ่ม] useEffect สำหรับการซ่อน/แสดงปุ่ม Navigation
+  // Navigation visibility management
   useEffect(() => {
     if (isHovering) {
       setShowNavButtons(true);
@@ -196,14 +201,14 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     };
   }, [isHovering, resetNavVisibilityTimer]);
 
-  // useEffect สำหรับ Initial setup และ Resize handler
+  // Setup and resize handling
   useEffect(() => {
     const checkIsMobile = () => window.innerWidth < 1024;
 
     const setupSlider = () => {
       if (!carouselRef.current || !slideContainerRef.current) return;
       
-      setIsMobile(checkIsMobile()); // ✅ [เพิ่ม] ตรวจสอบขนาดจอเมื่อ setup
+      setIsMobile(checkIsMobile());
       
       const newCenteringOffset = calculateCenteringOffset();
       setSlideContainerOffset(newCenteringOffset);
@@ -228,9 +233,9 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
       if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
       if (navVisibilityTimeoutRef.current) clearTimeout(navVisibilityTimeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calculateCenteringOffset, setTransform, totalSlides]); // deps ถูกต้องแล้ว
+  }, [calculateCenteringOffset, setTransform, totalSlides, currentTranslate, isDragging]);
 
+  // Touch and mouse interaction handlers
   const getPositionX = (event: MouseEvent | TouchEvent): number => {
     return event.type.includes('mouse')
       ? (event as MouseEvent).clientX
@@ -248,7 +253,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
     
-    resetNavVisibilityTimer(); // ✅ [เพิ่ม] รีเซ็ต timer เมื่อเริ่มลาก
+    resetNavVisibilityTimer();
     setIsTransitioning(false); 
     setIsDragging(true);
     setDragStartPos(getPositionX(event.nativeEvent));
@@ -322,7 +327,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   
   const currentLogicalIndex = getLoopedIndex(currentIndex);
   
-  // ✅ [ปรับปรุง] คำนวณความกว้างของ slide item แยกต่างหาก
+  // Calculate slide item width
   const getSlideItemWidth = () => {
       if(isMobile) return getEffectiveSlideWidth();
       return DESKTOP_FIXED_SLIDE_WIDTH;
@@ -343,16 +348,17 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
         ref={slideContainerRef}
         className={`${styles.slideContainer} ${isDragging ? styles.dragging : ''}`}
         onMouseDown={dragStart}
-        // ✅ [ปรับปรุง] gap จะเป็น 0 บน mobile
         style={{ gap: isMobile ? `0px` : `${SLIDE_GAP}px` }}
       >
         {extendedSlidesToRender.map((slide, index) => {
             const isCentralSlide = index === Math.floor(NUM_RENDERED_SLIDES / 2);
+            const isNearCenter = Math.abs(index - Math.floor(NUM_RENDERED_SLIDES / 2)) === 1;
+            const imageProps = getSlideImageProps(isCentralSlide, isNearCenter);
+            
             return (
              <div
                key={slide.uniqueKey}
                className={styles.slide}
-               // ✅ [ปรับปรุง] กำหนดความกว้างของสไลด์ให้ถูกต้องตาม responsive state
                style={{ width: `${getSlideItemWidth()}px` }}
                data-is-active={isCentralSlide}
                aria-live={isCentralSlide ? "polite" : "off"}
@@ -365,8 +371,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
                  src={slide.imageUrl}
                  alt={slide.description || slide.title || "Slide image"}
                  fill
-                 priority={isCentralSlide || Math.abs(index - Math.floor(NUM_RENDERED_SLIDES / 2)) === 1}
-                 sizes={`(max-width: 1023px) 100vw, ${DESKTOP_FIXED_SLIDE_WIDTH}px`}
+                 {...imageProps}
                  className={styles.slideImage}
                  draggable={false}
                />
@@ -428,7 +433,6 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
         <>
           <button
             onClick={goToPrevious}
-            // ✅ [เพิ่ม] class สำหรับซ่อนปุ่ม
             className={`${styles.navButton} ${styles.navButtonPrev} ${!showNavButtons ? styles.navButtonHidden : ''}`}
             aria-label="สไลด์ก่อนหน้า"
             disabled={isTransitioning || isDragging}
@@ -437,7 +441,6 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
           </button>
           <button
             onClick={() => goToNext(false)}
-            // ✅ [เพิ่ม] class สำหรับซ่อนปุ่ม
             className={`${styles.navButton} ${styles.navButtonNext} ${!showNavButtons ? styles.navButtonHidden : ''}`}
             aria-label="สไลด์ถัดไป"
             disabled={isTransitioning || isDragging}
