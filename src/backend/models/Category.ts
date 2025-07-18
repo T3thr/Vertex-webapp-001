@@ -3,7 +3,8 @@
 // จัดการหมวดหมู่ต่างๆ ในระบบ เช่น ประเภทนิยาย, แท็ก, ธีม, กลุ่มเป้าหมายผู้อ่าน, คำเตือนเนื้อหา, Fandoms ฯลฯ
 
 import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import BoardModel from "./Board"; // **เพิ่มเข้ามา:** import BoardModel เพื่อใช้ในการอัปเดตข้อมูลที่เกี่ยวข้อง
+// **ลบออก:** ไม่ import BoardModel โดยตรงเพื่อป้องกัน circular dependency
+// import BoardModel from "./Board"; 
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Category
@@ -378,6 +379,8 @@ CategorySchema.post<mongoose.Query<ICategory, ICategory>>("findOneAndDelete", as
         try {
             const CategoryModelConst = models.Category || model<ICategory>("Category");
             const NovelModelConst = models.Novel || model("Novel"); // ใช้ Novel.ts ที่อัปเดตแล้ว
+            // **แก้ไข:** เรียกใช้ BoardModel แบบ dynamic ภายใน hook แทนการ import
+            const BoardModelConst = models.Board || model("Board");
 
             // 1. อัปเดตหมวดหมู่ลูก: ตั้ง parentCategoryId เป็น null หรือ parent ของหมวดหมู่ที่ถูกลบ
             await CategoryModelConst.updateMany(
@@ -391,11 +394,8 @@ CategorySchema.post<mongoose.Query<ICategory, ICategory>>("findOneAndDelete", as
                 { $pull: { relatedCategories: deletedDoc._id } }
             );
             
-            // 3. **อัปเดต Board ที่ใช้หมวดหมู่นี้** (เพิ่มเข้ามา)
-            // ค้นหากระทู้ทั้งหมดที่ใช้ categoryAssociated เป็น ID ของหมวดหมู่ที่ถูกลบ
-            // แล้วตั้งค่า categoryAssociated เป็น null หรือย้ายไปยังหมวดหมู่ "ทั่วไป" (ถ้ามี)
-            // ในที่นี้จะตั้งเป็น null เพื่อให้ผู้ดูแลระบบตัดสินใจต่อไป
-            await BoardModel.updateMany(
+            // 3. **อัปเดต Board ที่ใช้หมวดหมู่นี้** (ใช้ BoardModelConst ที่เรียกมาใหม่)
+            await BoardModelConst.updateMany(
                 { categoryAssociated: deletedDoc._id },
                 { $set: { categoryAssociated: null } }
             );

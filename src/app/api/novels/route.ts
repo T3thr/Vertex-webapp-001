@@ -23,18 +23,18 @@ const createCacheKey = (filter: string, limit: number, page: number, categorySlu
 
 // Advanced query builder สำหรับ performance
 function buildQuery(filter: string, categorySlug?: string, novelType?: string, languageIdParam?: string) {
-  // Query พื้นฐาน: ดึงเฉพาะนิยายที่เผยแพร่แล้วหรือจบแล้ว, เป็นสาธารณะ, และไม่ถูกลบ
-  const query: any = {
-    status: { $in: [NovelStatus.PUBLISHED, NovelStatus.COMPLETED] },
-    accessLevel: NovelAccessLevel.PUBLIC,
-    isDeleted: false,
-  };
-  const sort: any = {};
+    // Query พื้นฐาน: ดึงเฉพาะนิยายที่เผยแพร่แล้วหรือจบแล้ว, เป็นสาธารณะ, และไม่ถูกลบ
+    const query: any = {
+      status: { $in: [NovelStatus.PUBLISHED, NovelStatus.COMPLETED] },
+      accessLevel: NovelAccessLevel.PUBLIC,
+      isDeleted: false,
+    };
+    const sort: any = {};
   const andConditions: any[] = [];
 
   // Filter ตาม sourceType
   if (novelType && Object.values(NovelContentType).includes(novelType as NovelContentType)) {
-    query["sourceType.type"] = novelType;
+      query["sourceType.type"] = novelType;
   }
 
   // Logic การกรองและเรียงลำดับตาม filter parameter
@@ -88,71 +88,71 @@ async function fetchNovelsFromDB(
   const skip = (page - 1) * limit;
   const { query, sort, andConditions } = buildQuery(filter, categorySlug, novelType, languageIdParam);
 
-  // Filter ตาม categorySlug
-  if (categorySlug) {
-    const category = await CategoryModel.findOne({ slug: categorySlug }).lean<ICategory>();
-    if (category && category._id) {
+    // Filter ตาม categorySlug
+    if (categorySlug) {
+      const category = await CategoryModel.findOne({ slug: categorySlug }).lean<ICategory>();
+      if (category && category._id) {
       const categoryObjId = category._id;
-      const categoryConditions = {
+        const categoryConditions = {
         $or: [
-          { "themeAssignment.mainTheme.categoryId": categoryObjId },
-          { "themeAssignment.subThemes.categoryId": categoryObjId },
-          { "themeAssignment.moodAndTone": categoryObjId },
-          { "themeAssignment.contentWarnings": categoryObjId },
-          { "narrativeFocus.artStyle": categoryObjId },
-          { "narrativeFocus.commonTropes": categoryObjId },
-          { "narrativeFocus.interactivityLevel": categoryObjId },
-          { "narrativeFocus.narrativePacingTags": categoryObjId },
-          { "narrativeFocus.primaryConflictTypes": categoryObjId },
-          { "narrativeFocus.targetAudienceProfileTags": categoryObjId },
-          { "narrativeFocus.lengthTag": categoryObjId },
-          { "narrativeFocus.playerAgencyLevel": categoryObjId },
-          { "narrativeFocus.storyArcStructure": categoryObjId },
-          { "narrativeFocus.narrativePerspective": categoryObjId },
-          { "sourceType.fandomCategoryId": categoryObjId },
-        ]
-      };
-      andConditions.push(categoryConditions);
-    } else {
+            { "themeAssignment.mainTheme.categoryId": categoryObjId },
+            { "themeAssignment.subThemes.categoryId": categoryObjId },
+            { "themeAssignment.moodAndTone": categoryObjId },
+            { "themeAssignment.contentWarnings": categoryObjId },
+            { "narrativeFocus.artStyle": categoryObjId },
+            { "narrativeFocus.commonTropes": categoryObjId },
+            { "narrativeFocus.interactivityLevel": categoryObjId },
+            { "narrativeFocus.narrativePacingTags": categoryObjId },
+            { "narrativeFocus.primaryConflictTypes": categoryObjId },
+            { "narrativeFocus.targetAudienceProfileTags": categoryObjId },
+            { "narrativeFocus.lengthTag": categoryObjId },
+            { "narrativeFocus.playerAgencyLevel": categoryObjId },
+            { "narrativeFocus.storyArcStructure": categoryObjId },
+            { "narrativeFocus.narrativePerspective": categoryObjId },
+            { "sourceType.fandomCategoryId": categoryObjId },
+          ]
+        };
+        andConditions.push(categoryConditions);
+      } else {
       return { novels: [], total: 0 };
+      }
     }
-  }
 
-  // Filter ตาม languageId
-  if (languageIdParam) {
-    const langId = toObjectId(languageIdParam);
-    if (langId) {
+    // Filter ตาม languageId
+    if (languageIdParam) {
+      const langId = toObjectId(languageIdParam);
+      if (langId) {
       query.language = langId;
     }
-  }
+    }
 
-  // รวม $andConditions เข้ากับ query หลัก
-  if (andConditions.length > 0) {
-    query.$and = query.$and ? [...query.$and, ...andConditions] : andConditions;
-  }
+    // รวม $andConditions เข้ากับ query หลัก
+    if (andConditions.length > 0) {
+      query.$and = query.$and ? [...query.$and, ...andConditions] : andConditions;
+    }
 
   // Optimized parallel fetch with lean queries
-  const [total, rawNovels] = await Promise.all([
-    NovelModel.countDocuments(query),
-    NovelModel.find(query)
+    const [total, rawNovels] = await Promise.all([
+      NovelModel.countDocuments(query),
+      NovelModel.find(query)
       .populate<{ author: Pick<IUser, '_id' | 'username' | 'profile' | 'roles'> }>({
         path: "author",
         select: "username profile.displayName profile.penName profile.avatarUrl roles",
-        model: UserModel,
+          model: UserModel,
       })
-      .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory } } }>({
+        .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory } } }>({
         path: "themeAssignment.mainTheme.categoryId",
         select: "name slug iconUrl color",
         model: CategoryModel,
       })
       .populate({
-        path: "language",
-        select: "name slug",
+          path: "language",
+          select: "name slug",
         model: CategoryModel,
       })
       .populate({
         path: "ageRatingCategoryId",
-        select: "name",
+          select: "name",
         model: CategoryModel,
       })
       .select("title slug synopsis coverImageUrl status isCompleted isFeatured publishedAt stats monetizationSettings totalEpisodesCount publishedEpisodesCount themeAssignment ageRatingCategoryId")
@@ -160,85 +160,85 @@ async function fetchNovelsFromDB(
       .skip(skip)
       .limit(limit)
       .lean({ virtuals: true })
-  ]);
+    ]);
 
   return { novels: rawNovels, total };
 }
 
 // Helper functions สำหรับ transform ข้อมูล (optimized)
-const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
-  if (!cat || !cat._id) return undefined;
-  return {
-    _id: cat._id.toString(),
-    name: cat.name || 'Unknown Category',
-    slug: cat.slug,
-    localizations: cat.localizations,
-    iconUrl: cat.iconUrl,
-    color: cat.color,
-    categoryType: cat.categoryType,
-    description: cat.description,
-  };
-};
-
-const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
-  if (!Array.isArray(cats)) return [];
-  return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
-};
+      const transformPopulatedCategory = (cat: any): PopulatedCategory | undefined => {
+      if (!cat || !cat._id) return undefined;
+        return {
+        _id: cat._id.toString(),
+        name: cat.name || 'Unknown Category',
+          slug: cat.slug,
+          localizations: cat.localizations,
+          iconUrl: cat.iconUrl,
+          color: cat.color,
+          categoryType: cat.categoryType,
+          description: cat.description,
+        };
+      };
+      
+      const transformPopulatedCategoryArray = (cats: any[]): PopulatedCategory[] => {
+        if (!Array.isArray(cats)) return [];
+        return cats.map(transformPopulatedCategory).filter(Boolean) as PopulatedCategory[];
+      };
 
 // Optimized data transformation
 const transformNovels = (rawNovels: any[]): NovelCardData[] => {
   return rawNovels.map((novel: any) => {
-    const transformedAuthor: PopulatedAuthor = {
-      _id: novel.author?._id?.toString() || '',
-      username: novel.author?.username,
-      profile: novel.author?.profile || {},
-      roles: novel.author?.roles || [],
-    };
+      const transformedAuthor: PopulatedAuthor = {
+        _id: novel.author?._id?.toString() || '',
+        username: novel.author?.username,
+        profile: novel.author?.profile || {},
+        roles: novel.author?.roles || [],
+      };
 
-    const transformedNovel: NovelCardData = {
-      _id: novel._id.toString(),
-      title: novel.title || 'ไม่มีชื่อ',
-      slug: novel.slug || '',
-      synopsis: novel.synopsis || '',
-      coverImageUrl: novel.coverImageUrl,
-      isCompleted: novel.isCompleted || false,
-      isFeatured: novel.isFeatured || false,
-      publishedAt: novel.publishedAt?.toISOString(),
-      status: novel.status,
-      totalEpisodesCount: novel.totalEpisodesCount || 0,
-      publishedEpisodesCount: novel.publishedEpisodesCount || 0,
-      currentEpisodePriceCoins: novel.currentEpisodePriceCoins || 0,
-      author: transformedAuthor,
-      themeAssignment: {
-        mainTheme: novel.themeAssignment?.mainTheme?.categoryId
-          ? {
-              categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!,
-              customName: novel.themeAssignment.mainTheme.customName,
-            }
-          : undefined,
-        subThemes: novel.themeAssignment?.subThemes
-          ? novel.themeAssignment.subThemes.map((subTheme: any) => ({
-              categoryId: transformPopulatedCategory(subTheme.categoryId)!,
-              customName: subTheme.customName,
-            })).filter((st: any) => st.categoryId)
-          : [],
-        moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone || []),
-        contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings || []),
-        customTags: novel.themeAssignment?.customTags || [],
-      },
-      language: transformPopulatedCategory(novel.language)!,
-      ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId),
-      monetizationSettings: novel.monetizationSettings,
-      stats: {
-        viewsCount: novel.stats?.viewsCount || 0,
-        likesCount: novel.stats?.likesCount || 0,
-        averageRating: novel.stats?.averageRating || 0,
-        lastPublishedEpisodeAt: novel.stats?.lastPublishedEpisodeAt?.toISOString(),
-      },
-    };
+      const transformedNovel: NovelCardData = {
+        _id: novel._id.toString(),
+        title: novel.title || 'ไม่มีชื่อ',
+        slug: novel.slug || '',
+        synopsis: novel.synopsis || '',
+        coverImageUrl: novel.coverImageUrl,
+        isCompleted: novel.isCompleted || false,
+        isFeatured: novel.isFeatured || false,
+        publishedAt: novel.publishedAt?.toISOString(),
+        status: novel.status,
+        totalEpisodesCount: novel.totalEpisodesCount || 0,
+        publishedEpisodesCount: novel.publishedEpisodesCount || 0,
+        currentEpisodePriceCoins: novel.currentEpisodePriceCoins || 0,
+        author: transformedAuthor,
+        themeAssignment: {
+          mainTheme: novel.themeAssignment?.mainTheme?.categoryId
+            ? {
+                categoryId: transformPopulatedCategory(novel.themeAssignment.mainTheme.categoryId)!,
+                customName: novel.themeAssignment.mainTheme.customName,
+              }
+            : undefined,
+          subThemes: novel.themeAssignment?.subThemes
+            ? novel.themeAssignment.subThemes.map((subTheme: any) => ({
+                categoryId: transformPopulatedCategory(subTheme.categoryId)!,
+                customName: subTheme.customName,
+              })).filter((st: any) => st.categoryId)
+            : [],
+          moodAndTone: transformPopulatedCategoryArray(novel.themeAssignment?.moodAndTone || []),
+          contentWarnings: transformPopulatedCategoryArray(novel.themeAssignment?.contentWarnings || []),
+          customTags: novel.themeAssignment?.customTags || [],
+        },
+        language: transformPopulatedCategory(novel.language)!,
+        ageRatingCategoryId: transformPopulatedCategory(novel.ageRatingCategoryId),
+        monetizationSettings: novel.monetizationSettings,
+        stats: {
+          viewsCount: novel.stats?.viewsCount || 0,
+          likesCount: novel.stats?.likesCount || 0,
+          averageRating: novel.stats?.averageRating || 0,
+          lastPublishedEpisodeAt: novel.stats?.lastPublishedEpisodeAt?.toISOString(),
+        },
+      };
 
-    return transformedNovel;
-  });
+      return transformedNovel;
+    });
 };
 
 export async function GET(request: Request) {
@@ -288,8 +288,8 @@ export async function GET(request: Request) {
       );
 
       const { novels, total } = result;
-      const totalPages = Math.ceil(total / limit);
-      const pagination = { total, page, limit, totalPages };
+    const totalPages = Math.ceil(total / limit);
+    const pagination = { total, page, limit, totalPages };
 
       // ตรวจสอบว่ามีข้อมูลจาก cache หรือไม่
       const isFromCache = await CacheManager.exists(cacheKey);
@@ -330,16 +330,16 @@ export async function GET(request: Request) {
       const totalPages = Math.ceil(total / limit);
       const pagination = { total, page, limit, totalPages };
 
-      return NextResponse.json(
-        { novels, pagination },
-        {
-          status: 200,
-          headers: {
+    return NextResponse.json(
+      { novels, pagination },
+      {
+        status: 200,
+        headers: {
             'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
             'X-Cache-Status': 'ERROR-FALLBACK'
-          }
         }
-      );
+      }
+    );
     }
 
   } catch (error) {
