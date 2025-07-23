@@ -12,11 +12,14 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizeCss: true,
     optimizePackageImports: ['lucide-react', 'framer-motion', 'date-fns'],
-    // ✅ เพิ่มการตั้งค่า alias สำหรับ Turbopack โดยเฉพาะ
-    turbo: {
-      resolveAlias: {
-        'lodash': 'lodash-es',
-      },
+  },
+
+  // ==========================================
+  // Turbopack Configuration (Stable)
+  // ==========================================
+  turbopack: {
+    resolveAlias: {
+      'lodash': 'lodash-es',
     },
   },
 

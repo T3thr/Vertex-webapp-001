@@ -609,6 +609,16 @@ NovelSchema.index({ isFeatured: 1, status: 1, "stats.viewsCount": -1, isDeleted:
 NovelSchema.index({ isDeleted: 1, status: 1 });
 NovelSchema.index({ "stats.trendingStats.trendingScore": -1, status: 1, isDeleted: 1, accessLevel: 1 }, { name: "NovelTrendingScoreIndex" });
 
+// **Indexes added for Homepage Performance Optimization**
+// For 'published' filter (new releases)
+NovelSchema.index({ status: 1, accessLevel: 1, isDeleted: 1, "stats.lastPublishedEpisodeAt": -1, publishedAt: -1 }, { name: "NovelPublishedSortIndex" });
+
+// For 'promoted' filter
+NovelSchema.index({ "monetizationSettings.activePromotion.isActive": 1, status: 1, accessLevel: 1, isDeleted: 1, "stats.trendingStats.trendingScore": -1 }, { name: "NovelPromotedFilterSortIndex" });
+
+// For 'completed' filter
+NovelSchema.index({ isCompleted: 1, status: 1, accessLevel: 1, isDeleted: 1, "stats.averageRating": -1, "stats.viewsCount": -1 }, { name: "NovelCompletedSortIndex" });
+
 
 // ==================================================================================================
 // SECTION: Virtuals (ฟิลด์เสมือน)
