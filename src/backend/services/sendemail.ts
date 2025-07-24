@@ -42,13 +42,13 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
   const verificationUrl = `${process.env.NEXTAUTH_URL}/verify-email?token=${token}`;
 
   const mailOptions: MailOptions = {
-    from: `"DIVWY - GAME VISUAL NOVEL PLATFORM" <${process.env.EMAIL_USERNAME}>`,
+    from: `"DIVWY - VISUAL NOVEL PLATFORM" <${process.env.EMAIL_USERNAME}>`,
     to: email,
     subject: '🔹 ยืนยันอีเมลของคุณเพื่อเริ่มต้นใช้งาน!',
     html: `
       <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; background-color: #0e0e10; color: #ffffff; border-radius: 8px;">
         <div style="text-align: center;">
-          <img src="https://divwy.vercel.app/logo.png" alt="Brand Logo" style="width: 120px; margin-bottom: 20px;" />
+          <img src="https://divwy.com/logo.png" alt="Brand Logo" style="width: 120px; margin-bottom: 20px;" />
           <h2 style="color: #ff5b00;">ยินดีต้อนรับสู่แพลตฟอร์มของเรา! 🎉</h2>
           <p style="color: #c0c0c0;">อีกเพียงขั้นตอนเดียวคุณก็จะสามารถเข้าถึงเนื้อหาพิเศษ, สิทธิประโยชน์, และประสบการณ์ที่น่าประทับใจ</p>
         </div>
