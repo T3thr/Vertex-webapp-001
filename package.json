@@ -13,7 +13,8 @@
     "cache:health": "node scripts/warm-cache.js health",
     "build:production": "npm run build && npm run cache:warm",
     "analyze": "ANALYZE=true npm run build",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "verify:send": "bun run src/scripts/manual-send-verification.ts"
   },
   "dependencies": {
     "@google-recaptcha/react": "^2.2.0",
