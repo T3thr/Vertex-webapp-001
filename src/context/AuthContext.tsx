@@ -313,8 +313,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         // NextAuth จะจัดการ OAuth flow ทั้งหมด รวมถึงการเรียก JWT/session callbacks
         // ซึ่งใน options.ts มีการใช้ toSessionUserFormat เพื่อแปลงข้อมูลแล้ว
         const result = await nextAuthSignIn(provider, {
+          callbackUrl: window.location.pathname, // เพิ่มพารามิเตอร์ callbackUrl
           redirect: true, // สำหรับ OAuth มักจะ redirect ไปหน้า provider
-          callbackUrl: "/", // URL ที่จะ redirect กลับมาหลังล็อกอินสำเร็จ
         });
 
         // หากตั้ง redirect: true, โค้ดส่วนนี้อาจจะไม่ถูกเรียกถ้าล็อกอินสำเร็จ (เพราะ browser จะ redirect ไปแล้ว)
