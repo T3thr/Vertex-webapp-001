@@ -4,12 +4,11 @@
 // อัปเดต: **ไม่ใช้ React Portal**, พยายามให้ modal อยู่กึ่งกลางและ backdrop เต็มจอด้วย CSS
 // คง Logic เดิมของ reCAPTCHA และการจัดการ UI/UX
 // คงการใช้ Tailwind CSS และ UX/UI เดิมทุกประการ
-// ✅ [แก้ไข] ปรับปรุง Layout ให้รองรับ Responsive ทุกขนาดหน้าจอ โดยเฉพาะ Mobile
+// ✅ [แก้ไข] ปรับปรุง Responsive สำหรับหน้าจอมือถือโดยการเพิ่ม `min-h-0` ในพื้นที่ scrollable
 
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-// import { createPortal } from 'react-dom'; // <--- ลบ import นี้ออก
 import { useAuth } from '@/context/AuthContext';
 import { validateEmail, validatePassword, validateUsername, validateConfirmPassword } from '@/backend/utils/validation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,9 +32,8 @@ import {
   FaApple
 } from 'react-icons/fa';
 import { SiLine } from 'react-icons/si';
-import { SessionUser } from "@/app/api/auth/[...nextauth]/options"; // ตรวจสอบ path นี้ให้ถูกต้อง
+import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
 import Link from 'next/link';
-
 
 // ขยาย interface สำหรับ Window เพื่อรองรับ grecaptcha (คงเดิม)
 interface ReCaptchaWindow extends Window {
@@ -45,7 +43,7 @@ interface ReCaptchaWindow extends Window {
       callback?: (token: string) => void;
       'expired-callback'?: () => void;
       'error-callback'?: () => void;
-      size: 'invisible'; // หรือ 'normal' ถ้าต้องการแสดง widget
+      size: 'invisible';
       badge?: 'bottomright' | 'bottomleft' | 'inline';
     }) => number;
     execute: (widgetId: number) => void;
@@ -214,7 +212,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     signInWithCredentials,
   } = useAuth();
 
-  // ----- คง Logic เดิมทั้งหมดไว้ -----
   const updateFormData = (field: keyof FormDataFields, value: string) => {
     setFormDataState(prev => ({ ...prev, [mode]: { ...prev[mode], [field]: value } }));
   };
@@ -239,28 +236,41 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       recaptchaToken: recaptchaClientToken
     };
 
+    console.log(`ℹ️ [AuthModal] [doActualSignupSubmission] ข้อมูลที่จะส่งไป authContextSignUp:`, {
+      email: signupData.email, username: signupData.username,
+      password: signupData.password ? '[SECURE]' : '[NONE]',
+      recaptchaToken: signupData.recaptchaToken ? `${signupData.recaptchaToken.substring(0,10)}...` : '[NONE]'
+    });
+
     try {
       const signupResult = await authContextSignUp(
         signupData.email, signupData.username, signupData.password, signupData.recaptchaToken
       );
+      console.log(`ℹ️ [AuthModal] [doActualSignupSubmission] ผลลัพธ์จาก authContextSignUp:`, signupResult);
 
       if (signupResult.error) {
+        console.warn(`⚠️ [AuthModal] [doActualSignupSubmission] การสมัครสมาชิกล้มเหลว (AuthContext): ${signupResult.error}`);
         setError(signupResult.error);
         setRecaptchaAttempts(prev => prev + 1);
       } else {
+        console.log(`✅ [AuthModal] [doActualSignupSubmission] สมัครสมาชิกสำเร็จ (AuthContext): ${signupData.email}`);
         setSuccessMessage(signupResult.message || "สร้างบัญชีสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยัน");
         setFormDataState(prev => ({ ...prev, signup: { identifier: '', username: '', password: '', confirmPassword: '' } }));
         setTouchedFields({});
         setValidationErrors({});
       }
     } catch (err: any) {
+      console.error("❌ [AuthModal] [doActualSignupSubmission] ข้อผิดพลาดระหว่างการเรียก authContextSignUp:", err);
       setError(err.message || 'เกิดข้อผิดพลาดในการสมัครสมาชิก');
     } finally {
       setIsLoading(false);
       const win = window as ReCaptchaWindow;
       if (widgetIdRef.current !== null && win.grecaptcha && typeof win.grecaptcha.reset === 'function') {
-        try { win.grecaptcha.reset(widgetIdRef.current); }
-        catch (e) { console.warn("⚠️ [AuthModal] ไม่สามารถรีเซ็ต reCAPTCHA widget (doActualSignupSubmission):", e); }
+        try {
+            win.grecaptcha.reset(widgetIdRef.current);
+        } catch (e) {
+            console.warn("⚠️ [AuthModal] ไม่สามารถรีเซ็ต reCAPTCHA widget (doActualSignupSubmission):", e);
+        }
       }
       recaptchaTokenRef.current = null;
     }
@@ -270,16 +280,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   useEffect(() => { doActualSignupSubmissionRef.current = doActualSignupSubmission; }, [doActualSignupSubmission]);
 
   const onRecaptchaSuccess = useCallback((clientToken: string) => {
+    console.log(`✅ [AuthModal] onRecaptchaSuccess: ได้รับ reCAPTCHA token`);
     recaptchaTokenRef.current = clientToken;
     if (doActualSignupSubmissionRef.current) {
         doActualSignupSubmissionRef.current(clientToken);
     } else {
+        console.error("❌ [AuthModal] onRecaptchaSuccess: doActualSignupSubmissionRef.current is null");
         setError("เกิดข้อผิดพลาดภายใน ไม่สามารถดำเนินการสมัครสมาชิกได้");
         setIsLoading(false);
     }
   }, []);
 
   const onRecaptchaExpiredOrError = useCallback((type: 'expired' | 'error') => {
+    console.warn(`⚠️ [AuthModal] onRecaptcha${type === 'expired' ? 'Expired' : 'Error'}`);
     recaptchaTokenRef.current = null;
     setError(type === 'expired' ? 'โทเค็น reCAPTCHA หมดอายุ กรุณาลองใหม่' : 'การยืนยัน reCAPTCHA ล้มเหลว กรุณาลองใหม่');
     setIsLoading(false);
@@ -295,19 +308,25 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (isRecaptchaRenderedRef.current || !recaptchaRef.current || !siteKey || typeof window === 'undefined') return;
     const win = window as ReCaptchaWindow;
     if (!win.grecaptcha || typeof win.grecaptcha.render !== 'function') {
+      console.error('❌ [AuthModal] grecaptcha.render ไม่พร้อมใช้งาน');
       setError('เกิดข้อผิดพลาดในการโหลด reCAPTCHA (render)');
       setIsLoading(false);
       return;
     }
     try {
+      console.log("🔄 [AuthModal] เริ่มเรนเดอร์ reCAPTCHA...");
       widgetIdRef.current = win.grecaptcha.render(recaptchaRef.current, {
-        sitekey: siteKey, callback: onRecaptchaSuccess,
+        sitekey: siteKey,
+        callback: onRecaptchaSuccess,
         'expired-callback': () => onRecaptchaExpiredOrError('expired'),
         'error-callback': () => onRecaptchaExpiredOrError('error'),
-        size: 'invisible', badge: 'bottomright',
+        size: 'invisible',
+        badge: 'bottomright',
       });
       isRecaptchaRenderedRef.current = true;
+      console.log(`✅ [AuthModal] reCAPTCHA เรนเดอร์สำเร็จ (Widget ID: ${widgetIdRef.current})`);
     } catch (e) {
+      console.error('❌ [AuthModal] ข้อผิดพลาดในการเรนเดอร์ reCAPTCHA:', e);
       setError('เกิดข้อผิดพลาดในการตั้งค่า reCAPTCHA');
       setIsLoading(false);
       isRecaptchaRenderedRef.current = false;
@@ -318,36 +337,77 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (typeof window === 'undefined') return;
     const win = window as ReCaptchaWindow;
     if (win.grecaptcha && win.grecaptcha.ready) {
-      win.grecaptcha.ready(renderRecaptcha); return;
+      win.grecaptcha.ready(renderRecaptcha);
+      return;
     }
     const existingScript = document.getElementById('recaptcha-script');
     if (!existingScript) {
       const script = document.createElement('script');
       script.src = `https://www.google.com/recaptcha/api.js?onload=onRecaptchaApiLoad&render=explicit&hl=th`;
-      script.async = true; script.defer = true; script.id = "recaptcha-script";
+      script.async = true;
+      script.defer = true;
+      script.id = "recaptcha-script";
       document.head.appendChild(script);
       (window as any).onRecaptchaApiLoad = () => {
+        console.log("✅ [AuthModal] reCAPTCHA API script loaded via onload callback.");
         const winOnload = window as ReCaptchaWindow;
         if (winOnload.grecaptcha && winOnload.grecaptcha.ready) {
           winOnload.grecaptcha.ready(renderRecaptcha);
-        } else { setError("ไม่สามารถเริ่มต้น reCAPTCHA ได้ (grecaptcha not ready after onload)"); }
+        } else {
+          console.warn("⚠️ [AuthModal] grecaptcha ไม่พร้อมใช้งานหลังโหลดสคริปต์ (onload)");
+          setError("ไม่สามารถเริ่มต้น reCAPTCHA ได้ (grecaptcha not ready after onload)");
+        }
       };
-      script.onerror = () => setError("ไม่สามารถโหลด reCAPTCHA ได้");
+      script.onerror = () => {
+        console.error("❌ [AuthModal] ล้มเหลวในการโหลดสคริปต์ reCAPTCHA");
+        setError("ไม่สามารถโหลด reCAPTCHA ได้");
+      };
+    } else if (!(win.grecaptcha && win.grecaptcha.ready)) {
+        let attempts = 0;
+        const intervalId = setInterval(() => {
+            attempts++;
+            const winRetry = window as ReCaptchaWindow;
+            if (winRetry.grecaptcha && winRetry.grecaptcha.ready) {
+            clearInterval(intervalId);
+            winRetry.grecaptcha.ready(renderRecaptcha);
+            } else if (attempts > 25) {
+            clearInterval(intervalId);
+            console.error("❌ [AuthModal] Timeout: grecaptcha ไม่พร้อมใช้งาน (script existed)");
+            setError("ไม่สามารถเริ่มต้น reCAPTCHA (timeout, script existed)");
+            }
+        }, 200);
+    } else {
+        win.grecaptcha.ready(renderRecaptcha);
     }
   }, [renderRecaptcha]);
 
   const executeRecaptcha = useCallback(() => {
+    console.log("🔄 [AuthModal] เริ่ม execute reCAPTCHA...");
     if (typeof window === 'undefined') return;
     const win = window as ReCaptchaWindow;
+
     if (!siteKey) {
-      setError('การตั้งค่า reCAPTCHA ไม่ถูกต้อง (Site Key)'); setIsLoading(false); return;
+      setError('การตั้งค่า reCAPTCHA ไม่ถูกต้อง (Site Key)');
+      setIsLoading(false);
+      console.error("❌ [AuthModal] [executeRecaptcha] ไม่มี Site Key");
+      return;
     }
     if (!win.grecaptcha || typeof win.grecaptcha.execute !== 'function' || widgetIdRef.current === null) {
-      setError('reCAPTCHA ยังไม่พร้อมใช้งาน กรุณาลองอีกครั้ง'); setIsLoading(false);
-      isRecaptchaRenderedRef.current = false; loadRecaptchaScript(); return;
+      setError('reCAPTCHA ยังไม่พร้อมใช้งาน กรุณาลองอีกครั้ง');
+      setIsLoading(false);
+      console.warn("⚠️ [AuthModal] [executeRecaptcha] reCAPTCHA ไม่พร้อม execute, พยายามโหลดใหม่...");
+      isRecaptchaRenderedRef.current = false;
+      loadRecaptchaScript();
+      return;
     }
-    try { win.grecaptcha.execute(widgetIdRef.current); }
-    catch (error) { setError('เกิดข้อผิดพลาดในการเริ่ม reCAPTCHA'); setIsLoading(false); }
+    try {
+      console.log(`ℹ️ [AuthModal] [executeRecaptcha] Executing widget ID: ${widgetIdRef.current}`);
+      win.grecaptcha.execute(widgetIdRef.current);
+    } catch (error) {
+      console.error('❌ [AuthModal] [executeRecaptcha] ข้อผิดพลาด:', error);
+      setError('เกิดข้อผิดพลาดในการเริ่ม reCAPTCHA');
+      setIsLoading(false);
+    }
   }, [loadRecaptchaScript, siteKey]);
 
   const validateField = useCallback((field: keyof ValidationErrors, value: string): string | undefined => {
@@ -359,13 +419,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
     if (mode === 'signup') {
       if (field === 'username') {
-        if (!value.trim()) return 'กรุณาระบุชื่อผู้ใช้'; const usernameVal = validateUsername(value); if (!usernameVal.valid) return usernameVal.message;
+        if (!value.trim()) return 'กรุณาระบุชื่อผู้ใช้';
+        const usernameVal = validateUsername(value);
+        if (!usernameVal.valid) return usernameVal.message;
       }
       if (field === 'password') {
-        if (!value.trim()) return 'กรุณาระบุรหัสผ่าน'; const passwordVal = validatePassword(value); if (!passwordVal.valid) return passwordVal.message;
+        if (!value.trim()) return 'กรุณาระบุรหัสผ่าน';
+        const passwordVal = validatePassword(value);
+        if (!passwordVal.valid) return passwordVal.message;
       }
       if (field === 'confirmPassword') {
-        if (!value.trim()) return 'กรุณายืนยันรหัสผ่าน'; const confirmVal = validateConfirmPassword(currentModeData.password || '', value); if (!confirmVal.valid) return confirmVal.message;
+        if (!value.trim()) return 'กรุณายืนยันรหัสผ่าน';
+        const confirmVal = validateConfirmPassword(currentModeData.password || '', value);
+        if (!confirmVal.valid) return confirmVal.message;
       }
     } else if (mode === 'signin' && field === 'password') {
       if (!value.trim()) return 'กรุณาระบุรหัสผ่าน';
@@ -374,23 +440,32 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   }, [mode, formData]);
 
   const validateForm = useCallback((): ValidationErrors => {
-    const newErrors: ValidationErrors = {}; const currentModeData = formData[mode];
-    const idError = validateField('identifier', currentModeData.identifier); if (idError) newErrors.identifier = idError;
-    const pwError = validateField('password', currentModeData.password); if (pwError) newErrors.password = pwError;
+    const newErrors: ValidationErrors = {};
+    const currentModeData = formData[mode];
+    const idError = validateField('identifier', currentModeData.identifier);
+    if (idError) newErrors.identifier = idError;
+    const pwError = validateField('password', currentModeData.password);
+    if (pwError) newErrors.password = pwError;
     if (mode === 'signup') {
-      const unError = validateField('username', currentModeData.username || ''); if (unError) newErrors.username = unError;
-      const cpError = validateField('confirmPassword', currentModeData.confirmPassword || ''); if (cpError) newErrors.confirmPassword = cpError;
+      const unError = validateField('username', currentModeData.username || '');
+      if (unError) newErrors.username = unError;
+      const cpError = validateField('confirmPassword', currentModeData.confirmPassword || '');
+      if (cpError) newErrors.confirmPassword = cpError;
     }
     return newErrors;
   }, [formData, mode, validateField]);
 
   useEffect(() => {
-    const updateValidation = () => { if (Object.keys(touchedFields).length > 0) setValidationErrors(validateForm()); };
+    const updateValidation = () => {
+      if (Object.keys(touchedFields).length > 0) setValidationErrors(validateForm());
+    };
     const debouncedValidation = setTimeout(updateValidation, 300);
     return () => clearTimeout(debouncedValidation);
   }, [formData, touchedFields, validateForm]);
 
-  const handleBlur = (field: keyof ValidationErrors) => { setTouchedFields(prev => ({ ...prev, [field]: true })); };
+  const handleBlur = (field: keyof ValidationErrors) => {
+    setTouchedFields(prev => ({ ...prev, [field]: true }));
+  };
 
   const handleInputChange = (field: keyof FormDataFields) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
@@ -405,27 +480,47 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (modalContentRef.current && !modalContentRef.current.contains(event.target as Node)) { onClose(); }
+      if (modalContentRef.current && !modalContentRef.current.contains(event.target as Node)) {
+        onClose();
+      }
     }
     if (isOpen) {
-      document.body.style.overflow = 'hidden'; document.addEventListener('mousedown', handleClickOutside);
-      setTimeout(() => { document.getElementById(mode === 'signin' ? 'identifier' : 'identifier')?.focus(); }, 150);
-    } else { document.body.style.overflow = ''; }
-    return () => { document.removeEventListener('mousedown', handleClickOutside); document.body.style.overflow = ''; };
+      document.body.style.overflow = 'hidden';
+      document.addEventListener('mousedown', handleClickOutside);
+      setTimeout(() => {
+        const firstInput = document.getElementById(mode === 'signin' ? 'identifier' : 'identifier') as HTMLInputElement | null;
+        firstInput?.focus();
+      }, 150);
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.style.overflow = '';
+    };
   }, [isOpen, onClose, mode]);
 
   useEffect(() => {
-    setError(null); setSuccessMessage(null); setIsLoading(false);
-    setShowPassword(false); setShowConfirmPassword(false);
-    setRecaptchaAttempts(0); recaptchaTokenRef.current = null;
+    setError(null);
+    setSuccessMessage(null);
+    setIsLoading(false);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setRecaptchaAttempts(0);
+    recaptchaTokenRef.current = null;
     const win = window as ReCaptchaWindow;
     if (widgetIdRef.current !== null && win.grecaptcha && typeof win.grecaptcha.reset === 'function') {
         try { win.grecaptcha.reset(widgetIdRef.current); }
         catch(e) { console.warn("⚠️ [AuthModal] ไม่สามารถรีเซ็ต reCAPTCHA widget (useEffect [isOpen, mode]):", e); }
     }
+
     if (isOpen && mode === 'signup') {
-      if (!siteKey) { setError("การตั้งค่า reCAPTCHA ไม่สมบูรณ์ (Site Key)"); }
-      else if (!isRecaptchaRenderedRef.current) { loadRecaptchaScript(); }
+      if (!siteKey) {
+        setError("การตั้งค่า reCAPTCHA ไม่สมบูรณ์ (Site Key)");
+        console.error("❌ [AuthModal] ไม่มี Site Key สำหรับ reCAPTCHA ในโหมด signup (useEffect)");
+      } else if (!isRecaptchaRenderedRef.current) {
+        loadRecaptchaScript();
+      }
     }
   }, [isOpen, mode, loadRecaptchaScript, siteKey]);
 
@@ -439,51 +534,88 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const toggleShowConfirmPassword = () => setShowConfirmPassword(!showConfirmPassword);
 
   const preSignupValidation = (): boolean => {
-    setError(null); setSuccessMessage(null);
+    setError(null);
+    setSuccessMessage(null);
     setTouchedFields({ identifier: true, username: true, password: true, confirmPassword: true });
     const formErrors = validateForm();
     setValidationErrors(formErrors);
     if (Object.keys(formErrors).some(key => formErrors[key as keyof ValidationErrors])) {
-      setError("กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง"); return false;
+      setError("กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง");
+      return false;
     }
     return true;
   };
 
   const handleSignupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!preSignupValidation()) { setIsLoading(false); return; }
-    if (!siteKey) { setError("การตั้งค่า reCAPTCHA ไม่สมบูรณ์ (Site Key)"); setIsLoading(false); return; }
-    setIsLoading(true); setError(null); setSuccessMessage(null);
+    console.log("🚀 [AuthModal] ส่งฟอร์มสมัครสมาชิก...");
+    if (!preSignupValidation()) {
+      setIsLoading(false);
+      return;
+    }
+    if (!siteKey) {
+      setError("การตั้งค่า reCAPTCHA ไม่สมบูรณ์ (Site Key)");
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+    console.log("🔄 [AuthModal] เรียก executeRecaptcha สำหรับ signup...");
     executeRecaptcha();
   };
 
   const handleSigninSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); setSuccessMessage(null);
+    console.log("🚀 [AuthModal] ส่งฟอร์มลงชื่อเข้าใช้...");
+    setError(null);
+    setSuccessMessage(null);
     setTouchedFields({ identifier: true, password: true });
-    const formErrors = validateForm(); setValidationErrors(formErrors);
+    const formErrors = validateForm();
+    setValidationErrors(formErrors);
+
     if (formErrors.identifier || formErrors.password) {
-      setError("กรุณากรอกอีเมล/ชื่อผู้ใช้ และรหัสผ่านให้ถูกต้อง"); setIsLoading(false); return;
+      setError("กรุณากรอกอีเมล/ชื่อผู้ใช้ และรหัสผ่านให้ถูกต้อง");
+      setIsLoading(false);
+      return;
     }
     setIsLoading(true);
     try {
-      const result = await signInWithCredentials(formData.signin.identifier.trim(), formData.signin.password.trim());
-      if (result.error) { setError(result.error); }
-      else if (result.success && result.ok) {
+      const result = await signInWithCredentials(
+        formData.signin.identifier.trim(),
+        formData.signin.password.trim()
+      );
+      console.log("🔵 [AuthModal] การตอบกลับจาก signInWithCredentials (AuthContext):", result);
+
+      if (result.error) {
+        setError(result.error);
+      } else if (result.success && result.ok) {
         setSuccessMessage('ลงชื่อเข้าใช้สำเร็จ!');
+        console.log("✅ [AuthModal] ลงชื่อเข้าใช้สำเร็จ, User (SessionUser) จาก Context:", result.user);
         setTimeout(() => { onClose(); }, 1000);
-      } else { setError(result.error || 'การลงชื่อเข้าใช้ล้มเหลวโดยไม่ทราบสาเหตุ'); }
-    } catch (err: any) { setError(err.message || 'เกิดข้อผิดพลาดในการลงชื่อเข้าใช้');
-    } finally { setIsLoading(false); }
+      } else {
+        setError(result.error || 'การลงชื่อเข้าใช้ล้มเหลวโดยไม่ทราบสาเหตุ');
+      }
+    } catch (err: any) {
+      console.error('❌ [AuthModal] ข้อผิดพลาดในการลงชื่อเข้าใช้ (เรียก AuthContext):', err);
+      setError(err.message || 'เกิดข้อผิดพลาดในการลงชื่อเข้าใช้');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSocialSignIn = async (provider: 'google' | 'facebook' | 'twitter' | 'apple' | 'line') => {
-    setError(null); setSuccessMessage(null); setIsLoading(true);
-    try { await signInWithSocial(provider); }
-    catch (error: any) { setError(`ไม่สามารถลงชื่อเข้าใช้ด้วย ${provider}: ${error.message || 'เกิดข้อผิดพลาด'}`); setIsLoading(false); }
+    console.log(`🚀 [AuthModal] เริ่มลงชื่อเข้าใช้ด้วย ${provider}...`);
+    setError(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+    try {
+      await signInWithSocial(provider);
+    } catch (error: any) {
+      setError(`ไม่สามารถลงชื่อเข้าใช้ด้วย ${provider}: ${error.message || 'เกิดข้อผิดพลาด'}`);
+      setIsLoading(false);
+    }
   };
-  // ----------------------------------------------------
-
 
   if (!isOpen) return null;
 
@@ -528,41 +660,41 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         />
       )}
       {isOpen && (
-        // ✅ [แก้ไข] Modal Container: จัดการ padding ที่นี่เพื่อให้ modal content box คำนวณความสูงได้ถูกต้อง
         <motion.div
             key="auth-modal-container"
             initial="hidden"
             animate="visible"
             exit="exit"
             variants={modalVariants}
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-4" // ใช้ p-4 (1rem) เพื่อให้มี safe area รอบ modal
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4"
             role="dialog"
             aria-modal="true"
             aria-labelledby="auth-modal-title"
         >
-          {/* ✅ [แก้ไข] Modal Content Box: ใช้ max-h-full เพื่อให้ความสูงไม่เกิน container ที่มี padding แล้ว */}
-          {/* และใช้ flex flex-col เพื่อสร้าง layout สำหรับ header, content (scrollable), และ footer */}
           <div
             ref={modalContentRef}
-            className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border flex flex-col max-h-full overflow-hidden"
+            className="bg-card w-full max-w-[95vw] sm:w-[90%] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[95vh] sm:max-h-[90vh] md:max-h-[85vh] overflow-hidden"
           >
-            {/* Header: ส่วนนี้จะมีความสูงคงที่ตามเนื้อหา (ไม่ scroll) */}
-            <div className="relative flex-shrink-0 py-5 px-6 md:px-8 border-b border-border">
+            {/* Header */}
+            <div className="relative w-full flex-shrink-0 py-4 sm:py-5 px-4 sm:px-6 md:px-8 border-b border-border bg-gradient-to-r from-primary to-secondary">
               <h2 id="auth-modal-title" className="text-xl md:text-2xl font-bold text-center text-card-foreground">
                 {mode === 'signin' ? 'ลงชื่อเข้าใช้งาน' : 'สร้างบัญชีใหม่'}
               </h2>
               <motion.button
                 onClick={onClose}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors p-2 hover:bg-secondary rounded-full"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors duration-200 cursor-pointer p-2 hover:bg-secondary rounded-full"
                 aria-label="ปิดหน้าต่าง"
-                whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }}
+                whileHover={{ scale: 1.1, rotate: 90 }}
+                whileTap={{ scale: 0.9 }}
               >
                 <FiX size={22} />
               </motion.button>
               {mode === 'signup' && (
                <motion.button
-                  onClick={() => { setMode('signin'); setValidationErrors({}); setTouchedFields({}); setError(null); setSuccessMessage(null); }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 p-2 rounded-md hover:bg-secondary"
+                  onClick={() => {
+                    setMode('signin'); setValidationErrors({}); setTouchedFields({}); setError(null); setSuccessMessage(null);
+                  }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer flex items-center gap-1 p-2 rounded-md hover:bg-secondary"
                   aria-label="กลับไปที่ลงชื่อเข้าใช้"
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 >
@@ -572,18 +704,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               )}
             </div>
 
-            {/* ✅ [แก้ไข] Scrollable Content Area: ใช้ flex-1 เพื่อให้ยืดเต็มพื้นที่ที่เหลือ และ overflow-y-auto เพื่อให้เลื่อนได้ */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-6 md:p-8">
+            {/* ✅ [แก้ไข] Scrollable Content Area */}
+            {/* เพิ่ม `min-h-0` เพื่อให้ flexbox สามารถหด element นี้ได้อย่างถูกต้องบนหน้าจอขนาดเล็ก */}
+            {/* และทำให้ `overflow-y-auto` ทำงานได้ตามที่คาดหวัง */}
+            <div className="flex-1 overflow-y-auto min-h-0 auth-modal-scrollbar">
+              <div className="p-4 sm:p-6 md:p-8"> {/* ✅ [ปรับปรุง] ปรับ padding เพื่อให้ดูดีในทุกอุปกรณ์ */}
                 <motion.div
-                  className="flex flex-col md:flex-row md:items-start gap-8"
+                  className="flex flex-col md:flex-row md:items-start gap-6 sm:gap-8 md:gap-10"
                   key={mode}
                   initial={{ opacity: 0, x: mode === 'signin' ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3, ease: "easeOut" }}
                 >
                   {/* Form Section */}
-                  <div className="flex flex-col space-y-6 flex-1 w-full min-w-0">
+                  <div className="flex flex-col space-y-4 sm:space-y-6 flex-1 w-full min-w-0">
                     <div className="mb-1">
                       <h3 className="text-lg font-semibold text-foreground">
                         {mode === 'signin' ? 'เข้าสู่บัญชีของคุณ' : 'ข้อมูลบัญชีใหม่'}
@@ -594,46 +728,72 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     </div>
                     <form onSubmit={mode === 'signin' ? handleSigninSubmit : handleSignupSubmit} className="space-y-5">
                        <InputField
-                        id="identifier" label={mode === 'signin' ? "อีเมลหรือชื่อผู้ใช้" : "อีเมล"}
-                        type="text" value={formData[mode].identifier}
-                        onChange={handleInputChange('identifier')} onBlur={() => handleBlur('identifier')}
+                        id="identifier"
+                        label={mode === 'signin' ? "อีเมลหรือชื่อผู้ใช้" : "อีเมล"}
+                        type="text"
+                        value={formData[mode].identifier}
+                        onChange={handleInputChange('identifier')}
+                        onBlur={() => handleBlur('identifier')}
                         placeholder={mode === 'signin' ? "email@example.com หรือ username" : "your.email@example.com"}
-                        icon={<FiMail size={18} />} required
+                        icon={<FiMail size={18} />}
+                        required
                         autoComplete={mode === 'signin' ? "username" : "email"}
-                        error={validationErrors.identifier}
-                        touched={touchedFields.identifier}
+                        error={mode === 'signin' ? null : validationErrors.identifier}
+                        touched={mode === 'signin' ? false : touchedFields.identifier}
                       />
                       {mode === 'signup' && (
                         <InputField
-                          id="username" label="ชื่อผู้ใช้" type="text"
-                          value={formData.signup.username || ''} onChange={handleInputChange('username')}
-                          onBlur={() => handleBlur('username')} placeholder="username123"
-                          icon={<FiUser size={18} />} required autoComplete="username"
+                          id="username"
+                          label="ชื่อผู้ใช้"
+                          type="text"
+                          value={formData.signup.username || ''}
+                          onChange={handleInputChange('username')}
+                          onBlur={() => handleBlur('username')}
+                          placeholder="username123"
+                          icon={<FiUser size={18} />}
+                          required
+                          autoComplete="username"
                           helpText="3-20 ตัวอักษร (a-z, A-Z, 0-9, _, .)"
-                          error={validationErrors.username} touched={touchedFields.username}
+                          error={validationErrors.username}
+                          touched={touchedFields.username}
                         />
                       )}
                       <InputField
-                        id="password" label="รหัสผ่าน"
-                        type={showPassword ? "text" : "password"} value={formData[mode].password}
-                        onChange={handleInputChange('password')} onBlur={() => handleBlur('password')}
+                        id="password"
+                        label="รหัสผ่าน"
+                        type={showPassword ? "text" : "password"}
+                        value={formData[mode].password}
+                        onChange={handleInputChange('password')}
+                        onBlur={() => handleBlur('password')}
                         placeholder={mode === 'signup' ? "สร้างรหัสผ่าน" : "กรอกรหัสผ่าน"}
-                        icon={<FiLock size={18} />} required
+                        icon={<FiLock size={18} />}
+                        required
                         minLength={mode === 'signup' ? 8 : undefined}
                         autoComplete={mode === 'signin' ? "current-password" : "new-password"}
                         helpText={mode === 'signup' ? "อย่างน้อย 8 ตัว, มีตัวเลข, ตัวพิมพ์ใหญ่/เล็ก" : undefined}
-                        showPasswordToggle showPassword={showPassword} toggleShowPassword={toggleShowPassword}
-                        error={validationErrors.password} touched={touchedFields.password}
+                        showPasswordToggle
+                        showPassword={showPassword}
+                        toggleShowPassword={toggleShowPassword}
+                        error={mode === 'signin' ? null : validationErrors.password}
+                        touched={mode === 'signin' ? false : touchedFields.password}
                       />
                       {mode === 'signup' && (
                         <InputField
-                          id="confirmPassword" label="ยืนยันรหัสผ่าน"
-                          type={showConfirmPassword ? "text" : "password"} value={formData.signup.confirmPassword || ''}
-                          onChange={handleInputChange('confirmPassword')} onBlur={() => handleBlur('confirmPassword')}
-                          placeholder="ยืนยันรหัสผ่านอีกครั้ง" icon={<FiLock size={18} />}
-                          required autoComplete="new-password"
-                          showPasswordToggle showPassword={showConfirmPassword} toggleShowPassword={toggleShowConfirmPassword}
-                          error={validationErrors.confirmPassword} touched={touchedFields.confirmPassword}
+                          id="confirmPassword"
+                          label="ยืนยันรหัสผ่าน"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={formData.signup.confirmPassword || ''}
+                          onChange={handleInputChange('confirmPassword')}
+                          onBlur={() => handleBlur('confirmPassword')}
+                          placeholder="ยืนยันรหัสผ่านอีกครั้ง"
+                          icon={<FiLock size={18} />}
+                          required
+                          autoComplete="new-password"
+                          showPasswordToggle
+                          showPassword={showConfirmPassword}
+                          toggleShowPassword={toggleShowConfirmPassword}
+                          error={validationErrors.confirmPassword}
+                          touched={touchedFields.confirmPassword}
                         />
                       )}
                       <AnimatePresence>
@@ -645,21 +805,34 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         <div ref={recaptchaRef} id="recaptcha-container-signup" className="g-recaptcha mt-1"></div>
                       )}
 
-                      <motion.button type="submit" disabled={isLoading}
-                        className="w-full py-3.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-md shadow-lg flex items-center justify-center gap-2.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+                      <motion.button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-3.5 bg-primary hover:bg-primary/90 cursor-pointer text-primary-foreground font-medium rounded-md shadow-lg flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
                         aria-label={mode === 'signin' ? "ลงชื่อเข้าใช้" : "สร้างบัญชี"}
-                        whileHover={{ scale: isLoading ? 1 : 1.03 }} whileTap={{ scale: isLoading ? 1 : 0.97 }}
-                        animate={isLoading ? { opacity: [1, 0.7, 1] } : {}} transition={isLoading ? { opacity: { duration: 1, repeat: Infinity } } : { duration: 0.2 }}>
-                        {isLoading ? ( <> <LoadingSpinner size="sm" /> <span>กำลังดำเนินการ...</span> </> )
-                         : mode === 'signin' ? ( <> <FiLogIn size={20} /> <span className="text-base">ลงชื่อเข้าใช้</span> </> )
-                         : ( <> <FiUserPlus size={20} /> <span className="text-base">สร้างบัญชี</span> </> )}
+                        whileHover={{ scale: isLoading ? 1 : 1.03, boxShadow: "var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)" }}
+                        whileTap={{ scale: isLoading ? 1 : 0.97 }}
+                        animate={isLoading ? { opacity: [1, 0.7, 1] } : {}}
+                        transition={isLoading ? { opacity: { duration: 1, repeat: Infinity } } : { duration: 0.2 }}
+                      >
+                        {isLoading ? (
+                          <> <LoadingSpinner size="sm" color="currentColor" /> <span>กำลังดำเนินการ...</span> </>
+                        ) : mode === 'signin' ? (
+                          <> <FiLogIn size={20} /> <span className="text-base">ลงชื่อเข้าใช้</span> </>
+                        ) : (
+                          <> <FiUserPlus size={20} /> <span className="text-base">สร้างบัญชี</span> </>
+                        )}
                       </motion.button>
 
                       {mode === 'signup' && (
                         <p className="text-center text-xs text-muted-foreground mt-3">
                           เว็บไซต์นี้ป้องกันด้วย Google reCAPTCHA <br/>
-                          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary"> นโยบายความเป็นส่วนตัว </a> &{' '}
-                          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary"> ข้อกำหนดการให้บริการ </a> ของ Google มีผลบังคับใช้
+                          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
+                            นโยบายความเป็นส่วนตัว
+                          </a> &{' '}
+                          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
+                            ข้อกำหนดการให้บริการ
+                          </a> ของ Google มีผลบังคับใช้
                         </p>
                       )}
                       {mode === 'signin' && (
@@ -680,12 +853,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       </div>
                       <div className="space-y-3">
                         <SocialButton provider="google" icon={<FaGoogle />} label="Google" onClick={() => handleSocialSignIn('google')} disabled={isLoading} className="w-full"/>
-                        <SocialButton provider="facebook" icon={<FaFacebook />} label="Facebook (ปิดใช้งาน)" onClick={() => {}} disabled={true} className="w-full opacity-50 cursor-not-allowed"/>
+                        <SocialButton provider="facebook" icon={<FaFacebook />} label="Facebook (ปิดใช้งานชั่วคราว)" onClick={() => {}} disabled={true} className="w-full opacity-50 cursor-not-allowed"/>
                         <div className="grid grid-cols-2 gap-3">
                           <SocialButton provider="twitter" icon={<FaTwitter />} label="Twitter / X" onClick={() => handleSocialSignIn('twitter')} disabled={isLoading} />
-                          <SocialButton provider="apple" icon={<FaApple />} label="Apple (ปิดใช้งาน)" onClick={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
+                          <SocialButton provider="apple" icon={<FaApple />} label="Apple (ปิดใช้งานชั่วคราว)" onClick={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
                         </div>
-                        <SocialButton provider="line" icon={<SiLine />} label="Line (ปิดใช้งาน)" onClick={() => {}} disabled={true} className="w-full opacity-50 cursor-not-allowed"/>
+                        <SocialButton provider="line" icon={<SiLine />} label="Line (ปิดใช้งานชั่วคราว)" onClick={() => {}} disabled={true} className="w-full opacity-50 cursor-not-allowed"/>
                       </div>
                     </div>
                   )}
@@ -693,14 +866,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </div>
             </div>
 
-            {/* Footer: ส่วนนี้จะมีความสูงคงที่ตามเนื้อหา (ไม่ scroll) */}
-            <div className="flex-shrink-0 border-t border-border p-6 bg-secondary/30">
+            {/* Footer */}
+            <div className="flex-shrink-0 border-t border-border p-4 sm:p-6 bg-secondary/30">
               <div className="text-center text-sm text-muted-foreground">
                 {mode === 'signin' ? (
                   <>
                     ยังไม่มีบัญชี?{' '}
                     <motion.button type="button" onClick={() => { setMode('signup'); setValidationErrors({}); setTouchedFields({}); setError(null); setSuccessMessage(null); }}
-                      className="text-primary hover:text-primary/80 font-medium hover:underline"
+                      className="text-primary hover:text-primary/80 font-medium hover:underline cursor-pointer"
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                       สร้างบัญชีใหม่
                     </motion.button>
@@ -709,7 +882,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   <>
                     มีบัญชีอยู่แล้ว?{' '}
                     <motion.button type="button" onClick={() => { setMode('signin'); setValidationErrors({}); setTouchedFields({}); setError(null); setSuccessMessage(null); }}
-                      className="text-primary hover:text-primary/80 font-medium hover:underline"
+                      className="text-primary hover:text-primary/80 font-medium hover:underline cursor-pointer"
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                       ลงชื่อเข้าใช้
                     </motion.button>
