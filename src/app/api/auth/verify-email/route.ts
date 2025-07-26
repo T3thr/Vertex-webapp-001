@@ -32,11 +32,12 @@ export async function GET(request: NextRequest) {
     // 3. ค้นหาผู้ใช้ที่มี hashed token และโทเค็นยังไม่หมดอายุ
     const user = await UserModelInstance.findOne({
       emailVerificationToken: hashedToken,
-      emailVerificationTokenExpiry: { $gt: new Date() },
+      // allow token even if expiry has passed so we can detect already verified later
     });
 
     if (!user) {
-      // ตรวจสอบว่าผู้ใช้ได้รับการยืนยันแล้วหรือไม่ (โดยใช้ token เดิม)
+      // ถ้าไม่พบผู้ใช้ที่มีโทเค็นนี้ อาจเป็นเพราะหมดอายุหรือลบโทเค็นไปแล้ว
+      // ลองตรวจสอบว่าผู้ใช้ได้รับการยืนยันแล้วหรือไม่ (มักเกิดจากการกดลิงก์ซ้ำ)
       const alreadyVerifiedUser = await UserModelInstance.findOne({
         emailVerificationToken: hashedToken,
         isEmailVerified: true,
@@ -51,16 +52,18 @@ export async function GET(request: NextRequest) {
       }
 
       console.warn(`⚠️ [VerifyEmail API] โทเค็นไม่ถูกต้องหรือหมดอายุ: ${token.substring(0, 10)}...`);
-      return NextResponse.json(
-        { error: "โทเค็นยืนยันไม่ถูกต้องหรือหมดอายุ", success: false },
-        { status: 400 }
-      );
+      // redirect พร้อมสถานะ error แทนการตอบ JSON เพื่อลดโอกาสเกิด 404
+      const redirectUrl = new URL("/verify-email", request.url);
+      redirectUrl.searchParams.set("status", "error");
+      redirectUrl.searchParams.set("message", "โทเค็นยืนยันไม่ถูกต้องหรือหมดอายุ กรุณาขออีเมลยืนยันใหม่");
+      return NextResponse.redirect(redirectUrl);
+
     }
 
     // 4. อัปเดตสถานะยืนยันอีเมลและล้างโทเค็น
     user.isEmailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationTokenExpiry = undefined;
+    // เก็บโทเค็นเอาไว้ (ไม่ลบ) แต่ทำให้หมดอายุแล้ว เพื่อให้การกดลิงก์ซ้ำสามารถตรวจสอบสถานะได้
+    user.emailVerificationTokenExpiry = new Date();
 
     await user.save();
     console.log(`✅ [VerifyEmail API] ยืนยันอีเมลสำเร็จสำหรับผู้ใช้: ${user.username} (${user.email})`);

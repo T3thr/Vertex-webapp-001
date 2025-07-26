@@ -610,7 +610,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             animate="visible"
             exit="exit"
             variants={modalVariants}
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4"
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 overflow-hidden"
             role="dialog"
             aria-modal="true"
             aria-labelledby="auth-modal-title"
@@ -622,7 +622,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           */}
           <div
             ref={modalContentRef}
-            className="bg-card w-full max-w-[95vw] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[95vh] sm:max-h-[90vh] md:max-h-[85vh] overflow-hidden"
+            className="bg-card w-full max-w-[95vw] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh] sm:max-h-[85vh] md:max-h-[80vh] overflow-hidden"
           >
             {/* Header: ส่วนหัวคงที่ ไม่เลื่อนตาม */}
             <div className="relative w-full flex-shrink-0 py-4 sm:py-5 px-4 sm:px-6 md:px-8 border-b border-border bg-gradient-to-r from-primary to-secondary">
@@ -658,7 +658,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               2. `overflow-y-auto`: ให้มี scrollbar แนวตั้งเมื่อเนื้อหาล้น
               3. `min-h-0`: **คลาสสำคัญที่สุด** อนุญาตให้ flex item นี้หดตัวได้ต่ำกว่าขนาดเนื้อหาจริงของมัน ทำให้ scrollbar ทำงานได้ถูกต้อง
             */}
-            <div className="flex-1 overflow-y-auto min-h-0 auth-modal-scrollbar">
+            <div className="flex-1 overflow-y-auto min-h-0 auth-modal-scrollbar" style={{ maxHeight: 'calc(90vh - 140px)' }}>
               <div className="p-4 sm:p-6 md:p-8">
                 <motion.div
                   className="flex flex-col md:flex-row md:items-start gap-6 sm:gap-8 md:gap-10"
@@ -689,8 +689,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         icon={<FiMail size={18} />}
                         required
                         autoComplete={mode === 'signin' ? "username" : "email"}
-                        error={validationErrors.identifier}
-                        touched={touchedFields.identifier}
+                        error={mode === 'signin' ? null : validationErrors.identifier}
+                        touched={mode === 'signin' ? false : touchedFields.identifier}
                       />
                       {mode === 'signup' && (
                         <InputField
@@ -725,8 +725,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         showPasswordToggle
                         showPassword={showPassword}
                         toggleShowPassword={toggleShowPassword}
-                        error={validationErrors.password}
-                        touched={touchedFields.password}
+                        error={mode === 'signin' ? null : validationErrors.password}
+                        touched={mode === 'signin' ? false : touchedFields.password}
                       />
                       {mode === 'signup' && (
                         <InputField

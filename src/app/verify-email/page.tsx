@@ -47,7 +47,7 @@ function VerifyEmailContent() {
             status: 'success',
             message: `ยืนยันอีเมลสำเร็จสำหรับ ${redirectedEmail || 'บัญชีของคุณ'}! คุณสามารถเข้าสู่ระบบได้แล้ว`,
           });
-          setTimeout(() => router.push('/auth/signin'), 3000);
+          setTimeout(() => router.push('/'), 3000);
         } else {
           setState({
             status: 'error',
@@ -74,7 +74,7 @@ function VerifyEmailContent() {
         status: 'success',
         message: `ยืนยันอีเมลสำเร็จสำหรับ ${email}! คุณสามารถเข้าสู่ระบบได้แล้ว`,
       });
-      setTimeout(() => router.push('/auth/signin'), 3000);
+      setTimeout(() => router.push('/'), 3000);
     } else if (status === 'already-verified' && email) {
       setState({
         status: 'already-verified',
@@ -104,13 +104,13 @@ function VerifyEmailContent() {
             <CheckCircle className="w-16 h-16 text-green-500" />
             <p className="text-xl font-semibold text-foreground">{state.message}</p>
             <p className="text-sm text-muted-foreground">
-              กำลังนำคุณไปยังหน้าเข้าสู่ระบบ...
+              กำลังนำคุณไปยังหน้าหลักเพื่อเข้าสู่ระบบ...
             </p>
             <Link
-              href="/auth/signin"
+              href="/"
               className="text-primary hover:underline transition-colors"
             >
-              ไปที่หน้าเข้าสู่ระบบตอนนี้เลย!
+              ไปที่หน้าหลักตอนนี้เลย!
             </Link>
           </div>
         );
