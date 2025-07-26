@@ -1,6 +1,6 @@
 // src/components/layouts/AuthModal.tsx
-// ✅ [แก้ไข] ผสานข้อดีจากสองเวอร์ชันเพื่อให้ Responsive อย่างสมบูรณ์
-// ใช้ Layout เดิมที่สวยงามบน Desktop และใช้เทคนิคการจัดการ Overflow เพื่อแก้ปัญหาบน Mobile
+// ✅ [ฉบับสมบูรณ์] ผสานการแสดงผลที่ถูกต้องสำหรับ Desktop และ Mobile
+// ใช้โครงสร้าง responsive จากโค้ดชุดแรก และยืนยันการใช้ `min-h-0` เพื่อแก้ปัญหาบน Mobile
 
 "use client";
 
@@ -31,8 +31,8 @@ import { SiLine } from 'react-icons/si';
 import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
 import Link from 'next/link';
 
+// --- โค้ดส่วน Interface และ Components ย่อย (คงเดิมทั้งหมด) ---
 
-// ขยาย interface สำหรับ Window เพื่อรองรับ grecaptcha (คงเดิม)
 interface ReCaptchaWindow extends Window {
   grecaptcha?: {
     render: (container: HTMLElement | string, parameters: {
@@ -58,7 +58,6 @@ interface FormDataFields {
   confirmPassword?: string;
 }
 
-// LoadingSpinner Component (คงเดิม)
 export const LoadingSpinner = ({ size = "md", color = "currentColor" }: { size?: "sm" | "md" | "lg", color?: string }) => {
   const sizeClass = { sm: "w-4 h-4", md: "w-6 h-6", lg: "w-8 h-8" };
   return (
@@ -73,7 +72,6 @@ export const LoadingSpinner = ({ size = "md", color = "currentColor" }: { size?:
   );
 };
 
-// InputField Component (คงเดิม)
 interface InputFieldProps {
   id: string;
   label: string;
@@ -128,7 +126,6 @@ const InputField = ({
   );
 };
 
-// SocialButton Component (คงเดิม)
 interface SocialButtonProps {
   provider: 'google' | 'facebook' | 'twitter' | 'apple' | 'line';
   icon: React.ReactNode;
@@ -154,7 +151,6 @@ const SocialButton = ({ provider, icon, label, onClick, disabled, className }: S
   );
 };
 
-// Alert Component (คงเดิม)
 interface AlertProps { type: 'error' | 'success'; message: string; }
 const Alert = ({ type, message }: AlertProps) => {
   const styles = {
@@ -167,6 +163,8 @@ const Alert = ({ type, message }: AlertProps) => {
     </motion.div>
   );
 };
+
+// --- จบส่วน Components ย่อย ---
 
 interface AuthModalProps { isOpen: boolean; onClose: () => void; }
 type AuthMode = 'signin' | 'signup';
@@ -209,7 +207,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     signInWithCredentials,
   } = useAuth();
 
-  // --- All logic functions remain unchanged ---
+  // --- โค้ดส่วน Logic ทั้งหมด (คงเดิม) ---
   const updateFormData = (field: keyof FormDataFields, value: string) => {
     setFormDataState(prev => ({ ...prev, [mode]: { ...prev[mode], [field]: value } }));
   };
@@ -236,6 +234,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       const signupResult = await authContextSignUp(
         signupData.email, signupData.username, signupData.password, signupData.recaptchaToken
       );
+
       if (signupResult.error) {
         setError(signupResult.error);
         setRecaptchaAttempts(prev => prev + 1);
@@ -562,7 +561,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setIsLoading(false);
     }
   };
-  // ---------------------------------------------
+  // --- จบส่วน Logic ---
 
 
   if (!isOpen) return null;
@@ -614,25 +613,24 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             animate="visible"
             exit="exit"
             variants={modalVariants}
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4"
             role="dialog"
             aria-modal="true"
             aria-labelledby="auth-modal-title"
         >
-          {/* ✅ [แก้ไข] ใช้ max-h-full เพราะ container หลักมี padding (p-4) แล้ว */}
-          {/* และใช้ flex flex-col เพื่อสร้าง layout สำหรับ header, content (scrollable), และ footer */}
+          {/* [✅ ผสานรวม] ใช้โครงสร้าง HTML และ Class จากโค้ดชุดแรกที่รองรับ Desktop */}
           <div
             ref={modalContentRef}
-            className="bg-card w-full max-w-[95vw] sm:max-w-md md:max-w-3xl lg:max-w-4xl rounded-xl shadow-2xl border border-border flex flex-col max-h-full overflow-hidden"
+            className="bg-card w-full max-w-[95vw] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[95vh] sm:max-h-[90vh] md:max-h-[85vh] overflow-hidden"
           >
-            {/* Header: ส่วนนี้จะมีความสูงคงที่ (ไม่ scroll) */}
-            <div className="relative flex-shrink-0 py-4 sm:py-5 px-6 md:px-8 border-b border-border">
+            {/* Header: ส่วนหัวคงที่ ไม่เลื่อนตาม */}
+            <div className="relative w-full flex-shrink-0 py-4 sm:py-5 px-4 sm:px-6 md:px-8 border-b border-border bg-gradient-to-r from-primary to-secondary">
               <h2 id="auth-modal-title" className="text-xl md:text-2xl font-bold text-center text-card-foreground">
                 {mode === 'signin' ? 'ลงชื่อเข้าใช้งาน' : 'สร้างบัญชีใหม่'}
               </h2>
               <motion.button
                 onClick={onClose}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors p-2 hover:bg-secondary rounded-full"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors duration-200 cursor-pointer p-2 hover:bg-secondary rounded-full"
                 aria-label="ปิดหน้าต่าง"
                 whileHover={{ scale: 1.1, rotate: 90 }}
                 whileTap={{ scale: 0.9 }}
@@ -644,7 +642,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   onClick={() => {
                     setMode('signin'); setValidationErrors({}); setTouchedFields({}); setError(null); setSuccessMessage(null);
                   }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 p-2 rounded-md hover:bg-secondary"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer flex items-center gap-1 p-2 rounded-md hover:bg-secondary"
                   aria-label="กลับไปที่ลงชื่อเข้าใช้"
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 >
@@ -654,18 +652,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               )}
             </div>
 
-            {/* ✅ [แก้ไข] Scrollable Content Area: ใช้ flex-1 และ min-h-0 เพื่อให้ยืดและหดได้ถูกต้อง */}
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <div className="p-6 md:p-8">
+            {/* [✅ ผสานรวม] Scrollable Content Area */}
+            {/* เพิ่ม `min-h-0` เพื่อให้ flexbox สามารถหด element นี้ได้อย่างถูกต้องบนหน้าจอขนาดเล็ก */}
+            {/* ทำให้ `overflow-y-auto` ทำงานได้ตามที่คาดหวัง และแก้ปัญหา modal ล้นจอ */}
+            <div className="flex-1 overflow-y-auto min-h-0 auth-modal-scrollbar">
+              <div className="p-4 sm:p-6 md:p-8">
                 <motion.div
-                  className="flex flex-col md:flex-row md:items-start gap-8"
+                  className="flex flex-col md:flex-row md:items-start gap-6 sm:gap-8 md:gap-10"
                   key={mode}
                   initial={{ opacity: 0, x: mode === 'signin' ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3, ease: "easeOut" }}
                 >
                   {/* Form Section */}
-                  <div className="flex flex-col space-y-5 flex-1 w-full min-w-0">
+                  <div className="flex flex-col space-y-4 sm:space-y-6 flex-1 w-full min-w-0">
                     <div className="mb-1">
                       <h3 className="text-lg font-semibold text-foreground">
                         {mode === 'signin' ? 'เข้าสู่บัญชีของคุณ' : 'ข้อมูลบัญชีใหม่'}
@@ -758,7 +758,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         disabled={isLoading}
                         className="w-full py-3.5 bg-primary hover:bg-primary/90 cursor-pointer text-primary-foreground font-medium rounded-md shadow-lg flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
                         aria-label={mode === 'signin' ? "ลงชื่อเข้าใช้" : "สร้างบัญชี"}
-                        whileHover={{ scale: isLoading ? 1 : 1.03 }}
+                        whileHover={{ scale: isLoading ? 1 : 1.03, boxShadow: "var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)" }}
                         whileTap={{ scale: isLoading ? 1 : 0.97 }}
                         animate={isLoading ? { opacity: [1, 0.7, 1] } : {}}
                         transition={isLoading ? { opacity: { duration: 1, repeat: Infinity } } : { duration: 0.2 }}
@@ -793,9 +793,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     </form>
                   </div>
 
-                  {/* Social Login Section */}
+                  {/* Social Login Section (แสดงเฉพาะบน Desktop และในโหมด signin) */}
                   {mode === 'signin' && (
-                    <div className="flex flex-col w-full md:w-auto md:max-w-xs mx-auto space-y-4 md:border-l md:border-border md:pl-8 pt-6 md:pt-0">
+                    <div className="flex flex-col w-full md:w-auto md:max-w-xs mx-auto space-y-4 md:border-l md:border-border md:pl-8 lg:pl-10 pt-6 md:pt-0">
                       <div className="mb-2 text-center md:text-left">
                         <h3 className="text-base font-semibold text-foreground">หรือเข้าสู่ระบบด้วย</h3>
                       </div>
@@ -814,8 +814,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </div>
             </div>
 
-            {/* Footer: ส่วนนี้จะมีความสูงคงที่ (ไม่ scroll) */}
-            <div className="flex-shrink-0 border-t border-border p-5 bg-secondary/30">
+            {/* Footer: ส่วนท้ายคงที่ ไม่เลื่อนตาม */}
+            <div className="flex-shrink-0 border-t border-border p-4 sm:p-6 bg-secondary/30">
               <div className="text-center text-sm text-muted-foreground">
                 {mode === 'signin' ? (
                   <>
