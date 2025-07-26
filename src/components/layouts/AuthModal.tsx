@@ -618,7 +618,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             aria-modal="true"
             aria-labelledby="auth-modal-title"
         >
-          {/* [✅ ผสานรวม] ใช้โครงสร้าง HTML และ Class จากโค้ดชุดแรกที่รองรับ Desktop */}
           <div
             ref={modalContentRef}
             className="bg-card w-full max-w-[95vw] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[95vh] sm:max-h-[90vh] md:max-h-[85vh] overflow-hidden"
@@ -652,9 +651,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               )}
             </div>
 
-            {/* [✅ ผสานรวม] Scrollable Content Area */}
-            {/* เพิ่ม `min-h-0` เพื่อให้ flexbox สามารถหด element นี้ได้อย่างถูกต้องบนหน้าจอขนาดเล็ก */}
-            {/* ทำให้ `overflow-y-auto` ทำงานได้ตามที่คาดหวัง และแก้ปัญหา modal ล้นจอ */}
+            {/* ✅ [แก้ไขปัญหา Responsive] Scrollable Content Area */}
+            {/* การเพิ่ม `min-h-0` คือหัวใจสำคัญที่ทำให้ Flexbox สามารถหด element นี้ได้อย่างถูกต้อง */}
+            {/* ส่งผลให้ `overflow-y-auto` ทำงานได้ตามที่คาดหวัง และแก้ปัญหา modal ล้นจอ */}
             <div className="flex-1 overflow-y-auto min-h-0 auth-modal-scrollbar">
               <div className="p-4 sm:p-6 md:p-8">
                 <motion.div
@@ -793,7 +792,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     </form>
                   </div>
 
-                  {/* Social Login Section (แสดงเฉพาะบน Desktop และในโหมด signin) */}
+                  {/* Social Login Section */}
                   {mode === 'signin' && (
                     <div className="flex flex-col w-full md:w-auto md:max-w-xs mx-auto space-y-4 md:border-l md:border-border md:pl-8 lg:pl-10 pt-6 md:pt-0">
                       <div className="mb-2 text-center md:text-left">
