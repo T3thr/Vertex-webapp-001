@@ -5,7 +5,7 @@
 // แก้ไข: เพิ่มการแปลงข้อมูล apiUser (IUser) เป็น SessionUser อย่างละเอียด และแก้ไข import
 "use client";
 
-import { createContext, useContext, useCallback, ReactNode, useState, useEffect, useMemo } from "react";
+import { createContext, useContext, useCallback, ReactNode, useState, useEffect } from "react";
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
 import {
   SessionUser,
@@ -188,22 +188,13 @@ const transformApiUserToSessionUser = (apiUser: IUser): SessionUser => {
 
 // AuthProvider component
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const { data: session, status: nextAuthStatus } = useSession();
-  const queryClient = useQueryClient();
-  const [loading, setLoading] = useState(false);
+  const { data: session, status: nextAuthStatus, update: updateNextAuthSession } = useSession();
+  // session.user จาก useSession() ควรจะมี type เป็น SessionUser อยู่แล้ว
+  // เนื่องจาก options.ts มีการแปลงข้อมูลใน callback jwt และ session
+  const user = session?.user as SessionUser | null;
+  const [loading, setLoading] = useState<boolean>(false); // สถานะ loading ของ AuthContext เอง
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  // Track hydration to prevent SSR/client mismatch
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
-
-  // แปลงข้อมูล session จาก NextAuth เป็น SessionUser
-  // Use session user data consistently across SSR and client
-  const user: SessionUser | null = useMemo(() => {
-    return session?.user ? (session.user as SessionUser) : null;
-  }, [session?.user]);
+  const queryClient = useQueryClient(); // สำหรับจัดการ cache ของ React Query (ถ้าใช้)
 
   // useEffect สำหรับจัดการ authError เมื่อสถานะ session เปลี่ยนแปลง
   useEffect(() => {
@@ -285,6 +276,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           // แปลงข้อมูลผู้ใช้จาก API (IUser) เป็น SessionUser
           const sessionUserPayload = transformApiUserToSessionUser(apiUserFromBackend);
 
+          await updateNextAuthSession(); // สั่งให้ NextAuth อัปเดต session ฝั่ง client
           setAuthError(null);
           // คืนค่า user ที่แปลงแล้ว เพื่อให้ UI สามารถนำไปใช้ได้ทันทีหากต้องการ
           return { success: true, ok: true, user: sessionUserPayload };
@@ -304,7 +296,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setLoading(false); // สิ้นสุด loading
       }
     },
-    [queryClient, loading]
+    [queryClient, loading, updateNextAuthSession]
   );
 
   // ฟังก์ชันสำหรับล็อกอินด้วย Social Provider
@@ -321,8 +313,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         // NextAuth จะจัดการ OAuth flow ทั้งหมด รวมถึงการเรียก JWT/session callbacks
         // ซึ่งใน options.ts มีการใช้ toSessionUserFormat เพื่อแปลงข้อมูลแล้ว
         const result = await nextAuthSignIn(provider, {
-          callbackUrl: window.location.pathname, // เพิ่มพารามิเตอร์ callbackUrl
           redirect: true, // สำหรับ OAuth มักจะ redirect ไปหน้า provider
+          callbackUrl: "/", // URL ที่จะ redirect กลับมาหลังล็อกอินสำเร็จ
         });
 
         // หากตั้ง redirect: true, โค้ดส่วนนี้อาจจะไม่ถูกเรียกถ้าล็อกอินสำเร็จ (เพราะ browser จะ redirect ไปแล้ว)
@@ -455,7 +447,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-function updateNextAuthSession() {
-  throw new Error("Function not implemented.");
-}
