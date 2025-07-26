@@ -1,6 +1,6 @@
 // src/components/layouts/AuthModal.tsx
-// ✅ [ฉบับสมบูรณ์] ผสานการแสดงผลที่ถูกต้องสำหรับ Desktop และ Mobile
-// ใช้โครงสร้าง responsive จากโค้ดชุดแรก และยืนยันการใช้ `min-h-0` เพื่อแก้ปัญหาบน Mobile
+// ✅ [ฉบับสมบูรณ์] แก้ไขปัญหา Responsive บน Mobile โดยใช้ `min-h-0`
+// คงโครงสร้างและฟังก์ชันการทำงานเดิมทั้งหมด
 
 "use client";
 
@@ -28,8 +28,6 @@ import {
   FaApple
 } from 'react-icons/fa';
 import { SiLine } from 'react-icons/si';
-import { SessionUser } from "@/app/api/auth/[...nextauth]/options";
-import Link from 'next/link';
 
 // --- โค้ดส่วน Interface และ Components ย่อย (คงเดิมทั้งหมด) ---
 
@@ -563,7 +561,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
   // --- จบส่วน Logic ---
 
-
   if (!isOpen) return null;
 
   if (mode === 'signup' && !siteKey) {
@@ -618,6 +615,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             aria-modal="true"
             aria-labelledby="auth-modal-title"
         >
+          {/* [📱 จุดสำคัญในการทำให้ Responsive]
+            1. `flex flex-col`: กำหนดให้ layout เป็นแนวตั้ง (Header, Content, Footer)
+            2. `max-h-[95vh]`: จำกัดความสูงสูงสุดของ modal ไม่ให้เกิน 95% ของความสูงหน้าจอ
+            3. `overflow-hidden`: ซ่อนส่วนที่ล้นออกไปจากกรอบ (สำคัญสำหรับมุมโค้ง)
+          */}
           <div
             ref={modalContentRef}
             className="bg-card w-full max-w-[95vw] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[95vh] sm:max-h-[90vh] md:max-h-[85vh] overflow-hidden"
@@ -651,9 +653,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               )}
             </div>
 
-            {/* ✅ [แก้ไขปัญหา Responsive] Scrollable Content Area */}
-            {/* การเพิ่ม `min-h-0` คือหัวใจสำคัญที่ทำให้ Flexbox สามารถหด element นี้ได้อย่างถูกต้อง */}
-            {/* ส่งผลให้ `overflow-y-auto` ทำงานได้ตามที่คาดหวัง และแก้ปัญหา modal ล้นจอ */}
+            {/* [📱 จุดแก้ไขหลัก] Scrollable Content Area
+              1. `flex-1`: ทำให้ content นี้ยืดเพื่อเติมเต็มพื้นที่ที่เหลือระหว่าง Header กับ Footer
+              2. `overflow-y-auto`: ให้มี scrollbar แนวตั้งเมื่อเนื้อหาล้น
+              3. `min-h-0`: **คลาสสำคัญที่สุด** อนุญาตให้ flex item นี้หดตัวได้ต่ำกว่าขนาดเนื้อหาจริงของมัน ทำให้ scrollbar ทำงานได้ถูกต้อง
+            */}
             <div className="flex-1 overflow-y-auto min-h-0 auth-modal-scrollbar">
               <div className="p-4 sm:p-6 md:p-8">
                 <motion.div
