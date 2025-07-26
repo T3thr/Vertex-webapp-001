@@ -111,14 +111,14 @@ export default function JulyBonusBanner({ className = "" }: JulyBonusBannerProps
             <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4zIj48Y2lyY2xlIGN4PSIzMCIgY3k9IjMwIiByPSIyIi8+PC9nPjwvZz48L3N2Zz4=')]" />
           </div>
 
-          {/* Close Button */}
+          {/* Close Button 
           <button
             onClick={closeBanner}
             className="absolute top-4 right-4 p-1 rounded-full bg-black/20 hover:bg-black/30 transition-colors"
             aria-label="ปิดแบนเนอร์"
           >
             <X size={20} className="text-white" />
-          </button>
+          </button>*/}
 
           <div className="relative flex items-center gap-4">
             {/* Icon Section */}

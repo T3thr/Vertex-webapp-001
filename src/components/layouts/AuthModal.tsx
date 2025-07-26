@@ -703,7 +703,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             animate="visible"
             exit="exit"
             variants={modalVariants}
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-4" // p-4 เพื่อให้มี space รอบ modal บนจอมือถือ
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4" // p-2 on mobile, p-4 on larger screens
             role="dialog"
             aria-modal="true"
             aria-labelledby="auth-modal-title" // ต้องมี id นี้ที่ h2 title
@@ -711,11 +711,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           {/* Modal Content Box */}
           <div
             ref={modalContentRef} // Ref สำหรับการคลิกนอก modal
-            className="bg-card w-full sm:w-[90%] md:w-[650px] lg:w-[750px] rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh] md:max-h-[85vh] overflow-hidden"
+            className="bg-card w-full max-w-[95vw] sm:w-[90%] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[750px] rounded-xl sm:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[95vh] sm:max-h-[90vh] md:max-h-[85vh] overflow-hidden"
             // เพิ่ม shadow-2xl และ border เพื่อให้เด่นชัด
           >
             {/* Header */}
-            <div className="relative w-full py-5 px-6 md:px-8 border-b border-border bg-gradient-to-r from-primary to-secondary">
+            <div className="relative w-full py-4 sm:py-5 px-4 sm:px-6 md:px-8 border-b border-border bg-gradient-to-r from-primary to-secondary">
               <h2 id="auth-modal-title" className="text-xl md:text-2xl font-bold text-center text-card-foreground">
                 {mode === 'signin' ? 'ลงชื่อเข้าใช้งาน' : 'สร้างบัญชีใหม่'}
               </h2>
@@ -745,16 +745,16 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto auth-modal-scrollbar">
-              <div className="p-6 md:p-8 lg:p-10">
+              <div className="p-4 sm:p-6 md:p-8 lg:p-10">
                 <motion.div
-                  className="flex flex-col md:flex-row md:items-start gap-8 md:gap-10"
+                  className="flex flex-col md:flex-row md:items-start gap-6 sm:gap-8 md:gap-10"
                   key={mode} // ให้ re-animate เมื่อ mode เปลี่ยน
                   initial={{ opacity: 0, x: mode === 'signin' ? -20 : 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3, ease: "easeOut" }}
                 >
                   {/* Form Section */}
-                  <div className="flex flex-col space-y-6 flex-1 w-full min-w-0"> {/* Added min-w-0 for flex child */}
+                  <div className="flex flex-col space-y-4 sm:space-y-6 flex-1 w-full min-w-0"> {/* Added min-w-0 for flex child */}
                     <div className="mb-1">
                       <h3 className="text-lg font-semibold text-foreground">
                         {mode === 'signin' ? 'เข้าสู่บัญชีของคุณ' : 'ข้อมูลบัญชีใหม่'}
@@ -776,8 +776,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         icon={<FiMail size={18} />}
                         required
                         autoComplete={mode === 'signin' ? "username" : "email"}
-                        error={validationErrors.identifier}
-                        touched={touchedFields.identifier}
+                        error={mode === 'signin' ? null : validationErrors.identifier}
+                        touched={mode === 'signin' ? false : touchedFields.identifier}
                       />
                       {mode === 'signup' && (
                         <InputField
@@ -812,8 +812,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         showPasswordToggle
                         showPassword={showPassword}
                         toggleShowPassword={toggleShowPassword}
-                        error={validationErrors.password}
-                        touched={touchedFields.password}
+                        error={mode === 'signin' ? null : validationErrors.password}
+                        touched={mode === 'signin' ? false : touchedFields.password}
                       />
                       {mode === 'signup' && (
                         <InputField
@@ -891,12 +891,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       </div>
                       <div className="space-y-3">
                         <SocialButton provider="google" icon={<FaGoogle />} label="Google" onClick={() => handleSocialSignIn('google')} disabled={isLoading} className="w-full"/>
-                        <SocialButton provider="facebook" icon={<FaFacebook />} label="Facebook" onClick={() => handleSocialSignIn('facebook')} disabled={isLoading} className="w-full"/>
+                        <SocialButton provider="facebook" icon={<FaFacebook />} label="Facebook (ปิดใช้งานชั่วคราว)" onClick={() => {}} disabled={true} className="w-full opacity-50 cursor-not-allowed"/>
                         <div className="grid grid-cols-2 gap-3">
                           <SocialButton provider="twitter" icon={<FaTwitter />} label="Twitter / X" onClick={() => handleSocialSignIn('twitter')} disabled={isLoading} />
-                          <SocialButton provider="apple" icon={<FaApple />} label="Apple" onClick={() => handleSocialSignIn('apple')} disabled={isLoading} />
+                          <SocialButton provider="apple" icon={<FaApple />} label="Apple (ปิดใช้งานชั่วคราว)" onClick={() => {}} disabled={true} className="opacity-50 cursor-not-allowed" />
                         </div>
-                        <SocialButton provider="line" icon={<SiLine />} label="Line" onClick={() => handleSocialSignIn('line')} disabled={isLoading} className="w-full"/>
+                        <SocialButton provider="line" icon={<SiLine />} label="Line (ปิดใช้งานชั่วคราว)" onClick={() => {}} disabled={true} className="w-full opacity-50 cursor-not-allowed"/>
                       </div>
                     </div>
                   )}
@@ -905,7 +905,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border p-6 bg-secondary/30">
+            <div className="border-t border-border p-4 sm:p-6 bg-secondary/30">
               <div className="text-center text-sm text-muted-foreground">
                 {mode === 'signin' ? (
                   <>

@@ -17,6 +17,7 @@ import {
   // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
   ChevronDown,
   Bookmark,
+  Coins, // Add Coins icon import
 } from "lucide-react"; // ตรวจสอบว่า Laptop icon จำเป็นหรือไม่
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -94,6 +95,8 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [coinBalance, setCoinBalance] = useState<number>(0);
+  const [isLoadingCoins, setIsLoadingCoins] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -149,6 +152,32 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
+
+  // ฟังก์ชันสำหรับดึงข้อมูลเหรียญ
+  const fetchCoinBalance = async () => {
+    if (!userDisplay && !initialUser) return;
+    
+    setIsLoadingCoins(true);
+    try {
+      const response = await fetch('/api/user/gamification');
+      const data = await response.json();
+      
+      if (data.success) {
+        setCoinBalance(data.data.coinBalance || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching coin balance:', error);
+    } finally {
+      setIsLoadingCoins(false);
+    }
+  };
+
+  // ดึงข้อมูลเหรียญเมื่อมีผู้ใช้ล็อกอิน
+  useEffect(() => {
+    if (userDisplay || initialUser) {
+      fetchCoinBalance();
+    }
+  }, [userDisplay, initialUser]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -260,9 +289,6 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
               aria-label="เมนูผู้ใช้"
             >
               <UserAvatar user={initialUser} size="md" />
-              <span className="hidden sm:inline text-sm font-medium text-foreground truncate max-w-[100px]">
-                {initialUser.profile?.displayName || initialUser.name || initialUser.username}
-              </span>
               <ChevronDown
                 size={18}
                 className={`text-muted-foreground transition-transform duration-200 ${
@@ -285,6 +311,12 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                     </div>
                     <div className="text-xs text-muted-foreground truncate">
                       {initialUser.email || `@${initialUser.username}`}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 text-sm text-amber-600 dark:text-amber-400">
+                      <Coins size={16} />
+                      <span className="font-medium">
+                        {isLoadingCoins ? '...' : coinBalance.toLocaleString()} เหรียญ
+                      </span>
                     </div>
                   </div>
                   <div className="py-1">
@@ -366,9 +398,6 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
             aria-label="เมนูผู้ใช้"
           >
             <UserAvatar user={userDisplay} size="md" />
-            <span className="hidden sm:inline text-sm font-medium text-foreground truncate max-w-[100px]">
-              {userDisplay.profile?.displayName || userDisplay.name || userDisplay.username}
-            </span>
             <ChevronDown
               size={18}
               className={`text-muted-foreground transition-transform duration-200 ${
@@ -391,6 +420,12 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                   </div>
                   <div className="text-xs text-muted-foreground truncate">
                     {userDisplay.email || `@${userDisplay.username}`}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 text-sm text-amber-600 dark:text-amber-400">
+                    <Coins size={16} />
+                    <span className="font-medium">
+                      {isLoadingCoins ? '...' : coinBalance.toLocaleString()} เหรียญ
+                    </span>
                   </div>
                 </div>
                 <div className="py-1">

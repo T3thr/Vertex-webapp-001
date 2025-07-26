@@ -36,6 +36,20 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
+      // ตรวจสอบว่าผู้ใช้ได้รับการยืนยันแล้วหรือไม่ (โดยใช้ token เดิม)
+      const alreadyVerifiedUser = await UserModelInstance.findOne({
+        emailVerificationToken: hashedToken,
+        isEmailVerified: true,
+      });
+
+      if (alreadyVerifiedUser) {
+        console.log(`ℹ️ [VerifyEmail API] ผู้ใช้ได้รับการยืนยันแล้ว: ${alreadyVerifiedUser.email}`);
+        const redirectUrl = new URL("/verify-email", request.url);
+        redirectUrl.searchParams.set("status", "already-verified");
+        redirectUrl.searchParams.set("email", alreadyVerifiedUser.email || "");
+        return NextResponse.redirect(redirectUrl);
+      }
+
       console.warn(`⚠️ [VerifyEmail API] โทเค็นไม่ถูกต้องหรือหมดอายุ: ${token.substring(0, 10)}...`);
       return NextResponse.json(
         { error: "โทเค็นยืนยันไม่ถูกต้องหรือหมดอายุ", success: false },
