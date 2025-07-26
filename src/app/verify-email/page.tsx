@@ -117,7 +117,7 @@ function VerifyEmailContent() {
               กรุณาตรวจสอบลิงก์ยืนยันหรือขออีเมลยืนยันใหม่
             </p>
             <Link
-              href="/auth/resend-verification"
+              href="/resend-verification"
               className="text-primary hover:underline transition-colors"
             >
               ขออีเมลยืนยันใหม่

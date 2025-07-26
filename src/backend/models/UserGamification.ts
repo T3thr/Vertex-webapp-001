@@ -17,6 +17,7 @@ import { IBadge } from "./Badge";
 export interface IUserWallet {
   coinBalance: number; // ยอดเหรียญคงเหลือ
   lastCoinTransactionAt?: Date; // วันที่ทำธุรกรรมเหรียญล่าสุด
+  julyBonusClaimed?: boolean; // สถานะการรับโบนัส July 2025 (30 เหรียญ)
 }
 
 /**
@@ -101,6 +102,11 @@ const UserWalletSchema = new Schema<IUserWallet>(
     lastCoinTransactionAt: {
       type: Date,
       comment: "วันที่ทำธุรกรรมเหรียญล่าสุด",
+    },
+    julyBonusClaimed: {
+      type: Boolean,
+      default: false,
+      comment: "สถานะการรับโบนัส July 2025 (30 เหรียญ)",
     },
   },
   { _id: false }

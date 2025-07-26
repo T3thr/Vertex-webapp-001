@@ -57,8 +57,12 @@ async function main() {
       continue;
     }
     try {
-            // Reuse existing model helper to create hashed token on User document for compatibility with verify-email route
-      const plainToken = user.generateEmailVerificationToken();
+      // Use the same token generation logic as resend-verification API
+      const { token: plainToken, hashedToken, expiry } = generateVerificationToken();
+      
+      // Update token in User model (same as API)
+      user.emailVerificationToken = hashedToken;
+      user.emailVerificationTokenExpiry = expiry;
       await user.save();
 
       await sendVerificationEmail(user.email!, plainToken);

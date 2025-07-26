@@ -1,7 +1,6 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 import dbConnect from '../backend/lib/mongodb';
-import UserSecurityModel from '../backend/models/UserSecurity';
 import UserModel from '../backend/models/User';
 import { generateVerificationToken, sendVerificationEmail } from '../backend/services/sendemail';
 
@@ -11,18 +10,24 @@ async function main() {
 
   await dbConnect();
 
-  const user = await UserModel.findOne({ email: emailArg }).lean();
+  // Find user as full document (not lean) to enable saving
+  const user = await UserModel.findOne({ email: emailArg.toLowerCase() });
   if (!user) throw new Error('ไม่พบผู้ใช้');
 
-  const { token, hashedToken, expiry } = generateVerificationToken();
+  console.log(`🔄 สร้างโทเค็นใหม่สำหรับ ${user.email}...`);
+  
+  // Use the same token generation logic as resend-verification API
+  const { token: plainToken, hashedToken, expiry } = generateVerificationToken();
 
-  await UserSecurityModel.updateOne(
-    { userId: user._id },
-    { 'verification.token': hashedToken, 'verification.expiresAt': expiry }
-  );
+  // Update token in User model (same as API)
+  user.emailVerificationToken = hashedToken;
+  user.emailVerificationTokenExpiry = expiry;
+  await user.save();
+  
+  console.log(`✅ อัปเดตโทเค็นสำเร็จสำหรับ ${user.email}`);
 
-  await sendVerificationEmail(emailArg, token);
-  console.log('✅ ส่งอีเมลยืนยันเรียบร้อย');
+  await sendVerificationEmail(user.email!, plainToken);
+  console.log('📧 ส่งอีเมลยืนยันเรียบร้อย');
 }
 
 main()

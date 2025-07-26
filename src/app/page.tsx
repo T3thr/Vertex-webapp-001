@@ -7,6 +7,7 @@ import { Suspense } from 'react';
 import { NovelCard, NovelCardData } from "@/components/NovelCard";
 import { ImageSlider, SlideData as SliderSlideData } from "@/components/ImageSlider";
 import { NovelRowNavButton } from "@/components/NovelRowNavigation";
+import JulyBonusBanner from "@/components/JulyBonusBanner";
 import {
   TrendingUp,
   CheckCircle,
@@ -461,6 +462,9 @@ export default async function HomePage() {
         </section>
 
         <div className="container-custom space-y-8 md:space-y-12">
+          {/* July 2025 Bonus Banner - Show for eligible users */}
+          <JulyBonusBanner className="mb-8" />
+          
           {/* Featured section (trending) - render immediately */}
           {allSectionsData[0] && (
             <FeaturedSection 
