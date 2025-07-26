@@ -505,7 +505,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             userDocument.profile.displayName = name;
             updated = true;
           }
-          if (picture && !userDocument.profile.avatarUrl) {
+          if (picture) {
             userDocument.profile.avatarUrl = picture;
             updated = true;
           }
@@ -562,7 +562,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             }
             if (userDocument.profile) {
                 if (name && !userDocument.profile.displayName) userDocument.profile.displayName = name;
-                if (picture && !userDocument.profile.avatarUrl) userDocument.profile.avatarUrl = picture;
+                if (picture) userDocument.profile.avatarUrl = picture;
             } else {
                 userDocument.profile = { displayName: name || undefined, avatarUrl: picture || undefined, gender: "prefer_not_to_say" };
             }

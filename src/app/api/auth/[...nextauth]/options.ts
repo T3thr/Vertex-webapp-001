@@ -506,54 +506,62 @@ export const authOptions: NextAuthOptions = {
             token.roles = sessionUserCredentials.roles;
         } else { // OAuth sign-in
             // Logic การดึงข้อมูลจาก OAuth profile และเรียก API ของคุณ (คงเดิมจากโค้ดผู้ใช้)
-            let apiEmailFromProfile: string | undefined = (profile as any)?.email || undefined;
+            let apiEmailFromProfile: string | undefined = (profile as any)?.email;
             let apiDisplayNameFromProfile: string = "";
             let apiUsernameSuggestionFromProfile: string = "";
+            let apiAvatarUrlFromProfile: string | undefined = undefined;
 
             switch (account.provider) {
                 case "google":
                     const googleProfile = profile as GoogleProfile;
-                    apiEmailFromProfile = googleProfile.email || undefined;
+                    apiEmailFromProfile = googleProfile.email;
                     apiDisplayNameFromProfile = googleProfile.name || googleProfile.given_name || "";
                     if (googleProfile.given_name && googleProfile.family_name) { apiDisplayNameFromProfile = `${googleProfile.given_name} ${googleProfile.family_name}`.trim(); }
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                    apiAvatarUrlFromProfile = googleProfile.picture;
                     break;
                 case "twitter":
                     const twitterProfile = profile as TwitterProfile;
-                    apiEmailFromProfile = twitterProfile.email || undefined;
+                    apiEmailFromProfile = twitterProfile.email;
                     apiDisplayNameFromProfile = twitterProfile.data?.name || twitterProfile.name || "";
-                    apiUsernameSuggestionFromProfile = twitterProfile.data?.username || twitterProfile.username || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                    apiUsernameSuggestionFromProfile = twitterProfile.data?.username || twitterProfile.username || "";
+                    apiAvatarUrlFromProfile = twitterProfile.data?.profile_image_url?.replace('_normal', '_400x400'); // Get higher resolution
                     break;
                 case "facebook":
                     const facebookProfile = profile as FacebookProfile;
-                    apiEmailFromProfile = facebookProfile.email || undefined;
-                    apiDisplayNameFromProfile = facebookProfile.name || `${facebookProfile.first_name || ""} ${facebookProfile.last_name || ""}`.trim() || "";
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                    apiEmailFromProfile = facebookProfile.email;
+                    apiDisplayNameFromProfile = facebookProfile.name || `${facebookProfile.first_name || ""} ${facebookProfile.last_name || ""}`.trim();
+                    apiAvatarUrlFromProfile = facebookProfile.picture?.data?.url;
                     break;
                 case "apple":
                     const appleProfile = profile as AppleProfile;
-                    apiEmailFromProfile = appleProfile.email || undefined;
+                    apiEmailFromProfile = appleProfile.email;
                     apiDisplayNameFromProfile = appleProfile.name ? `${appleProfile.name.firstName || ""} ${appleProfile.name.lastName || ""}`.trim() : "";
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                    apiAvatarUrlFromProfile = appleProfile.picture;
                     break;
                 case "line":
                     const lineProfile = profile as LineProfile;
-                    apiEmailFromProfile = lineProfile.email || undefined;
+                    apiEmailFromProfile = lineProfile.email;
                     apiDisplayNameFromProfile = lineProfile.displayName || "";
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+                    apiAvatarUrlFromProfile = lineProfile.pictureUrl;
                     break;
             }
+
+            // Generate username suggestion if not available from provider (e.g., Twitter)
+            if (!apiUsernameSuggestionFromProfile) {
+                apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+            }
+
             if (!apiEmailFromProfile && account.provider !== "twitter" && account.provider !== "apple") {
-                console.error(`❌ [AuthOptions JWT] ไม่มีอีเมลจาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayNameFromProfile}`);
-                throw new Error(`ไม่ได้รับอีเมลจาก ${account.provider}.`);
+                console.error(`❌ [AuthOptions JWT] Email not received from ${account.provider} for user ${apiDisplayNameFromProfile}`);
+                throw new Error(`Email not received from ${account.provider}.`);
             }
             if ((account.provider === "twitter" || account.provider === "apple") && !apiEmailFromProfile && !apiUsernameSuggestionFromProfile) {
-                console.error(`❌ [AuthOptions JWT] ไม่มีทั้งอีเมลและชื่อผู้ใช้จาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayNameFromProfile}`);
-                throw new Error(`ไม่ได้รับข้อมูลที่เพียงพอจาก ${account.provider}.`);
+                console.error(`❌ [AuthOptions JWT] Insufficient data from ${account.provider} for user ${apiDisplayNameFromProfile}`);
+                throw new Error(`Insufficient data from ${account.provider}.`);
             }
 
             try {
-                console.log(`⏳ [AuthOptions JWT] OAuth: เรียก /api/auth/signin/oauth สำหรับ provider=${account.provider}, accountId=${account.providerAccountId}`);
+                console.log(`⏳ [AuthOptions JWT] OAuth: Calling /api/auth/signin/oauth for provider=${account.provider}, accountId=${account.providerAccountId}`);
                 const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin/oauth`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -563,7 +571,7 @@ export const authOptions: NextAuthOptions = {
                         email: apiEmailFromProfile || null,
                         name: apiDisplayNameFromProfile,
                         usernameSuggestion: apiUsernameSuggestionFromProfile,
-                        picture: (profile as any).picture || (profile as GoogleProfile).picture || (profile as FacebookProfile).picture?.data?.url || (profile as TwitterProfile).data?.profile_image_url || (profile as LineProfile).pictureUrl || null,
+                        picture: apiAvatarUrlFromProfile || null, // Use the clean variable
                     }),
                 });
                 const responseData = await response.json();

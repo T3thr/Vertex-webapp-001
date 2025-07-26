@@ -6,8 +6,12 @@ interface NavBarWrapperProps {
   user: SessionUser | null;
 }
 
-// NavBarWrapper - จัดการการแสดงผล NavBar และรองรับ Server Component
-// Wrapper นี้ไม่จำเป็นต้องเป็น Client Component อีกต่อไป
+// NavBarWrapper - SSR Component for immediate correct NavBar rendering
+// Passes server-side user data directly to NavBar for zero flickering
 export default function NavBarWrapper({ user }: NavBarWrapperProps) {
-  return <NavBar initialUser={user} />;
+  return (
+    <div suppressHydrationWarning>
+      <NavBar initialUser={user} />
+    </div>
+  );
 }
