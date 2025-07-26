@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     // อัปเดตเหรียญและสถานะการรับโบนัส
-    const bonusAmount = 30;
+    const bonusAmount = 20;
     const updatedGamification = await UserGamificationModel.findOneAndUpdate(
       { userId: authSession.user.id },
       {
