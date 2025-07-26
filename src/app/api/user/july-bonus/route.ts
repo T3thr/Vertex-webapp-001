@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       bonusAmount: 20,
       message: alreadyClaimed 
         ? 'คุณได้รับโบนัส July 2025 แล้ว' 
-        : 'คุณสามารถรับโบนัส 30 เหรียญได้!'
+        : 'คุณสามารถรับโบนัส 20 เหรียญได้!'
     });
 
   } catch (error) {
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST - Claim July 2025 bonus coins
- * Awards 30 coins to eligible users who haven't claimed yet
+ * Awards 20 coins to eligible users who haven't claimed yet
  */
 export async function POST(request: NextRequest) {
   const session = await mongoose.startSession();
