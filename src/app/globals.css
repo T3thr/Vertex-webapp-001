@@ -1,19 +1,11 @@
-/* src/app/global.css */
+/* src/app/global.css - Optimized for Performance */
 
 @import "tailwindcss";
 
-/* --------------------------------------- */
-/* การกำหนด Keyframes สำหรับแอนิเมชั่น - ✅ [ลดลง] เหลือเฉพาะที่จำเป็น */
-/* --------------------------------------- */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+/* Critical animations only - optimized for performance */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
 /* --------------------------------------- */
 /* การกำหนดตัวแปรพื้นฐานสำหรับ Light Theme (ค่าเริ่มต้น) */

@@ -99,63 +99,10 @@ export const viewport: Viewport = {
   ],
 };
 
-// --- Script สำหรับการตั้งค่า Theme เริ่มต้น ---
+// --- Optimized Non-blocking Theme Script ---
 function ThemeInitializerScript(theme: Theme | null) {
-  const scriptContent = `
-(function() { // IIFE
-  try {
-    const storageKey = 'divwy-theme';
-    const defaultCssTheme = 'light'; // Fallback CSS class สุดท้ายหากเกิดข้อผิดพลาด
-    const userDbThemeFromServer = ${theme ? JSON.stringify(theme) : 'null'};
-
-    function determineEffectiveTheme() {
-      let themeToApply;
-      let themeToStoreInLocalStorage;
-
-      // 1. ตรวจสอบธีมจาก server (ผ่าน data-attribute) ถ้าผู้ใช้ login และมี preference
-      if (userDbThemeFromServer && ['light', 'dark', 'system', 'sepia'].includes(userDbThemeFromServer)) {
-        themeToStoreInLocalStorage = userDbThemeFromServer; // นี่คือ "ตัวเลือก" ของผู้ใช้
-        if (userDbThemeFromServer === 'system') {
-          themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        } else {
-          themeToApply = userDbThemeFromServer; // light, dark, sepia
-        }
-        localStorage.setItem(storageKey, themeToStoreInLocalStorage);
-        return themeToApply;
-      }
-
-      // 2. ถ้าไม่มีธีมจาก server (เช่น ผู้ใช้ guest), ตรวจสอบ localStorage
-      const storedTheme = localStorage.getItem(storageKey);
-      if (storedTheme && ['light', 'dark', 'system', 'sepia'].includes(storedTheme)) {
-        themeToStoreInLocalStorage = storedTheme; // "ตัวเลือก" ที่เคยบันทึกไว้
-        if (storedTheme === 'system') {
-          themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        } else {
-          themeToApply = storedTheme; // light, dark, sepia
-        }
-        return themeToApply;
-      }
-
-      // 3. ถ้าไม่มีทั้งจาก server และ localStorage, ใช้ system preference เป็น default
-      themeToStoreInLocalStorage = 'system';
-      localStorage.setItem(storageKey, themeToStoreInLocalStorage);
-      themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      return themeToApply;
-    }
-
-    const finalThemeToApply = determineEffectiveTheme() || defaultCssTheme;
-    document.documentElement.className = '';
-    document.documentElement.classList.add(finalThemeToApply);
-    document.documentElement.setAttribute('data-theme', finalThemeToApply);
-    document.documentElement.setAttribute('data-theme-ready', 'true');
-  } catch (e) {
-    console.warn('[Layout ThemeScript] Error setting initial theme:', e);
-    document.documentElement.className = ''; // Clear classes on error
-    document.documentElement.classList.add('light'); // Fallback to light
-    document.documentElement.setAttribute('data-theme', 'light');
-    document.documentElement.setAttribute('data-theme-ready', 'true');
-  }
-})();`;
+  // Minified and optimized theme script
+  const scriptContent = `!function(){try{const e='divwy-theme',t=${JSON.stringify(theme)};let n;const o=()=>{if(t&&'system'!==t)return localStorage.setItem(e,t),t;const n=localStorage.getItem(e);if(n)return'system'===n?window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light':n;return localStorage.setItem(e,'system'),window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'};n=o()||'light',document.documentElement.className='',document.documentElement.classList.add(n),document.documentElement.setAttribute('data-theme',n),document.documentElement.setAttribute('data-theme-ready','true')}catch(e){document.documentElement.className='',document.documentElement.classList.add('light'),document.documentElement.setAttribute('data-theme','light'),document.documentElement.setAttribute('data-theme-ready','true')}}();`;
 
   return (
     <script
