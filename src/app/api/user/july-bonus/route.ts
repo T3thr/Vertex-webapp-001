@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       eligible: true,
       alreadyClaimed,
-      bonusAmount: 30,
+      bonusAmount: 20,
       message: alreadyClaimed 
         ? 'คุณได้รับโบนัส July 2025 แล้ว' 
         : 'คุณสามารถรับโบนัส 30 เหรียญได้!'
