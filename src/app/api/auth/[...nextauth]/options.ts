@@ -582,9 +582,9 @@ export const authOptions: NextAuthOptions = {
             token.roles = sessionUserCredentials.roles;
         } else { // OAuth sign-in
             // Use the standardized user object that was processed by provider profile functions
-            const apiEmailFromProfile: string | undefined = user.email ?? "";
+            const apiEmailFromProfile: string | undefined = user.email ?? undefined;
             const apiDisplayNameFromProfile: string = user.name ?? "";
-            const apiAvatarUrlFromProfile: string | undefined = user.image ?? "";
+            const apiAvatarUrlFromProfile: string | undefined = user.image ?? undefined;
             
             // Generate username suggestion from available data
             let apiUsernameSuggestionFromProfile: string = "";

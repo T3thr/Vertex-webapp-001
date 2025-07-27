@@ -97,17 +97,45 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [coinBalance, setCoinBalance] = useState<number>(0);
   const [isLoadingCoins, setIsLoadingCoins] = useState(false);
-
-
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // SSR-FIRST: Always use server data first for zero flickering
-  const userDisplay = initialUser || (authStatus === 'authenticated' ? authContextUser : null);
+  // Complete flickering elimination: Always prioritize showing user data when available
+  const userDisplay = useMemo(() => {
+    // CRITICAL: If we have initialUser from server, ALWAYS use it first to prevent flickering
+    // This ensures the profile shows immediately on page load/refresh
+    if (initialUser) {
+      // If we also have authContextUser and it's authenticated, prefer that (most up-to-date)
+      if (authContextUser && authStatus === 'authenticated') {
+        return authContextUser;
+      }
+      // Otherwise, use initialUser to prevent any login button flash
+      return initialUser;
+    }
+    
+    // Only if no initialUser, then check authContextUser
+    if (authContextUser && authStatus === 'authenticated') {
+      return authContextUser;
+    }
+    
+    // Only show null (login button) if we're certain there's no user
+    // and we're not in a loading state
+    if (authStatus === 'unauthenticated' && isHydrated) {
+      return null;
+    }
+    
+    // During loading, return null but we'll handle this in the render logic
+    return null;
+  }, [authContextUser, initialUser, isHydrated, authStatus]);
 
-  // No hydration tracking needed - use SSR data directly
+  // Track hydration state to prevent flickering
+  useEffect(() => {
+    // Immediate hydration for better UX, but still prevent mismatch
+    setIsHydrated(true);
+  }, []);
 
   const isReadPage = pathname.startsWith('/read/');
 
@@ -245,22 +273,127 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
   );
 
   const AuthSection = () => {
-    // Handle loading state first to prevent sign-in button flash
-    if (authStatus === 'loading' && !initialUser) {
-      return (
-        <div className="flex items-center justify-center w-10 h-10 p-1">
-          <div className="w-8 h-8 bg-muted rounded-full animate-pulse"></div>
-        </div>
-      );
+    // ZERO FLICKERING: If we have any user data (server or client), show profile immediately
+    // Never show login button if there's any indication of a logged-in user
+    if (!userDisplay) {
+      // CRITICAL: If we have initialUser from server, this means user is logged in
+      // Don't show login button even if userDisplay is temporarily null
+      if (initialUser) {
+        // Show user profile immediately using initialUser with full dropdown functionality
+        return (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={toggleDropdown}
+              className="flex items-center space-x-2 p-1 rounded-full hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors"
+              aria-expanded={isDropdownOpen}
+              aria-label="เมนูผู้ใช้"
+            >
+              <UserAvatar user={initialUser} size="md" />
+              <ChevronDown
+                size={18}
+                className={`text-muted-foreground transition-transform duration-200 ${
+                  isDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 mt-2 w-64 rounded-xl shadow-xl bg-popover border border-border text-popover-foreground z-50 overflow-hidden"
+                >
+                  <div className="p-3 border-b border-border">
+                    <div className="font-semibold truncate">
+                      {initialUser.profile?.displayName || initialUser.name || initialUser.username}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {initialUser.email || `@${initialUser.username}`}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 text-sm text-amber-600 dark:text-amber-400">
+                      <Coins size={16} />
+                      <span className="font-medium">
+                        {isLoadingCoins ? '...' : coinBalance.toLocaleString()} เหรียญ
+                      </span>
+                    </div>
+                  </div>
+                  <div className="py-1">
+                    {userDropdownLinks.map(
+                      (link) =>
+                        link.condition && (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className="flex items-center px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors w-full text-left"
+                            onClick={() => setIsDropdownOpen(false)}
+                          >
+                            {React.cloneElement(link.icon, { className: "mr-2.5 text-muted-foreground" })}
+                            {link.label}
+                          </Link>
+                        )
+                    )}
+                    {themeMounted && (
+                      <button
+                        onClick={cycleThemeInDropdown}
+                        className="flex items-center w-full px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors text-left"
+                        aria-label={`เปลี่ยนธีม, ธีมปัจจุบัน: ${availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}`}
+                      >
+                        {resolvedTheme === "dark" ? ( <Sun size={16} className="mr-2.5 text-muted-foreground" /> )
+                         : resolvedTheme === "sepia" ? ( <Moon size={16} className="mr-2.5 text-muted-foreground" /> )
+                         : ( <IconBookOpen size={16} className="mr-2.5 text-muted-foreground" /> )
+                        }
+                        <span>
+                          เปลี่ยนธีม (
+                          {availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}
+                          {currentThemeChoice === "system" && ` -> ${resolvedTheme === "dark" ? "มืด" : resolvedTheme === "sepia" ? "ซีเปีย" : "สว่าง"}`}
+                          )
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="border-t border-border p-1">
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                    >
+                      <LogOut size={16} className="mr-2.5" />
+                      ออกจากระบบ
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      }
+      
+      // Only show login button if we're absolutely certain there's no user
+      if (authStatus === 'unauthenticated' && isHydrated && !initialUser) {
+        return (
+          <motion.button
+            onClick={openAuthModal}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap cursor-pointer"
+          >
+            เข้าสู่ระบบ
+          </motion.button>
+        );
+      }
+      
+      // During uncertain states, show nothing (invisible) rather than flickering
+      return <div className="w-[120px] h-[40px]" />;
     }
 
-    // If user is authenticated, show profile dropdown
-    if (userDisplay) {
+    // หากมีข้อมูล `userDisplay` ให้แสดงผลส่วนของเมนูผู้ใช้ที่ล็อกอินแล้ว
+    if (userDisplay) { // userDisplay คือ AppSessionUser | null
       return (
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={toggleDropdown}
-            className="flex items-center space-x-2 p-1 rounded-full hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors"
+            className="flex items-center space-x-2 p-1 rounded-full hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors" // ใช้สีจาก theme
             aria-expanded={isDropdownOpen}
             aria-label="เมนูผู้ใช้"
           >
@@ -279,9 +412,9 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                 transition={{ duration: 0.15, ease: "easeOut" }}
-                className="absolute right-0 mt-2 w-64 rounded-xl shadow-xl bg-popover border border-border text-popover-foreground z-50 overflow-hidden"
+                className="absolute right-0 mt-2 w-64 rounded-xl shadow-xl bg-popover border border-border text-popover-foreground z-50 overflow-hidden" // ใช้สี popover
               >
-                <div className="p-3 border-b border-border">
+                <div className="p-3 border-b border-border"> {/* ใช้ border-border */}
                   <div className="font-semibold truncate">
                     {userDisplay.profile?.displayName || userDisplay.name || userDisplay.username}
                   </div>
@@ -302,7 +435,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                         <Link
                           key={link.href}
                           href={link.href}
-                          className="flex items-center px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors w-full text-left"
+                          className="flex items-center px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors w-full text-left" // ใช้สี text-popover-foreground จาก parent และ hover:bg-muted
                           onClick={() => setIsDropdownOpen(false)}
                         >
                           {React.cloneElement(link.icon, { className: "mr-2.5 text-muted-foreground" })}
@@ -310,30 +443,30 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                         </Link>
                       )
                   )}
-                  {themeMounted && (
+                  {themeMounted && ( // Theme switcher section
                     <button
                       onClick={cycleThemeInDropdown}
                       className="flex items-center w-full px-4 py-2.5 text-sm hover:bg-muted/50 dark:hover:bg-muted/20 transition-colors text-left"
                       aria-label={`เปลี่ยนธีม, ธีมปัจจุบัน: ${availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}`}
                     >
-                      {resolvedTheme === "dark" ? (
-                        <Sun size={16} className="mr-2.5 text-muted-foreground" />
-                      ) : resolvedTheme === "sepia" ? (
-                        <Moon size={16} className="mr-2.5 text-muted-foreground" />
-                      ) : (
-                        <IconBookOpen size={16} className="mr-2.5 text-muted-foreground" />
-                      )}
+                      {/* Icons for theme, should use foreground/muted-foreground for consistency */}
+                      {resolvedTheme === "dark" ? ( <Sun size={16} className="mr-2.5 text-muted-foreground" /> )
+                       : resolvedTheme === "sepia" ? ( <Moon size={16} className="mr-2.5 text-muted-foreground" /> ) // สมมติว่ามีไอคอน Moon สำหรับ Sepia
+                       : ( <IconBookOpen size={16} className="mr-2.5 text-muted-foreground" /> ) // ใช้ BookOpen สำหรับ light หรือ default
+                      }
                       <span>
-                        เปลี่ยนธีม ({availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}
-                        {currentThemeChoice === "system" && ` -> ${resolvedTheme === "dark" ? "มืด" : resolvedTheme === "sepia" ? "ซีเปีย" : "สว่าง"}`})
+                        เปลี่ยนธีม (
+                        {availableThemes.find(t => t.name === currentThemeChoice)?.label || currentThemeChoice}
+                        {currentThemeChoice === "system" && ` -> ${resolvedTheme === "dark" ? "มืด" : resolvedTheme === "sepia" ? "ซีเปีย" : "สว่าง"}`}
+                        )
                       </span>
                     </button>
                   )}
                 </div>
-                <div className="border-t border-border p-1">
+                <div className="border-t border-border p-1"> {/* ใช้ border-border */}
                   <button
                     onClick={handleSignOut}
-                    className="flex items-center w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                    className="flex items-center w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors" // ใช้สี destructive
                   >
                     <LogOut size={16} className="mr-2.5" />
                     ออกจากระบบ
@@ -345,18 +478,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
         </div>
       );
     }
-
-    // If not loading and not authenticated, show login button
-    return (
-      <motion.button
-        onClick={openAuthModal}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap cursor-pointer"
-      >
-        เข้าสู่ระบบ
-      </motion.button>
-    );
+    return null; // กรณี authStatus อื่นๆ หรือ userDisplay ไม่มีค่า
   };
 
   // NavBar header styling
