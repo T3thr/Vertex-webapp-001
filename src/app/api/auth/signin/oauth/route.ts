@@ -87,7 +87,7 @@ function createDefaultNotificationChannelSettings(): INotificationChannelSetting
 }
 
 // Helper function สำหรับสร้าง user documents ที่เกี่ยวข้องทั้งหมดสำหรับ OAuth user ใหม่
-async function createCompleteUserDocuments(userId: Types.ObjectId, username: string, email?: string, displayName?: string): Promise<void> {
+async function createCompleteUserDocuments(userId: Types.ObjectId, username: string, email?: string, displayName?: string, avatarUrl?: string): Promise<void> {
   const now = new Date();
 
   // สร้างเอกสารทั้งหมดแบบ parallel เพื่อประสิทธิภาพ
@@ -96,6 +96,7 @@ async function createCompleteUserDocuments(userId: Types.ObjectId, username: str
     UserProfileModel.create({
       userId,
       displayName: displayName || username,
+      avatarUrl: avatarUrl || undefined, // Include avatar URL from OAuth provider
       socialStats: {
         followersCount: 0,
         followingUsersCount: 0,
@@ -500,26 +501,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
       }
 
-      if (userDocument.profile) {
-          if (name && !userDocument.profile.displayName) {
-            userDocument.profile.displayName = name;
-            updated = true;
-          }
-          if (picture) {
-            userDocument.profile.avatarUrl = picture;
-            updated = true;
-          }
-      } else {
-          // Mongoose subdocuments (like profile) are automatically initialized
-          // if their schema has defaults or they are assigned an object.
-          // If profile can be undefined in IUser and the schema doesn't auto-create it,
-          // this direct assignment is correct.
-          userDocument.profile = {
-              displayName: name || undefined,
-              avatarUrl: picture || undefined,
-              gender: "prefer_not_to_say", // Default
-          };
-          updated = true;
+      if (name && !userDocument.primaryPenName) {
+        userDocument.primaryPenName = name;
+        updated = true;
+      }
+      if (picture) {
+        userDocument.avatarUrl = picture;
+        updated = true;
       }
 
       userDocument.lastLoginAt = new Date();
@@ -599,6 +587,8 @@ export async function POST(request: Request): Promise<NextResponse> {
           emailVerifiedAt: email ? new Date() : undefined,
           accounts: [{ provider, providerAccountId, type: "oauth" } as IAccount],
           roles: ["Reader"], // กำหนด role เริ่มต้น
+          primaryPenName: name || finalUsername, // Set primary pen name from OAuth profile
+          avatarUrl: picture || undefined, // Set avatar URL from OAuth profile
           lastLoginAt: new Date(),
         };
 
@@ -623,7 +613,8 @@ export async function POST(request: Request): Promise<NextResponse> {
             userDocument._id, 
             finalUsername, 
             email || undefined, 
-            name || finalUsername
+            name || finalUsername,
+            picture || undefined // Pass the OAuth profile picture URL
           );
           console.log(`✅ [API:OAuthSignIn] สร้างเอกสารย่อยทั้งหมดสำหรับผู้ใช้ ${userDocument.username} สำเร็จ`);
         } catch (subDocError: any) {
