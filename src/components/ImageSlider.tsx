@@ -227,7 +227,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   const dragMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!isDragging) return;
     const currentPosition = getPositionX(event);
-    let diff = currentPosition - dragStartPos;
+    const diff = currentPosition - dragStartPos;
     setCurrentTranslate(diff);
     setTransform(slideContainerOffset + diff, false);
   }, [isDragging, getPositionX, dragStartPos, slideContainerOffset, setTransform]);
