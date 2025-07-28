@@ -281,7 +281,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
           {/* Overlay */}
           <motion.div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -294,22 +294,19 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
 
           {/* Modal */}
           <motion.div
-            className="relative w-full max-w-6xl max-h-[95vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col"
+            className="relative w-full max-w-4xl max-h-[95vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             variants={modalVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
           >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-blue-500/10 px-6 py-5 border-b border-border relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-blue-500/5" />
-              <div className="relative flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl backdrop-blur-sm border border-purple-500/20">
-                      <Gamepad2 className="w-7 h-7 text-purple-600 dark:text-purple-400" />
-                    </div>
+            {/* Sticky Header */}
+            <div className="flex-shrink-0 bg-card/80 backdrop-blur-sm border-b border-border px-4 sm:px-6 py-4 z-10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="relative p-2 sm:p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg sm:rounded-xl border border-purple-500/20">
+                    <Gamepad2 className="w-5 h-5 sm:w-7 sm:h-7 text-purple-600 dark:text-purple-400" />
                     <div className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full animate-pulse" />
                   </div>
                   <div>

@@ -359,6 +359,7 @@ export default function SidebarDashboard({
             totalStats={totalStats}
             user={user}
             initialCreateModal={initialCreateModal}
+            setActiveTab={setActiveTab}
           />
         );
       case 'analytics':

@@ -52,10 +52,9 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   const [dragStartPos, setDragStartPos] = useState(0);
   const [currentTranslate, setCurrentTranslate] = useState(0);
   const [slideContainerOffset, setSlideContainerOffset] = useState(0);
-  
+
   // Navigation visibility state
-  const [showNavButtons, setShowNavButtons] = useState(true);
-  const navVisibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showNavButtons, setShowNavButtons] = useState(false);
 
   const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,7 +66,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
 
   // Optimized slide width calculation
   const getEffectiveSlideWidth = useCallback((): number => {
-    if (typeof window !== "undefined" && carouselRef.current) {
+    if (carouselRef.current) {
       if (isMobile || totalSlides <= 1) {
         return carouselRef.current.offsetWidth;
       }
@@ -82,36 +81,39 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   }, [totalSlides]);
 
   const setTransform = useCallback((translateX: number, useTransition: boolean = false) => {
-    if (slideContainerRef.current) {
-      slideContainerRef.current.style.transition = useTransition
-        ? `transform ${TRANSITION_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`
-        : 'none';
-      slideContainerRef.current.style.transform = `translateX(${translateX}px)`;
+    const element = slideContainerRef.current;
+    if (!element) return;
+
+    element.style.transition = useTransition
+      ? `transform ${TRANSITION_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`
+      : 'none';
+
+    // The key to fixing the flicker is to ensure the browser registers
+    // the new 'transition' value *before* it gets the new 'transform' value.
+    // Forcing a reflow by reading a layout property like offsetHeight does the trick.
+    if (useTransition) {
+      void element.offsetHeight; // Force reflow to prevent flickering
     }
+    
+    element.style.transform = `translateX(${translateX}px)`;
   }, []);
-  
+
   // Navigation visibility management
   const resetNavVisibilityTimer = useCallback(() => {
-    if (navVisibilityTimeoutRef.current) clearTimeout(navVisibilityTimeoutRef.current);
+    // This function is now only for resetting visibility on interaction, not for timeout.
     setShowNavButtons(true);
-    navVisibilityTimeoutRef.current = setTimeout(() => {
-        if (!isHovering) {
-            setShowNavButtons(false);
-        }
-    }, NAV_FADE_TIMEOUT);
-  }, [isHovering]);
+  }, []);
 
-  const calculateCenteringOffset = useCallback((): number => {
+  const calculateCenteringOffset = useCallback(() => {
     if (!carouselRef.current) return 0;
-
     const effectiveSlideWidth = getEffectiveSlideWidth();
     const carouselWidth = carouselRef.current.offsetWidth;
     const centralSlideInDomIndex = Math.floor(NUM_RENDERED_SLIDES / 2);
 
     if (isMobile) {
-        return -(centralSlideInDomIndex * effectiveSlideWidth);
+      return -(centralSlideInDomIndex * effectiveSlideWidth);
     }
-    
+
     const slideWidthWithoutGap = effectiveSlideWidth - SLIDE_GAP;
     return (carouselWidth / 2) - (slideWidthWithoutGap / 2) - (centralSlideInDomIndex * effectiveSlideWidth);
   }, [getEffectiveSlideWidth, isMobile]);
@@ -125,13 +127,11 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
     setTransform(slideContainerOffset - effectiveSlideWidth, true);
 
     transitionTimeoutRef.current = setTimeout(() => {
-      const newIndex = getLoopedIndex(currentIndex + 1);
-      setCurrentIndex(newIndex);
+      setCurrentIndex(prev => prev + 1);
       setTransform(slideContainerOffset, false);
       setIsTransitioning(false);
     }, TRANSITION_DURATION);
-
-  }, [isTransitioning, totalSlides, slideContainerOffset, getEffectiveSlideWidth, setTransform, getLoopedIndex, currentIndex, resetNavVisibilityTimer]);
+  }, [isTransitioning, totalSlides, slideContainerOffset, getEffectiveSlideWidth, setTransform, resetNavVisibilityTimer]);
 
   const goToPrevious = useCallback(() => {
     if (isTransitioning || totalSlides <= 1) return;
@@ -140,90 +140,51 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
 
     const effectiveSlideWidth = getEffectiveSlideWidth();
     setTransform(slideContainerOffset + effectiveSlideWidth, true);
-    
+
     transitionTimeoutRef.current = setTimeout(() => {
-      const newIndex = getLoopedIndex(currentIndex - 1);
-      setCurrentIndex(newIndex);
+      setCurrentIndex(prev => prev - 1);
       setTransform(slideContainerOffset, false);
       setIsTransitioning(false);
     }, TRANSITION_DURATION);
-
-  }, [isTransitioning, totalSlides, slideContainerOffset, getEffectiveSlideWidth, setTransform, getLoopedIndex, currentIndex, resetNavVisibilityTimer]);
+  }, [isTransitioning, totalSlides, slideContainerOffset, getEffectiveSlideWidth, setTransform, resetNavVisibilityTimer]);
 
   const goToSlide = useCallback((slideIndex: number) => {
-    if (isTransitioning || totalSlides <= 1) return;
-    const newLogicalIndex = getLoopedIndex(slideIndex);
-    if (newLogicalIndex === currentIndex) return;
-    
-    resetNavVisibilityTimer();
+    if (isTransitioning || totalSlides <= 1 || slideIndex === getLoopedIndex(currentIndex)) return;
     setIsTransitioning(true);
+    resetNavVisibilityTimer();
+
+    const currentLogicalIndex = getLoopedIndex(currentIndex);
+    let diff = slideIndex - currentLogicalIndex;
+
+    if (Math.abs(diff) > totalSlides / 2) {
+      diff = diff > 0 ? diff - totalSlides : diff + totalSlides;
+    }
 
     const effectiveSlideWidth = getEffectiveSlideWidth();
-    const diff = newLogicalIndex - currentIndex;
-    const slidesToMove = (Math.abs(diff) > totalSlides / 2) 
-        ? (diff > 0 ? diff - totalSlides : diff + totalSlides) 
-        : diff;
-
-    const translateDistance = -slidesToMove * effectiveSlideWidth;
-
-    setTransform(slideContainerOffset + translateDistance, true);
+    const newOffset = calculateCenteringOffset();
+    setSlideContainerOffset(newOffset); // Recalculate offset before transition
+    const translateDistance = newOffset - (diff * effectiveSlideWidth);
+    setTransform(translateDistance, true);
 
     transitionTimeoutRef.current = setTimeout(() => {
-      setCurrentIndex(newLogicalIndex);
-      setTransform(calculateCenteringOffset(), false);
-      setCurrentTranslate(0);
+      setCurrentIndex(getLoopedIndex(currentIndex + diff));
+      setTransform(newOffset, false);
       setIsTransitioning(false);
     }, TRANSITION_DURATION);
-
   }, [isTransitioning, totalSlides, currentIndex, getLoopedIndex, getEffectiveSlideWidth, setTransform, calculateCenteringOffset, resetNavVisibilityTimer]);
 
-  // Autoplay management
   useEffect(() => {
-    if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
-    if (autoPlayInterval && !isHovering && !isDragging && !isTransitioning && totalSlides > 1) {
-      autoPlayTimeoutRef.current = setTimeout(() => goToNext(true), autoPlayInterval);
-    }
-    return () => {
-      if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
-    };
-  }, [currentIndex, goToNext, autoPlayInterval, isHovering, isDragging, isTransitioning, totalSlides]);
-  
-  // Navigation visibility management
-  useEffect(() => {
-    if (isHovering) {
-      setShowNavButtons(true);
-      if (navVisibilityTimeoutRef.current) clearTimeout(navVisibilityTimeoutRef.current);
-    } else {
-      resetNavVisibilityTimer();
-    }
-    return () => {
-      if (navVisibilityTimeoutRef.current) clearTimeout(navVisibilityTimeoutRef.current);
-    };
-  }, [isHovering, resetNavVisibilityTimer]);
-
-  // Setup and resize handling
-  useEffect(() => {
-    const checkIsMobile = () => window.innerWidth < 1024;
+    const checkIsMobile = () => setIsMobile(window.innerWidth < 1024);
 
     const setupSlider = () => {
-      if (!carouselRef.current || !slideContainerRef.current) return;
-      
-      setIsMobile(checkIsMobile());
-      
-      const newCenteringOffset = calculateCenteringOffset();
-      setSlideContainerOffset(newCenteringOffset);
-      setTransform(newCenteringOffset + currentTranslate, false);   
+      checkIsMobile();
+      const offset = calculateCenteringOffset();
+      setSlideContainerOffset(offset);
+      setTransform(offset, false);
     };
-    
-    const initialTimeoutId = setTimeout(setupSlider, 50); 
-    
-    const handleResize = () => {
-      if (!isDragging) {
-        if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
-        setIsTransitioning(false);
-        setupSlider();
-      }
-    };
+
+    const initialTimeoutId = setTimeout(setupSlider, 50);
+    const handleResize = () => setupSlider();
 
     window.addEventListener('resize', handleResize);
     return () => {
@@ -231,82 +192,101 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
       clearTimeout(initialTimeoutId);
       if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
       if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
-      if (navVisibilityTimeoutRef.current) clearTimeout(navVisibilityTimeoutRef.current);
-    };
-  }, [calculateCenteringOffset, setTransform, totalSlides, currentTranslate, isDragging]);
 
-  // Touch and mouse interaction handlers
-  const getPositionX = (event: MouseEvent | TouchEvent): number => {
-    return event.type.includes('mouse')
-      ? (event as MouseEvent).clientX
-      : (event as TouchEvent).touches[0].clientX;
-  };
+    };
+  }, [calculateCenteringOffset, setTransform]);
+
+  const getPositionX = useCallback((event: MouseEvent | TouchEvent): number => {
+    if (event.type.includes('mouse')) {
+      return (event as MouseEvent).clientX;
+    } else {
+      const touchEvent = event as TouchEvent;
+      const touches = touchEvent.touches.length > 0 ? touchEvent.touches : touchEvent.changedTouches;
+      return touches[0]?.clientX || 0;
+    }
+  }, []);
 
   const dragStart = useCallback((event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (totalSlides <= 1 || isTransitioning) return;
-    const targetElement = event.target as HTMLElement;
-    if (targetElement.closest('a, button')) return;
 
-    if (event.type === 'mousedown') {
-      (event as React.MouseEvent<HTMLDivElement>).preventDefault();
-    }
+    const targetElement = event.target as HTMLElement;
+    if (targetElement.closest('a, button, input, textarea, select')) return;
+
     if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
-    
+
+    if (event.type === 'mousedown') event.preventDefault();
+
     resetNavVisibilityTimer();
-    setIsTransitioning(false); 
-    setIsDragging(true);
-    setDragStartPos(getPositionX(event.nativeEvent));
     setTransform(slideContainerOffset + currentTranslate, false);
-  }, [totalSlides, isTransitioning, slideContainerOffset, currentTranslate, setTransform, resetNavVisibilityTimer]);
+    setIsTransitioning(false);
+    setDragStartPos(getPositionX(event.nativeEvent));
+    setIsDragging(true);
+  }, [totalSlides, isTransitioning, resetNavVisibilityTimer, getPositionX, slideContainerOffset, currentTranslate, setTransform]);
 
   const dragMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!isDragging) return;
     const currentPosition = getPositionX(event);
-    const diff = currentPosition - dragStartPos;
+    let diff = currentPosition - dragStartPos;
     setCurrentTranslate(diff);
     setTransform(slideContainerOffset + diff, false);
-  }, [isDragging, dragStartPos, slideContainerOffset, setTransform]);
+  }, [isDragging, getPositionX, dragStartPos, slideContainerOffset, setTransform]);
 
   const dragEnd = useCallback(() => {
     if (!isDragging) return;
-    setIsDragging(false);
 
     const effectiveSlideWidth = getEffectiveSlideWidth();
-    const threshold = effectiveSlideWidth * 0.2;
+    const threshold = effectiveSlideWidth * 0.25;
 
-    if (currentTranslate < -threshold) {
-      goToNext(false);
-    } else if (currentTranslate > threshold) {
-      goToPrevious();
+    setIsDragging(false);
+
+    if (Math.abs(currentTranslate) > threshold) {
+      if (currentTranslate < 0) {
+        goToNext(false);
+      } else {
+        goToPrevious();
+      }
     } else {
       setTransform(slideContainerOffset, true);
     }
-    
+
     setCurrentTranslate(0);
   }, [isDragging, currentTranslate, getEffectiveSlideWidth, goToNext, goToPrevious, slideContainerOffset, setTransform]);
 
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => dragMove(e);
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (isDragging) e.preventDefault();
+      dragMove(e);
+    };
     const handleGlobalMouseUp = () => dragEnd();
-    const handleGlobalTouchMove = (e: TouchEvent) => dragMove(e);
     const handleGlobalTouchEnd = () => dragEnd();
 
     if (isDragging) {
       document.addEventListener('mousemove', handleGlobalMouseMove);
       document.addEventListener('mouseup', handleGlobalMouseUp);
       document.addEventListener('mouseleave', handleGlobalMouseUp);
-      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
+      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
       document.addEventListener('touchend', handleGlobalTouchEnd);
+      document.addEventListener('touchcancel', handleGlobalTouchEnd);
     }
+
     return () => {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.removeEventListener('mouseleave', handleGlobalMouseUp);
       document.removeEventListener('touchmove', handleGlobalTouchMove);
       document.removeEventListener('touchend', handleGlobalTouchEnd);
+      document.removeEventListener('touchcancel', handleGlobalTouchEnd);
     };
   }, [isDragging, dragMove, dragEnd]);
+
+  useEffect(() => {
+    if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
+    if (autoPlayInterval && !isHovering && !isDragging && !isTransitioning && totalSlides > 1) {
+      autoPlayTimeoutRef.current = setTimeout(() => goToNext(true), autoPlayInterval);
+    }
+  }, [currentIndex, isHovering, isDragging, isTransitioning, autoPlayInterval, totalSlides, goToNext]);
 
   if (totalSlides === 0) {
     return <div className={`${styles.carousel} ${styles.loadingState}`} style={{ height: '300px' }}><p>Loading slides...</p></div>;
@@ -327,18 +307,26 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
   
   const currentLogicalIndex = getLoopedIndex(currentIndex);
   
-  // Calculate slide item width
   const getSlideItemWidth = () => {
-      if(isMobile) return getEffectiveSlideWidth();
-      return DESKTOP_FIXED_SLIDE_WIDTH;
-  }
+    if (isMobile || totalSlides <= 1) {
+      return carouselRef.current?.offsetWidth || 0;
+    }
+    return DESKTOP_FIXED_SLIDE_WIDTH;
+  };
 
   return (
     <div
       ref={carouselRef}
       className={styles.carousel}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseEnter={() => {
+        setIsHovering(true);
+        setShowNavButtons(true);
+      }}
+      onMouseLeave={() => {
+        setIsHovering(false);
+        setShowNavButtons(false);
+      }}
+      onMouseDown={dragStart}
       onTouchStart={dragStart}
       role="region"
       aria-roledescription="carousel"
@@ -347,7 +335,6 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
       <div
         ref={slideContainerRef}
         className={`${styles.slideContainer} ${isDragging ? styles.dragging : ''}`}
-        onMouseDown={dragStart}
         style={{ gap: isMobile ? `0px` : `${SLIDE_GAP}px` }}
       >
         {extendedSlidesToRender.map((slide, index) => {
@@ -357,7 +344,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
             
             return (
              <div
-               key={slide.uniqueKey}
+               key={index}
                className={styles.slide}
                style={{ width: `${getSlideItemWidth()}px` }}
                data-is-active={isCentralSlide}
@@ -451,7 +438,7 @@ export function ImageSlider({ slides, autoPlayInterval = 7000 }: ImageSliderProp
           <div className={styles.dots}>
             {slides.map((s, slideIdx) => (
               <button
-                key={`dot-${s.id}-${slideIdx}`}
+                key={slideIdx}
                 onClick={() => goToSlide(slideIdx)}
                 className={`${styles.dot} ${currentLogicalIndex === slideIdx ? styles.active : ''}`}
                 aria-label={`ไปที่สไลด์ ${slideIdx + 1} (${s.title})`}
