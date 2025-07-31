@@ -170,7 +170,7 @@ export async function GET(
 
     // 1. ✨[แก้ไข] รับ slug จาก context.params ซึ่งเป็น Promise ใน Next.js 15
     const { slug } = await context.params;
-    const decodedSlug = decodeURIComponent(slug.trim()).toLowerCase();
+    const decodedSlug = decodeURIComponent(slug.trim());
 
     // ตรวจสอบความถูกต้องของ slug
     if (!decodedSlug) {

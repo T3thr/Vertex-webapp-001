@@ -45,6 +45,7 @@ const cached: MongooseGlobalCache = globalWithMongoose.mongooseCache;
 export default async function dbConnect(): Promise<Mongoose> {
   // หากมีการเชื่อมต่ออยู่แล้ว ให้คืนค่า instance ที่แคชไว้
   if (cached.conn) {
+    console.log(`✅ [MongoDB] ใช้การเชื่อมต่อจาก Cache (${DB_NAME})`);
     return cached.conn;
   }
 

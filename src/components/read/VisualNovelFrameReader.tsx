@@ -25,11 +25,12 @@ import ReaderSettings, { IReaderSettings } from './ReaderSettings';
 import StoryStatusPanel from './StoryStatusPanel';
 import { DEFAULT_USER_SETTINGS, getInitialSettings } from '@/lib/user-settings';
 import { useDebouncedCallback } from 'use-debounce';
+import { saveReadingProgress } from '@/lib/actions/user.actions';
 
 // Refactored to import from models
 import type { INovel } from '@/backend/models/Novel';
 import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
-import type { IScene } from '@/backend/models/Scene';
+import type { IScene, ISceneEnding } from '@/backend/models/Scene';
 
 // The page provides a serialized version of INovel.
 // This type should reflect the actual data shape passed from page.tsx
@@ -99,6 +100,7 @@ export default function VisualNovelFrameReader({
   const [showEpisodeNav, setShowEpisodeNav] = useState(false);
   const [showStoryStatus, setShowStoryStatus] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [endingDetails, setEndingDetails] = useState<ISceneEnding | null>(null);
 
   // Settings State
   const [settings, setSettings] = useState<IReaderSettings>(DEFAULT_USER_SETTINGS);
@@ -235,47 +237,17 @@ export default function VisualNovelFrameReader({
     });
   }, []);
 
-  const handleEpisodeEnd = useCallback(async () => {
-    const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === activeEpisode._id);
-
-    if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
-      const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
-
-      if (!nextEpisode.hasAccess) {
-        router.push(`/novels/${novel.slug}`);
-        return;
-      }
-
-      const performTransition = (nextEp: FullEpisode, nextEpData: DetailedEpisode) => {
-        setDialogueHistory([]);
-        setActiveEpisode(nextEp);
-        setCurrentSceneId(nextEpData.firstSceneId);
-        
-        const newUrl = `/read/${novel.slug}/${nextEp.episodeOrder}-${nextEp.slug}`;
-        window.history.pushState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
-        setIsTransitioning(false);
-      };
-
-      if (loadedEpisodesData[nextEpisode._id]) {
-        performTransition(nextEpisode, loadedEpisodesData[nextEpisode._id]);
-      } else {
-        setIsTransitioning(true);
-        const nextEpisodeData = await fetchEpisodeDetails(nextEpisode._id);
-        if (nextEpisodeData) {
-          setLoadedEpisodesData(prev => ({ ...prev, [nextEpisode._id]: nextEpisodeData }));
-          performTransition(nextEpisode, nextEpisodeData);
-        } else {
-          console.error("Failed to load next episode, returning to novel page.");
-          setIsTransitioning(false);
-          router.push(`/novels/${novel.slug}`);
-        }
-      }
-    } else if (currentEpisodeIndex !== -1 && currentEpisodeIndex === allEpisodes.length - 1) {
-      setShowSummary(true);
-    } else {
-      router.push(`/novels/${novel.slug}`);
+  const handleEpisodeEnd = useCallback((ending?: ISceneEnding) => {
+    console.log("Episode has ended.", ending);
+    if (ending) {
+      setEndingDetails(ending);
     }
-  }, [allEpisodes, activeEpisode, novel.slug, router, loadedEpisodesData, fetchEpisodeDetails]);
+    setShowSummary(true);
+    // Potentially save progress here
+    if (userId && activeEpisode?._id) {
+      saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId || '', true);
+    }
+  }, [userId, novel._id, activeEpisode?._id, currentSceneId]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {
@@ -295,6 +267,18 @@ export default function VisualNovelFrameReader({
   };
 
   const activeEpisodeData = loadedEpisodesData[activeEpisode._id];
+
+  const getEndingTypeText = (type: ISceneEnding['endingType']) => {
+    switch (type) {
+      case 'TRUE': return 'TRUE ENDING';
+      case 'GOOD': return 'GOOD ENDING';
+      case 'BAD': return 'BAD ENDING';
+      case 'NORMAL': return 'NORMAL ENDING';
+      case 'ALTERNATE': return 'ALTERNATE ENDING';
+      case 'JOKE': return 'JOKE ENDING';
+      default: return 'ENDING';
+    }
+  };
 
   return (
     <div className="w-full h-full bg-black text-white flex flex-col relative">
@@ -392,6 +376,8 @@ export default function VisualNovelFrameReader({
                 <EndSummaryScreen 
                     novel={novel} 
                     backgroundUrl={currentSceneData?.background?.value}
+                    ending={endingDetails}
+                    getEndingTypeText={getEndingTypeText}
                 />
             )}
         </AnimatePresence>
@@ -412,7 +398,17 @@ export default function VisualNovelFrameReader({
 }
 
 // A new component for the end summary screen
-function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backgroundUrl?: string }) {
+function EndSummaryScreen({ 
+  novel, 
+  backgroundUrl, 
+  ending, 
+  getEndingTypeText
+}: { 
+  novel: DisplayNovel, 
+  backgroundUrl?: string,
+  ending: ISceneEnding | null,
+  getEndingTypeText: (type: ISceneEnding['endingType']) => string
+}) {
     const router = useRouter();
 
     return (
@@ -429,29 +425,62 @@ function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backg
                     className="absolute inset-0 w-full h-full object-cover"
                 />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent" />
             
-            <div className="relative z-10 text-center text-white p-8 rounded-lg max-w-2xl">
-                <motion.h1 
-                    className="text-4xl md:text-5xl font-bold mb-4"
-                    style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
-                    initial={{ y: -20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
-                >
-                    บทสรุปการเดินทาง
-                </motion.h1>
-                <motion.p 
-                    className="text-lg md:text-xl text-white/80 mb-8"
-                    style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
-                    initial={{ y: -20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
-                >
-                    ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา DIVWY!
-                </motion.p>
+            <div className="relative z-10 text-center text-white p-8 rounded-lg max-w-3xl">
+                {ending ? (
+                  <>
+                    <motion.p 
+                      className="text-lg md:text-xl font-bold text-primary-400 tracking-widest"
+                      style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
+                      initial={{ y: -20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
+                    >
+                      {getEndingTypeText(ending.endingType)}
+                    </motion.p>
+                    <motion.h1 
+                        className="text-4xl md:text-5xl font-bold mb-2 mt-2"
+                        style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
+                    >
+                        {ending.title}
+                    </motion.h1>
+                    {ending.description && (
+                      <motion.p 
+                        className="text-md md:text-lg text-white/80 mb-8 max-w-xl mx-auto"
+                        style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.6 } }}
+                      >
+                        {ending.description}
+                      </motion.p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <motion.h1 
+                        className="text-4xl md:text-5xl font-bold mb-4"
+                        style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
+                    >
+                        บทสรุปการเดินทาง
+                    </motion.h1>
+                    <motion.p 
+                        className="text-lg md:text-xl text-white/80 mb-8"
+                        style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
+                    >
+                        ขอบคุณที่ร่วมสนุกกับพวกเรา DIVWY!
+                    </motion.p>
+                  </>
+                )}
                 <motion.div 
-                    className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                    className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12"
                     initial={{ y: -20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1, transition: { delay: 0.6 } }}
+                    animate={{ y: 0, opacity: 1, transition: { delay: 0.8 } }}
                 >
                     <button
                         onClick={() => router.push(`/novels/${novel.slug}`)}

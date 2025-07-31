@@ -10,7 +10,7 @@ import type {
     IUserDisplayPreferences, 
     IVisualNovelGameplayPreferences 
 } from '@/backend/models/UserSettings';
-import type { IScene, ICharacterInScene, ITextContent, IAudioElement, IBackgroundSetting, IConfigurableAction } from '@/backend/models/Scene';
+import type { IScene, ICharacterInScene, ITextContent, IAudioElement, IBackgroundSetting, IConfigurableAction, ISceneEnding } from '@/backend/models/Scene';
 import type { ICharacter } from '@/backend/models/Character';
 import type { INovel } from '@/backend/models/Novel';
 import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
@@ -43,6 +43,7 @@ type SerializedScene = Omit<IScene, '_id' | 'novelId' | 'episodeId' | 'character
     audios: IAudioElement[];
     defaultNextSceneId?: string;
     previousSceneId?: string;
+    ending?: ISceneEnding;
 };
 
 type SerializedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
@@ -115,7 +116,7 @@ interface VisualNovelContentProps {
   onSceneChange: (sceneId: string) => void;
   onSceneDataChange: (scene: SerializedScene | null) => void;
   onDialogueEntry: (entry: DialogueHistoryItem) => void;
-  onEpisodeEnd: () => void;
+  onEpisodeEnd: (ending?: ISceneEnding) => void;
 }
 
 // --- Audio Hook ---
@@ -333,7 +334,7 @@ export default function VisualNovelContent({
                 const nextScene = episodeData.scenes[currentSceneIndex + 1];
                 if (nextScene) onSceneChange(nextScene._id);
             } else {
-                onEpisodeEnd();
+                onEpisodeEnd(currentScene?.ending);
             }
         }
       }
@@ -358,13 +359,13 @@ export default function VisualNovelContent({
           onSceneChange(defaultNextSceneId);
         } else {
           // If no fallback, end the episode
-          onEpisodeEnd();
+          onEpisodeEnd(currentScene?.ending);
         }
       }
     } else {
         // If no "go_to_node" action, assume it's the end or requires a different handler.
         // For now, we just end the episode.
-        onEpisodeEnd();
+        onEpisodeEnd(currentScene?.ending);
     }
   };
   
