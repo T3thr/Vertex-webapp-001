@@ -42,7 +42,7 @@ const findOrCreateCategory = async (name: string, type: CategoryType, slug: stri
 
 
 const createMockAuthor = async () => {
-  let author = await UserModel.findOne({ username: AUTHOR_USERNAME });
+  const author = await UserModel.findOne({ username: AUTHOR_USERNAME });
   if (author) {
     // Ensure profile exists
     if (!author.profile) {
