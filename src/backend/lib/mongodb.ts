@@ -1,10 +1,11 @@
 // src/backend/lib/mongodb.ts
 // นำเข้า mongoose สำหรับเชื่อมต่อกับ MongoDB และกำหนดประเภทให้ชัดเจนด้วย TypeScript
+// ปรับปรุงให้การเชื่อมต่อเร็วที่สุดโดยไม่ใช้ cache จ่ก mongo ใช้ redis เก็ย cache แทนเพือ speed insight ของ web
 import mongoose, { ConnectOptions, Mongoose } from 'mongoose';
 
 // ดึงค่าตัวแปรจากไฟล์ .env และกำหนดประเภทให้เป็น string หรือ undefined
 const MONGODB_URI: string | undefined = process.env.MONGODB_URI;
-const DB_NAME: string = process.env.DB_NAME || 'default_db';
+const DB_NAME: string = process.env.DB_NAME || 'DivWy';
 
 // ตรวจสอบว่า MONGODB_URI ถูกกำหนดไว้หรือไม่
 if (!MONGODB_URI) {
@@ -13,80 +14,34 @@ if (!MONGODB_URI) {
   );
 }
 
-// สร้าง interface สำหรับเก็บสถานะการเชื่อมต่อใน global cache
-interface MongooseGlobalCache {
-  conn: Mongoose | null;
-  promise: Promise<Mongoose> | null;
-}
+// ตั้งค่า strictQuery เป็น false เพื่อรองรับ query แบบ dynamic
+mongoose.set('strictQuery', false);
 
-// ประกาศ global type-safe สำหรับ Next.js เพื่อให้ TypeScript รู้จัก property mongooseCache
-declare global {
-  // eslint-disable-next-line no-var
-  var mongooseCache: MongooseGlobalCache | undefined;
-}
-
-// กำหนด cache ให้ global object และใช้ type assertion เพื่อความปลอดภัย
-const globalWithMongoose = global as typeof globalThis & {
-  mongooseCache?: MongooseGlobalCache;
+// กำหนดตัวเลือกสำหรับการเชื่อมต่อ MongoDB ให้เร็วที่สุด
+const options: ConnectOptions = {
+  dbName: DB_NAME,
+  maxPoolSize: 20, // เพิ่ม connection pool สำหรับ performance
+  serverSelectionTimeoutMS: 2000, // ลด timeout ให้เร็วขึ้น
+  socketTimeoutMS: 10000, // ลด socket timeout
+  connectTimeoutMS: 2000, // เพิ่ม connection timeout
+  retryWrites: true, // เปิดใช้งาน retry writes
+  retryReads: true, // เปิดใช้งาน retry reads
 };
 
-// ตรวจสอบและกำหนดค่าเริ่มต้นให้ mongooseCache ถ้ายังไม่มี
-if (!globalWithMongoose.mongooseCache) {
-  globalWithMongoose.mongooseCache = { conn: null, promise: null };
-}
-
-const cached: MongooseGlobalCache = globalWithMongoose.mongooseCache;
-
 /**
- * ฟังก์ชันสำหรับเชื่อมต่อ MongoDB โดยใช้ Mongoose พร้อมระบบ cache และ retry
+ * ฟังก์ชันสำหรับเชื่อมต่อ MongoDB โดยใช้ Mongoose แบบ direct connection (ไม่ใช้ cache)
+ * ใช้ Redis สำหรับ caching แทนเพื่อ performance ที่ดีกว่า
  * @returns Promise<Mongoose> คืนค่า instance ของ Mongoose เมื่อเชื่อมต่อสำเร็จ
- * @throws Error หากไม่สามารถเชื่อมต่อได้หลังจากลองใหม่ครบจำนวนครั้ง
+ * @throws Error หากไม่สามารถเชื่อมต่อได้
  */
 export default async function dbConnect(): Promise<Mongoose> {
-  // หากมีการเชื่อมต่ออยู่แล้ว ให้คืนค่า instance ที่แคชไว้
-  if (cached.conn) {
-    console.log(`✅ [MongoDB] ใช้การเชื่อมต่อจาก Cache (${DB_NAME})`);
-    return cached.conn;
+  try {
+    // เชื่อมต่อ MongoDB แบบ direct โดยไม่มี caching
+    const connection: Mongoose = await mongoose.connect(MONGODB_URI as string, options);
+    console.log(`✅ [MongoDB] เชื่อมต่อสำเร็จ (${DB_NAME}) - ไม่ใช้ internal cache`);
+    return connection;
+  } catch (err: unknown) {
+    console.error(`❌ [MongoDB] การเชื่อมต่อล้มเหลว`, err);
+    throw new Error('❌ ไม่สามารถเชื่อมต่อ MongoDB ได้');
   }
-
-  // ถ้ายังไม่มี Promise ที่กำลังเชื่อมต่อ ให้เริ่มกระบวนการเชื่อมต่อใหม่
-  if (!cached.promise) {
-    // ตั้งค่า strictQuery เป็น false เพื่อรองรับ query แบบ dynamic
-    mongoose.set('strictQuery', false);
-
-    // กำหนดตัวเลือกสำหรับการเชื่อมต่อ MongoDB
-    const options: ConnectOptions = {
-      dbName: DB_NAME,
-      maxPoolSize: 10, // จำกัดขนาด connection pool
-      serverSelectionTimeoutMS: 5000, // รอ server ไม่เกิน 5 วินาที
-      socketTimeoutMS: 45000, // ปิด socket เมื่อไม่ได้ใช้งานนาน 45 วินาที
-    };
-
-    // สร้าง Promise สำหรับการเชื่อมต่อพร้อม retry logic
-    cached.promise = (async () => {
-      const maxRetries: number = 3;
-      for (let i = 0; i < maxRetries; i++) {
-        try {
-          // ตรวจสอบว่า MONGODB_URI ไม่เป็น undefined (ยืนยันจากเงื่อนไขด้านบน)
-          // ใช้ type assertion เพื่อบอก TypeScript ว่า MONGODB_URI เป็น string แน่นอน
-          const connection: Mongoose = await mongoose.connect(MONGODB_URI as string, options);
-          console.log(`✅ [MongoDB] เชื่อมต่อสำเร็จ (${DB_NAME})`);
-          return connection;
-        } catch (err: unknown) {
-          // บันทึกข้อผิดพลาดและลองใหม่
-          console.error(`❌ [MongoDB] พยายามเชื่อมต่อครั้งที่ ${i + 1} ล้มเหลว`, err);
-          if (i === maxRetries - 1) {
-            throw new Error('❌ ไม่สามารถเชื่อมต่อ MongoDB ได้หลังจากพยายามหลายครั้ง');
-          }
-          // รอ 2 วินาทีก่อนลองใหม่
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-      }
-      throw new Error('❌ ไม่สามารถเชื่อมต่อ MongoDB ได้หลังจากพยายามหลายครั้ง');
-    })();
-  }
-
-  // รอให้การเชื่อมต่อสำเร็จและเก็บ instance ไว้ใน cache
-  cached.conn = await cached.promise;
-  return cached.conn;
 }

@@ -9,6 +9,7 @@ import ChoiceModel from '@/backend/models/Choice';
 import UserModel, { IUser } from '@/backend/models/User';
 import UserProfileModel, { IUserProfile } from '@/backend/models/UserProfile';
 import CategoryModel, { CategoryType } from '@/backend/models/Category'; // Import CategoryModel
+import redis from '@/backend/lib/redis'; // Import Redis client
 import dbConnect from '@/backend/lib/mongodb'; // Import the centralized dbConnect
 
 config({ path: '.env' });
@@ -821,11 +822,21 @@ const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
   console.log('🔍 Finding or creating necessary categories...');
   const langCatId = await findOrCreateCategory('ภาษาไทย', CategoryType.LANGUAGE, 'th');
   const themeCatId = await findOrCreateCategory('สยองขวัญ', CategoryType.GENRE, 'horror');
+  const subThemeCatId1 = await findOrCreateCategory('จิตวิทยา', CategoryType.GENRE, 'psychological');
+  const subThemeCatId2 = await findOrCreateCategory('ปริศนา', CategoryType.GENRE, 'mystery');
+  const moodToneCatId1 = await findOrCreateCategory('ลึกลับ', CategoryType.MOOD_AND_TONE, 'mysterious');
+  const moodToneCatId2 = await findOrCreateCategory('น่ากลัว', CategoryType.MOOD_AND_TONE, 'scary');
+  const ageRatingCatId = await findOrCreateCategory('18+', CategoryType.AGE_RATING, '18-plus');
+  const narrativePerspectiveCatId = await findOrCreateCategory('บุคคลที่หนึ่ง', CategoryType.NARRATIVE_PERSPECTIVE, 'first-person');
+  const artStyleCatId = await findOrCreateCategory('สมจริง', CategoryType.ART_STYLE, 'realistic');
+  const interactivityLevelCatId = await findOrCreateCategory('สูง', CategoryType.INTERACTIVITY_LEVEL, 'high');
+  const lengthTagCatId = await findOrCreateCategory('เรื่องสั้น', CategoryType.LENGTH_TAG, 'short-story');
+
   console.log('✅ Categories are ready.');
 
   const novel = new NovelModel({
     title: 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999',
-    slug: 'the-whisper-of-apartment-999',
+    slug: 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999',
     author: authorId,
     synopsis: 'เมื่อนิราย้ายเข้าบ้านใหม่ราคาถูก เธอก็ได้พบกับข่าวลือแปลกๆ และความมืดที่รอคอยอยู่ข้างใน การตัดสินใจแรกของเธอจะเป็นตัวกำหนดชะตากรรม',
     longDescription: 'นิยายสยองขวัญจิตวิทยาที่จะพาคุณดำดิ่งไปกับบรรยากาศอันน่าขนลุกของบ้านร้างและความลับที่ซ่อนอยู่ ทุกการเลือกของคุณอาจหมายถึงความเป็นหรือความตาย',
@@ -833,12 +844,29 @@ const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
     bannerImageUrl: '/images/background/badend1.png',
     themeAssignment: {
       mainTheme: {
-        categoryId: themeCatId, // Use the actual category ID
+        categoryId: themeCatId,
         customName: 'สยองขวัญ'
       },
+      subThemes: [
+        { categoryId: subThemeCatId1, customName: 'จิตวิทยา' },
+        { categoryId: subThemeCatId2, customName: 'ปริศนา' }
+      ],
+      moodAndTone: [moodToneCatId1, moodToneCatId2],
+      contentWarnings: [],
       customTags: ['สยองขวัญ', 'จิตวิทยา', 'ปริศนา', 'บ้านผีสิง', 'ยอดนิยม', 'แนะนำ']
     },
-    language: langCatId, // Use the actual language category ID
+    narrativeFocus: {
+        narrativePerspective: narrativePerspectiveCatId,
+        artStyle: artStyleCatId,
+        interactivityLevel: interactivityLevelCatId,
+        lengthTag: lengthTagCatId,
+    },
+    worldBuildingDetails: {
+        loreSummary: 'อพาร์ตเมนท์เก่าแก่ที่มีประวัติศาสตร์ดำมืดซ่อนอยู่ ทุกห้องมีเรื่องราวของตัวเอง และไม่ใช่ทุกเรื่องที่จะจบลงด้วยดี',
+        technologyPrinciples: 'เรื่องราวเกิดขึ้นในยุคปัจจุบัน ไม่มีเทคโนโลยีล้ำยุค แต่เน้นบรรยากาศและความเชื่อเหนือธรรมชาติ'
+    },
+    ageRatingCategoryId: ageRatingCatId,
+    language: langCatId,
     status: NovelStatus.PUBLISHED,
     accessLevel: NovelAccessLevel.PUBLIC,
     isCompleted: false,
@@ -848,10 +876,9 @@ const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
     },
     totalEpisodesCount: 1,
     publishedEpisodesCount: 1,
-    isFeatured: true, // Make the novel featured
-    publishedAt: new Date(), // Set publish date to now to appear in new releases
+    isFeatured: true,
+    publishedAt: new Date(),
     lastContentUpdatedAt: new Date(),
-
     stats: {
       viewsCount: 852345,
       uniqueViewersCount: 55678,
@@ -865,16 +892,19 @@ const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
       bookmarksCount: 2345,
       totalWords: 15000,
       estimatedReadingTimeMinutes: 75,
+      completionRate: 0,
+      purchasesCount: 0,
       lastPublishedEpisodeAt: new Date(),
+      currentReaders: 0,
+      peakConcurrentReaders: 0,
       trendingStats: {
         viewsLast24h: 15876,
         likesLast24h: 1210,
         commentsLast24h: 155,
-        trendingScore: 9999, // High score to be on top
+        trendingScore: 9999,
         lastTrendingScoreUpdate: new Date(),
       },
     },
-
     monetizationSettings: {
       isCoinBasedUnlock: true,
       defaultEpisodePriceCoins: 10,
@@ -885,9 +915,17 @@ const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
         isActive: true,
         promotionalPriceCoins: 5,
         promotionStartDate: new Date(),
-        promotionEndDate: new Date(new Date().setDate(new Date().getDate() + 7)), // 1 week promo
+        promotionEndDate: new Date(new Date().setDate(new Date().getDate() + 7)),
         promotionDescription: "ลดราคาพิเศษสำหรับนิยายใหม่!",
       },
+    },
+    psychologicalAnalysisConfig: {
+        allowsPsychologicalAnalysis: false,
+        sensitiveChoiceCategoriesBlocked: []
+    },
+    collaborationSettings: {
+        allowCoAuthorRequests: false,
+        pendingCoAuthors: []
     },
   });
 
@@ -940,8 +978,30 @@ export const seedWhisper999Data = async () => {
     console.log('✅ ดัชนีของ Character collection พร้อมใช้งาน');
     
     // --- START: Cleanup Logic ---
-    const novelSlug = 'the-whisper-of-apartment-999';
+    const novelSlug = 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999';
     const novelTitle = 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999';
+
+    // --- START: Category Cleanup --- 
+    const categorySlugsToClean = [
+      'horror', 'psychological', 'mystery', 'haunted-house', 'popular', 'recommended',
+      'dark', 'suspenseful', '18-plus', 'thai', 'first-person', 'realistic', 'high', 'short-story'
+    ];
+    console.log('🧹 เริ่มการล้างข้อมูลหมวดหมู่ที่เกี่ยวข้อง...');
+    const deleteResult = await CategoryModel.deleteMany({ slug: { $in: categorySlugsToClean }, isSystemDefined: true });
+    if (deleteResult.deletedCount > 0) {
+      console.log(`✅ ลบหมวดหมู่เก่า ${deleteResult.deletedCount} รายการ`);
+    }
+    // --- END: Category Cleanup ---
+
+    // --- START: Redis Cache Cleanup ---
+    const cacheKey = `novel:${novelSlug}`;
+    console.log(`🧹 Clearing Redis cache for key: ${cacheKey}`)
+    if (!redis.isOpen) {
+      await redis.connect();
+    }
+    await redis.del(cacheKey);
+    console.log('✅ ลบ Cache ใน Redis เรียบร้อย')
+    // --- END: Redis Cache Cleanup ---
     console.log(`🧹 เริ่มการล้างข้อมูลเก่าสำหรับนิยาย: slug="${novelSlug}" หรือ title="${novelTitle}"...`);
 
     // ค้นหา novel ทั้งหมดที่มี slug หรือตรงกับชื่อเรื่อง (เผื่อมีข้อมูลซ้ำ)
