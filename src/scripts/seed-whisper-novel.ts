@@ -117,7 +117,14 @@ const sceneData = [
 // --- SEEDING LOGIC ---
 
 const findOrCreateCategory = async (name: string, type: CategoryType, slug: string) => {
+    // Check for existing category by slug and type (most reliable)
     let category = await CategoryModel.findOne({ slug, categoryType: type });
+    
+    // If not found by slug, check by name and type (fallback)
+    if (!category) {
+        category = await CategoryModel.findOne({ name, categoryType: type });
+    }
+    
     if (!category) {
         console.log(`- Creating new category: "${name}"`);
         category = await CategoryModel.create({
@@ -127,6 +134,8 @@ const findOrCreateCategory = async (name: string, type: CategoryType, slug: stri
             description: `Category for ${name}`,
             isSystemDefined: true,
         });
+    } else {
+        console.log(`- Using existing category: "${category.name}" (Type: ${category.categoryType}, ID: ${category._id})`);
     }
     return category._id;
 };

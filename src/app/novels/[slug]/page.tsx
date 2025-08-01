@@ -61,7 +61,16 @@ const toPopulatedCharacter = (char: any) => {
 async function getNovelDataDirect(slug: string): Promise<PopulatedNovelForDetailPage | null> {
   await dbConnect();
 
-  const novelFromDb = await NovelModel.findOne({ slug: slug.trim(), isDeleted: false })
+  // Decode URL-encoded Thai slug with error handling
+  let decodedSlug: string;
+  try {
+    decodedSlug = decodeURIComponent(slug.trim());
+  } catch (error) {
+    console.error(`[NovelPage] Error decoding slug "${slug}":`, error);
+    return null;
+  }
+  
+  const novelFromDb = await NovelModel.findOne({ slug: decodedSlug, isDeleted: false })
     .populate<{ author: IUser }>({ path: "author", select: "_id username profile writerStats", model: UserModel })
     .populate<{ "themeAssignment.mainTheme.categoryId": ICategory }>({
       path: "themeAssignment.mainTheme.categoryId",
@@ -272,12 +281,23 @@ export async function generateMetadata(
     };
   }
 
-  const novel = await getNovelData(slug.trim());
+  let decodedSlug: string;
+  try {
+    decodedSlug = decodeURIComponent(slug.trim());
+  } catch (error) {
+    console.error(`[generateMetadata] Error decoding slug "${slug}":`, error);
+    return {
+      title: "ข้อมูลไม่ถูกต้อง - DivWy",
+      description: "ไม่สามารถโหลดข้อมูลสำหรับเนื้อหานี้ได้เนื่องจาก slug ไม่ถูกต้อง",
+      robots: { index: false, follow: false }
+    };
+  }
+  const novel = await getNovelData(decodedSlug);
 
   if (!novel) {
     return {
       title: "ไม่พบนิยาย - DivWy",
-      description: `ขออภัย ไม่พบข้อมูลนิยายที่คุณกำลังค้นหา (slug: ${slug})`,
+      description: `ขออภัย ไม่พบข้อมูลนิยายที่คุณกำลังค้นหา (slug: ${decodedSlug})`,
       robots: { index: false, follow: false }
     };
   }
@@ -365,7 +385,14 @@ export default async function NovelPage({ params }: NovelPageProps) {
     notFound();
   }
 
-  const novel = await getNovelData(slug.trim());
+  let decodedSlug: string;
+  try {
+    decodedSlug = decodeURIComponent(slug.trim());
+  } catch (error) {
+    console.error(`[NovelPage] Error decoding slug "${slug}":`, error);
+    notFound();
+  }
+  const novel = await getNovelData(decodedSlug);
 
   if (!novel) {
     console.log(`⚠️ [NovelPage] ไม่พบข้อมูลนิยายสำหรับ slug "${slug}"`);

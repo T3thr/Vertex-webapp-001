@@ -24,7 +24,14 @@ const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME || 'whisper_author';
  * @returns The ObjectId of the category.
  */
 const findOrCreateCategory = async (name: string, type: CategoryType, slug: string): Promise<mongoose.Types.ObjectId> => {
+  // Check for existing category by slug and type (most reliable)
   let category = await CategoryModel.findOne({ slug, categoryType: type });
+  
+  // If not found by slug, check by name and type (fallback)
+  if (!category) {
+    category = await CategoryModel.findOne({ name, categoryType: type });
+  }
+  
   if (!category) {
     console.log(`- Creating new category: "${name}" (Type: ${type})`);
     category = new CategoryModel({
@@ -37,6 +44,8 @@ const findOrCreateCategory = async (name: string, type: CategoryType, slug: stri
       isActive: true,
     });
     await category.save();
+  } else {
+    console.log(`- Using existing category: "${category.name}" (Type: ${category.categoryType}, ID: ${category._id})`);
   }
   return category._id;
 };

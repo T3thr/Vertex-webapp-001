@@ -95,6 +95,9 @@ const main = async () => {
     await mongoose.disconnect();
     console.log('🔌 ปิดการเชื่อมต่อฐานข้อมูลแล้ว');
   }
+  
+  // Exit the process to prevent hanging
+  process.exit(0);
 };
 
 // เรียกใช้ main function เพื่อเริ่มการทำงาน
