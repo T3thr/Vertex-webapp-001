@@ -3,112 +3,63 @@ import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
 import NovelModel, { NovelStatus, NovelAccessLevel, NovelContentType, NovelEndingType } from '@/backend/models/Novel';
 import EpisodeModel, { EpisodeStatus, EpisodeAccessType } from '@/backend/models/Episode';
-import SceneModel, { TimelineEventType, ISceneEnding } from '@/backend/models/Scene';
-import CharacterModel from '@/backend/models/Character';
-import ChoiceModel from '@/backend/models/Choice';
+import SceneModel, { TextContentType, ISceneEnding } from '@/backend/models/Scene';
+import CharacterModel, { CharacterRoleInStory, CharacterGenderIdentity } from '@/backend/models/Character';
+import ChoiceModel, { ChoiceActionType } from '@/backend/models/Choice';
 import UserModel, { IUser } from '@/backend/models/User';
 import UserProfileModel, { IUserProfile } from '@/backend/models/UserProfile';
-import CategoryModel, { CategoryType } from '@/backend/models/Category'; // Import CategoryModel
-import redis from '@/backend/lib/redis'; // Import Redis client
-import dbConnect from '@/backend/lib/mongodb'; // Import the centralized dbConnect
+import CategoryModel, { CategoryType } from '@/backend/models/Category';
+import StoryMapModel, { 
+  StoryMapNodeType, 
+  IStoryMapNode, 
+  IStoryMapEdge, 
+  IStoryVariableDefinition,
+  StoryVariableDataType
+} from '@/backend/models/StoryMap';
+import { v4 as uuidv4 } from 'uuid';
+import redis from '@/backend/lib/redis';
+import dbConnect from '@/backend/lib/mongodb';
 
 config({ path: '.env' });
 
 const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME || 'whisper_author';
 
 /**
- * Finds or creates a category and returns its ID.
- * @param name - The name of the category.
- * @param type - The type of the category.
- * @param slug - The slug for the category.
- * @returns The ObjectId of the category.
+ * ฟังก์ชันค้นหาหรือสร้างหมวดหมู่ใหม่ และคืนค่า ObjectId
+ * @param name - ชื่อหมวดหมู่
+ * @param type - ประเภทหมวดหมู่ตาม CategoryType enum
+ * @param slug - slug สำหรับ URL
+ * @returns ObjectId ของหมวดหมู่
  */
 const findOrCreateCategory = async (name: string, type: CategoryType, slug: string): Promise<mongoose.Types.ObjectId> => {
-  // Check for existing category by slug and type (most reliable)
+  // ค้นหาหมวดหมู่ที่มีอยู่แล้วด้วย slug และ type
   let category = await CategoryModel.findOne({ slug, categoryType: type });
   
-  // If not found by slug, check by name and type (fallback)
+  // หากไม่พบ ให้ลองค้นหาด้วยชื่อและประเภท
   if (!category) {
     category = await CategoryModel.findOne({ name, categoryType: type });
   }
   
   if (!category) {
-    console.log(`- Creating new category: "${name}" (Type: ${type})`);
+    console.log(`- สร้างหมวดหมู่ใหม่: "${name}" (ประเภท: ${type})`);
     category = new CategoryModel({
       name,
       slug,
       categoryType: type,
-      description: `Category for ${name}`,
-      visibility: 'public',
+      description: `หมวดหมู่สำหรับ ${name}`,
+      visibility: 'PUBLIC',
       isSystemDefined: true,
       isActive: true,
     });
     await category.save();
   } else {
-    console.log(`- Using existing category: "${category.name}" (Type: ${category.categoryType}, ID: ${category._id})`);
+    console.log(`- ใช้หมวดหมู่ที่มีอยู่: "${category.name}" (ประเภท: ${category.categoryType}, ID: ${category._id})`);
   }
   return category._id;
 };
 
 
-const createMockAuthor = async () => {
-  const author = await UserModel.findOne({ username: AUTHOR_USERNAME });
-  if (author) {
-    // Ensure profile exists
-    if (!author.profile) {
-        let userProfile = await UserProfileModel.findOne({ userId: author._id });
-        if (!userProfile) {
-            userProfile = new UserProfileModel({
-                userId: author._id,
-                displayName: 'นักเขียนเงา',
-                penNames: ['ผู้เขียนเสียงกระซิบ', 'Shadow Scribe'],
-                bio: 'นักเขียนผู้หลงใหลในเรื่องราวลึกลับและสยองขวัญ',
-            });
-            await userProfile.save();
-        }
-        author.profile = userProfile._id;
-        await author.save();
-    }
-    console.log(`✅ พบผู้แต่งในฐานข้อมูล: ${author.username} (${author._id})`);
-    return author._id;
-  }
 
-  const salt = await bcrypt.genSalt(12);
-  const hashedPassword = await bcrypt.hash('password123', salt);
-
-  const newAuthor = new UserModel({
-    username: AUTHOR_USERNAME,
-    email: 'author_whisper@novelmaze.com',
-    password: hashedPassword,
-    accounts: [{
-      provider: 'credentials',
-      providerAccountId: 'author_whisper@novelmaze.com',
-      type: 'credentials'
-    }],
-    roles: ['Writer'],
-    primaryPenName: 'นักเขียนเงา',
-    isEmailVerified: true,
-    isActive: true,
-    isBanned: false,
-    isDeleted: false,
-  });
-
-  const savedAuthor = await newAuthor.save();
-
-  const authorProfile = new UserProfileModel({
-      userId: savedAuthor._id,
-      displayName: 'นักเขียนเงา',
-      penNames: ['ผู้เขียนเสียงกระซิบ', 'Shadow Scribe'],
-      bio: 'นักเขียนผู้หลงใหลในเรื่องราวลึกลับและสยองขวัญ',
-  });
-  await authorProfile.save();
-  
-  savedAuthor.profile = authorProfile._id;
-  await savedAuthor.save();
-
-  console.log(`✅ สร้างผู้แต่งใหม่: ${savedAuthor.username} (${savedAuthor._id})`);
-  return savedAuthor._id;
-};
 
 const createWhisper999Characters = async (novelId: mongoose.Types.ObjectId, authorId: mongoose.Types.ObjectId) => {
   const characters = [
@@ -168,8 +119,13 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_EXPLORE',
       text: 'เดินสำรวจบ้านชั้นล่างทันที',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_explore_downstairs_1' } }],
+      actions: [{ 
+        actionId: uuidv4(), 
+        type: ChoiceActionType.GO_TO_NODE, 
+        parameters: { targetNodeId: 'scene_explore_downstairs_1' } 
+      }],
       isMajorChoice: true,
+      isArchived: false,
     },
     {
       novelId,
@@ -179,8 +135,8 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       text: 'ทำความสะอาดห้องนั่งเล่นและเปิดผ้าม่าน',
       actions: [
         {
-          actionId: 'action_end_clean',
-          type: 'end_novel_branch',
+          actionId: uuidv4(),
+          type: ChoiceActionType.END_NOVEL_BRANCH,
           parameters: {
             endingNodeId: 'ENDING_SAFE_DAY1',
             outcomeDescription: 'คุณเลือกที่จะใช้ชีวิตอย่างปกติสุขต่อไป และไม่มีอะไรผิดปกติเกิดขึ้นในวันแรก... อย่างน้อยก็ในตอนนี้',
@@ -190,6 +146,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
         }
       ],
       isMajorChoice: true,
+      isArchived: false,
     },
     {
       novelId,
@@ -199,8 +156,8 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       text: 'โทรหาเพื่อนเพื่อเล่าเรื่องบ้านใหม่',
       actions: [
         {
-          actionId: 'action_end_call',
-          type: 'end_novel_branch',
+          actionId: uuidv4(),
+          type: ChoiceActionType.END_NOVEL_BRANCH,
           parameters: {
             endingNodeId: 'ENDING_SAFE_DAY1_SHARED',
             outcomeDescription: 'คุณเล่าเรื่องบ้านใหม่ให้เพื่อนฟัง และใช้เวลาที่เหลือของวันไปกับการจัดของอย่างสบายใจ',
@@ -210,6 +167,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
         }
       ],
       isMajorChoice: true,
+      isArchived: false,
     },
     {
       novelId,
@@ -217,8 +175,13 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_LISTEN_NOW',
       text: 'กดฟังเทปทันที',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_listen_tape_1' } }],
+      actions: [{ 
+        actionId: uuidv4(), 
+        type: ChoiceActionType.GO_TO_NODE, 
+        parameters: { targetNodeId: 'scene_listen_tape_1' } 
+      }],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -228,8 +191,8 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       text: 'รอให้ถึงตีสาม แล้วฟังตามที่เขียน',
        actions: [
         {
-          actionId: 'action_end_wait',
-          type: 'end_novel_branch',
+          actionId: uuidv4(),
+          type: ChoiceActionType.END_NOVEL_BRANCH,
           parameters: {
             endingNodeId: 'ENDING_CLIFFHANGER_3AM',
             outcomeDescription: 'คุณตัดสินใจที่จะทำตามคำท้าทายบนเทป... คืนนี้อะไรจะเกิดขึ้นกันแน่? (โปรดติดตามตอนต่อไป)',
@@ -239,6 +202,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
         }
       ],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -249,7 +213,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       actions: [
         {
           actionId: 'action_end_burn',
-          type: 'end_novel_branch',
+          type: ChoiceActionType.END_NOVEL_BRANCH,
           parameters: {
             endingNodeId: 'ENDING_DESTROY_EVIDENCE',
             outcomeDescription: 'คุณตัดสินใจทำลายเทปปริศนาทิ้ง บางทีการไม่รู้ อาจจะเป็นสิ่งที่ดีที่สุดแล้ว คุณพยายามจะลืมเรื่องราวแปลกๆ และใช้ชีวิตต่อไป',
@@ -259,6 +223,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
         }
       ],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -266,8 +231,9 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_OPEN_SECRET_DOOR',
       text: 'เปิดประตูลับและลงไปทันที',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_enter_basement_1' } }],
+      actions: [{ actionId: uuidv4(), type: ChoiceActionType.GO_TO_NODE, parameters: { targetNodeId: 'scene_enter_basement_1' } }],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -275,8 +241,9 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_TAKE_PHOTO',
       text: 'ถ่ายรูปส่งให้เพื่อนก่อนเปิด',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_send_photo_1' } }],
+      actions: [{ actionId: uuidv4(), type: ChoiceActionType.GO_TO_NODE, parameters: { targetNodeId: 'scene_send_photo_1' } }],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -284,8 +251,9 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_LOCK_DOOR',
       text: 'ปิดมันไว้แล้วล็อกด้วยตู้เย็นทับ',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_lock_door_1' } }],
+      actions: [{ actionId: uuidv4(), type: ChoiceActionType.GO_TO_NODE, parameters: { targetNodeId: 'scene_lock_door_1' } }],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -293,8 +261,9 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_REINFORCE_DOOR',
       text: '🪚 เสริมโครงไม้ทับตู้เย็นอีกชั้น',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_reinforce_door_1' } }],
+      actions: [{ actionId: uuidv4(), type: ChoiceActionType.GO_TO_NODE, parameters: { targetNodeId: 'scene_reinforce_door_1' } }],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -302,8 +271,9 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_SETUP_CAMERA',
       text: '📷 ตั้งกล้องวงจรปิดไว้หน้าตู้เย็น แล้วออกไปนอนข้างนอกสักคืน',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_setup_camera_1' } }],
+      actions: [{ actionId: uuidv4(), type: ChoiceActionType.GO_TO_NODE, parameters: { targetNodeId: 'scene_setup_camera_1' } }],
       isMajorChoice: false,
+      isArchived: false,
     },
     {
       novelId,
@@ -311,7 +281,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_DESTROY_DOOR',
       text: '🧨 หาวัสดุระเบิดฝังตรงนั้นแล้วเผาทำลายให้หมด',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_destroy_door_1' } }],
+      actions: [{ actionId: uuidv4(), type: ChoiceActionType.GO_TO_NODE, parameters: { targetNodeId: 'scene_destroy_door_1' } }],
       isMajorChoice: false,
     }
   ];
@@ -350,6 +320,7 @@ const createWhisper999Scenes = async (
       nodeId: 'scene_arrival',
       title: 'การมาถึง',
       background: { type: 'image', value: '/images/background/ChurchCorridor_Sunset.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกันกับ scene ถัดไป
       textContents: [
         {
           instanceId: 'narration_1',
@@ -365,6 +336,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_key_exchange',
         title: 'รับกุญแจ',
         background: { type: 'image', value: '/images/background/ChurchCorridor_Sunset.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 }, // เปลี่ยนไป ChurchCourtyardA_Sunset
         characters: [
           { instanceId: 'agent_char', characterId: characterMap.agent, expressionId: 'normal', transform: { positionX: 100 }, isVisible: true },
           { instanceId: 'nira_char', characterId: characterMap.nira, expressionId: 'normal', transform: { positionX: -100 }, isVisible: true },
@@ -375,7 +347,7 @@ const createWhisper999Scenes = async (
             type: 'dialogue',
             characterId: characterMap.agent,
             speakerDisplayName: 'นายหน้า',
-            content: '“ยินดีต้อนรับ คุณนิรา” — เสียงของนายหน้าอสังหาริมทรัพย์กล่าว พร้อมยื่นกุญแจบ้านให้',
+            content: '"ยินดีต้อนรับ คุณนิรา" — เสียงของนายหน้าอสังหาริมทรัพย์กล่าว พร้อมยื่นกุญแจบ้านให้',
           },
         ],
       },
@@ -386,6 +358,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_nira_thoughts',
         title: 'ความคิดของนิรา',
         background: { type: 'image', value: '/images/background/ChurchCourtyardA_Sunset.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 }, // เปลี่ยนกลับไป ChurchCorridor_Sunset
         characters: [
           { instanceId: 'nira_char_thinking', characterId: characterMap.nira, expressionId: 'curious', transform: { positionX: 0 }, isVisible: true },
         ],
@@ -395,7 +368,7 @@ const createWhisper999Scenes = async (
             type: 'dialogue',
             characterId: characterMap.nira,
             speakerDisplayName: 'นิรา (คิดในใจ)',
-            content: '“บ้านนี้ราคาถูกจนน่าตกใจ แต่สวยดี” นิราพึมพำกับตัวเอง',
+            content: '"บ้านนี้ราคาถูกจนน่าตกใจ แต่สวยดี" นิราพึมพำกับตัวเอง',
           },
         ],
       },
@@ -406,6 +379,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_agent_warning',
         title: 'คำเตือน',
         background: { type: 'image', value: '/images/background/ChurchCorridor_Sunset.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.8 }, // เปลี่ยนไป BG39.png
         characters: [
             { instanceId: 'agent_char_leaving', characterId: characterMap.agent, expressionId: 'normal', transform: { positionX: 100, opacity: 0.5 }, isVisible: true },
         ],
@@ -413,7 +387,7 @@ const createWhisper999Scenes = async (
           {
             instanceId: 'dialogue_agent_whisper',
             type: 'narration',
-            content: '“เพราะมีข่าวลือ…” นายหน้ากระซิบเบาๆ แล้วรีบหันหลังจากไป',
+            content: '"เพราะมีข่าวลือ…" นายหน้ากระซิบเบาๆ แล้วรีบหันหลังจากไป',
           },
         ],
       },
@@ -424,6 +398,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_enter_house',
         title: 'เข้าบ้าน',
         background: { type: 'image', value: '/images/background/BG39.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกันกับ scene ถัดไป
         textContents: [
           {
             instanceId: 'narration_enter',
@@ -439,6 +414,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_first_choice',
         title: 'การตัดสินใจแรก',
         background: { type: 'image', value: '/images/background/BG39.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 }, // เปลี่ยนไป BG43.png
         textContents: [
           {
             instanceId: 'choice_prompt',
@@ -455,6 +431,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_explore_downstairs_1',
         title: 'สำรวจชั้นล่าง',
         background: { type: 'image', value: '/images/background/BG43.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 }, // เปลี่ยนไป home.png
         textContents: [
           {
             instanceId: 'narration_explore_1',
@@ -470,11 +447,12 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_found_box',
         title: 'กล่องไม้เก่า',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
           {
             instanceId: 'narration_found_box',
             type: 'narration',
-            content: 'ขณะเดินผ่านห้องใต้บันได เธอสังเกตเห็น “กล่องไม้เก่า” มีตราประทับปี 1974',
+            content: 'ขณะเดินผ่านห้องใต้บันได เธอสังเกตเห็น "กล่องไม้เก่า" มีตราประทับปี 1974',
           },
         ],
       },
@@ -485,11 +463,12 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_found_tape',
         title: 'เทปลึกลับ',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
           {
             instanceId: 'narration_found_tape',
             type: 'narration',
-            content: 'ข้างในมีเครื่องเล่นเทปพกพาและคาสเซ็ตที่เขียนด้วยลายมือว่า “เสียงสุดท้ายของฉัน - ห้ามฟังตอนตีสาม”',
+            content: 'ข้างในมีเครื่องเล่นเทปพกพาและคาสเซ็ตที่เขียนด้วยลายมือว่า "เสียงสุดท้ายของฉัน - ห้ามฟังตอนตีสาม"',
           },
         ],
       },
@@ -500,6 +479,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_tape_choice',
         title: 'การตัดสินใจกับเทป',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
           {
             instanceId: 'choice_prompt',
@@ -516,6 +496,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_listen_tape_1',
         title: 'เสียงจากเทป',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
             {
                 instanceId: 'narration_tape_sound',
@@ -525,7 +506,7 @@ const createWhisper999Scenes = async (
             {
                 instanceId: 'narration_tape_voice',
                 type: 'narration',
-                content: '“ฉันเห็นผู้ชายไม่มีหน้าในกระจก…เขาบอกให้ฉัน ‘ตามหาเสียงกระซิบในห้องใต้ดิน’…แต่บ้านนี้ไม่มีห้องใต้ดิน…”'
+                content: `"ฉันเห็นผู้ชายไม่มีหน้าในกระจก…เขาบอกให้ฉัน 'ตามหาเสียงกระซิบในห้องใต้ดิน'…แต่บ้านนี้ไม่มีห้องใต้ดิน…"`
             }
         ]
       },
@@ -536,6 +517,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_secret_door',
         title: 'ประตูลับ',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
             {
                 instanceId: 'narration_nira_shock',
@@ -545,7 +527,7 @@ const createWhisper999Scenes = async (
             {
                 instanceId: 'narration_found_door',
                 type: 'narration',
-                content: 'วันรุ่งขึ้น เธอสังเกตเห็นพรมในครัวนูนขึ้นเล็กน้อย เมื่อเปิดออกมา พบ “ประตูลับ”'
+                content: 'วันรุ่งขึ้น เธอสังเกตเห็นพรมในครัวนูนขึ้นเล็กน้อย เมื่อเปิดออกมา พบ "ประตูลับ"'
             }
         ]
       },
@@ -556,6 +538,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_secret_door_choice',
         title: 'การตัดสินใจกับประตูลับ',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.8 }, // เปลี่ยนไป badend1.png
         textContents: [
           {
             instanceId: 'choice_prompt',
@@ -572,11 +555,12 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_enter_basement_1',
         title: 'ห้องใต้ดิน',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
             {
                 instanceId: 'narration_basement_whisper',
                 type: 'narration',
-                content: 'เสียงกระซิบดังขึ้นทันทีที่เปิดประตู… “ดีใจที่เธอมาจนถึงตรงนี้…”'
+                content: 'เสียงกระซิบดังขึ้นทันทีที่เปิดประตู… "ดีใจที่เธอมาจนถึงตรงนี้…"'
             }
         ]
       },
@@ -587,6 +571,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_basement_encounter',
         title: 'เผชิญหน้า',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน (ending scene)
         textContents: [
             {
                 instanceId: 'narration_basement_details',
@@ -602,16 +587,17 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_bad_ending_1',
         title: 'เสียงสุดท้าย',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 1.0 }, // Ending scene สำหรับ dramatic effect
         textContents: [
             {
                 instanceId: 'narration_final_words',
                 type: 'narration',
-                content: '“ต่อไป…เสียงสุดท้ายจะเป็นของเธอ”'
+                content: '"ต่อไป…เสียงสุดท้ายจะเป็นของเธอ"'
             },
             {
                 instanceId: 'narration_ending_desc',
                 type: 'narration',
-                content: 'นิราหายไป อีกสองเดือนต่อมา กล่องไม้และเทปอันเดิมกลับไปวางอยู่ที่เดิม พร้อมเทปล่าสุดว่า “เสียงของนิรา”'
+                content: 'นิราหายไป อีกสองเดือนต่อมา กล่องไม้และเทปอันเดิมกลับไปวางอยู่ที่เดิม พร้อมเทปล่าสุดว่า "เสียงของนิรา"'
             }
         ],
         ending: {
@@ -629,11 +615,12 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_send_photo_1',
         title: 'คำเตือนจากเพื่อน',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
             {
                 instanceId: 'narration_friend_warning',
                 type: 'narration',
-                content: 'มิน เพื่อนสนิท รีบบอกให้เธอ “อย่าเปิดเด็ดขาด!”'
+                content: 'มิน เพื่อนสนิท รีบบอกให้เธอ "อย่าเปิดเด็ดขาด!"'
             },
             {
                 instanceId: 'narration_kitchen_door_opens',
@@ -649,11 +636,12 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_other_doors',
         title: 'ประตูบานอื่น',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.8 }, // เปลี่ยนไป badend1.png
         textContents: [
             {
                 instanceId: 'narration_whisper_choice',
                 type: 'narration',
-                content: 'เสียงกระซิบดังขึ้น: “ถ้าไม่เปิดประตูนั้น ประตูอื่นจะเปิดแทน…”'
+                content: 'เสียงกระซิบดังขึ้น: "ถ้าไม่เปิดประตูนั้น ประตูอื่นจะเปิดแทน…"'
             },
             {
                 instanceId: 'narration_chaos',
@@ -669,11 +657,12 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_bad_ending_2',
         title: 'เสียงที่ถูกเลือก',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 1.0 }, // Ending scene สำหรับ dramatic effect
         textContents: [
             {
                 instanceId: 'narration_disappearance',
                 type: 'narration',
-                content: 'นิราหายไปกลางสายตาของมินผ่านวิดีโอคอล กล้องดับพร้อมเสียงกระซิบว่า “เสียงของเธอ…ถูกเลือกแล้ว”'
+                content: 'นิราหายไปกลางสายตาของมินผ่านวิดีโอคอล กล้องดับพร้อมเสียงกระซิบว่า "เสียงของเธอ…ถูกเลือกแล้ว"'
             }
         ],
         ending: {
@@ -691,9 +680,10 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_lock_door_1',
         title: 'ผนึกประตู',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
           { instanceId: 'narration_shaking', type: 'narration', content: 'นิราตัวสั่น มือไม้เย็นเฉียบ สิ่งที่เธอเพิ่งเห็นใต้ประตูลับ — เงาคล้ายร่างเด็กผอมสูงที่เคลื่อนไหวเร็วผิดธรรมชาติ — มันยังคงลอยอยู่ในดวงตาเธอ' },
-          { instanceId: 'narration_slam_door', type: 'narration', content: 'เธอ กระแทก ฝาปิดบันไดใต้พื้นด้วยแรงทั้งหมดที่มี เสียง “ปึง!” ดังขึ้น และตามด้วยเสียงกระแทกเบา ๆ …จาก “ข้างใต้”' },
+          { instanceId: 'narration_slam_door', type: 'narration', content: 'เธอ กระแทก ฝาปิดบันไดใต้พื้นด้วยแรงทั้งหมดที่มี เสียง "ปึง!" ดังขึ้น และตามด้วยเสียงกระแทกเบา ๆ …จาก "ข้างใต้"' },
           { instanceId: 'narration_climbing', type: 'narration', content: 'กึก… กึก… ตึง… เหมือนบางอย่างกำลังปีนขึ้นมา' },
           { instanceId: 'narration_move_fridge', type: 'narration', content: 'นิรารีบลากตู้เย็นขนาดใหญ่ไปทับไว้ทันที ต้องใช้แรงมากกว่าที่เคยใช้มาในชีวิต กล้ามเนื้อสั่นระริกเมื่อเธอลากขอบมันผ่านพื้นไม้เก่าเสียงครูด ๆ อย่างน่าขนลุก' },
           { instanceId: 'narration_lock_fridge', type: 'narration', content: 'ในที่สุด… ตู้เย็นก็ขวางไว้ตรงกลางพอดี เธอรีบเอาโซ่ที่เคยใช้รัดประตูคลังอาหาร มารัดไว้กับหูเหล็กของตู้เย็น และตรึงกับตะขอบนพื้น ล็อกไว้แล้ว' },
@@ -707,9 +697,10 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_vigil',
         title: 'เฝ้าระวัง',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน
         textContents: [
             { instanceId: 'narration_vigil', type: 'narration', content: 'คืนนั้น เธอนั่งเฝ้าตู้เย็นทั้งคืน โดยถือมีดครัวไว้ในมือ เสียงเคาะยังคงมีเป็นระยะ…' },
-            { instanceId: 'narration_knocking', type: 'narration', content: 'ไม่แรง…แต่สม่ำเสมอ เหมือน “มันรู้” ว่าเธอยังนั่งฟังอยู่ เหมือนการย้ำเตือนว่า “ฉันยังอยู่ตรงนี้”' },
+            { instanceId: 'narration_knocking', type: 'narration', content: 'ไม่แรง…แต่สม่ำเสมอ เหมือน "มันรู้" ว่าเธอยังนั่งฟังอยู่ เหมือนการย้ำเตือนว่า "ฉันยังอยู่ตรงนี้"' },
         ]
       },
       {
@@ -719,6 +710,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_lock_door_choice',
         title: 'ทางเลือกต่อไป',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน (มี 3 choices ที่ใช้ background เดียวกัน)
         choiceIds: [choiceMap.CHOICE_REINFORCE_DOOR, choiceMap.CHOICE_SETUP_CAMERA, choiceMap.CHOICE_DESTROY_DOOR]
       },
       {
@@ -728,9 +720,10 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_reinforce_door_1',
         title: 'เสริมความแข็งแกร่ง',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.8 }, // เปลี่ยนไป badend1.png
         textContents: [
-          { instanceId: 'narration_reinforce', type: 'narration', content: 'นิราใช้เวลาทั้งเช้า เลื่อยไม้จากลังเก่า ตอกโครงเหล็กกับผนังสองด้านของห้องครัว เธอเอาไม้หนา ๆ ทับบนตู้เย็น ตอกตะปูแน่นทุกมุม จนกลายเป็น “หลุมฝังศพ” ที่ไม่มีวจะเปิดอีก' },
-          { instanceId: 'narration_whisper_plug', type: 'narration', content: 'เสียงเคาะเงียบลงในคืนที่สาม แต่สิ่งที่ดังแทนคือ… เสียง “กระซิบจากปลั๊กไฟ” เมื่อเธอเอาหูแนบผนัง กลับได้ยินเสียงเด็กพูดคำว่า… “เธอฝังฉัน… แต่ฉันฝันถึงเธอทุกคืน…”' },
+          { instanceId: 'narration_reinforce', type: 'narration', content: 'นิราใช้เวลาทั้งเช้า เลื่อยไม้จากลังเก่า ตอกโครงเหล็กกับผนังสองด้านของห้องครัว เธอเอาไม้หนา ๆ ทับบนตู้เย็น ตอกตะปูแน่นทุกมุม จนกลายเป็น "หลุมฝังศพ" ที่ไม่มีวจะเปิดอีก' },
+          { instanceId: 'narration_whisper_plug', type: 'narration', content: 'เสียงเคาะเงียบลงในคืนที่สาม แต่สิ่งที่ดังแทนคือ… เสียง "กระซิบจากปลั๊กไฟ" เมื่อเธอเอาหูแนบผนัง กลับได้ยินเสียงเด็กพูดคำว่า… "เธอฝังฉัน… แต่ฉันฝันถึงเธอทุกคืน…"' },
         ]
       },
       {
@@ -740,9 +733,10 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_bad_ending_3',
         title: 'มืออีกข้าง',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 1.0 }, // Ending scene สำหรับ dramatic effect
         textContents: [
           { instanceId: 'narration_sleepwalk', type: 'narration', content: 'นิราเริ่มละเมอ เธอลุกขึ้นกลางดึก เดินมาที่ห้องครัว และ… แกะตะปูออกทีละตัว… ทั้งที่หลับตาอยู่' },
-          { instanceId: 'narration_other_hand', type: 'narration', content: 'กล้องวงจรปิดที่เธอลืมไว้ในมุมห้องจับภาพได้ชัดเจน ว่า “มือที่เปิดไม้แผ่นสุดท้าย” ไม่ใช่มือเธอคนเดียว… มี “อีกมือ” ที่ผิวซีดขาว…จับตะปูอีกด้าน พร้อมกัน' },
+          { instanceId: 'narration_other_hand', type: 'narration', content: 'กล้องวงจรปิดที่เธอลืมไว้ในมุมห้องจับภาพได้ชัดเจน ว่า "มือที่เปิดไม้แผ่นสุดท้าย" ไม่ใช่มือเธอคนเดียว… มี "อีกมือ" ที่ผิวซีดขาว…จับตะปูอีกด้าน พร้อมกัน' },
         ],
         ending: {
           endingType: 'BAD',
@@ -759,10 +753,11 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_setup_camera_1',
         title: 'ติดตั้งกล้อง',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.8 }, // เปลี่ยนไป badend1.png
         textContents: [
           { instanceId: 'narration_setup_camera', type: 'narration', content: 'นิราซื้อกล้องวงจรปิดแบบมีอินฟราเรดมาติดไว้ หันตรงไปยังตู้เย็นกับพื้น เธอออกไปนอนโรงแรมเล็ก ๆ ในตัวเมือง พร้อมโน้ตบุ๊กเพื่อดูฟุตเทจแบบเรียลไทม์' },
-          { instanceId: 'narration_camera_shake', type: 'narration', content: 'ตีสองสิบห้า — จู่ ๆ กล้องเริ่มสั่น ในภาพปรากฏ “ร่างดำซีดสูงเกินคน” ปีนออกจากช่องแคบ ๆ ใต้ตู้เย็น แม้ตู้เย็นไม่ขยับเลยสักนิด' },
-          { instanceId: 'narration_faceless', type: 'narration', content: 'มัน ทะลุผ่าน อย่างไร้แรงต้าน มันยืนนิ่ง…แล้ว “หันหน้ามาทางกล้องโดยตรง” ใบหน้าขาวซีดไม่มีลูกตา แต่กลับมี “ปาก” อยู่ตรงกลางหน้าผาก ปากนั้น… ยิ้ม' },
+          { instanceId: 'narration_camera_shake', type: 'narration', content: 'ตีสองสิบห้า — จู่ ๆ กล้องเริ่มสั่น ในภาพปรากฏ "ร่างดำซีดสูงเกินคน" ปีนออกจากช่องแคบ ๆ ใต้ตู้เย็น แม้ตู้เย็นไม่ขยับเลยสักนิด' },
+          { instanceId: 'narration_faceless', type: 'narration', content: 'มัน ทะลุผ่าน อย่างไร้แรงต้าน มันยืนนิ่ง…แล้ว "หันหน้ามาทางกล้องโดยตรง" ใบหน้าขาวซีดไม่มีลูกตา แต่กลับมี "ปาก" อยู่ตรงกลางหน้าผาก ปากนั้น… ยิ้ม' },
         ]
       },
       {
@@ -772,8 +767,9 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_bad_ending_4',
         title: 'ถึงตาเธอ',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 1.0 }, // Ending scene สำหรับ dramatic effect
         textContents: [
-          { instanceId: 'narration_camera_destroyed', type: 'narration', content: 'นิรากลับบ้านในวันรุ่งขึ้น กล้องถูกบิดหักพังลง หน้าประตูบ้านมีโน้ตเขียนด้วยลายมือเด็ก: “ออกไปได้แล้ว… ถึงตาเธอลงมาหาฉันบ้าง”' },
+          { instanceId: 'narration_camera_destroyed', type: 'narration', content: 'นิรากลับบ้านในวันรุ่งขึ้น กล้องถูกบิดหักพังลง หน้าประตูบ้านมีโน้ตเขียนด้วยลายมือเด็ก: "ออกไปได้แล้ว… ถึงตาเธอลงมาหาฉันบ้าง"' },
         ],
         ending: {
           endingType: 'BAD',
@@ -790,10 +786,11 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_destroy_door_1',
         title: 'ทำลายล้าง',
         background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 0.8 }, // เปลี่ยนไป badend1.png
         textContents: [
-          { instanceId: 'narration_destroy_plan', type: 'narration', content: 'นิราตัดสินใจว่า จะไม่ทนอีกต่อไป เธอรู้จักเพื่อนเก่าที่เป็นช่างโยธา เขาช่วยเอาวัตถุระเบิดแรงต่ำมาฝังไว้ใต้พื้นห้อง เธอเตือนเพื่อนว่า “อย่ามองเข้าไปข้างในเด็ดขาด”' },
-          { instanceId: 'narration_explosion', type: 'narration', content: 'เวลา 05:03 น. นิรากดสวิตช์จุดระเบิดในระยะไกล ตูม! เสียงดังสะท้อนทั่วหมู่บ้าน ไฟไหม้ลุกลามเฉพาะ “บริเวณห้องครัว”' },
-          { instanceId: 'narration_shadow', type: 'narration', content: 'เธอเห็นเงาดำ ๆ พุ่งขึ้นไปในเปลวเพลิง เหมือนกำลังดิ้น…และ “หัวเราะ”' },
+          { instanceId: 'narration_destroy_plan', type: 'narration', content: 'นิราตัดสินใจว่า จะไม่ทนอีกต่อไป เธอรู้จักเพื่อนเก่าที่เป็นช่างโยธา เขาช่วยเอาวัตถุระเบิดแรงต่ำมาฝังไว้ใต้พื้นห้อง เธอเตือนเพื่อนว่า "อย่ามองเข้าไปข้างในเด็ดขาด"' },
+          { instanceId: 'narration_explosion', type: 'narration', content: 'เวลา 05:03 น. นิรากดสวิตช์จุดระเบิดในระยะไกล ตูม! เสียงดังสะท้อนทั่วหมู่บ้าน ไฟไหม้ลุกลามเฉพาะ "บริเวณห้องครัว"' },
+          { instanceId: 'narration_shadow', type: 'narration', content: 'เธอเห็นเงาดำ ๆ พุ่งขึ้นไปในเปลวเพลิง เหมือนกำลังดิ้น…และ "หัวเราะ"' },
         ]
       },
       {
@@ -803,8 +800,9 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_bad_ending_5',
         title: 'รอยยิ้มสุดท้าย',
         background: { type: 'image', value: '/images/background/badend1.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 1.2 }, // TRUE ending ดราม่าสุด
         textContents: [
-          { instanceId: 'narration_no_basement', type: 'narration', content: 'เจ้าหน้าที่ดับเพลิงพบว่า ใต้บ้านไม่มีทางเดิน ไม่มีห้องใต้ดิน ไม่มีอุโมงค์ใด ๆ ทั้งสิ้น “มันแค่ดินตัน ๆ… ไม่มีช่องเลยครับ”' },
+          { instanceId: 'narration_no_basement', type: 'narration', content: 'เจ้าหน้าที่ดับเพลิงพบว่า ใต้บ้านไม่มีทางเดิน ไม่มีห้องใต้ดิน ไม่มีอุโมงค์ใด ๆ ทั้งสิ้น "มันแค่ดินตัน ๆ… ไม่มีช่องเลยครับ"' },
           { instanceId: 'narration_camera_reveal', type: 'narration', content: 'แต่…ในภาพจากกล้องเพื่อนช่าง ก่อนระเบิดจะลง 3 วินาที มีเด็กหญิงตัวเล็ก ๆ เดินขึ้นจากช่องพื้น หันหน้ามา… แล้วยิ้มให้กล้อง…' },
         ],
         ending: {
@@ -822,6 +820,7 @@ const createWhisper999Scenes = async (
         nodeId: 'scene_end_of_prologue',
         title: 'จะเกิดอะไรขึ้นต่อไป...',
         background: { type: 'image', value: '/images/background/main.png', isOfficialMedia: true, fitMode: 'cover' },
+        sceneTransitionOut: { type: 'fade', durationSeconds: 1.0 }, // Ending scene สำหรับ dramatic effect
         textContents: [
           {
             instanceId: 'ending_message',
@@ -829,27 +828,381 @@ const createWhisper999Scenes = async (
             content: 'เรื่องราวในบทแรกจบลงเพียงเท่านี้... การตัดสินใจของคุณจะนำไปสู่อะไร โปรดติดตามตอนต่อไป',
           },
         ],
+        ending: {
+          endingType: 'NORMAL',
+          title: 'จบบทที่ 1',
+          description: 'จบตอนแรกของเรื่อง The Whisper of 999 โปรดติดตามตอนต่อไป',
+          endingId: 'prologue_end',
+          imageUrl: '/images/background/main.png'
+        }
       }
     ];
 
+  // สร้าง scenes ทั้งหมดก่อน
   const savedScenes = [];
   for (const scene of scenes) {
     const sceneDoc = new SceneModel(scene);
-    // Link scenes sequentially
-    if (savedScenes.length > 0) {
-        const previousScene = savedScenes[savedScenes.length - 1];
-        if (!previousScene.choiceIds || previousScene.choiceIds.length === 0) {
-            await SceneModel.findByIdAndUpdate(previousScene._id, { defaultNextSceneId: sceneDoc._id });
-        }
-    }
     await sceneDoc.save();
     savedScenes.push(sceneDoc);
+  }
+
+  // จากนั้นสร้าง defaultNextSceneId mapping โดยใช้ nodeId เป็นหลัก
+  const sceneNodeIdMap = savedScenes.reduce((acc, scene) => {
+    if (scene.nodeId) {
+      acc[scene.nodeId] = scene._id.toString();
+    }
+    return acc;
+  }, {} as Record<string, string>);
+
+  // อัปเดต defaultNextSceneId สำหรับ scenes ที่ไม่มี choices หรือมีการต่อเนื่องชัดเจน
+  const sceneUpdates = [
+    // ฉากแรกไปฉากที่สอง (การรับกุญแจ)
+    { from: 'scene_arrival', to: 'scene_key_exchange' },
+    // จากรับกุญแจไปความคิดของนิรา
+    { from: 'scene_key_exchange', to: 'scene_nira_thoughts' },
+    // จากความคิดไปคำเตือน
+    { from: 'scene_nira_thoughts', to: 'scene_agent_warning' },
+    // จากคำเตือนไปเข้าบ้าน
+    { from: 'scene_agent_warning', to: 'scene_enter_house' },
+    // จากเข้าบ้านไปตัดสินใจแรก
+    { from: 'scene_enter_house', to: 'scene_first_choice' },
+    
+    // จาก explore ไปหาของ
+    { from: 'scene_explore_downstairs_1', to: 'scene_found_box' },
+    { from: 'scene_found_box', to: 'scene_found_tape' },
+    { from: 'scene_found_tape', to: 'scene_tape_choice' },
+    
+    // จากฟังเทปไปเจอประตูลับ
+    { from: 'scene_listen_tape_1', to: 'scene_secret_door' },
+    { from: 'scene_secret_door', to: 'scene_secret_door_choice' },
+    
+    // จากเปิดประตูลับไปห้องใต้ดิน
+    { from: 'scene_enter_basement_1', to: 'scene_basement_encounter' },
+    { from: 'scene_basement_encounter', to: 'scene_bad_ending_1' },
+    
+    // จากส่งรูปไปประตูอื่น
+    { from: 'scene_send_photo_1', to: 'scene_other_doors' },
+    { from: 'scene_other_doors', to: 'scene_bad_ending_2' },
+    
+    // จากล็อกประตูไปเฝ้าระวัง
+    { from: 'scene_lock_door_1', to: 'scene_vigil' },
+    { from: 'scene_vigil', to: 'scene_lock_door_choice' },
+    
+    // จากเสริมประตูไปจบเลว
+    { from: 'scene_reinforce_door_1', to: 'scene_bad_ending_3' },
+    
+    // จากติดกล้องไปจบเลว
+    { from: 'scene_setup_camera_1', to: 'scene_bad_ending_4' },
+    
+    // จากทำลายไปจบจริง
+    { from: 'scene_destroy_door_1', to: 'scene_bad_ending_5' },
+    
+    // เชื่อมต่อ ending scenes ที่ไม่ได้เป็นการจบเรื่องจริงไปยัง scene_end_of_prologue
+    // (กรณีผู้เล่นเลือกทางที่ทำให้เกมจบแต่ยังไม่ใช่จบจริง)
+    // สำหรับตอนนี้ไม่ต้องเพิ่มเพราะ ending scenes จะจบเลย
+    // แต่เพิ่มเพื่อป้องกันกรณี missing links อื่นๆ ในอนาคต
+  ];
+
+  // อัปเดต defaultNextSceneId
+  for (const update of sceneUpdates) {
+    const fromSceneId = sceneNodeIdMap[update.from];
+    const toSceneId = sceneNodeIdMap[update.to];
+    
+    if (fromSceneId && toSceneId) {
+      await SceneModel.findByIdAndUpdate(fromSceneId, { 
+        defaultNextSceneId: new mongoose.Types.ObjectId(toSceneId) 
+      });
+    }
   }
   
   return savedScenes;
 };
 
-const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
+/**
+ * สร้าง StoryMap สำหรับนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"
+ * @param novelId - ID ของนิยาย
+ * @param authorId - ID ของผู้แต่ง
+ * @param choices - Array ของ choices ที่ถูกสร้างแล้ว
+ * @returns StoryMap document ที่สร้างเสร็จแล้ว
+ */
+const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, authorId: mongoose.Types.ObjectId, choices: any[]) => {
+  console.log('📊 กำลังสร้าง StoryMap สำหรับ "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"...');
+
+  // สร้าง choice lookup map สำหรับแปลง choiceCode เป็น ObjectId
+  const choiceCodeToId = choices.reduce((acc, choice) => {
+    acc[choice.choiceCode] = choice._id;
+    return acc;
+  }, {} as Record<string, mongoose.Types.ObjectId>);
+
+  // กำหนดตัวแปรเรื่องราว (Story Variables)
+  const storyVariables: IStoryVariableDefinition[] = [
+    {
+      variableId: 'karma',
+      variableName: 'karma',
+      dataType: StoryVariableDataType.NUMBER,
+      initialValue: 0,
+      description: 'ค่ากรรมของตัวละครหลัก (เพิ่มเมื่อเลือกดี ลดเมื่อเลือกร้าย)',
+      allowedValues: [-100, 100],
+      isGlobal: true,
+      isVisibleToPlayer: false
+    },
+    {
+      variableId: 'has_explored_basement',
+      variableName: 'has_explored_basement',
+      dataType: StoryVariableDataType.BOOLEAN,
+      initialValue: false,
+      description: 'ตัวแปรเช็คว่าผู้เล่นเข้าไปในห้องใต้ดินแล้วหรือยัง',
+      isGlobal: true,
+      isVisibleToPlayer: false
+    },
+    {
+      variableId: 'tape_listened',
+      variableName: 'tape_listened',
+      dataType: StoryVariableDataType.BOOLEAN,
+      initialValue: false,
+      description: 'ตัวแปรเช็คว่าผู้เล่นฟังเทปแล้วหรือยัง',
+      isGlobal: true,
+      isVisibleToPlayer: false
+    }
+  ];
+
+  // กำหนด Nodes ของ StoryMap
+  const nodes: IStoryMapNode[] = [
+    // Start Node
+    {
+      nodeId: 'start_whisper999',
+      nodeType: StoryMapNodeType.START_NODE,
+      title: 'จุดเริ่มต้น',
+      position: { x: 100, y: 100 },
+      nodeSpecificData: {},
+      notesForAuthor: 'จุดเริ่มต้นของเรื่อง - การมาถึงบ้านใหม่'
+    },
+    
+    // Scene Nodes
+    {
+      nodeId: 'scene_arrival',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'การมาถึง',
+      position: { x: 300, y: 100 },
+      nodeSpecificData: { sceneId: 'scene_arrival' }
+    },
+    {
+      nodeId: 'scene_key_exchange',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'รับกุญแจ',
+      position: { x: 500, y: 100 },
+      nodeSpecificData: { sceneId: 'scene_key_exchange' }
+    },
+    {
+      nodeId: 'scene_nira_thoughts',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'ความคิดของนิรา',
+      position: { x: 700, y: 100 },
+      nodeSpecificData: { sceneId: 'scene_nira_thoughts' }
+    },
+    {
+      nodeId: 'scene_agent_warning',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'คำเตือน',
+      position: { x: 900, y: 100 },
+      nodeSpecificData: { sceneId: 'scene_agent_warning' }
+    },
+    {
+      nodeId: 'scene_enter_house',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'เข้าบ้าน',
+      position: { x: 1100, y: 100 },
+      nodeSpecificData: { sceneId: 'scene_enter_house' }
+    },
+    
+    // Choice Node - การตัดสินใจแรก
+    {
+      nodeId: 'choice_first_decision',
+      nodeType: StoryMapNodeType.CHOICE_NODE,
+      title: 'การตัดสินใจแรก',
+      position: { x: 1300, y: 100 },
+      nodeSpecificData: {
+        choiceIds: ['CHOICE_EXPLORE', 'CHOICE_CLEAN', 'CHOICE_CALL'],
+        promptText: 'ตอนนี้คุณจะทำอะไรเป็นอย่างแรก?',
+        layout: 'vertical'
+      }
+    },
+    
+    // Branch paths from first choice
+    {
+      nodeId: 'scene_explore_downstairs_1',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'สำรวจชั้นล่าง',
+      position: { x: 1500, y: 50 },
+      nodeSpecificData: { sceneId: 'scene_explore_downstairs_1' }
+    },
+    {
+      nodeId: 'scene_found_box',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'กล่องไม้เก่า',
+      position: { x: 1700, y: 50 },
+      nodeSpecificData: { sceneId: 'scene_found_box' }
+    },
+    {
+      nodeId: 'scene_found_tape',
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'เทปลึกลับ',
+      position: { x: 1900, y: 50 },
+      nodeSpecificData: { sceneId: 'scene_found_tape' }
+    },
+    
+    // Choice Node - การตัดสินใจกับเทป
+    {
+      nodeId: 'choice_tape_decision',
+      nodeType: StoryMapNodeType.CHOICE_NODE,
+      title: 'การตัดสินใจกับเทป',
+      position: { x: 2100, y: 50 },
+      nodeSpecificData: {
+        choiceIds: ['CHOICE_LISTEN_NOW', 'CHOICE_LISTEN_LATER', 'CHOICE_BURN_TAPE'],
+        promptText: 'ตอนนี้คุณจะทำอะไรกับเทป?',
+        layout: 'vertical'
+      }
+    },
+    
+    // Ending Nodes
+    {
+      nodeId: 'ending_bad_1',
+      nodeType: StoryMapNodeType.ENDING_NODE,
+      title: 'เสียงสุดท้าย',
+      position: { x: 2300, y: 0 },
+      nodeSpecificData: {
+        endingTitle: 'เสียงสุดท้าย',
+        endingSceneId: 'scene_bad_ending_1',
+        outcomeDescription: 'นิรากลายเป็นเสียงในเทปอันต่อไป หลังจากเผชิญหน้ากับสิ่งลี้ลับในห้องใต้ดิน'
+      }
+    },
+    {
+      nodeId: 'ending_safe_day1',
+      nodeType: StoryMapNodeType.ENDING_NODE,
+      title: 'วันแรกที่แสนสงบ',
+      position: { x: 1500, y: 200 },
+      nodeSpecificData: {
+        endingTitle: 'วันแรกที่แสนสงบ',
+        outcomeDescription: 'คุณเลือกที่จะใช้ชีวิตอย่างปกติสุขต่อไป และไม่มีอะไรผิดปกติเกิดขึ้นในวันแรก... อย่างน้อยก็ในตอนนี้'
+      }
+    }
+  ];
+
+  // กำหนด Edges (การเชื่อมโยง)
+  const edges: IStoryMapEdge[] = [
+    // เส้นทางหลัก
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'start_whisper999',
+      targetNodeId: 'scene_arrival',
+      label: 'เริ่มเรื่อง'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_arrival',
+      targetNodeId: 'scene_key_exchange',
+      label: 'ต่อไป'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_key_exchange',
+      targetNodeId: 'scene_nira_thoughts',
+      label: 'ต่อไป'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_nira_thoughts',
+      targetNodeId: 'scene_agent_warning',
+      label: 'ต่อไป'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_agent_warning',
+      targetNodeId: 'scene_enter_house',
+      label: 'ต่อไป'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_enter_house',
+      targetNodeId: 'choice_first_decision',
+      label: 'ต่อไป'
+    },
+    
+    // จากทางเลือกแรก
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'choice_first_decision',
+      targetNodeId: 'scene_explore_downstairs_1',
+      triggeringChoiceId: choiceCodeToId['CHOICE_EXPLORE'],
+      label: 'สำรวจบ้าน'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'choice_first_decision',
+      targetNodeId: 'ending_safe_day1',
+      triggeringChoiceId: choiceCodeToId['CHOICE_CLEAN'],
+      label: 'ทำความสะอาด'
+    },
+    
+    // เส้นทางสำรวจ
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_explore_downstairs_1',
+      targetNodeId: 'scene_found_box',
+      label: 'ต่อไป'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_found_box',
+      targetNodeId: 'scene_found_tape',
+      label: 'ต่อไป'
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'scene_found_tape',
+      targetNodeId: 'choice_tape_decision',
+      label: 'ต่อไป'
+    },
+    
+    // จากทางเลือกเทป
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: 'choice_tape_decision',
+      targetNodeId: 'ending_bad_1',
+      triggeringChoiceId: choiceCodeToId['CHOICE_LISTEN_NOW'],
+      label: 'ฟังเทปทันที'
+    }
+  ];
+
+  // สร้าง StoryMap
+  const storyMap = new StoryMapModel({
+    novelId,
+    title: `แผนผังเรื่อง - เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999`,
+    version: 1,
+    description: 'แผนผังเรื่องราวของนิยายสยองขวัญจิตวิทยาที่เต็มไปด้วยทางเลือกและการตัดสินใจที่ส่งผลต่อชะตากรรม',
+    nodes,
+    edges,
+    storyVariables,
+    startNodeId: 'start_whisper999',
+    lastModifiedByUserId: authorId,
+    isActive: true,
+    editorMetadata: {
+      zoomLevel: 1,
+      viewOffsetX: 0,
+      viewOffsetY: 0,
+      gridSize: 20,
+      showGrid: true,
+      autoLayoutAlgorithm: 'dagre'
+    }
+  });
+
+  const savedStoryMap = await storyMap.save();
+  console.log(`✅ สร้าง StoryMap สำเร็จ: ${savedStoryMap._id} (${savedStoryMap.nodes.length} nodes, ${savedStoryMap.edges.length} edges)`);
+  
+  return savedStoryMap;
+};
+
+export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
   
   // Find or create necessary categories before creating the novel
   console.log('🔍 Finding or creating necessary categories...');
@@ -994,118 +1347,11 @@ const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
   
   const updatedEpisodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 });
 
-  return { novel, episodes: updatedEpisodes, characters, choices, scenes };
+  // สร้าง StoryMap สำหรับนิยาย
+  console.log('📊 กำลังสร้าง StoryMap...');
+  const storyMap = await createWhisper999StoryMap(novel._id, authorId, choices);
+
+  return { novel, episodes: updatedEpisodes, characters, choices, scenes, storyMap };
 };
 
-export const seedWhisper999Data = async () => {
-  try {
-    console.log('🌱 เริ่มต้นการสร้างข้อมูลนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"...');
 
-    // Use the centralized dbConnect instead of mongoose.connect directly
-    await dbConnect();
-    console.log('✅ เชื่อมต่อฐานข้อมูลสำเร็จ');
-
-    // Ensure Character collection indexes are up to date (drops legacy unique indexes like characterCode_1)
-    console.log('🔄 กำลังตรวจสอบและปรับปรุงดัชนีของคอลเลกชัน Character...');
-    await CharacterModel.syncIndexes();
-    console.log('✅ ดัชนีของ Character collection พร้อมใช้งาน');
-    
-    // --- START: Cleanup Logic ---
-    const novelSlug = 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999';
-    const novelTitle = 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999';
-
-    // --- START: Category Cleanup --- 
-    const categorySlugsToClean = [
-      'horror', 'psychological', 'mystery', 'haunted-house', 'popular', 'recommended',
-      'dark', 'suspenseful', '18-plus', 'thai', 'first-person', 'realistic', 'high', 'short-story'
-    ];
-    console.log('🧹 เริ่มการล้างข้อมูลหมวดหมู่ที่เกี่ยวข้อง...');
-    const deleteResult = await CategoryModel.deleteMany({ slug: { $in: categorySlugsToClean }, isSystemDefined: true });
-    if (deleteResult.deletedCount > 0) {
-      console.log(`✅ ลบหมวดหมู่เก่า ${deleteResult.deletedCount} รายการ`);
-    }
-    // --- END: Category Cleanup ---
-
-    // --- START: Redis Cache Cleanup ---
-    const cacheKey = `novel:${novelSlug}`;
-    console.log(`🧹 Clearing Redis cache for key: ${cacheKey}`)
-    if (!redis.isOpen) {
-      await redis.connect();
-    }
-    await redis.del(cacheKey);
-    console.log('✅ ลบ Cache ใน Redis เรียบร้อย')
-    // --- END: Redis Cache Cleanup ---
-    console.log(`🧹 เริ่มการล้างข้อมูลเก่าสำหรับนิยาย: slug="${novelSlug}" หรือ title="${novelTitle}"...`);
-
-    // ค้นหา novel ทั้งหมดที่มี slug หรือตรงกับชื่อเรื่อง (เผื่อมีข้อมูลซ้ำ)
-    const novelsToDelete = await NovelModel.find({
-      $or: [
-        { slug: novelSlug },
-        { title: { $regex: new RegExp(`^${novelTitle}$`, 'i') } }, // case-insensitive exact title match
-      ]
-    }).select('_id title');
-
-    if (novelsToDelete.length > 0) {
-      const novelIds = novelsToDelete.map(n => n._id);
-
-      // ลบข้อมูลที่เกี่ยวข้องทั้งหมดแบบ bulk
-      await Promise.all([
-        EpisodeModel.deleteMany({ novelId: { $in: novelIds } }),
-        SceneModel.deleteMany({ novelId: { $in: novelIds } }),
-        ChoiceModel.deleteMany({ novelId: { $in: novelIds } }),
-        CharacterModel.deleteMany({ novelId: { $in: novelIds } }),
-      ]);
-      await NovelModel.deleteMany({ _id: { $in: novelIds } });
-      console.log(`✅ ลบข้อมูลเก่านิยายทั้งหมด ${novelsToDelete.length} รายการเรียบร้อยแล้ว`);
-    } else {
-      console.log('🧐 ไม่พบข้อมูลนิยายเก่า, ข้ามขั้นตอนการลบ');
-    }
-    // --- END: Cleanup Logic ---
-
-    console.log('👤 กำลังสร้างข้อมูลผู้แต่ง...');
-    const authorId = await createMockAuthor();
-    console.log(`✅ สร้างผู้แต่งสำเร็จ: ${authorId}`);
-
-    console.log('📚 กำลังสร้างนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"...');
-    const whisperData = await createWhisper999Novel(authorId);
-    console.log(`✅ สร้างนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999" สำเร็จ:
-    - นิยาย: ${whisperData.novel._id}
-    - ตอน: ${whisperData.episodes.length} ตอน
-    - ตัวละคร: ${whisperData.characters.length} ตัว
-    - ตัวเลือก: ${whisperData.choices.length} ตัวเลือก
-    - ฉาก: ${whisperData.scenes.length} ฉาก`);
-
-    console.log('🎉 สร้างข้อมูลนิยายจำลองเสร็จสิ้น!');
-    
-    return {
-      author: { _id: authorId },
-      novel: whisperData.novel,
-      episodes: whisperData.episodes,
-      characters: whisperData.characters,
-      choices: whisperData.choices,
-      scenes: whisperData.scenes
-    };
-
-  } catch (error) {
-    console.error('❌ เกิดข้อผิดพลาดในการสร้างข้อมูล:', error);
-    throw error;
-  }
-};
-
-export const runSeedWhisper999Data = async () => {
-  try {
-    await seedWhisper999Data();
-    console.log('✅ Seeding script finished successfully.');
-  } catch (error) {
-    console.error('💥 การสร้างข้อมูลล้มเหลว:', error);
-  } finally {
-    // Disconnect after seeding
-    await mongoose.disconnect();
-    console.log('🚪 Database connection closed.');
-    process.exit(0);
-  }
-};
-
-if (require.main === module) {
-  runSeedWhisper999Data();
-}

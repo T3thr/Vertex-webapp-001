@@ -2,17 +2,86 @@
 
 import { config } from 'dotenv';
 import dbConnect from '../backend/lib/mongodb';
-import { seedWhisper999Data } from '../data/TheWhisperOf999';
+import { createWhisper999Novel } from '../data/TheWhisperOf999';
 import mongoose from 'mongoose';
 import NovelModel from '../backend/models/Novel';
 import EpisodeModel from '../backend/models/Episode';
 import SceneModel from '../backend/models/Scene';
 import ChoiceModel from '../backend/models/Choice';
 import CharacterModel from '../backend/models/Character';
+import UserModel from '../backend/models/User';
+import UserProfileModel from '../backend/models/UserProfile';
+import StoryMapModel from '../backend/models/StoryMap';
+import bcrypt from 'bcryptjs';
 
 // โหลดตัวแปรสภาพแวดล้อมจาก .env และ .env.local
 config({ path: '.env' });
 config({ path: '.env.local' });
+
+const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME || 'whisper_author';
+
+/**
+ * ฟังก์ชันสร้างผู้แต่งจำลองในฐานข้อมูล
+ * @returns ObjectId ของผู้แต่งที่สร้างขึ้น
+ */
+const createMockAuthor = async () => {
+  const author = await UserModel.findOne({ username: AUTHOR_USERNAME });
+  if (author) {
+    // Ensure profile exists
+    if (!author.profile) {
+        let userProfile = await UserProfileModel.findOne({ userId: author._id });
+        if (!userProfile) {
+            userProfile = new UserProfileModel({
+                userId: author._id,
+                displayName: 'นักเขียนเงา',
+                penNames: ['ผู้เขียนเสียงกระซิบ', 'Shadow Scribe'],
+                bio: 'นักเขียนผู้หลงใหลในเรื่องราวลึกลับและสยองขวัญ',
+            });
+            await userProfile.save();
+        }
+        author.profile = userProfile._id;
+        await author.save();
+    }
+    console.log(`✅ พบผู้แต่งในฐานข้อมูล: ${author.username} (${author._id})`);
+    return author._id;
+  }
+
+  const salt = await bcrypt.genSalt(12);
+  const hashedPassword = await bcrypt.hash('password123', salt);
+
+  const newAuthor = new UserModel({
+    username: AUTHOR_USERNAME,
+    email: 'author_whisper@novelmaze.com',
+    password: hashedPassword,
+    accounts: [{
+      provider: 'credentials',
+      providerAccountId: 'author_whisper@novelmaze.com',
+      type: 'credentials'
+    }],
+    roles: ['Writer'],
+    primaryPenName: 'นักเขียนเงา',
+    isEmailVerified: true,
+    isActive: true,
+    isBanned: false,
+    isDeleted: false,
+  });
+
+  const savedAuthor = await newAuthor.save();
+
+  const authorProfile = new UserProfileModel({
+      userId: savedAuthor._id,
+      displayName: 'นักเขียนเงา',
+      penNames: ['ผู้เขียนเสียงกระซิบ', 'Shadow Scribe'],
+      bio: 'นักเขียนผู้หลงใหลในเรื่องราวลึกลับและสยองขวัญ',
+  });
+  await authorProfile.save();
+  
+  savedAuthor.profile = authorProfile._id;
+  await savedAuthor.save();
+
+  console.log(`✅ สร้างผู้แต่งใหม่: ${savedAuthor.username} (${savedAuthor._id})`);
+  return savedAuthor._id;
+};
 
 const main = async () => {
   try {
@@ -62,14 +131,15 @@ const main = async () => {
       console.log(`ℹ️  พบนิยาย ${novelIdsToDelete.length} เรื่องที่ต้องลบข้อมูลเกี่ยวข้อง (ก่อน seed ใหม่)`);
 
       // ลบข้อมูลที่เกี่ยวข้องแบบขนาน
-      console.log('🗑️  กำลังลบข้อมูล Episodes, Scenes, Choices, Characters เก่า...');
-      const [epRes, scRes, chRes, charRes] = await Promise.all([
+      console.log('🗑️  กำลังลบข้อมูล Episodes, Scenes, Choices, Characters, StoryMaps เก่า...');
+      const [epRes, scRes, chRes, charRes, smRes] = await Promise.all([
         EpisodeModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
         SceneModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
         ChoiceModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
         CharacterModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
+        StoryMapModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
       ]);
-      console.log(`✅  ลบ episodes=${epRes.deletedCount}, scenes=${scRes.deletedCount}, choices=${chRes.deletedCount}, characters=${charRes.deletedCount}`);
+      console.log(`✅  ลบ episodes=${epRes.deletedCount}, scenes=${scRes.deletedCount}, choices=${chRes.deletedCount}, characters=${charRes.deletedCount}, storyMaps=${smRes.deletedCount}`);
 
       // ลบ Novels เอง
       const novelResult = await NovelModel.deleteMany({ _id: { $in: novelIdsToDelete } });
@@ -80,8 +150,19 @@ const main = async () => {
 
     // ----- END: Cleanup Logic -----
 
+    console.log('👤 กำลังสร้างข้อมูลผู้แต่ง...');
+    const authorId = await createMockAuthor();
+    console.log(`✅ สร้างผู้แต่งสำเร็จ: ${authorId}`);
+
     console.log('📚 กำลังสร้างข้อมูลนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"...');
-    await seedWhisper999Data();
+    const whisperData = await createWhisper999Novel(authorId);
+    console.log(`✅ สร้างนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999" สำเร็จ:
+    - นิยาย: ${whisperData.novel._id}
+    - ตอน: ${whisperData.episodes.length} ตอน
+    - ตัวละคร: ${whisperData.characters.length} ตัว
+    - ตัวเลือก: ${whisperData.choices.length} ตัวเลือก
+    - ฉาก: ${whisperData.scenes.length} ฉาก
+    - StoryMap: ${whisperData.storyMap._id}`);
 
     console.log('');
     console.log('🎉 Seed Script สำหรับ "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999" ทำงานเสร็จสิ้น!');

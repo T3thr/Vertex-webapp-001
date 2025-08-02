@@ -430,7 +430,7 @@ export interface IStoryMapGroup {
 }
 const StoryMapGroupSchema = new Schema<IStoryMapGroup>(
     {
-        groupId: { type: String, required: true, trim: true, unique: true, comment: "UUID ที่สร้างจาก Client-side Editor" },
+        groupId: { type: String, required: true, trim: true, comment: "UUID ที่สร้างจาก Client-side Editor" },
         title: { type: String, required: true, trim: true, maxlength: [150, "Group title is too long"] },
         nodeIds: [{ type: String, required: true, trim: true }],
         position: {
@@ -603,6 +603,7 @@ const StoryMapSchema = new Schema<IStoryMap>(
 // Compound index สำหรับการ query StoryMap ที่ active ของ novel หนึ่งๆ และเวอร์ชัน (สำคัญมาก)
 StoryMapSchema.index({ novelId: 1, isActive: 1, version: -1 }, { name: "NovelActiveVersionStoryMapIndex" });
 StoryMapSchema.index({ novelId: 1, version: 1 }, { unique: true, name: "NovelStoryMapVersionUniqueIndex", comment: "แต่ละ Novel ควรมี version ที่ไม่ซ้ำกัน" });
+StoryMapSchema.index({ "groups.groupId": 1 }, { unique: true, sparse: true });
 
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)

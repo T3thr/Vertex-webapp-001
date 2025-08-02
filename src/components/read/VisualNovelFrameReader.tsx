@@ -238,28 +238,15 @@ export default function VisualNovelFrameReader({
   }, []);
 
   const handleEpisodeEnd = useCallback((ending?: ISceneEnding) => {
-    // Prevent multiple invocations
-    if (showSummary) return;
-
     console.log("Episode has ended.", ending);
-
-    // Pause any auto-play or typing animations
-    setIsPlaying(false);
-
-    if (ending) {
-      setEndingDetails(ending);
-    }
-
-    // Hide other UI elements for an immersive ending screen
-    setIsUiVisible(false);
-
+    setEndingDetails(ending || null);
     setShowSummary(true);
-
-    // Persist reading progress as completed
-    if (userId && activeEpisode?._id) {
-      saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId || '', true);
+    setIsPlaying(false);
+    // Here you would typically handle API calls for completion, achievements, etc.
+    if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
+      saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
     }
-  }, [userId, novel._id, activeEpisode?._id, currentSceneId, showSummary]);
+  }, [userId, activeEpisode, novel, currentSceneId]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {
@@ -329,14 +316,14 @@ export default function VisualNovelFrameReader({
         </motion.button>
 
         {/* Main UI (Header and Footer) */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
             {isUiVisible && (
                 <motion.div 
                     className='absolute inset-0 pointer-events-none'
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
                 >
                     {/* Header */}
                     <header className="absolute top-0 left-0 right-0 z-40 bg-gradient-to-b from-black/60 to-transparent p-4 text-white pointer-events-auto">
@@ -357,7 +344,7 @@ export default function VisualNovelFrameReader({
                                 <motion.button whileTap={{ scale: 0.95 }} onClick={handleToggleDialogue} className="p-2 rounded-full hover:bg-white/20 transition-colors" aria-label="Toggle Dialogue">
                                   {(settings.display.uiVisibility?.isDialogueBoxVisible ?? true) ? <MessageSquareOff size={18} /> : <MessageSquare size={18} />}
                                 </motion.button>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowStoryStatus(true)} className="p-2 rounded-full hover:bg-white/20 transition-colors"><Swords size={18} /></motion.button>
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowStoryStatus(true)} className="p-2 rounded-full hover:bg-white/20 transition-colors mr-12" aria-label="Story Status"><Swords size={18} /></motion.button>
                             </div>
                         </div>
                     </header>

@@ -44,6 +44,11 @@ type SerializedScene = Omit<IScene, '_id' | 'novelId' | 'episodeId' | 'character
     defaultNextSceneId?: string;
     previousSceneId?: string;
     ending?: ISceneEnding;
+    sceneTransitionOut?: {
+        type: string;
+        durationSeconds?: number;
+        parameters?: any;
+    };
 };
 
 type SerializedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 'sceneIds' | 'firstSceneId' | 'nextEpisodeId' | 'previousEpisodeId'> & {
@@ -103,6 +108,13 @@ export type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 's
     firstSceneId?: string;
     nextEpisodeId?: string;
     previousEpisodeId?: string;
+    storyMap?: {
+        _id: string;
+        nodes: any[];
+        edges: any[];
+        storyVariables: any[];
+        startNodeId: string;
+    } | null;
 };
 
 interface VisualNovelContentProps {
@@ -200,7 +212,7 @@ const getSpeakerInfo = (textContent: SerializedTextContent | undefined, characte
     return { name: '', color: '#FFFFFF' };
 };
 
-export default function VisualNovelContent({
+function VisualNovelContent({
   novel,
   episodeData,
   currentSceneId,
@@ -214,6 +226,9 @@ export default function VisualNovelContent({
   onEpisodeEnd,
 }: VisualNovelContentProps) {
   const [currentScene, setCurrentScene] = useState<SerializedScene | null>(null);
+  const [previousScene, setPreviousScene] = useState<SerializedScene | null>(null);
+  const [currentBackground, setCurrentBackground] = useState<string | null>(null);
+  const [shouldTransition, setShouldTransition] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -237,7 +252,30 @@ export default function VisualNovelContent({
 
   useEffect(() => {
     const scene = episodeData?.scenes?.find(s => s._id === currentSceneId) ?? null;
-    setCurrentScene(scene);
+    if (scene) {
+      const newBackground = scene.background.type === 'image' ? scene.background.value : scene.background.value;
+      
+      // ตรวจสอบว่าต้องมี transition หรือไม่
+      if (currentScene && scene) {
+        const transitionType = currentScene.sceneTransitionOut?.type;
+        
+        // ถ้าเป็น 'none' ไม่ต้อง transition เลย (ให้รู้สึกเป็นฉากเดียวกัน)
+        if (transitionType === 'none') {
+          setShouldTransition(false);
+        } 
+        // ถ้าเป็น 'fade' หรือ transition อื่นๆ ให้ทำ smooth transition
+        else {
+          setShouldTransition(true);
+        }
+      } else {
+        setShouldTransition(false); // Scene แรก ไม่ต้อง transition
+      }
+      
+      setPreviousScene(currentScene);
+      setCurrentScene(scene);
+      setCurrentBackground(newBackground);
+    }
+    
     onSceneDataChange(scene);
     setTextIndex(0);
     setDisplayedText('');
@@ -301,56 +339,109 @@ export default function VisualNovelContent({
     }
 
     if (isTyping) {
+      // If user clicks while typing, reveal the full text instantly.
       setDisplayedText(currentScene?.textContents[textIndex]?.content || '');
       setIsTyping(false);
     } else {
-      const hasNextText = textIndex < (currentScene?.textContents.length || 0) - 1;
+      // If text is fully displayed, advance to the next part of the scene.
+      if (!currentScene) return;
 
+      // Check if there is more text content in the current scene object.
+      const hasNextText = textIndex < (currentScene.textContents.length - 1);
       if (hasNextText) {
         setTextIndex(prev => prev + 1);
-      } else if (currentScene?.choices && currentScene.choices.length > 0) {
-        setAvailableChoices(currentScene.choices);
-      } else {
-        // 1) If the current scene is explicitly marked as an ending, finish the episode immediately.
-        const isSceneEnding = Boolean(currentScene?.ending);
-        /*
-          Some legacy / hard-coded data (e.g. TheWhisperOf999) uses a Timeline
-          Event with type "END_NOVEL" instead of the dedicated `ending` field.
-          To support that scenario we do a lightweight runtime check. Because
-          `timelineEvents` is not part of the typed `SerializedScene`, we cast
-          to `any` before inspecting.
-        */
-        const timelineHasEndNovel = (currentScene as any)?.timelineEvents?.some((ev: any) => ev?.type === 'end_novel' || ev?.eventType === 'end_novel');
-
-        if (isSceneEnding || timelineHasEndNovel) {
-          onEpisodeEnd(currentScene?.ending);
-          return;
-        }
-
-        // 2) If not an ending, try to follow `defaultNextSceneId`.
-        const nextSceneId = currentScene?.defaultNextSceneId;
-        if (nextSceneId) {
-          onSceneChange(nextSceneId);
-          return;
-        }
-
-        // 3) If no ending and no default next scene, attempt to locate the next scene by sceneOrder.
-        const sequentialScene = episodeData?.scenes?.find(s => (s.sceneOrder ?? 0) === ((currentScene?.sceneOrder ?? 0) + 1));
-        if (sequentialScene) {
-          onSceneChange(sequentialScene._id);
-          return;
-        }
-
-        // 4) If still not found, it's a natural end.
-        onEpisodeEnd();
+        return;
       }
+
+      // End of all text for the current scene. Determine what's next.
+      // 1. Priority: If there's a default next scene, go to it immediately.
+      if (currentScene.defaultNextSceneId) {
+        onSceneChange(currentScene.defaultNextSceneId);
+        return;
+      }
+
+      // 2. If there are choices, display them and wait for the user.
+      if (currentScene.choices && currentScene.choices.length > 0) {
+        setAvailableChoices(currentScene.choices);
+        return;
+      }
+
+      // 3. If it's an explicit ending scene, end the episode.
+      if (currentScene.ending) {
+        onEpisodeEnd(currentScene.ending);
+        return;
+      }
+
+      // 4. Fallback: If none of the above, the episode ends.
+      onEpisodeEnd();
     }
   }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd]);
+
+  const handleChoiceSelect = (choice: SerializedChoice) => {
+    setAvailableChoices(null); // Hide choices after selection
+    
+    // หา action ที่เป็น GO_TO_NODE หรือ END_NOVEL_BRANCH
+    const goToNodeAction = choice.actions.find((a: IChoiceAction) => a.type === 'go_to_node');
+    const endBranchAction = choice.actions.find((a: IChoiceAction) => a.type === 'end_novel_branch');
+
+    if (goToNodeAction) {
+      const targetNodeId = goToNodeAction.parameters.targetNodeId;
+      
+      // ใช้ StoryMap เพื่อหา scene ที่ควรไปต่อ
+      if (episodeData?.storyMap && episodeData?.scenes) {
+        // หา node ใน StoryMap ที่ตรงกับ targetNodeId
+        const targetNode = episodeData.storyMap.nodes.find(node => node.nodeId === targetNodeId);
+        
+        if (targetNode) {
+          if (targetNode.nodeType === 'scene_node' && targetNode.nodeSpecificData?.sceneId) {
+            // หา scene ที่ตรงกับ sceneId ใน nodeSpecificData
+            const nextScene = episodeData.scenes.find(s => s.nodeId === targetNode.nodeSpecificData.sceneId);
+            if (nextScene) {
+              onSceneChange(nextScene._id);
+              return;
+            }
+          } else if (targetNode.nodeType === 'ending_node') {
+            // หากเป็น ending node ให้จบ episode ด้วยข้อมูลจาก node
+            const endingData = {
+              endingType: 'NORMAL' as const,
+              title: targetNode.nodeSpecificData?.endingTitle || targetNode.title || 'จบ',
+              description: targetNode.nodeSpecificData?.outcomeDescription || 'เรื่องจบลงแล้ว',
+              endingId: targetNode.nodeId,
+            };
+            onEpisodeEnd(endingData);
+            return;
+          }
+        }
+      }
+      
+      // Fallback: ใช้วิธีเก่า
+      const nextScene = episodeData?.scenes?.find(s => s.nodeId === targetNodeId);
+      if (nextScene) {
+        onSceneChange(nextScene._id);
+      } else {
+        console.warn(`Choice action "go_to_node" failed: Scene with node ID "${targetNodeId}" not found.`);
+        onEpisodeEnd(currentScene?.ending);
+      }
+    } else if (endBranchAction) {
+      // จัดการ ending จาก choice action
+      const endingData = {
+        endingType: endBranchAction.parameters.endingType || 'NORMAL',
+        title: endBranchAction.parameters.endingTitle || 'จบ',
+        description: endBranchAction.parameters.outcomeDescription || 'เรื่องจบลงแล้ว',
+        endingId: endBranchAction.parameters.endingNodeId || 'ending',
+      };
+      onEpisodeEnd(endingData);
+    } else {
+      console.log('Selected choice has no valid action.');
+      // ถ้าไม่มี action ที่รู้จัก ให้จบ episode
+      onEpisodeEnd(currentScene?.ending);
+    }
+  };
 
   useEffect(() => {
     if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     
-    if (gameplaySettings.autoPlayEnabled && isPlaying && !isTyping && currentScene?.textContents[textIndex]) {
+    if (gameplaySettings.autoPlayEnabled && isPlaying && !isTyping && !availableChoices && currentScene?.textContents[textIndex]) {
        autoPlayTimeoutRef.current = setTimeout(() => {
             handleAdvance();
        }, gameplaySettings.autoPlayDelayMs ?? 2000);
@@ -359,29 +450,13 @@ export default function VisualNovelContent({
     return () => {
        if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
     }
-  }, [gameplaySettings.autoPlayEnabled, gameplaySettings.autoPlayDelayMs, isPlaying, isTyping, textIndex, currentScene, handleAdvance]);
+  }, [gameplaySettings.autoPlayEnabled, gameplaySettings.autoPlayDelayMs, isPlaying, isTyping, textIndex, currentScene, availableChoices, handleAdvance]);
 
-
-  const handleChoiceSelect = (choice: SerializedChoice) => {
-    setAvailableChoices(null);
-    const goToNodeAction = choice.actions.find((a: IChoiceAction) => a.type === 'go_to_node');
-
-    if (goToNodeAction && episodeData?.scenes) {
-      const targetNodeId = goToNodeAction.parameters.targetNodeId;
-      const nextScene = episodeData.scenes.find(s => s.nodeId === targetNodeId);
-
-      if (nextScene) {
-        onSceneChange(nextScene._id);
-      } else {
-        console.warn(`Choice action "go_to_node" failed: Scene with node ID "${targetNodeId}" not found in this episode.`);
-        // As a fallback, end the episode. This could be improved with more robust error handling.
-        onEpisodeEnd(currentScene?.ending);
-      }
-    } else {
-      // Handle other choice actions or do nothing if no 'go_to_node' is found.
-      console.log('Selected choice has no go_to_node action or scenes are not loaded.');
+  useEffect(() => {
+    if (episodeData?.scenes && episodeData.scenes.length > 0 && currentScene) {
+        onSceneDataChange(currentScene);
     }
-  };
+   }, [currentScene, episodeData, onSceneDataChange]);
 
   useEffect(() => {
     if (episodeData?.scenes && episodeData.scenes.length > 0 && currentScene) {
@@ -421,41 +496,63 @@ export default function VisualNovelContent({
   return (
     <div className="relative w-full h-full" onClick={!availableChoices ? handleAdvance : undefined}>
       {/* Background */}
-      <AnimatePresence>
-        <motion.div
-          key={currentScene._id}
-          className="absolute inset-0"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
-        >
-          {currentScene.background.type === 'image' ? (
+      {shouldTransition ? (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentScene._id}
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              duration: previousScene?.sceneTransitionOut?.durationSeconds ?? 0.6,
+              ease: "easeInOut"
+            }}
+          >
+            {currentScene?.background.type === 'image' ? (
+              <div
+                className="w-full h-full vn-background"
+                style={{ backgroundImage: `url(${currentScene.background.value})` }}
+                aria-label={currentScene?.title || 'background'}
+              />
+            ) : (
+              <div 
+                className="w-full h-full" 
+                style={{ backgroundColor: currentScene?.background.value }} 
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      ) : (
+        // ไม่มี transition - แสดง background แบบ static (สำหรับ type: 'none')
+        <div className="absolute inset-0">
+          {currentScene?.background.type === 'image' ? (
             <div
               className="w-full h-full vn-background"
               style={{ backgroundImage: `url(${currentScene.background.value})` }}
-              aria-label={currentScene.title || 'background'}
+              aria-label={currentScene?.title || 'background'}
             />
           ) : (
             <div 
               className="w-full h-full" 
-              style={{ backgroundColor: currentScene.background.value }} 
+              style={{ backgroundColor: currentScene?.background.value }} 
             />
           )}
-        </motion.div>
-      </AnimatePresence>
+        </div>
+      )}
       
       {/* ใช้ CSS class ใหม่สำหรับ gradient overlay */}
       <div className="absolute inset-0 vn-gradient-overlay"></div>
 
       {/* Characters */}
       <div className="absolute inset-0 z-10 overflow-hidden">
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {charactersInScene.map(char => {
             const transform = char.transform ?? {};
             return (
               <motion.div
                   key={char.instanceId}
-                  initial={{ opacity: 0, x: (transform.positionX ?? 0) > 0 ? '100%' : '-100%' }}
+                  initial={{ opacity: 0 }}
                   animate={{ 
                     opacity: transform.opacity ?? 1,
                     x: transform.positionX ?? 0,
@@ -463,7 +560,11 @@ export default function VisualNovelContent({
                     scale: transform.scaleX ?? 1,
                   }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  transition={{ 
+                    duration: 0.4, 
+                    ease: "easeInOut",
+                    opacity: { duration: 0.3 }
+                  }}
                   className="absolute bottom-0 h-[85%]" // Base height
                   style={{
                       width: 'auto',
@@ -489,21 +590,27 @@ export default function VisualNovelContent({
       </div>
 
       {/* Choices Overlay */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {availableChoices && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
             className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm p-8"
           >
             <motion.div 
               className="w-full max-w-lg space-y-4"
               variants={{
-                  hidden: { opacity: 0 },
+                  hidden: { opacity: 0, y: 20 },
                   visible: {
                       opacity: 1,
-                      transition: { staggerChildren: 0.1 }
+                      y: 0,
+                      transition: { 
+                        staggerChildren: 0.08,
+                        duration: 0.4,
+                        ease: "easeOut"
+                      }
                   }
               }}
               initial="hidden"
@@ -515,7 +622,7 @@ export default function VisualNovelContent({
                   onClick={() => handleChoiceSelect(choice)}
                   className="w-full p-4 bg-white/10 border border-white/20 rounded-lg text-white text-lg font-semibold text-center hover:bg-white/20 transition-all duration-300"
                   variants={{
-                      hidden: { y: 20, opacity: 0 },
+                      hidden: { y: 15, opacity: 0 },
                       visible: { y: 0, opacity: 1 }
                   }}
                 >
@@ -551,8 +658,7 @@ export default function VisualNovelContent({
               <p 
                 key={currentScene.textContents[textIndex].instanceId}
                 className="leading-normal sm:leading-relaxed text-base sm:text-lg md:text-xl"
-                style={{ fontSize: `${fontSize}px`}}
-              >
+                style={{ fontSize: `${fontSize}px`}}>
                 {displayedText}
               </p>
             )}
@@ -561,4 +667,6 @@ export default function VisualNovelContent({
       )}
     </div>
   );
-} 
+}
+
+export default VisualNovelContent;

@@ -5,6 +5,7 @@ import EpisodeModel from '@/backend/models/Episode';
 import SceneModel from '@/backend/models/Scene';
 import CharacterModel from '@/backend/models/Character';
 import ChoiceModel from '@/backend/models/Choice';
+import StoryMapModel from '@/backend/models/StoryMap';
 
 export async function GET(
   request: NextRequest,
@@ -24,10 +25,11 @@ export async function GET(
       return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
     }
 
-    const [scenes, characters, choices] = await Promise.all([
+    const [scenes, characters, choices, storyMap] = await Promise.all([
       SceneModel.find({ episodeId: episode._id }).sort({ sceneOrder: 1 }).lean(),
       CharacterModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
-      ChoiceModel.find({ novelId: novel._id }).lean()
+      ChoiceModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
+      StoryMapModel.findOne({ novelId: novel._id, isActive: true }).lean()
     ]);
 
     const characterLookup = characters.reduce((acc, char) => {
@@ -77,7 +79,8 @@ export async function GET(
         characters: sceneCharacters,
         textContents,
         choices: sceneChoices,
-        nextSceneId: scene.defaultNextSceneId?.toString(),
+        defaultNextSceneId: scene.defaultNextSceneId?.toString(),
+        ending: scene.ending, // เพิ่มการส่ง ending data
         audioElements: scene.audios || [],
       };
     });
@@ -87,6 +90,13 @@ export async function GET(
       _id: episode._id.toString(),
       firstSceneId: episode.firstSceneId?.toString(),
       scenes: processedScenes,
+      storyMap: storyMap ? {
+        _id: storyMap._id.toString(),
+        nodes: storyMap.nodes,
+        edges: storyMap.edges,
+        storyVariables: storyMap.storyVariables,
+        startNodeId: storyMap.startNodeId
+      } : null,
     };
     
     // The top-level choices property is removed as choices are now embedded in scenes
