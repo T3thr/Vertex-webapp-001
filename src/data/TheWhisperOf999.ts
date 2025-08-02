@@ -141,7 +141,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
             endingNodeId: 'ENDING_SAFE_DAY1',
             outcomeDescription: 'คุณเลือกที่จะใช้ชีวิตอย่างปกติสุขต่อไป และไม่มีอะไรผิดปกติเกิดขึ้นในวันแรก... อย่างน้อยก็ในตอนนี้',
             endingTitle: 'วันแรกที่แสนสงบ',
-            endingType: 'NEUTRAL'
+            endingType: 'NORMAL'
           }
         }
       ],
@@ -162,7 +162,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
             endingNodeId: 'ENDING_SAFE_DAY1_SHARED',
             outcomeDescription: 'คุณเล่าเรื่องบ้านใหม่ให้เพื่อนฟัง และใช้เวลาที่เหลือของวันไปกับการจัดของอย่างสบายใจ',
             endingTitle: 'เริ่มต้นอย่างอุ่นใจ',
-            endingType: 'GOOD'
+            endingType: 'NORMAL'
           }
         }
       ],
@@ -197,7 +197,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
             endingNodeId: 'ENDING_CLIFFHANGER_3AM',
             outcomeDescription: 'คุณตัดสินใจที่จะทำตามคำท้าทายบนเทป... คืนนี้อะไรจะเกิดขึ้นกันแน่? (โปรดติดตามตอนต่อไป)',
             endingTitle: 'คำท้าทายตอนตีสาม',
-            endingType: 'CLIFFHANGER'
+            endingType: 'NORMAL'
           }
         }
       ],
@@ -296,12 +296,21 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
   return savedChoices;
 };
 
+/**
+ * สร้าง scenes สำหรับ Episode 1 ของนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"
+ * @param novelId - ID ของนิยาย
+ * @param episodeId - ID ของ episode
+ * @param characters - Array ของ characters ที่ถูกสร้างแล้ว
+ * @param choices - Array ของ choices ที่ถูกสร้างแล้ว
+ * @returns Array ของ Scene documents ที่สร้างเสร็จแล้ว
+ */
 const createWhisper999Scenes = async (
   novelId: mongoose.Types.ObjectId, 
   episodeId: mongoose.Types.ObjectId, 
   characters: any[],
   choices: any[]
 ) => {
+  // สร้าง mapping สำหรับ characters และ choices เพื่อความสะดวกในการอ้างอิง
   const characterMap = characters.reduce((acc, char) => {
     acc[char.characterCode] = char._id;
     return acc;
@@ -312,7 +321,18 @@ const createWhisper999Scenes = async (
     return acc;
   }, {} as Record<string, mongoose.Types.ObjectId>);
 
+  // กำหนด scenes ทั้งหมดสำหรับ Episode 1
+  // แต่ละ scene มี sceneOrder ที่เรียงลำดับตามการเล่น
+  // 🎭 MULTIPLE ENDINGS: แต่ละ ending scene จะแสดง ending screen ทันทีเมื่อ VisualNovelContent ตรวจพบ ending field
+  // Ending scenes ที่มี ending field:
+  // - Scene 16: BAD ENDING 1 - เสียงสุดท้าย
+  // - Scene 19: BAD ENDING 2 - เสียงที่ถูกเลือก  
+  // - Scene 24: BAD ENDING 3 - มืออีกข้าง
+  // - Scene 26: BAD ENDING 4 - ถึงตาเธอ
+  // - Scene 28: TRUE ENDING - รอยยิ้มสุดท้าย
+  // - Scene 29: NORMAL ENDING - จบบทที่ 1
   const scenes = [
+    // === SCENE 1: การมาถึง ===
     {
       novelId,
       episodeId,
@@ -329,6 +349,7 @@ const createWhisper999Scenes = async (
         }
       ],
     },
+    // === SCENE 2: รับกุญแจ ===
     {
         novelId,
         episodeId,
@@ -351,6 +372,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 3: ความคิดของนิรา ===
       {
         novelId,
         episodeId,
@@ -372,6 +394,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 4: คำเตือน ===
       {
         novelId,
         episodeId,
@@ -391,6 +414,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 5: เข้าบ้าน ===
       {
         novelId,
         episodeId,
@@ -407,6 +431,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 6: การตัดสินใจแรก ===
       {
         novelId,
         episodeId,
@@ -424,6 +449,7 @@ const createWhisper999Scenes = async (
         ],
         choiceIds: [choiceMap.CHOICE_EXPLORE, choiceMap.CHOICE_CLEAN, choiceMap.CHOICE_CALL]
       },
+      // === SCENE 7: สำรวจชั้นล่าง (จาก choice explore) ===
       {
         novelId,
         episodeId,
@@ -440,6 +466,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 8: กล่องไม้เก่า ===
       {
         novelId,
         episodeId,
@@ -456,6 +483,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 9: เทปลึกลับ ===
       {
         novelId,
         episodeId,
@@ -472,6 +500,7 @@ const createWhisper999Scenes = async (
           },
         ],
       },
+      // === SCENE 10: การตัดสินใจกับเทป ===
       {
         novelId,
         episodeId,
@@ -489,6 +518,7 @@ const createWhisper999Scenes = async (
         ],
         choiceIds: [choiceMap.CHOICE_LISTEN_NOW, choiceMap.CHOICE_LISTEN_LATER, choiceMap.CHOICE_BURN_TAPE]
       },
+      // === SCENE 11: เสียงจากเทป ===
       {
         novelId,
         episodeId,
@@ -510,6 +540,7 @@ const createWhisper999Scenes = async (
             }
         ]
       },
+      // === SCENE 12: ประตูลับ ===
       {
         novelId,
         episodeId,
@@ -531,6 +562,7 @@ const createWhisper999Scenes = async (
             }
         ]
       },
+      // === SCENE 13: การตัดสินใจกับประตูลับ ===
       {
         novelId,
         episodeId,
@@ -548,6 +580,7 @@ const createWhisper999Scenes = async (
         ],
         choiceIds: [choiceMap.CHOICE_OPEN_SECRET_DOOR, choiceMap.CHOICE_TAKE_PHOTO, choiceMap.CHOICE_LOCK_DOOR]
       },
+      // === SCENE 14: ห้องใต้ดิน ===
       {
         novelId,
         episodeId,
@@ -564,6 +597,7 @@ const createWhisper999Scenes = async (
             }
         ]
       },
+      // === SCENE 15: เผชิญหน้า ===
       {
         novelId,
         episodeId,
@@ -580,6 +614,8 @@ const createWhisper999Scenes = async (
             }
         ]
       },
+      // === SCENE 16: BAD ENDING 1 - เสียงสุดท้าย ===
+      // 🎭 MULTIPLE ENDINGS: ฉากจบที่ 1 - แสดง ending screen ทันทีเมื่อถึงฉากนี้
       {
         novelId,
         episodeId,
@@ -608,6 +644,7 @@ const createWhisper999Scenes = async (
           imageUrl: '/images/background/badend1.png'
         }
       },
+      // === SCENE 17: คำเตือนจากเพื่อน (จาก choice take photo) ===
       {
         novelId,
         episodeId,
@@ -629,6 +666,7 @@ const createWhisper999Scenes = async (
             }
         ]
       },
+      // === SCENE 18: ประตูบานอื่น ===
       {
         novelId,
         episodeId,
@@ -650,6 +688,8 @@ const createWhisper999Scenes = async (
             }
         ]
       },
+      // === SCENE 19: BAD ENDING 2 - เสียงที่ถูกเลือก ===
+      // 🎭 MULTIPLE ENDINGS: ฉากจบที่ 2 - แสดง ending screen ทันทีเมื่อถึงฉากนี้
       {
         novelId,
         episodeId,
@@ -673,6 +713,7 @@ const createWhisper999Scenes = async (
           imageUrl: '/images/background/badend1.png'
         }
       },
+      // === SCENE 20: ผนึกประตู (จาก choice lock door) ===
       {
         novelId,
         episodeId,
@@ -690,6 +731,7 @@ const createWhisper999Scenes = async (
           { instanceId: 'narration_hope', type: 'narration', content: 'สิ่งที่อยู่ข้างล่าง…จะไม่มีวันขึ้นมาอีก หรืออย่างน้อย…เธอก็หวังเช่นนั้น' },
         ]
       },
+      // === SCENE 21: เฝ้าระวัง ===
       {
         novelId,
         episodeId,
@@ -703,6 +745,7 @@ const createWhisper999Scenes = async (
             { instanceId: 'narration_knocking', type: 'narration', content: 'ไม่แรง…แต่สม่ำเสมอ เหมือน "มันรู้" ว่าเธอยังนั่งฟังอยู่ เหมือนการย้ำเตือนว่า "ฉันยังอยู่ตรงนี้"' },
         ]
       },
+      // === SCENE 22: ทางเลือกต่อไป ===
       {
         novelId,
         episodeId,
@@ -713,6 +756,7 @@ const createWhisper999Scenes = async (
         sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกัน (มี 3 choices ที่ใช้ background เดียวกัน)
         choiceIds: [choiceMap.CHOICE_REINFORCE_DOOR, choiceMap.CHOICE_SETUP_CAMERA, choiceMap.CHOICE_DESTROY_DOOR]
       },
+      // === SCENE 23: เสริมความแข็งแกร่ง ===
       {
         novelId,
         episodeId,
@@ -726,6 +770,8 @@ const createWhisper999Scenes = async (
           { instanceId: 'narration_whisper_plug', type: 'narration', content: 'เสียงเคาะเงียบลงในคืนที่สาม แต่สิ่งที่ดังแทนคือ… เสียง "กระซิบจากปลั๊กไฟ" เมื่อเธอเอาหูแนบผนัง กลับได้ยินเสียงเด็กพูดคำว่า… "เธอฝังฉัน… แต่ฉันฝันถึงเธอทุกคืน…"' },
         ]
       },
+      // === SCENE 24: BAD ENDING 3 - มืออีกข้าง ===
+      // 🎭 MULTIPLE ENDINGS: ฉากจบที่ 3 - แสดง ending screen ทันทีเมื่อถึงฉากนี้
       {
         novelId,
         episodeId,
@@ -746,6 +792,7 @@ const createWhisper999Scenes = async (
           imageUrl: '/images/background/badend1.png'
         }
       },
+      // === SCENE 25: ติดตั้งกล้อง ===
       {
         novelId,
         episodeId,
@@ -760,6 +807,8 @@ const createWhisper999Scenes = async (
           { instanceId: 'narration_faceless', type: 'narration', content: 'มัน ทะลุผ่าน อย่างไร้แรงต้าน มันยืนนิ่ง…แล้ว "หันหน้ามาทางกล้องโดยตรง" ใบหน้าขาวซีดไม่มีลูกตา แต่กลับมี "ปาก" อยู่ตรงกลางหน้าผาก ปากนั้น… ยิ้ม' },
         ]
       },
+      // === SCENE 26: BAD ENDING 4 - ถึงตาเธอ ===
+      // 🎭 MULTIPLE ENDINGS: ฉากจบที่ 4 - แสดง ending screen ทันทีเมื่อถึงฉากนี้
       {
         novelId,
         episodeId,
@@ -779,6 +828,7 @@ const createWhisper999Scenes = async (
           imageUrl: '/images/background/badend1.png'
         }
       },
+      // === SCENE 27: ทำลายล้าง ===
       {
         novelId,
         episodeId,
@@ -793,6 +843,8 @@ const createWhisper999Scenes = async (
           { instanceId: 'narration_shadow', type: 'narration', content: 'เธอเห็นเงาดำ ๆ พุ่งขึ้นไปในเปลวเพลิง เหมือนกำลังดิ้น…และ "หัวเราะ"' },
         ]
       },
+      // === SCENE 28: TRUE ENDING - รอยยิ้มสุดท้าย ===
+      // 🎭 MULTIPLE ENDINGS: ฉากจบที่ 5 (TRUE ENDING) - แสดง ending screen ทันทีเมื่อถึงฉากนี้
       {
         novelId,
         episodeId,
@@ -813,6 +865,8 @@ const createWhisper999Scenes = async (
           imageUrl: '/images/background/badend1.png'
         }
       },
+      // === SCENE 29: จบบทที่ 1 (สำหรับ multiple endings) ===
+      // 🎭 MULTIPLE ENDINGS: ฉากจบที่ 6 (NORMAL ENDING) - แสดง ending screen ทันทีเมื่อถึงฉากนี้
       {
         novelId,
         episodeId,
@@ -839,6 +893,7 @@ const createWhisper999Scenes = async (
     ];
 
   // สร้าง scenes ทั้งหมดก่อน
+  console.log(`🎬 กำลังสร้าง ${scenes.length} scenes สำหรับ Episode 1...`);
   const savedScenes = [];
   for (const scene of scenes) {
     const sceneDoc = new SceneModel(scene);
@@ -855,6 +910,7 @@ const createWhisper999Scenes = async (
   }, {} as Record<string, string>);
 
   // อัปเดต defaultNextSceneId สำหรับ scenes ที่ไม่มี choices หรือมีการต่อเนื่องชัดเจน
+  // 🎭 สำหรับ Multiple Endings: ending scenes จะไม่มีการเชื่อมต่อไปยังฉากอื่น
   const sceneUpdates = [
     // ฉากแรกไปฉากที่สอง (การรับกุญแจ)
     { from: 'scene_arrival', to: 'scene_key_exchange' },
@@ -897,13 +953,13 @@ const createWhisper999Scenes = async (
     // จากทำลายไปจบจริง
     { from: 'scene_destroy_door_1', to: 'scene_bad_ending_5' },
     
-    // เชื่อมต่อ ending scenes ที่ไม่ได้เป็นการจบเรื่องจริงไปยัง scene_end_of_prologue
-    // (กรณีผู้เล่นเลือกทางที่ทำให้เกมจบแต่ยังไม่ใช่จบจริง)
-    // สำหรับตอนนี้ไม่ต้องเพิ่มเพราะ ending scenes จะจบเลย
-    // แต่เพิ่มเพื่อป้องกันกรณี missing links อื่นๆ ในอนาคต
+    // 🎭 MULTIPLE ENDINGS: ending scenes ไม่มีการเชื่อมต่อไปยังฉากอื่น
+    // เมื่อถึง ending scene จะแสดง ending screen และหยุดการเล่น
+    // ไม่ต้องเพิ่ม defaultNextSceneId สำหรับ ending scenes
   ];
 
   // อัปเดต defaultNextSceneId
+  console.log('🔗 กำลังเชื่อมต่อ scenes...');
   for (const update of sceneUpdates) {
     const fromSceneId = sceneNodeIdMap[update.from];
     const toSceneId = sceneNodeIdMap[update.to];
@@ -915,6 +971,7 @@ const createWhisper999Scenes = async (
     }
   }
   
+  console.log(`✅ สร้าง scenes เสร็จสิ้น: ${savedScenes.length} scenes`);
   return savedScenes;
 };
 
@@ -1260,7 +1317,7 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
     sourceType: {
       type: NovelContentType.INTERACTIVE_FICTION
     },
-    totalEpisodesCount: 1,
+    totalEpisodesCount: 1, // ปัจจุบันมีแค่ episode 1 เท่านั้น
     publishedEpisodesCount: 1,
     isFeatured: true,
     publishedAt: new Date(),
@@ -1320,38 +1377,62 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
   const characters = await createWhisper999Characters(novel._id, authorId);
   const choices = await createWhisper999Choices(novel._id, authorId);
 
-  const episodeData = [
-    {
-      novelId: novel._id,
-      authorId,
-      title: 'บทที่ 1: ย้ายเข้า',
-      slug: 'chapter-1-moving-in',
-      episodeOrder: 1,
-      status: EpisodeStatus.PUBLISHED,
-      accessType: EpisodeAccessType.FREE,
-      teaserText: 'การมาถึงบ้านหลังใหม่ที่ดูเหมือนจะสมบูรณ์แบบ... ยกเว้นก็แต่ข่าวลือและราคาที่ถูกจนน่าสงสัย',
-      publishedAt: new Date(),
-      isPreviewAllowed: true,
+  // สร้าง Episode 1 (ปัจจุบันมีแค่ episode เดียว)
+  console.log('📖 กำลังสร้าง Episode 1...');
+  const episode1 = new EpisodeModel({
+    novelId: novel._id,
+    authorId,
+    title: 'บทที่ 1: ย้ายเข้า',
+    slug: 'chapter-1-moving-in',
+    episodeOrder: 1,
+    status: EpisodeStatus.PUBLISHED,
+    accessType: EpisodeAccessType.FREE,
+    teaserText: 'การมาถึงบ้านหลังใหม่ที่ดูเหมือนจะสมบูรณ์แบบ... ยกเว้นก็แต่ข่าวลือและราคาที่ถูกจนน่าสงสัย',
+    publishedAt: new Date(),
+    isPreviewAllowed: true,
+    stats: {
+      viewsCount: 0,
+      uniqueViewersCount: 0,
+      likesCount: 0,
+      commentsCount: 0,
+      totalWords: 0,
+      estimatedReadingTimeMinutes: 0,
+      purchasesCount: 0,
     }
-  ];
-
-  const episodes = await EpisodeModel.insertMany(episodeData);
-  const firstEpisode = episodes[0];
-
-  const scenes = await createWhisper999Scenes(novel._id, firstEpisode._id, characters, choices);
-
-  await EpisodeModel.findByIdAndUpdate(firstEpisode._id, {
-    firstSceneId: scenes[0]?._id,
-    sceneIds: scenes.map(s => s._id)
   });
-  
+
+  await episode1.save();
+
+  // สร้าง scenes สำหรับ Episode 1
+  console.log('🎬 กำลังสร้าง scenes สำหรับ Episode 1...');
+  const episode1Scenes = await createWhisper999Scenes(novel._id, episode1._id, characters, choices);
+
+  // อัปเดต Episode 1 ด้วย sceneIds และ firstSceneId
+  await EpisodeModel.findByIdAndUpdate(episode1._id, {
+    firstSceneId: episode1Scenes[0]?._id,
+    sceneIds: episode1Scenes.map(s => s._id)
+  });
+
+  // อัปเดต Novel ด้วย firstEpisodeId
+  await NovelModel.findByIdAndUpdate(novel._id, {
+    firstEpisodeId: episode1._id
+  });
+
+  // ดึง episodes ที่อัปเดตแล้ว
   const updatedEpisodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 });
 
   // สร้าง StoryMap สำหรับนิยาย
   console.log('📊 กำลังสร้าง StoryMap...');
   const storyMap = await createWhisper999StoryMap(novel._id, authorId, choices);
 
-  return { novel, episodes: updatedEpisodes, characters, choices, scenes, storyMap };
+  return { 
+    novel, 
+    episodes: updatedEpisodes, 
+    characters, 
+    choices, 
+    scenes: episode1Scenes, // scenes ของ episode 1 เท่านั้น
+    storyMap 
+  };
 };
 
 

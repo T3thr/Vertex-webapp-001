@@ -306,6 +306,47 @@ function VisualNovelContent({
       
       setPreviousScene(currentScene);
       setCurrentScene(scene);
+      
+      // 🎭 MULTIPLE ENDINGS: ตรวจสอบ ending field ทันทีเมื่อเข้าสู่ scene
+      if (scene.ending) {
+        const novelMeta = episodeData?.novelMeta || novel;
+        console.log(`🎭 Ending scene detected: "${scene.ending.title}" (${scene.ending.endingType})`);
+        console.log(`📚 Novel type: "${novelMeta.endingType}", Episode: ${episodeData?.episodeOrder}/${novelMeta.totalEpisodesCount}`);
+        
+        if (novelMeta.endingType === 'multiple_endings') {
+          // สำหรับ MULTIPLE_ENDINGS: แสดง ending screen ทันที
+          console.log(`🎊 Showing MULTIPLE_ENDINGS ending: "${scene.ending.title}"`);
+          onEpisodeEnd(scene.ending);
+          return; // หยุดการเล่นทันที
+        } else if (novelMeta.endingType === 'single_ending') {
+          // สำหรับ SINGLE_ENDING: ตรวจสอบว่าเป็นฉากสุดท้ายของตอนสุดท้ายหรือไม่
+          const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+          const maxSceneOrder = Math.max(...(episodeData?.scenes?.map(s => s.sceneOrder) || [0]));
+          const isLastScene = scene.sceneOrder === maxSceneOrder;
+          
+          console.log(`🎯 SINGLE_ENDING ending check - isLastEpisode: ${isLastEpisode}, isLastScene: ${isLastScene} (${scene.sceneOrder}/${maxSceneOrder})`);
+          
+          if (isLastEpisode && isLastScene) {
+            console.log(`🎊 Showing SINGLE_ENDING finale: "${scene.ending.title}"`);
+            onEpisodeEnd(scene.ending);
+            return; // หยุดการเล่นทันที
+          } else {
+            console.log(`⏭️ Skipping ending for SINGLE_ENDING novel (not final scene/episode)`);
+            // ไปตอนถัดไปโดยไม่แสดง ending screen
+            const nextEpisodeOrder = (episodeData?.episodeOrder || 1) + 1;
+            if (nextEpisodeOrder <= novelMeta.totalEpisodesCount) {
+              console.log(`📖 Moving to next episode: ${nextEpisodeOrder}/${novelMeta.totalEpisodesCount}`);
+              onEpisodeEnd(); // จบตอนปัจจุบันแล้วไปตอนถัดไป
+              return;
+            }
+          }
+        } else {
+          // สำหรับ ending types อื่นๆ: แสดง ending
+          console.log(`🔄 Showing ending for "${novelMeta.endingType}" novel: "${scene.ending.title}"`);
+          onEpisodeEnd(scene.ending);
+          return; // หยุดการเล่นทันที
+        }
+      }
     }
     
     onSceneDataChange(scene);
@@ -313,7 +354,7 @@ function VisualNovelContent({
     setDisplayedText('');
     setIsTyping(false);
     setAvailableChoices(null);
-  }, [currentSceneId, episodeData, onSceneDataChange, currentScene, shouldTransition, currentBackground]);
+  }, [currentSceneId, episodeData, onSceneDataChange, currentScene, shouldTransition, currentBackground, novel, onEpisodeEnd]);
 
 
   const typeText = useCallback(() => {
@@ -366,73 +407,129 @@ function VisualNovelContent({
 
   // Move handleAdvance definition above auto-play effect to avoid TDZ error
   const handleAdvance = useCallback(() => {
+    // Always clear any active typing animation first to ensure responsive interaction
     if (typingTimeoutRef.current) {
        clearTimeout(typingTimeoutRef.current);
+       typingTimeoutRef.current = null;
     }
 
     if (isTyping) {
       // If user clicks while typing, reveal the full text instantly.
-      setDisplayedText(currentScene?.textContents[textIndex]?.content || '');
+      // This ensures clicking during fade transitions works seamlessly
+      const fullText = currentScene?.textContents[textIndex]?.content || '';
+      setDisplayedText(fullText);
       setIsTyping(false);
+      
+      console.log(`🎯 User clicked during typing - showing full text instantly: "${fullText.substring(0, 50)}..."`);
+      console.log(`🔧 Instant text - Scene: "${currentScene?.title || 'Unknown'}" (${currentScene?.sceneOrder || 0}), Text: ${textIndex + 1}/${currentScene?.textContents.length || 0}`);
+      return; // Exit early to prevent advancing to next scene
     } else {
       // If text is fully displayed, advance to the next part of the scene.
       if (!currentScene) return;
 
+      // ✅ แก้ไข: ตรวจสอบว่าข้อความปัจจุบันแสดงครบหรือยัง
+      const currentTextContent = currentScene.textContents[textIndex];
+      const fullText = currentTextContent?.content || '';
+      const isCurrentTextComplete = displayedText === fullText;
+
+      // หากข้อความปัจจุบันยังแสดงไม่ครบ ให้แสดงครบก่อน
+      if (!isCurrentTextComplete && fullText) {
+        console.log(`📝 Current text not fully displayed - showing complete text first`);
+        console.log(`📊 Text comparison: displayed="${displayedText.length}/${fullText.length}" chars`);
+        console.log(`🎬 Scene: "${currentScene.title}" (${currentScene.sceneOrder}) - Text ${textIndex + 1}/${currentScene.textContents.length}`);
+        setDisplayedText(fullText);
+        setIsTyping(false);
+        return; // หยุดไม่ให้ไปฉากถัดไป
+      }
+
       // Check if there is more text content in the current scene object.
       const hasNextText = textIndex < (currentScene.textContents.length - 1);
       if (hasNextText) {
+        console.log(`📖 Advancing to next text in scene (${textIndex + 1}/${currentScene.textContents.length})`);
         setTextIndex(prev => prev + 1);
         return;
       }
 
       // End of all text for the current scene. Determine what's next.
+      console.log(`🎬 End of scene "${currentScene.title}" - determining next action...`);
+      
       // 1. Priority: If there's a default next scene, go to it immediately.
       if (currentScene.defaultNextSceneId) {
+        console.log(`➡️ Moving to default next scene: ${currentScene.defaultNextSceneId}`);
+        console.log(`🎭 Scene transition: "${currentScene.sceneTransitionOut?.type || 'none'}" (${currentScene.sceneTransitionOut?.durationSeconds || 0}s)`);
         onSceneChange(currentScene.defaultNextSceneId);
         return;
       }
 
       // 2. If there are choices, display them and wait for the user.
       if (currentScene.choices && currentScene.choices.length > 0) {
+        console.log(`🔄 Showing ${currentScene.choices.length} choices to user`);
         setAvailableChoices(currentScene.choices);
         return;
       }
 
+      // ✅ แก้ไข: เพิ่มการตรวจสอบฉากถัดไปใน episode เดียวกัน
+      const nextSceneInEpisode = episodeData?.scenes?.find(s => s.sceneOrder === currentScene.sceneOrder + 1);
+      if (nextSceneInEpisode) {
+        console.log(`📖 Moving to next scene in same episode: ${nextSceneInEpisode.title} (${nextSceneInEpisode.sceneOrder})`);
+        console.log(`🎭 Scene transition: "${currentScene.sceneTransitionOut?.type || 'none'}" (${currentScene.sceneTransitionOut?.durationSeconds || 0}s)`);
+        onSceneChange(nextSceneInEpisode._id);
+        return;
+      } else {
+        console.log(`🏁 No more scenes in current episode (${episodeData?.episodeOrder}) - ending episode`);
+      }
+
       // 3. Handle scene endings based on novel type
       const novelMeta = episodeData?.novelMeta || novel;
+      console.log(`📚 Novel metadata - endingType: "${novelMeta.endingType}", isCompleted: ${novelMeta.isCompleted}, totalEpisodes: ${novelMeta.totalEpisodesCount}`);
+      console.log(`📜 Current episode: ${episodeData?.episodeOrder}, has ending: ${!!currentScene.ending}`);
+      console.log(`🎬 Current scene: "${currentScene.title}" (${currentScene.sceneOrder}) - Total scenes in episode: ${episodeData?.scenes?.length || 0}`);
+      console.log(`📋 Available scenes in episode: ${episodeData?.scenes?.map(s => `${s.sceneOrder}:${s.title}`).join(', ') || 'none'}`);
       
       if (currentScene.ending) {
-        // Check novel ending type correctly (use exact enum values)
-        if (novelMeta.endingType === 'single_ending') {
-          // For SINGLE_ENDING novels, only show ending if this is the very last scene of the final episode
+        // 🎭 MULTIPLE ENDINGS: ตรวจสอบ ending field ใน scene ปัจจุบัน
+        console.log(`🎭 Ending scene detected in handleAdvance: "${currentScene.ending.title}" (${currentScene.ending.endingType})`);
+        
+        if (novelMeta.endingType === 'multiple_endings') {
+          // สำหรับ MULTIPLE_ENDINGS: แสดง ending screen ทันที
+          console.log(`🎊 Showing MULTIPLE_ENDINGS ending: "${currentScene.ending.title}"`);
+          onEpisodeEnd(currentScene.ending);
+          return; // หยุดการเล่นทันที
+        } else if (novelMeta.endingType === 'single_ending') {
+          // สำหรับ SINGLE_ENDING: ตรวจสอบว่าเป็นฉากสุดท้ายของตอนสุดท้ายหรือไม่
           const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
-          
-          // Find the highest scene order in this episode to determine if this is the last scene
           const maxSceneOrder = Math.max(...(episodeData?.scenes?.map(s => s.sceneOrder) || [0]));
           const isLastScene = currentScene.sceneOrder === maxSceneOrder;
           
+          console.log(`🎯 SINGLE_ENDING ending check - isLastEpisode: ${isLastEpisode}, isLastScene: ${isLastScene} (${currentScene.sceneOrder}/${maxSceneOrder})`);
+          
           if (isLastEpisode && isLastScene) {
-            // Only show ending on the very last scene of the final episode for SINGLE_ENDING
+            console.log(`🎊 Showing SINGLE_ENDING finale: "${currentScene.ending.title}"`);
             onEpisodeEnd(currentScene.ending);
-            return;
+            return; // หยุดการเล่นทันที
+          } else {
+            console.log(`⏭️ Skipping ending for SINGLE_ENDING novel (not final scene/episode)`);
+            // ไปตอนถัดไปโดยไม่แสดง ending screen
+            const nextEpisodeOrder = (episodeData?.episodeOrder || 1) + 1;
+            if (nextEpisodeOrder <= novelMeta.totalEpisodesCount) {
+              console.log(`📖 Moving to next episode: ${nextEpisodeOrder}/${novelMeta.totalEpisodesCount}`);
+              onEpisodeEnd(); // จบตอนปัจจุบันแล้วไปตอนถัดไป
+              return;
+            }
           }
-          // For SINGLE_ENDING, ignore scene endings if not the final scene - continue to next scene instead
-          // Fall through to episode end without showing ending
-        } else if (novelMeta.endingType === 'multiple_endings') {
-          // For MULTIPLE_ENDINGS novels, show ending whenever a scene has one
-          onEpisodeEnd(currentScene.ending);
-          return;
         } else {
-          // For other ending types (ongoing, open_ending), show ending if present
+          // สำหรับ ending types อื่นๆ: แสดง ending
+          console.log(`🔄 Showing ending for "${novelMeta.endingType}" novel: "${currentScene.ending.title}"`);
           onEpisodeEnd(currentScene.ending);
-          return;
+          return; // หยุดการเล่นทันที
         }
       }
 
       // 4. Fallback: If none of the above, the episode ends.
+      console.log(`🏁 Episode ending without specific scene ending`);
       onEpisodeEnd();
     }
-  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd, novel.slug, episodeData]);
+  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd, novel.slug, episodeData, displayedText]);
 
   const handleChoiceSelect = (choice: SerializedChoice) => {
     setAvailableChoices(null); // Hide choices after selection
@@ -466,20 +563,26 @@ function VisualNovelContent({
               endingId: targetNode.nodeId,
             };
             
-            // Apply novel type restrictions
+            // Apply novel type restrictions with detailed logging
             const novelMeta = episodeData?.novelMeta || novel;
+            console.log(`🎲 Choice ending check - Novel type: "${novelMeta.endingType}", Episode: ${episodeData?.episodeOrder}/${novelMeta.totalEpisodesCount}`);
+            
             if (novelMeta.endingType === 'single_ending') {
               // For SINGLE_ENDING novels, only show ending if this is the final episode
               const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+              console.log(`🎯 SINGLE_ENDING choice ending check - isLastEpisode: ${isLastEpisode}`);
+              
               if (isLastEpisode) {
+                console.log(`🎊 Showing SINGLE_ENDING choice finale: "${endingData.title}"`);
                 onEpisodeEnd(endingData);
               } else {
                 // Skip ending for SINGLE_ENDING novels on non-final episodes
-                console.log('Skipping ending for SINGLE_ENDING novel on non-final episode');
+                console.log(`⏭️ Skipping choice ending for SINGLE_ENDING novel (not final episode)`);
                 onEpisodeEnd(); // End without showing ending
               }
             } else {
               // For MULTIPLE_ENDINGS or other types, show ending
+              console.log(`🎭 Showing choice ending for "${novelMeta.endingType}" novel: "${endingData.title}"`);
               onEpisodeEnd(endingData);
             }
             return;
@@ -504,20 +607,26 @@ function VisualNovelContent({
         endingId: endBranchAction.parameters.endingNodeId || 'ending',
       };
       
-      // Apply novel type restrictions
+      // Apply novel type restrictions with detailed logging
       const novelMeta = episodeData?.novelMeta || novel;
+      console.log(`🎲 Choice action ending check - Novel type: "${novelMeta.endingType}", Episode: ${episodeData?.episodeOrder}/${novelMeta.totalEpisodesCount}`);
+      
       if (novelMeta.endingType === 'single_ending') {
         // For SINGLE_ENDING novels, only show ending if this is the final episode
         const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+        console.log(`🎯 SINGLE_ENDING action ending check - isLastEpisode: ${isLastEpisode}`);
+        
         if (isLastEpisode) {
+          console.log(`🎊 Showing SINGLE_ENDING action finale: "${endingData.title}"`);
           onEpisodeEnd(endingData);
         } else {
           // Skip ending for SINGLE_ENDING novels on non-final episodes
-          console.log('Skipping ending for SINGLE_ENDING novel on non-final episode via choice action');
+          console.log(`⏭️ Skipping action ending for SINGLE_ENDING novel (not final episode)`);
           onEpisodeEnd(); // End without showing ending
         }
       } else {
         // For MULTIPLE_ENDINGS or other types, show ending
+        console.log(`🎭 Showing action ending for "${novelMeta.endingType}" novel: "${endingData.title}"`);
         onEpisodeEnd(endingData);
       }
     } else {
@@ -729,9 +838,12 @@ function VisualNovelContent({
           className="absolute inset-0 cursor-pointer"
           onClick={handleAdvance}
           onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()} // Prevent touch interference
           style={{ 
             zIndex: 50, // Highest z-index to capture all clicks
-            backgroundColor: 'transparent' // Invisible but clickable
+            backgroundColor: 'transparent', // Invisible but clickable
+            pointerEvents: 'auto', // Ensure this always receives clicks
+            touchAction: 'manipulation' // Optimize touch response
           }}
           aria-label="Click to advance text"
         />

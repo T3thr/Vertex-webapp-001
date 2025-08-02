@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Shield, Heart, Zap, Skull } from 'lucide-react';
+import { useEffect } from 'react';
 import type { ICharacterInScene, IStatusEffect } from '@/backend/models/Scene';
 import type { SerializedScene } from './VisualNovelFrameReader';
 
@@ -33,6 +34,19 @@ const getEffectIcon = (effectType: string) => {
 export default function StoryStatusPanel({ isOpen, onClose, scene }: StoryStatusPanelProps) {
   const charactersInScene = scene?.characters.filter(c => c.isVisible && c.currentStatusEffects && c.currentStatusEffects.length > 0) || [];
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -52,7 +66,7 @@ export default function StoryStatusPanel({ isOpen, onClose, scene }: StoryStatus
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           >
-            <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
               <h2 className="text-card-foreground text-lg font-semibold">สถานะเรื่องราว</h2>
               <button
                 onClick={onClose}
@@ -62,7 +76,7 @@ export default function StoryStatusPanel({ isOpen, onClose, scene }: StoryStatus
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
               {charactersInScene.length > 0 ? (
                 charactersInScene.map(char => (
                   <div key={char.instanceId}>

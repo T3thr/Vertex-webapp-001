@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { X, Type, Zap, Eye, Play, Volume2, Music, Waves, Mic, Monitor } from 'lucide-react';
+import { useEffect } from 'react';
 import { IVisualNovelGameplayPreferences, IUserDisplayPreferences } from '@/backend/models/UserSettings';
 
 // Combined settings interface for easier prop management
@@ -43,6 +44,19 @@ export default function ReaderSettings({
   onSave,
   onReset
 }: ReaderSettingsProps) {
+  
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
   
   if (!isOpen) return null;
 
@@ -104,7 +118,7 @@ export default function ReaderSettings({
               </div>
 
               {/* Content */}
-          <div className="p-4 space-y-2 overflow-y-auto flex-grow">
+          <div className="p-4 space-y-2 overflow-y-auto flex-grow scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
             <h3 className="text-sm font-semibold text-primary px-2 pt-2">การแสดงผล</h3>
             <SettingRow
               icon={<Type size={18} className="text-primary/80" />}

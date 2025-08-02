@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Play, 
-  Pause, 
   Settings, 
   ArrowLeft,
   List,
@@ -87,7 +85,7 @@ export default function VisualNovelFrameReader({
   const router = useRouter();
 
   // Core Reader State
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying] = useState(true); // Always true since we removed play/pause functionality
   const [activeEpisode, setActiveEpisode] = useState<FullEpisode>(episode);
   const [currentSceneId, setCurrentSceneId] = useState(initialSceneId || episode.firstSceneId?.toString());
   const [currentSceneData, setCurrentSceneData] = useState<SerializedScene | null>(null);
@@ -115,6 +113,35 @@ export default function VisualNovelFrameReader({
   // Advance Trigger
   const [advanceTrigger, setAdvanceTrigger] = useState(0);
   const handleAdvance = () => setAdvanceTrigger(t => t + 1);
+
+  // Add keyboard event listener for spacebar
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Only handle spacebar when no panels are open
+      if (e.key === ' ' && !showSettings && !showHistory && !showEpisodeNav && !showStoryStatus) {
+        e.preventDefault(); // Prevent default spacebar behavior (page scroll)
+        handleAdvance();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showSettings, showHistory, showEpisodeNav, showStoryStatus]);
+
+  // Prevent body scroll when any panel is open
+  useEffect(() => {
+    const isAnyPanelOpen = showSettings || showHistory || showEpisodeNav || showStoryStatus;
+    
+    if (isAnyPanelOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showSettings, showHistory, showEpisodeNav, showStoryStatus]);
 
   // Fetch initial settings from API or localStorage
   useEffect(() => {
@@ -239,14 +266,61 @@ export default function VisualNovelFrameReader({
 
   const handleEpisodeEnd = useCallback((ending?: ISceneEnding) => {
     console.log("Episode has ended.", ending);
+    
+    // ✅ แก้ไข: ตรวจสอบ novel type และ episode order สำหรับ single_ending
+    const isSingleEnding = novel.endingType === 'single_ending';
+    const isLastEpisode = activeEpisode.episodeOrder === novel.totalEpisodesCount;
+    
+    console.log(`🎯 Episode End Check - Novel: "${novel.title}", Type: "${novel.endingType}", Episode: ${activeEpisode.episodeOrder}/${novel.totalEpisodesCount}`);
+    console.log(`📊 Single Ending: ${isSingleEnding}, Last Episode: ${isLastEpisode}, Has Ending: ${!!ending}`);
+    
+    if (isSingleEnding && !isLastEpisode) {
+      // ✅ สำหรับ single_ending ที่ไม่ใช่ตอนสุดท้าย: ไม่แสดง ending screen
+      console.log(`⏭️ Single ending novel - skipping ending screen for non-final episode`);
+      
+      // หา episode ถัดไป
+      const nextEpisodeOrder = activeEpisode.episodeOrder + 1;
+      const nextEpisode = Object.values(loadedEpisodesData).find(ep => ep.episodeOrder === nextEpisodeOrder);
+      
+      if (nextEpisode) {
+        console.log(`📖 Moving to next episode: ${nextEpisode.title} (${nextEpisode.episodeOrder})`);
+        setActiveEpisode({
+          _id: nextEpisode._id,
+          title: nextEpisode.title,
+          slug: nextEpisode.slug,
+          episodeOrder: nextEpisode.episodeOrder,
+          accessType: nextEpisode.accessType,
+          priceCoins: nextEpisode.priceCoins || 0,
+          originalPriceCoins: nextEpisode.originalPriceCoins || 0,
+          teaserText: nextEpisode.teaserText || '',
+          firstSceneId: nextEpisode.firstSceneId,
+          stats: nextEpisode.stats,
+          hasAccess: (nextEpisode as any).hasAccess || true
+        });
+        setCurrentSceneId(nextEpisode.firstSceneId?.toString());
+        
+        // Save progress for current episode
+        if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
+          saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
+        }
+        return;
+      } else {
+        console.warn(`⚠️ Next episode not found for order ${nextEpisodeOrder}`);
+      }
+    }
+    
+    // ✅ แสดง ending screen เฉพาะเมื่อ:
+    // 1. ไม่ใช่ single_ending (multiple_endings, ongoing, etc.)
+    // 2. หรือเป็น single_ending แต่เป็นตอนสุดท้าย
+    console.log(`🎊 Showing ending screen`);
     setEndingDetails(ending || null);
     setShowSummary(true);
-    setIsPlaying(false);
-    // Here you would typically handle API calls for completion, achievements, etc.
+    
+    // Save progress
     if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
       saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
     }
-  }, [userId, activeEpisode, novel, currentSceneId]);
+  }, [userId, activeEpisode, novel, currentSceneId, loadedEpisodesData]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {
@@ -265,7 +339,15 @@ export default function VisualNovelFrameReader({
     handleSettingsChange(newSettings);
   };
 
-  const activeEpisodeData = loadedEpisodesData[activeEpisode._id];
+  // ✅ เพิ่ม novelMeta จากข้อมูล novel ที่มาจาก page.tsx
+  const activeEpisodeData = loadedEpisodesData[activeEpisode._id] ? {
+    ...loadedEpisodesData[activeEpisode._id],
+    novelMeta: {
+      endingType: novel.endingType,
+      isCompleted: novel.isCompleted,
+      totalEpisodesCount: novel.totalEpisodesCount
+    }
+  } : null;
 
   const getEndingTypeText = (type: ISceneEnding['endingType']) => {
     switch (type) {
@@ -344,7 +426,6 @@ export default function VisualNovelFrameReader({
                                 <motion.button whileTap={{ scale: 0.95 }} onClick={handleToggleDialogue} className="p-2 rounded-full hover:bg-white/20 transition-colors" aria-label="Toggle Dialogue">
                                   {(settings.display.uiVisibility?.isDialogueBoxVisible ?? true) ? <MessageSquareOff size={18} /> : <MessageSquare size={18} />}
                                 </motion.button>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowStoryStatus(true)} className="p-2 rounded-full hover:bg-white/20 transition-colors mr-12" aria-label="Story Status"><Swords size={18} /></motion.button>
                             </div>
                         </div>
                     </header>
@@ -354,10 +435,8 @@ export default function VisualNovelFrameReader({
                         <div className="max-w-xl mx-auto bg-black/30 backdrop-blur-md rounded-full flex items-center justify-evenly text-white p-2 border border-white/20 shadow-lg">
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowEpisodeNav(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Episode List"><List size={20} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowHistory(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Dialogue History"><MessageSquareText size={20} /></motion.button>
-                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => setIsPlaying(!isPlaying)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
-                             {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                           </motion.button>
-                           <motion.button whileTap={{ scale: 0.9 }} onClick={handleAdvance} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Skip"><SkipForward size={20} /></motion.button>
+                           <motion.button whileTap={{ scale: 0.9 }} onClick={handleAdvance} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Skip"><SkipForward size={24} /></motion.button>
+                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowStoryStatus(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Story Status"><Swords size={20} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowSettings(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Settings"><Settings size={20} /></motion.button>
                         </div>
                     </footer>

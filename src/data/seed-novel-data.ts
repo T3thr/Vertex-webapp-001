@@ -622,7 +622,7 @@ const createChosenOneChoices = async (novelId: mongoose.Types.ObjectId, authorId
           actionId: 'action1',
           type: 'go_to_node',
           parameters: {
-            targetNodeId: 'scene39'
+            targetNodeId: 'scene6'
           }
         },
         {
@@ -653,7 +653,7 @@ const createChosenOneChoices = async (novelId: mongoose.Types.ObjectId, authorId
           actionId: 'action1',
           type: 'go_to_node',
           parameters: {
-            targetNodeId: 'scene39'
+            targetNodeId: 'scene6'
           }
         },
         {
@@ -1413,7 +1413,7 @@ const createChosenOneScenes = async (
       novelId,
       episodeId,
       sceneOrder: 6,
-      nodeId: 'scene39',
+      nodeId: 'scene6',
       title: 'ผลลัพธ์',
       background: {
         type: 'image',
