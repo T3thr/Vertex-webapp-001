@@ -398,37 +398,41 @@ function VisualNovelContent({
         return;
       }
 
-      // 3. If it's an explicit ending scene, end the episode.
-      if (currentScene.ending) {
-        onEpisodeEnd(currentScene.ending);
-        return;
-      }
-
-      // 4. For SINGLE_ENDING novels, check if this is the last scene of the final episode
-      // Use optimized novel metadata from episode data when available
+      // 3. Handle scene endings based on novel type
       const novelMeta = episodeData?.novelMeta || novel;
-      if (novelMeta.endingType === 'single_ending' && novelMeta.isCompleted) {
-        // Check if this is the final episode and final scene
-        const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
-        const isLastScene = episodeData?.scenes && currentScene.sceneOrder === episodeData.scenes.length;
-        
-        if (isLastEpisode && isLastScene) {
-          // Generate a default ending for single ending novels
-          const defaultEnding = {
-            endingType: 'NORMAL' as const,
-            title: 'จบบทเรื่องราว',
-            description: 'ขอบคุณที่ติดตามเรื่องราวจนจบ',
-            endingId: `${novel.slug}_single_ending`
-          };
-          onEpisodeEnd(defaultEnding);
+      
+      if (currentScene.ending) {
+        // Check novel ending type correctly (use exact enum values)
+        if (novelMeta.endingType === 'single_ending') {
+          // For SINGLE_ENDING novels, only show ending if this is the very last scene of the final episode
+          const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+          
+          // Find the highest scene order in this episode to determine if this is the last scene
+          const maxSceneOrder = Math.max(...(episodeData?.scenes?.map(s => s.sceneOrder) || [0]));
+          const isLastScene = currentScene.sceneOrder === maxSceneOrder;
+          
+          if (isLastEpisode && isLastScene) {
+            // Only show ending on the very last scene of the final episode for SINGLE_ENDING
+            onEpisodeEnd(currentScene.ending);
+            return;
+          }
+          // For SINGLE_ENDING, ignore scene endings if not the final scene - continue to next scene instead
+          // Fall through to episode end without showing ending
+        } else if (novelMeta.endingType === 'multiple_endings') {
+          // For MULTIPLE_ENDINGS novels, show ending whenever a scene has one
+          onEpisodeEnd(currentScene.ending);
+          return;
+        } else {
+          // For other ending types (ongoing, open_ending), show ending if present
+          onEpisodeEnd(currentScene.ending);
           return;
         }
       }
 
-      // 5. Fallback: If none of the above, the episode ends.
+      // 4. Fallback: If none of the above, the episode ends.
       onEpisodeEnd();
     }
-  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd, novel, episodeData]);
+  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd, novel.slug, episodeData]);
 
   const handleChoiceSelect = (choice: SerializedChoice) => {
     setAvailableChoices(null); // Hide choices after selection
@@ -454,14 +458,30 @@ function VisualNovelContent({
               return;
             }
           } else if (targetNode.nodeType === 'ending_node') {
-            // หากเป็น ending node ให้จบ episode ด้วยข้อมูลจาก node
+            // หากเป็น ending node ให้ตรวจสอบประเภทนิยายก่อนแสดงจบ
             const endingData = {
               endingType: 'NORMAL' as const,
               title: targetNode.nodeSpecificData?.endingTitle || targetNode.title || 'จบ',
               description: targetNode.nodeSpecificData?.outcomeDescription || 'เรื่องจบลงแล้ว',
               endingId: targetNode.nodeId,
             };
-            onEpisodeEnd(endingData);
+            
+            // Apply novel type restrictions
+            const novelMeta = episodeData?.novelMeta || novel;
+            if (novelMeta.endingType === 'single_ending') {
+              // For SINGLE_ENDING novels, only show ending if this is the final episode
+              const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+              if (isLastEpisode) {
+                onEpisodeEnd(endingData);
+              } else {
+                // Skip ending for SINGLE_ENDING novels on non-final episodes
+                console.log('Skipping ending for SINGLE_ENDING novel on non-final episode');
+                onEpisodeEnd(); // End without showing ending
+              }
+            } else {
+              // For MULTIPLE_ENDINGS or other types, show ending
+              onEpisodeEnd(endingData);
+            }
             return;
           }
         }
@@ -476,14 +496,30 @@ function VisualNovelContent({
         onEpisodeEnd(currentScene?.ending);
       }
     } else if (endBranchAction) {
-      // จัดการ ending จาก choice action
+      // จัดการ ending จาก choice action โดยตรวจสอบประเภทนิยาย
       const endingData = {
         endingType: endBranchAction.parameters.endingType || 'NORMAL',
         title: endBranchAction.parameters.endingTitle || 'จบ',
         description: endBranchAction.parameters.outcomeDescription || 'เรื่องจบลงแล้ว',
         endingId: endBranchAction.parameters.endingNodeId || 'ending',
       };
-      onEpisodeEnd(endingData);
+      
+      // Apply novel type restrictions
+      const novelMeta = episodeData?.novelMeta || novel;
+      if (novelMeta.endingType === 'single_ending') {
+        // For SINGLE_ENDING novels, only show ending if this is the final episode
+        const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+        if (isLastEpisode) {
+          onEpisodeEnd(endingData);
+        } else {
+          // Skip ending for SINGLE_ENDING novels on non-final episodes
+          console.log('Skipping ending for SINGLE_ENDING novel on non-final episode via choice action');
+          onEpisodeEnd(); // End without showing ending
+        }
+      } else {
+        // For MULTIPLE_ENDINGS or other types, show ending
+        onEpisodeEnd(endingData);
+      }
     } else {
       console.log('Selected choice has no valid action.');
       // ถ้าไม่มี action ที่รู้จัก ให้จบ episode
@@ -547,8 +583,14 @@ function VisualNovelContent({
   }
 
   return (
-    <div className="relative w-full h-full" onClick={!availableChoices ? handleAdvance : undefined}>
-      {/* Background - Optimized for performance */}
+    <div 
+      className="relative w-full h-full" 
+      style={{ 
+        pointerEvents: 'none', // Disable pointer events on container, let click overlay handle it
+        zIndex: 1 // Ensure main container is above background
+      }}
+    >
+      {/* Background - Completely non-interactive for seamless clicking */}
       {shouldTransition ? (
         <AnimatePresence mode="wait">
           <motion.div
@@ -561,22 +603,34 @@ function VisualNovelContent({
               duration: previousScene?.sceneTransitionOut?.durationSeconds ?? 0.6,
               ease: "easeInOut"
             }}
+            style={{ 
+              zIndex: -10, // Much lower z-index to ensure it never interferes with clicks
+              pointerEvents: 'none', // Explicitly disable all pointer events
+              touchAction: 'none' // Disable touch events as well
+            }}
           >
             <BackgroundRenderer background={currentScene?.background} title={currentScene?.title} />
           </motion.div>
         </AnimatePresence>
       ) : (
         // No transition - instant background change for 'none' type (performance optimized)
-        <div className="absolute inset-0">
+        <div 
+          className="absolute inset-0" 
+          style={{ 
+            zIndex: -10, // Much lower z-index 
+            pointerEvents: 'none', // Explicitly disable all pointer events
+            touchAction: 'none' // Disable touch events as well
+          }}
+        >
           <BackgroundRenderer background={currentScene?.background} title={currentScene?.title} />
         </div>
       )}
       
       {/* ใช้ CSS class ใหม่สำหรับ gradient overlay */}
-      <div className="absolute inset-0 vn-gradient-overlay"></div>
+      <div className="absolute inset-0 vn-gradient-overlay pointer-events-none" style={{ zIndex: 0 }}></div>
 
       {/* Characters */}
-      <div className="absolute inset-0 z-10 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 5 }}>
         <AnimatePresence mode="wait">
           {charactersInScene.map(char => {
             const transform = char.transform ?? {};
@@ -600,7 +654,7 @@ function VisualNovelContent({
                   style={{
                       width: 'auto',
                       left: '50%', // Center horizontally
-                      zIndex: transform.zIndex ?? 1,
+                      zIndex: (transform.zIndex ?? 1) + 10, // Ensure characters are above background
                       transform: `translateX(-50%)`, // Offset by half its own width to truly center
                   }}
               >
@@ -628,7 +682,11 @@ function VisualNovelContent({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm p-8"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm p-8"
+            style={{ 
+              pointerEvents: 'auto',
+              zIndex: 60 // Higher than click overlay to receive interactions
+            }}
           >
             <motion.div 
               className="w-full max-w-lg space-y-4"
@@ -665,9 +723,26 @@ function VisualNovelContent({
         )}
       </AnimatePresence>
 
+      {/* Click overlay - Ensures clicks always work regardless of transitions */}
+      {!availableChoices && (
+        <div 
+          className="absolute inset-0 cursor-pointer"
+          onClick={handleAdvance}
+          onMouseDown={(e) => e.preventDefault()}
+          style={{ 
+            zIndex: 50, // Highest z-index to capture all clicks
+            backgroundColor: 'transparent' // Invisible but clickable
+          }}
+          aria-label="Click to advance text"
+        />
+      )}
+
       {/* Dialogue Box - ใช้ CSS class ใหม่ */}
       {isDialogueVisible && !availableChoices && currentScene?.textContents[textIndex] && (
-        <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 text-white z-30 pointer-events-none">
+        <div 
+          className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 md:p-6 text-white pointer-events-none"
+          style={{ zIndex: 10 }}
+        >
           <div 
             className="vn-dialogue-box p-4 sm:p-6 md:p-8 rounded-lg min-h-[150px] sm:min-h-[180px] md:min-h-[220px] flex flex-col justify-center"
             style={{ 
