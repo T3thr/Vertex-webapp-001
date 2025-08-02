@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
 import NovelModel, { NovelStatus, NovelAccessLevel, NovelContentType, NovelEndingType } from '@/backend/models/Novel';
 import EpisodeModel, { EpisodeStatus, EpisodeAccessType } from '@/backend/models/Episode';
-import SceneModel, { EndingType as SceneEndingType, TimelineEventType } from '@/backend/models/Scene';
+import SceneModel, { TimelineEventType, ISceneEnding } from '@/backend/models/Scene';
 import CharacterModel from '@/backend/models/Character';
 import ChoiceModel from '@/backend/models/Choice';
 import UserModel, { IUser } from '@/backend/models/User';
@@ -614,17 +614,13 @@ const createWhisper999Scenes = async (
                 content: 'นิราหายไป อีกสองเดือนต่อมา กล่องไม้และเทปอันเดิมกลับไปวางอยู่ที่เดิม พร้อมเทปล่าสุดว่า “เสียงของนิรา”'
             }
         ],
-        timelineEvents: [
-          {
-            startTimeMs: 0,
-            type: TimelineEventType.END_NOVEL,
-            parameters: {
-              endingType: SceneEndingType.BAD,
-              title: 'เสียงสุดท้าย',
-              description: 'นิรากลายเป็นเสียงในเทปอันต่อไป หลังจากเผชิญหน้ากับสิ่งลี้ลับในห้องใต้ดิน'
-            }
-          }
-        ]
+        ending: {
+          endingType: 'BAD',
+          title: 'เสียงสุดท้าย',
+          description: 'นิรากลายเป็นเสียงในเทปอันต่อไป หลังจากเผชิญหน้ากับสิ่งลี้ลับในห้องใต้ดิน',
+          endingId: 'bad_ending_1',
+          imageUrl: '/images/background/badend1.png'
+        }
       },
       {
         novelId,
@@ -680,17 +676,13 @@ const createWhisper999Scenes = async (
                 content: 'นิราหายไปกลางสายตาของมินผ่านวิดีโอคอล กล้องดับพร้อมเสียงกระซิบว่า “เสียงของเธอ…ถูกเลือกแล้ว”'
             }
         ],
-        timelineEvents: [
-          {
-            startTimeMs: 0,
-            type: TimelineEventType.END_NOVEL,
-            parameters: {
-              endingType: SceneEndingType.BAD,
-              title: 'เสียงที่ถูกเลือก',
-              description: 'นิราหายตัวไปอย่างลึกลับระหว่างวิดีโอคอลกับเพื่อน หลังจากเพิกเฉยต่อคำเตือน'
-            }
-          }
-        ]
+        ending: {
+          endingType: 'BAD',
+          title: 'เสียงที่ถูกเลือก',
+          description: 'นิราหายตัวไปอย่างลึกลับระหว่างวิดีโอคอลกับเพื่อน หลังจากเพิกเฉยต่อคำเตือน',
+          endingId: 'bad_ending_2',
+          imageUrl: '/images/background/badend1.png'
+        }
       },
       {
         novelId,
@@ -752,17 +744,13 @@ const createWhisper999Scenes = async (
           { instanceId: 'narration_sleepwalk', type: 'narration', content: 'นิราเริ่มละเมอ เธอลุกขึ้นกลางดึก เดินมาที่ห้องครัว และ… แกะตะปูออกทีละตัว… ทั้งที่หลับตาอยู่' },
           { instanceId: 'narration_other_hand', type: 'narration', content: 'กล้องวงจรปิดที่เธอลืมไว้ในมุมห้องจับภาพได้ชัดเจน ว่า “มือที่เปิดไม้แผ่นสุดท้าย” ไม่ใช่มือเธอคนเดียว… มี “อีกมือ” ที่ผิวซีดขาว…จับตะปูอีกด้าน พร้อมกัน' },
         ],
-        timelineEvents: [
-          {
-            startTimeMs: 0,
-            type: TimelineEventType.END_NOVEL,
-            parameters: {
-              endingType: SceneEndingType.BAD,
-              title: 'มืออีกข้าง',
-              description: 'การเพิกเฉยไม่ได้ช่วยอะไร สิ่งลี้ลับได้เข้ามาอยู่ในตัวเธอเรียบร้อยแล้ว'
-            }
-          }
-        ]
+        ending: {
+          endingType: 'BAD',
+          title: 'มืออีกข้าง',
+          description: 'การเพิกเฉยไม่ได้ช่วยอะไร สิ่งลี้ลับได้เข้ามาอยู่ในตัวเธอเรียบร้อยแล้ว',
+          endingId: 'bad_ending_3',
+          imageUrl: '/images/background/badend1.png'
+        }
       },
       {
         novelId,
@@ -787,17 +775,13 @@ const createWhisper999Scenes = async (
         textContents: [
           { instanceId: 'narration_camera_destroyed', type: 'narration', content: 'นิรากลับบ้านในวันรุ่งขึ้น กล้องถูกบิดหักพังลง หน้าประตูบ้านมีโน้ตเขียนด้วยลายมือเด็ก: “ออกไปได้แล้ว… ถึงตาเธอลงมาหาฉันบ้าง”' },
         ],
-        timelineEvents: [
-          {
-            startTimeMs: 0,
-            type: TimelineEventType.END_NOVEL,
-            parameters: {
-              endingType: SceneEndingType.BAD,
-              title: 'ถึงตาเธอ',
-              description: 'การพยายามสังเกตการณ์จากระยะไกลไม่ได้ผล สิ่งลี้ลับสามารถเข้าถึงตัวนิราได้อยู่ดี'
-            }
-          }
-        ]
+        ending: {
+          endingType: 'BAD',
+          title: 'ถึงตาเธอ',
+          description: 'การพยายามสังเกตการณ์จากระยะไกลไม่ได้ผล สิ่งลี้ลับสามารถเข้าถึงตัวนิราได้อยู่ดี',
+          endingId: 'bad_ending_4',
+          imageUrl: '/images/background/badend1.png'
+        }
       },
       {
         novelId,
@@ -823,17 +807,13 @@ const createWhisper999Scenes = async (
           { instanceId: 'narration_no_basement', type: 'narration', content: 'เจ้าหน้าที่ดับเพลิงพบว่า ใต้บ้านไม่มีทางเดิน ไม่มีห้องใต้ดิน ไม่มีอุโมงค์ใด ๆ ทั้งสิ้น “มันแค่ดินตัน ๆ… ไม่มีช่องเลยครับ”' },
           { instanceId: 'narration_camera_reveal', type: 'narration', content: 'แต่…ในภาพจากกล้องเพื่อนช่าง ก่อนระเบิดจะลง 3 วินาที มีเด็กหญิงตัวเล็ก ๆ เดินขึ้นจากช่องพื้น หันหน้ามา… แล้วยิ้มให้กล้อง…' },
         ],
-        timelineEvents: [
-          {
-            startTimeMs: 0,
-            type: TimelineEventType.END_NOVEL,
-            parameters: {
-              endingType: SceneEndingType.TRUE,
-              title: 'รอยยิ้มสุดท้าย',
-              description: 'การทำลายสถานที่ได้ปลดปล่อยวิญญาณเด็กสาว และรอยยิ้มสุดท้ายของเธอคือการขอบคุณที่ช่วยให้เธอเป็นอิสระจากคำสาปนี้',
-            }
-          }
-        ]
+        ending: {
+          endingType: 'TRUE',
+          title: 'รอยยิ้มสุดท้าย',
+          description: 'การทำลายสถานที่ได้ปลดปล่อยวิญญาณเด็กสาว และรอยยิ้มสุดท้ายของเธอคือการขอบคุณที่ช่วยให้เธอเป็นอิสระจากคำสาปนี้',
+          endingId: 'true_ending',
+          imageUrl: '/images/background/badend1.png'
+        }
       },
       {
         novelId,

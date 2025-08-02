@@ -242,6 +242,7 @@ export default function VisualNovelContent({
     setTextIndex(0);
     setDisplayedText('');
     setIsTyping(false);
+    setAvailableChoices(null);
   }, [currentSceneId, episodeData, onSceneDataChange]);
 
 
@@ -293,20 +294,7 @@ export default function VisualNovelContent({
     };
   }, [textIndex, currentScene, isPlaying, typeText]);
 
-  useEffect(() => {
-    if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
-    
-    if (gameplaySettings.autoPlayEnabled && isPlaying && !isTyping && currentScene?.textContents[textIndex]) {
-       autoPlayTimeoutRef.current = setTimeout(() => {
-            handleAdvance();
-       }, gameplaySettings.autoPlayDelayMs ?? 2000);
-    }
-    
-    return () => {
-       if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
-    }
-  }, [gameplaySettings.autoPlayEnabled, gameplaySettings.autoPlayDelayMs, isPlaying, isTyping, textIndex, currentScene]);
-
+  // Move handleAdvance definition above auto-play effect to avoid TDZ error
   const handleAdvance = useCallback(() => {
     if (typingTimeoutRef.current) {
        clearTimeout(typingTimeoutRef.current);
@@ -332,39 +320,52 @@ export default function VisualNovelContent({
           `timelineEvents` is not part of the typed `SerializedScene`, we cast
           to `any` before inspecting.
         */
-        const timelineHasEndNovel = (currentScene as any)?.timelineEvents?.some((ev: any) => {
-            const raw = (ev?.type ?? ev?.eventType ?? '').toString();
-            return raw.toLowerCase() === 'end_novel';
-          });
+        const timelineHasEndNovel = (currentScene as any)?.timelineEvents?.some((ev: any) => ev?.type === 'end_novel' || ev?.eventType === 'end_novel');
 
         if (isSceneEnding || timelineHasEndNovel) {
           onEpisodeEnd(currentScene?.ending);
           return;
         }
 
-        // 2) Otherwise try to follow `defaultNextSceneId` or fall back to sequential order.
+        // 2) If not an ending, try to follow `defaultNextSceneId`.
         const nextSceneId = currentScene?.defaultNextSceneId;
-        if (nextSceneId && episodeData?.scenes) {
-            onSceneChange(nextSceneId);
-        } else if (episodeData?.scenes && currentScene) {
-            const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene._id);
-            const isLastScene = currentSceneIndex === episodeData.scenes.length - 1;
-            
-            if (!isLastScene) {
-                const nextScene = episodeData.scenes[currentSceneIndex + 1];
-                if (nextScene) onSceneChange(nextScene._id);
-            } else {
-                onEpisodeEnd(currentScene?.ending);
-            }
+        if (nextSceneId) {
+          onSceneChange(nextSceneId);
+          return;
         }
+
+        // 3) If no ending and no default next scene, attempt to locate the next scene by sceneOrder.
+        const sequentialScene = episodeData?.scenes?.find(s => (s.sceneOrder ?? 0) === ((currentScene?.sceneOrder ?? 0) + 1));
+        if (sequentialScene) {
+          onSceneChange(sequentialScene._id);
+          return;
+        }
+
+        // 4) If still not found, it's a natural end.
+        onEpisodeEnd();
       }
     }
-  }, [isTyping, textIndex, currentScene, episodeData, onSceneChange, onEpisodeEnd]);
-  
+  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd]);
+
+  useEffect(() => {
+    if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
+    
+    if (gameplaySettings.autoPlayEnabled && isPlaying && !isTyping && currentScene?.textContents[textIndex]) {
+       autoPlayTimeoutRef.current = setTimeout(() => {
+            handleAdvance();
+       }, gameplaySettings.autoPlayDelayMs ?? 2000);
+    }
+    
+    return () => {
+       if (autoPlayTimeoutRef.current) clearTimeout(autoPlayTimeoutRef.current);
+    }
+  }, [gameplaySettings.autoPlayEnabled, gameplaySettings.autoPlayDelayMs, isPlaying, isTyping, textIndex, currentScene, handleAdvance]);
+
+
   const handleChoiceSelect = (choice: SerializedChoice) => {
     setAvailableChoices(null);
     const goToNodeAction = choice.actions.find((a: IChoiceAction) => a.type === 'go_to_node');
-    
+
     if (goToNodeAction && episodeData?.scenes) {
       const targetNodeId = goToNodeAction.parameters.targetNodeId;
       const nextScene = episodeData.scenes.find(s => s.nodeId === targetNodeId);
@@ -373,30 +374,21 @@ export default function VisualNovelContent({
         onSceneChange(nextScene._id);
       } else {
         console.warn(`Choice action "go_to_node" failed: Scene with node ID "${targetNodeId}" not found in this episode.`);
-        // As a fallback, try to go to the default next scene if it exists
-        const defaultNextSceneId = currentScene?.defaultNextSceneId;
-        if (defaultNextSceneId && episodeData.scenes.some(s => s._id === defaultNextSceneId)) {
-          onSceneChange(defaultNextSceneId);
-        } else {
-          // If no fallback, end the episode
-          onEpisodeEnd(currentScene?.ending);
-        }
+        // As a fallback, end the episode. This could be improved with more robust error handling.
+        onEpisodeEnd(currentScene?.ending);
       }
     } else {
-        // If no "go_to_node" action, assume it's the end or requires a different handler.
-        // For now, we just end the episode.
-        onEpisodeEnd(currentScene?.ending);
+      // Handle other choice actions or do nothing if no 'go_to_node' is found.
+      console.log('Selected choice has no go_to_node action or scenes are not loaded.');
     }
   };
-  
-   useEffect(() => {
+
+  useEffect(() => {
     if (episodeData?.scenes && episodeData.scenes.length > 0 && currentScene) {
-        const currentSceneIndex = episodeData.scenes.findIndex(s => s._id === currentScene._id);
-        const progress = ((currentSceneIndex + 1) / episodeData.scenes.length) * 100;
         onSceneDataChange(currentScene);
     }
    }, [currentScene, episodeData, onSceneDataChange]);
-   
+
   const speakerInfo = currentScene?.textContents[textIndex] ? getSpeakerInfo(currentScene.textContents[textIndex], currentScene.characters || []) : { name: '', color: undefined };
   const fontSize = displaySettings.reading?.fontSize ?? 16;
   const textBoxOpacity = (displaySettings.uiVisibility?.textBoxOpacity ?? 80) / 100;
@@ -413,8 +405,8 @@ export default function VisualNovelContent({
   if (!episodeData) {
     return (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
-      </div>
+             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+       </div>
     );
   }
 
