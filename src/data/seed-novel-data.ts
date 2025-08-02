@@ -703,36 +703,15 @@ const createNowOrNeverScenes = async (
       sceneOrder: 1,
       nodeId: 'scene1',
       title: 'จุดเริ่มต้น',
-      background: {
-        type: 'image',
-        value: '/images/background/main.png', // เปลี่ยนเป็นรูปที่มีอยู่จริง
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
-      characters: [],
-      textContents: [],
-      audios: [
+      background: { type: 'image', value: '/images/background/main.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'none', durationSeconds: 0 },
+      textContents: [
         {
-          instanceId: 'bgm_scene1',
-          type: 'background_music',
-          mediaId: new mongoose.Types.ObjectId(),
-          mediaSourceType: 'OfficialMedia',
-          volume: 0.8,
-          loop: true,
-          autoplayOnLoad: true,
-          fadeInSeconds: 2,
-          fadeOutSeconds: 2
+          instanceId: 'narration_1',
+          type: 'narration',
+          content: 'เมื่อเอลล่า และแฟนหนุ่มรวมถึงผองเพื่อนต้องออกปล้นเพื่อใช้หนี้ที่คฤหาสน์แห่งหนึ่ง แต่พวกเขาหารู้ไม่ ... ว่าอาจมีอะไรบางอย่างกำลังรอพวกเขาอยู่',
         }
       ],
-      defaultNextSceneId: null, // จะกำหนดหลังจากสร้าง scene อื่นแล้ว
-      timelineTracks: [
-        {
-          trackId: 'main_track',
-          trackName: 'Main Timeline',
-          events: []
-        }
-      ],
-      sceneVariables: []
     },
 
     // Scene 1a - แมทธิวพูด
@@ -742,43 +721,39 @@ const createNowOrNeverScenes = async (
       sceneOrder: 2,
       nodeId: 'scene1a',
       title: 'จุดเริ่มต้น (ต่อ)',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
-        {
-          instanceId: 'ella_listening_1a',
-          characterId: characterMap.ella,
-          expressionId: 'worried',
-          transform: {
-            positionX: -150,
-            positionY: -20,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
-          isVisible: true
+        { 
+          instanceId: 'ella_listening_1a', 
+          characterId: characterMap.ella, 
+          expressionId: 'worried', 
+          transform: { 
+            positionX: -150, 
+            positionY: -20, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
         },
-        {
-          instanceId: 'matthew_speaking_1a',
-          characterId: characterMap.matthew,
-          expressionId: 'frustrated',
-          transform: {
-            positionX: 150,
-            positionY: -50,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2 // Make speaker slightly in front
-          },
-          isVisible: true
-        }
+        { 
+          instanceId: 'matthew_speaking_1a', 
+          characterId: characterMap.matthew, 
+          expressionId: 'frustrated', 
+          transform: { 
+            positionX: 150, 
+            positionY: -50, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
+        },
       ],
       textContents: [
         {
@@ -787,55 +762,8 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.matthew,
           speakerDisplayName: 'แมทธิว',
           content: '"ไม่เอาหน่าเอลล่า เลิกทำเหมือนโลกจะแตกสักทีเถอะ เดี๋ยวพอไปถึงหน้างานเธอก็ทำได้เองนั่นแหละ" ชายหนุ่มเอ่ยกระแทกกระทั้นอย่างหัวเสีย',
-          fontSize: 16,
-          color: '#ffffff',
-          textAlign: 'center',
-          transform: {
-            positionX: 0,
-            positionY: 100,
-            opacity: 1,
-            zIndex: 10
-          },
-          displaySpeed: 50
         }
       ],
-      audios: [
-        {
-          instanceId: 'bgm_scene1a',
-          type: 'background_music',
-          mediaId: new mongoose.Types.ObjectId(),
-          mediaSourceType: 'OfficialMedia',
-          volume: 0.8,
-          loop: true,
-          autoplayOnLoad: true
-        }
-      ],
-      timelineTracks: [
-        {
-          trackId: 'main_track',
-          trackName: 'Main Timeline',
-          events: [
-            {
-              eventId: 'show_matthew',
-              startTimeMs: 0,
-              eventType: 'show_character',
-              targetInstanceId: 'matthew_instance',
-              parameters: {
-                transitionDurationMs: 1000
-              }
-            },
-            {
-              eventId: 'show_dialogue',
-              startTimeMs: 1000,
-              eventType: 'show_text_block',
-              targetInstanceId: 'dialogue_1a',
-              parameters: {
-                transitionDurationMs: 500
-              }
-            }
-          ]
-        }
-      ]
     },
 
     // Scene 1b - เอลล่าตอบ
@@ -845,43 +773,39 @@ const createNowOrNeverScenes = async (
       sceneOrder: 3,
       nodeId: 'scene1b',
       title: 'สนทนา',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
-        {
-          instanceId: 'matthew_listening_1b',
-          characterId: characterMap.matthew,
-          expressionId: 'frustrated',
-          transform: {
-            positionX: 150,
-            positionY: -50,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
-          isVisible: true
+        { 
+          instanceId: 'matthew_listening_1b', 
+          characterId: characterMap.matthew, 
+          expressionId: 'frustrated', 
+          transform: { 
+            positionX: 150, 
+            positionY: -50, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
         },
-        {
-          instanceId: 'ella_speaking_1b',
-          characterId: characterMap.ella,
-          expressionId: 'angry',
-          transform: {
-            positionX: -150,
-            positionY: -20,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2
-          },
-          isVisible: true
-        }
+        { 
+          instanceId: 'ella_speaking_1b', 
+          characterId: characterMap.ella, 
+          expressionId: 'angry', 
+          transform: { 
+            positionX: -150, 
+            positionY: -20, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
+        },
       ],
       textContents: [
         {
@@ -890,29 +814,8 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.ella,
           speakerDisplayName: 'เอลล่า',
           content: 'หล่อนแค่นหัวเราะ "นายมันบ้าไปแล้วแมท ผีตัวไหนเข้าสิงนายกันล่ะตอนที่นายตัดสินใจส่งยาให้พวกใต้ดิน"',
-          fontSize: 16,
-          color: '#ffffff',
-          textAlign: 'center',
-          transform: {
-            positionX: 0,
-            positionY: 100,
-            opacity: 1,
-            zIndex: 10
-          },
-          displaySpeed: 50
         }
       ],
-      audios: [
-        {
-          instanceId: 'bgm_peaceful',
-          type: 'background_music',
-          mediaId: new mongoose.Types.ObjectId(),
-          mediaSourceType: 'OfficialMedia',
-          volume: 0.8,
-          loop: true,
-          autoplayOnLoad: true
-        }
-      ]
     },
 
     // Scene 1c - แมทธิวตอบ
@@ -922,43 +825,39 @@ const createNowOrNeverScenes = async (
       sceneOrder: 4,
       nodeId: 'scene1c',
       title: 'สนทนา2',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
-        {
-          instanceId: 'ella_listening_1c',
-          characterId: characterMap.ella,
-          expressionId: 'worried',
-          transform: {
-            positionX: -150,
-            positionY: -20,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
-          isVisible: true
+        { 
+          instanceId: 'ella_listening_1c', 
+          characterId: characterMap.ella, 
+          expressionId: 'worried', 
+          transform: { 
+            positionX: -150, 
+            positionY: -20, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
         },
-        {
-          instanceId: 'matthew_speaking_1c',
-          characterId: characterMap.matthew,
-          expressionId: 'angry',
-          transform: {
-            positionX: 150,
-            positionY: -40,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2
-          },
-          isVisible: true
-        }
+        { 
+          instanceId: 'matthew_speaking_1c', 
+          characterId: characterMap.matthew, 
+          expressionId: 'angry', 
+          transform: { 
+            positionX: 150, 
+            positionY: -40, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
+        },
       ],
       textContents: [
         {
@@ -967,18 +866,8 @@ const createNowOrNeverScenes = async (
           characterId: characterMap.matthew,
           speakerDisplayName: 'แมทธิว',
           content: '"ก็ถ้าชั้นไม่โดนปล้นยาระหว่างทาง ป่านนี้เราคงรวยเละกันไปแล้ว" ชายหนุ่มกัดฟันอย่างแค้นใจ',
-          fontSize: 16,
-          color: '#ffffff',
-          textAlign: 'center',
-          transform: {
-            positionX: 0,
-            positionY: 100,
-            opacity: 1,
-            zIndex: 10
-          },
-          displaySpeed: 50
         }
-      ]
+      ],
     },
 
     // Scene 1d - เอลล่านิ่งงัน
@@ -988,61 +877,47 @@ const createNowOrNeverScenes = async (
       sceneOrder: 5,
       nodeId: 'scene1d',
       title: 'ความคิดของเอลล่า',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
-        {
-          instanceId: 'ella_thinking_1d',
-          characterId: characterMap.ella,
-          expressionId: 'worried',
-          transform: {
-            positionX: -150,
-            positionY: -20,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2
-          },
-          isVisible: true
+        { 
+          instanceId: 'ella_thinking_1d', 
+          characterId: characterMap.ella, 
+          expressionId: 'worried', 
+          transform: { 
+            positionX: -150, 
+            positionY: -20, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
         },
-        {
-          instanceId: 'matthew_present_1d',
-          characterId: characterMap.matthew,
-          expressionId: 'normal',
-          transform: {
-            positionX: 150,
-            positionY: -40,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1
-          },
-          isVisible: true
-        }
+        { 
+          instanceId: 'matthew_present_1d', 
+          characterId: characterMap.matthew, 
+          expressionId: 'normal', 
+          transform: { 
+            positionX: 150, 
+            positionY: -40, 
+            scaleX: 1, 
+            scaleY: 1, 
+            rotation: 0, 
+            opacity: 1, 
+            zIndex: 1 
+          }, 
+          isVisible: true 
+        },
       ],
       textContents: [
         {
           instanceId: 'narration_1d',
           type: 'narration',
           content: 'หล่อนได้แต่นั่งนิ่งงันอยู่อย่างนั้น .... พลางนึกท้อแท้ใจในตัวแฟนหนุ่มของตัวเอง ชีวิตหล่อนราวกับดิ่งลงเหวแท้ๆ ตั้งแต่ที่หนีตามแมทธิวมาใช้ชีวิตในเมืองตั้งแต่ตอนอายุสิบสี่',
-          fontSize: 16,
-          color: '#ffffff',
-          textAlign: 'center',
-          transform: {
-            positionX: 0,
-            positionY: 100,
-            opacity: 1,
-            zIndex: 10
-          },
-          displaySpeed: 50
         }
-      ]
+      ],
     },
 
     // Scene 1e - ตัวเลือกแรก
@@ -1052,40 +927,14 @@ const createNowOrNeverScenes = async (
       sceneOrder: 6,
       nodeId: 'scene1e',
       title: 'ตัวเลือกสำคัญ',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [],
       textContents: [
         {
           instanceId: 'choice_prompt',
           type: 'narration',
           content: 'หากคุณเป็นเอลล่า คุณเลือกที่จะ ... (ตัวเลือกมีผลต่อเนื้อเรื่อง กรุณาเลือกอย่างระมัดระวัง)',
-          fontSize: 16,
-          color: '#ffffff',
-          textAlign: 'center',
-          transform: {
-            positionX: 0,
-            positionY: 100,
-            opacity: 1,
-            zIndex: 10
-          },
-          displaySpeed: 50
-        }
-      ],
-      choiceGroupsAvailable: [
-        {
-          instanceId: 'choice_group_1e',
-          choiceGroupId: new mongoose.Types.ObjectId(), // จะต้องสร้าง choice group แยกต่างหาก
-          transform: {
-            positionX: 0,
-            positionY: 200,
-            opacity: 1,
-            zIndex: 15
-          }
         }
       ]
     },
@@ -1097,12 +946,8 @@ const createNowOrNeverScenes = async (
       sceneOrder: 7,
       nodeId: 'scene1g',
       title: 'เลือกทางคุณธรรม',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [],
       textContents: [
         {
@@ -1129,12 +974,8 @@ const createNowOrNeverScenes = async (
       sceneOrder: 8,
       nodeId: 'scene1h',
       title: 'การเปลี่ยนเวลา',
-      background: {
-        type: 'image',
-        value: '/images/background/home.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/home.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 2 },
       characters: [],
       textContents: [
         {
@@ -1151,12 +992,7 @@ const createNowOrNeverScenes = async (
             zIndex: 10
           }
         }
-      ],
-      sceneTransitionOut: {
-        type: 'fade',
-        durationSeconds: 2,
-        parameters: {}
-      }
+      ]
     },
 
     // Scene 1i - ข่าวฆาตกรรม
@@ -1166,12 +1002,8 @@ const createNowOrNeverScenes = async (
       sceneOrder: 9,
       nodeId: 'scene1i',
       title: 'ข่าวร้าย',
-      background: {
-        type: 'image',
-        value: '/images/background/news.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/news.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
         {
           instanceId: 'news_anchor',
@@ -1215,12 +1047,8 @@ const createNowOrNeverScenes = async (
       sceneOrder: 10,
       nodeId: 'scene1j',
       title: 'รายละเอียดการฆาตกรรม',
-      background: {
-        type: 'image',
-        value: '/images/background/blood.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/blood.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [],
       textContents: [
         {
@@ -1247,12 +1075,8 @@ const createNowOrNeverScenes = async (
       sceneOrder: 11,
       nodeId: 'scene1k',
       title: 'จบข่าว',
-      background: {
-        type: 'image',
-        value: '/images/background/news.png',
-        isOfficialMedia: true,
-        fitMode: 'cover'
-      },
+      background: { type: 'image', value: '/images/background/news.png', isOfficialMedia: true, fitMode: 'cover' },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
         {
           instanceId: 'news_anchor2',
@@ -1325,6 +1149,7 @@ const createChosenOneScenes = async (
         isOfficialMedia: true,
         fitMode: 'cover'
       },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [],
       textContents: [
         {
@@ -1369,33 +1194,34 @@ const createChosenOneScenes = async (
         isOfficialMedia: true,
         fitMode: 'cover'
       },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
         {
           instanceId: 'ana_playing_s2',
           characterId: characterMap.ana,
           expressionId: 'happy',
-          transform: { positionX: -180, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: -180, positionY: -40, scaleX: 0.9, scaleY: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'hoshi_playing_s2',
           characterId: characterMap.hoshi,
           expressionId: 'happy',
-          transform: { positionX: -60, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: -60, positionY: -40, scaleX: 0.9, scaleY: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'cho_playing_s2',
           characterId: characterMap.cho,
           expressionId: 'happy',
-          transform: { positionX: 60, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: 60, positionY: -40, scaleX: 0.9, scaleY: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'riwsey_playing_s2',
           characterId: characterMap.riwsey,
           expressionId: 'happy',
-          transform: { positionX: 180, positionY: -40, scale: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
+          transform: { positionX: 180, positionY: -40, scaleX: 0.9, scaleY: 0.9, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         }
       ],
@@ -1430,6 +1256,7 @@ const createChosenOneScenes = async (
         isOfficialMedia: true,
         fitMode: 'cover'
       },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
         {
           instanceId: 'toya_main',
@@ -1524,40 +1351,41 @@ const createChosenOneScenes = async (
         isOfficialMedia: true,
         fitMode: 'cover'
       },
+      sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 },
       characters: [
         {
           instanceId: 'ana_trapped_s5',
           characterId: characterMap.ana,
           expressionId: 'worried',
-          transform: { positionX: -200, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: -200, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'hoshi_trapped_s5',
           characterId: characterMap.hoshi,
           expressionId: 'worried',
-          transform: { positionX: -80, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: -80, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'cho_trapped_s5',
           characterId: characterMap.cho,
           expressionId: 'worried',
-          transform: { positionX: 20, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: 20, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'riwsey_trapped_s5',
           characterId: characterMap.riwsey,
           expressionId: 'worried',
-          transform: { positionX: 140, positionY: -40, scale: 1, rotation: 0 },
+          transform: { positionX: 140, positionY: -40, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         },
         {
           instanceId: 'dog_trapped_s5',
           characterId: characterMap.dog,
           expressionId: 'normal',
-          transform: { positionX: -520, positionY: 0, scale: 1, rotation: 0 },
+          transform: { positionX: -520, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, zIndex: 1 },
           isVisible: true
         }
       ],
@@ -1577,18 +1405,7 @@ const createChosenOneScenes = async (
           }
         }
       ],
-      choiceGroupsAvailable: [
-        {
-          instanceId: 'final_choice_group',
-          choiceGroupId: new mongoose.Types.ObjectId(),
-          transform: {
-            positionX: 0,
-            positionY: 200,
-            opacity: 1,
-            zIndex: 15
-          }
-        }
-      ]
+
     },
 
     // Scene 6 - จบ
@@ -1604,6 +1421,7 @@ const createChosenOneScenes = async (
         isOfficialMedia: true,
         fitMode: 'cover'
       },
+      sceneTransitionOut: { type: 'none', durationSeconds: 0 },
       characters: [],
       textContents: [
         {
@@ -1620,7 +1438,13 @@ const createChosenOneScenes = async (
             zIndex: 10
           }
         }
-      ]
+      ],
+      ending: {
+        endingType: 'NORMAL',
+        title: 'การเดินทางสิ้นสุด',
+        description: 'ขอบคุณที่ร่วมสำรวจคำถามทางจริยธรรมไปกับเรา การเลือกของคุณสะท้อนถึงค่านิยมภายในจิตใจ',
+        endingId: 'chosen_one_single_ending'
+      }
     }
   ];
 
@@ -1903,38 +1727,23 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
   
   // --- New Logic: Associate Choices with Scenes ---
   console.log('🔗 กำลังเชื่อมโยง Choices เข้ากับ Scenes ที่ถูกต้อง (Now or Never)...');
-  const sceneNodeMap = new Map(allScenes.map(s => [s.nodeId, s]));
+  
+  // หา Scene ที่มี choiceIds และอัปเดตให้ตรงกับ choices ที่สร้าง
+  const choiceSceneMap = {
+    'scene1e': ['CHOICE_HELP_MATTHEW', 'CHOICE_NOT_HELP_MATTHEW']
+  };
 
-  for (const choice of choices) {
-    const goToNodeAction = choice.actions.find(a => a.type === 'go_to_node');
-    if (!goToNodeAction || !goToNodeAction.parameters.targetNodeId) {
-      console.warn(`️️⚠️ Choice "${choice.text}" (${choice._id}) ไม่มี targetNodeId, จะถูกข้ามไป`);
-      continue;
-    }
-
-    const targetNodeId = goToNodeAction.parameters.targetNodeId;
-    const targetScene = sceneNodeMap.get(targetNodeId);
-
-    if (!targetScene) {
-      console.warn(`️⚠️ ไม่พบ Scene ที่มี nodeId: "${targetNodeId}" สำหรับ Choice "${choice.text}", จะถูกข้ามไป`);
-      continue;
-    }
-
-    let sourceScene = null;
-    for (const scene of allScenes) {
-      if (scene.sceneOrder === targetScene.sceneOrder - 1) {
-        sourceScene = scene;
-        break;
-      }
-    }
-
-    if (sourceScene) {
-      await SceneModel.findByIdAndUpdate(sourceScene._id, {
-        $addToSet: { choiceIds: choice._id }
+  for (const [nodeId, choiceCodes] of Object.entries(choiceSceneMap)) {
+    const scene = allScenes.find(s => s.nodeId === nodeId);
+    if (scene) {
+      const relevantChoiceIds = choices
+        .filter(choice => choiceCodes.includes(choice.choiceCode))
+        .map(choice => choice._id);
+      
+      await SceneModel.findByIdAndUpdate(scene._id, {
+        choiceIds: relevantChoiceIds
       });
-      console.log(`✅  เพิ่ม Choice "${choice.text}" -> Scene "${sourceScene.title}" (Order: ${sourceScene.sceneOrder})`);
-    } else {
-      console.warn(`️⚠️ ไม่พบ Source Scene สำหรับ Choice "${choice.text}" (Target: ${targetNodeId}), จะถูกข้ามไป`);
+      console.log(`✅ เพิ่ม ${relevantChoiceIds.length} Choices -> Scene "${scene.title}"`);
     }
   }
   // --- End New Logic ---
@@ -1992,7 +1801,7 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
     status: NovelStatus.PUBLISHED,
     accessLevel: NovelAccessLevel.PUBLIC,
     isCompleted: true,
-    endingType: NovelEndingType.MULTIPLE_ENDINGS,
+    endingType: NovelEndingType.SINGLE_ENDING,
     sourceType: {
       type: NovelContentType.INTERACTIVE_FICTION
     },
@@ -2200,38 +2009,23 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
   
   // --- New Logic: Associate Choices with Scenes ---
   console.log('🔗 กำลังเชื่อมโยง Choices เข้ากับ Scenes ที่ถูกต้อง (The Chosen One)...');
-  const sceneNodeMap = new Map(allScenes.map(s => [s.nodeId, s]));
+  
+  // หา Scene ที่มี choiceIds และอัปเดตให้ตรงกับ choices ที่สร้าง
+  const choiceSceneMap = {
+    'scene5': ['CHOICE_SAVE_DOG', 'CHOICE_SAVE_CHILDREN']
+  };
 
-  for (const choice of choices) {
-    const goToNodeAction = choice.actions.find(a => a.type === 'go_to_node');
-    if (!goToNodeAction || !goToNodeAction.parameters.targetNodeId) {
-      console.warn(`️️⚠️ Choice "${choice.text}" (${choice._id}) ไม่มี targetNodeId, จะถูกข้ามไป`);
-      continue;
-    }
-
-    const targetNodeId = goToNodeAction.parameters.targetNodeId;
-    const targetScene = sceneNodeMap.get(targetNodeId);
-
-    if (!targetScene) {
-      console.warn(`️⚠️ ไม่พบ Scene ที่มี nodeId: "${targetNodeId}" สำหรับ Choice "${choice.text}", จะถูกข้ามไป`);
-      continue;
-    }
-
-    let sourceScene = null;
-    for (const scene of allScenes) {
-      if (scene.sceneOrder === targetScene.sceneOrder - 1) {
-        sourceScene = scene;
-        break;
-      }
-    }
-
-    if (sourceScene) {
-      await SceneModel.findByIdAndUpdate(sourceScene._id, {
-        $addToSet: { choiceIds: choice._id }
+  for (const [nodeId, choiceCodes] of Object.entries(choiceSceneMap)) {
+    const scene = allScenes.find(s => s.nodeId === nodeId);
+    if (scene) {
+      const relevantChoiceIds = choices
+        .filter(choice => choiceCodes.includes(choice.choiceCode))
+        .map(choice => choice._id);
+      
+      await SceneModel.findByIdAndUpdate(scene._id, {
+        choiceIds: relevantChoiceIds
       });
-      console.log(`✅  เพิ่ม Choice "${choice.text}" -> Scene "${sourceScene.title}" (Order: ${sourceScene.sceneOrder})`);
-    } else {
-      console.warn(`️⚠️ ไม่พบ Source Scene สำหรับ Choice "${choice.text}" (Target: ${targetNodeId}), จะถูกข้ามไป`);
+      console.log(`✅ เพิ่ม ${relevantChoiceIds.length} Choices -> Scene "${scene.title}"`);
     }
   }
   // --- End New Logic ---

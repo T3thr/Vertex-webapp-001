@@ -34,7 +34,7 @@ import type { IScene, ISceneEnding } from '@/backend/models/Scene';
 
 // The page provides a serialized version of INovel.
 // This type should reflect the actual data shape passed from page.tsx
-type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis'> & {
+type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis' | 'endingType' | 'isCompleted' | 'totalEpisodesCount'> & {
   _id: string;
   author: {
     _id: string;

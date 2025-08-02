@@ -64,7 +64,7 @@ async function getNovelAndEpisode(novelSlug: string, episodeSlug: string) {
       isDeleted: { $ne: true },
       status: { $in: ['published', 'completed'] }
     })
-    .select('_id title author slug coverImageUrl synopsis')
+    .select('_id title author slug coverImageUrl synopsis endingType isCompleted totalEpisodesCount')
     .populate({
       path: 'author',
       select: '_id username primaryPenName avatarUrl',
@@ -296,6 +296,9 @@ export default async function ReadPage({ params, searchParams }: ReadPageProps) 
     slug: novel.slug || novelSlug,
     coverImageUrl: novel.coverImageUrl || '',
     synopsis: novel.synopsis || '',
+    endingType: novel.endingType,
+    isCompleted: novel.isCompleted,
+    totalEpisodesCount: novel.totalEpisodesCount,
     author: populatedAuthor && typeof populatedAuthor === 'object' && populatedAuthor._id ? {
       _id: populatedAuthor._id.toString(),
       username: populatedAuthor.username || '',

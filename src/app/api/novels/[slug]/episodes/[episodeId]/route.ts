@@ -15,7 +15,7 @@ export async function GET(
     await dbConnect();
     const { slug, episodeId } = await params;
 
-    const novel = await NovelModel.findOne({ slug, isDeleted: { $ne: true } }).select('_id').lean();
+    const novel = await NovelModel.findOne({ slug, isDeleted: { $ne: true } }).select('_id endingType isCompleted totalEpisodesCount').lean();
     if (!novel) {
       return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
     }
@@ -76,6 +76,7 @@ export async function GET(
         sceneOrder: scene.sceneOrder,
         title: scene.title,
         background: scene.background,
+        sceneTransitionOut: scene.sceneTransitionOut, // Add transition data for performance optimization
         characters: sceneCharacters,
         textContents,
         choices: sceneChoices,
@@ -97,6 +98,12 @@ export async function GET(
         storyVariables: storyMap.storyVariables,
         startNodeId: storyMap.startNodeId
       } : null,
+      // Add novel metadata for ending logic
+      novelMeta: {
+        endingType: novel.endingType,
+        isCompleted: novel.isCompleted,
+        totalEpisodesCount: novel.totalEpisodesCount
+      }
     };
     
     // The top-level choices property is removed as choices are now embedded in scenes

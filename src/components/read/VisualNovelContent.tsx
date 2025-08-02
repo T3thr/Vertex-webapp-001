@@ -83,7 +83,7 @@ interface UserSettings {
 // --- Frontend-Specific Serialized Types ---
 // These types should match what VisualNovelFrameReader passes down.
 
-type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis'> & {
+type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis' | 'endingType' | 'isCompleted' | 'totalEpisodesCount'> & {
   _id: string;
   author: {
     _id: string;
@@ -115,6 +115,11 @@ export type DetailedEpisode = Omit<IEpisode, '_id' | 'novelId' | 'authorId' | 's
         storyVariables: any[];
         startNodeId: string;
     } | null;
+    novelMeta?: {
+        endingType: string;
+        isCompleted: boolean;
+        totalEpisodesCount: number;
+    };
 };
 
 interface VisualNovelContentProps {
@@ -212,6 +217,28 @@ const getSpeakerInfo = (textContent: SerializedTextContent | undefined, characte
     return { name: '', color: '#FFFFFF' };
 };
 
+// Optimized background renderer component to avoid re-renders
+const BackgroundRenderer = ({ background, title }: { background?: any, title?: string }) => {
+  if (!background) return null;
+  
+  if (background.type === 'image') {
+    return (
+      <div
+        className="w-full h-full vn-background"
+        style={{ backgroundImage: `url(${background.value})` }}
+        aria-label={title || 'background'}
+      />
+    );
+  }
+  
+  return (
+    <div 
+      className="w-full h-full" 
+      style={{ backgroundColor: background.value }} 
+    />
+  );
+};
+
 function VisualNovelContent({
   novel,
   episodeData,
@@ -253,27 +280,32 @@ function VisualNovelContent({
   useEffect(() => {
     const scene = episodeData?.scenes?.find(s => s._id === currentSceneId) ?? null;
     if (scene) {
-      const newBackground = scene.background.type === 'image' ? scene.background.value : scene.background.value;
+      const newBackground = scene.background.value;
       
-      // ตรวจสอบว่าต้องมี transition หรือไม่
-      if (currentScene && scene) {
+      // Optimize transition logic - avoid unnecessary state updates
+      let shouldUseTransition = false;
+      
+      // Only check transition if we have a current scene (not the first scene)
+      if (currentScene && scene && currentScene._id !== scene._id) {
         const transitionType = currentScene.sceneTransitionOut?.type;
         
-        // ถ้าเป็น 'none' ไม่ต้อง transition เลย (ให้รู้สึกเป็นฉากเดียวกัน)
-        if (transitionType === 'none') {
-          setShouldTransition(false);
-        } 
-        // ถ้าเป็น 'fade' หรือ transition อื่นๆ ให้ทำ smooth transition
-        else {
-          setShouldTransition(true);
-        }
-      } else {
-        setShouldTransition(false); // Scene แรก ไม่ต้อง transition
+        // Performance optimization: 'none' means instant transition (no animation)
+        // 'fade' or other types mean animated transition
+        shouldUseTransition = transitionType !== 'none';
+      }
+      
+      // Only update transition state if it actually changed
+      if (shouldUseTransition !== shouldTransition) {
+        setShouldTransition(shouldUseTransition);
+      }
+      
+      // Only update background if it actually changed
+      if (newBackground !== currentBackground) {
+        setCurrentBackground(newBackground);
       }
       
       setPreviousScene(currentScene);
       setCurrentScene(scene);
-      setCurrentBackground(newBackground);
     }
     
     onSceneDataChange(scene);
@@ -281,7 +313,7 @@ function VisualNovelContent({
     setDisplayedText('');
     setIsTyping(false);
     setAvailableChoices(null);
-  }, [currentSceneId, episodeData, onSceneDataChange]);
+  }, [currentSceneId, episodeData, onSceneDataChange, currentScene, shouldTransition, currentBackground]);
 
 
   const typeText = useCallback(() => {
@@ -372,10 +404,31 @@ function VisualNovelContent({
         return;
       }
 
-      // 4. Fallback: If none of the above, the episode ends.
+      // 4. For SINGLE_ENDING novels, check if this is the last scene of the final episode
+      // Use optimized novel metadata from episode data when available
+      const novelMeta = episodeData?.novelMeta || novel;
+      if (novelMeta.endingType === 'single_ending' && novelMeta.isCompleted) {
+        // Check if this is the final episode and final scene
+        const isLastEpisode = episodeData?.episodeOrder === novelMeta.totalEpisodesCount;
+        const isLastScene = episodeData?.scenes && currentScene.sceneOrder === episodeData.scenes.length;
+        
+        if (isLastEpisode && isLastScene) {
+          // Generate a default ending for single ending novels
+          const defaultEnding = {
+            endingType: 'NORMAL' as const,
+            title: 'จบบทเรื่องราว',
+            description: 'ขอบคุณที่ติดตามเรื่องราวจนจบ',
+            endingId: `${novel.slug}_single_ending`
+          };
+          onEpisodeEnd(defaultEnding);
+          return;
+        }
+      }
+
+      // 5. Fallback: If none of the above, the episode ends.
       onEpisodeEnd();
     }
-  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd]);
+  }, [isTyping, textIndex, currentScene, onSceneChange, onEpisodeEnd, novel, episodeData]);
 
   const handleChoiceSelect = (choice: SerializedChoice) => {
     setAvailableChoices(null); // Hide choices after selection
@@ -495,7 +548,7 @@ function VisualNovelContent({
 
   return (
     <div className="relative w-full h-full" onClick={!availableChoices ? handleAdvance : undefined}>
-      {/* Background */}
+      {/* Background - Optimized for performance */}
       {shouldTransition ? (
         <AnimatePresence mode="wait">
           <motion.div
@@ -509,35 +562,13 @@ function VisualNovelContent({
               ease: "easeInOut"
             }}
           >
-            {currentScene?.background.type === 'image' ? (
-              <div
-                className="w-full h-full vn-background"
-                style={{ backgroundImage: `url(${currentScene.background.value})` }}
-                aria-label={currentScene?.title || 'background'}
-              />
-            ) : (
-              <div 
-                className="w-full h-full" 
-                style={{ backgroundColor: currentScene?.background.value }} 
-              />
-            )}
+            <BackgroundRenderer background={currentScene?.background} title={currentScene?.title} />
           </motion.div>
         </AnimatePresence>
       ) : (
-        // ไม่มี transition - แสดง background แบบ static (สำหรับ type: 'none')
+        // No transition - instant background change for 'none' type (performance optimized)
         <div className="absolute inset-0">
-          {currentScene?.background.type === 'image' ? (
-            <div
-              className="w-full h-full vn-background"
-              style={{ backgroundImage: `url(${currentScene.background.value})` }}
-              aria-label={currentScene?.title || 'background'}
-            />
-          ) : (
-            <div 
-              className="w-full h-full" 
-              style={{ backgroundColor: currentScene?.background.value }} 
-            />
-          )}
+          <BackgroundRenderer background={currentScene?.background} title={currentScene?.title} />
         </div>
       )}
       
