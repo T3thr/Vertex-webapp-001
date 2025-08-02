@@ -238,16 +238,28 @@ export default function VisualNovelFrameReader({
   }, []);
 
   const handleEpisodeEnd = useCallback((ending?: ISceneEnding) => {
+    // Prevent multiple invocations
+    if (showSummary) return;
+
     console.log("Episode has ended.", ending);
+
+    // Pause any auto-play or typing animations
+    setIsPlaying(false);
+
     if (ending) {
       setEndingDetails(ending);
     }
+
+    // Hide other UI elements for an immersive ending screen
+    setIsUiVisible(false);
+
     setShowSummary(true);
-    // Potentially save progress here
+
+    // Persist reading progress as completed
     if (userId && activeEpisode?._id) {
       saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId || '', true);
     }
-  }, [userId, novel._id, activeEpisode?._id, currentSceneId]);
+  }, [userId, novel._id, activeEpisode?._id, currentSceneId, showSummary]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {

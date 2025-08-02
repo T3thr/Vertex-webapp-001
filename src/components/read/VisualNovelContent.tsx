@@ -323,6 +323,26 @@ export default function VisualNovelContent({
       } else if (currentScene?.choices && currentScene.choices.length > 0) {
         setAvailableChoices(currentScene.choices);
       } else {
+        // 1) If the current scene is explicitly marked as an ending, finish the episode immediately.
+        const isSceneEnding = Boolean(currentScene?.ending);
+        /*
+          Some legacy / hard-coded data (e.g. TheWhisperOf999) uses a Timeline
+          Event with type "END_NOVEL" instead of the dedicated `ending` field.
+          To support that scenario we do a lightweight runtime check. Because
+          `timelineEvents` is not part of the typed `SerializedScene`, we cast
+          to `any` before inspecting.
+        */
+        const timelineHasEndNovel = (currentScene as any)?.timelineEvents?.some((ev: any) => {
+            const raw = (ev?.type ?? ev?.eventType ?? '').toString();
+            return raw.toLowerCase() === 'end_novel';
+          });
+
+        if (isSceneEnding || timelineHasEndNovel) {
+          onEpisodeEnd(currentScene?.ending);
+          return;
+        }
+
+        // 2) Otherwise try to follow `defaultNextSceneId` or fall back to sequential order.
         const nextSceneId = currentScene?.defaultNextSceneId;
         if (nextSceneId && episodeData?.scenes) {
             onSceneChange(nextSceneId);

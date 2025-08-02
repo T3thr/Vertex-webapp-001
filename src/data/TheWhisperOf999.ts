@@ -177,7 +177,18 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_CLEAN',
       text: 'ทำความสะอาดห้องนั่งเล่นและเปิดผ้าม่าน',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }],
+      actions: [
+        {
+          actionId: 'action_end_clean',
+          type: 'end_novel_branch',
+          parameters: {
+            endingNodeId: 'ENDING_SAFE_DAY1',
+            outcomeDescription: 'คุณเลือกที่จะใช้ชีวิตอย่างปกติสุขต่อไป และไม่มีอะไรผิดปกติเกิดขึ้นในวันแรก... อย่างน้อยก็ในตอนนี้',
+            endingTitle: 'วันแรกที่แสนสงบ',
+            endingType: 'NEUTRAL'
+          }
+        }
+      ],
       isMajorChoice: true,
     },
     {
@@ -186,7 +197,18 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_CALL',
       text: 'โทรหาเพื่อนเพื่อเล่าเรื่องบ้านใหม่',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }],
+      actions: [
+        {
+          actionId: 'action_end_call',
+          type: 'end_novel_branch',
+          parameters: {
+            endingNodeId: 'ENDING_SAFE_DAY1_SHARED',
+            outcomeDescription: 'คุณเล่าเรื่องบ้านใหม่ให้เพื่อนฟัง และใช้เวลาที่เหลือของวันไปกับการจัดของอย่างสบายใจ',
+            endingTitle: 'เริ่มต้นอย่างอุ่นใจ',
+            endingType: 'GOOD'
+          }
+        }
+      ],
       isMajorChoice: true,
     },
     {
@@ -204,7 +226,18 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_LISTEN_LATER',
       text: 'รอให้ถึงตีสาม แล้วฟังตามที่เขียน',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }],
+       actions: [
+        {
+          actionId: 'action_end_wait',
+          type: 'end_novel_branch',
+          parameters: {
+            endingNodeId: 'ENDING_CLIFFHANGER_3AM',
+            outcomeDescription: 'คุณตัดสินใจที่จะทำตามคำท้าทายบนเทป... คืนนี้อะไรจะเกิดขึ้นกันแน่? (โปรดติดตามตอนต่อไป)',
+            endingTitle: 'คำท้าทายตอนตีสาม',
+            endingType: 'CLIFFHANGER'
+          }
+        }
+      ],
       isMajorChoice: false,
     },
     {
@@ -213,7 +246,18 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_BURN_TAPE',
       text: 'เผาเทปทิ้งทันที',
-      actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }],
+      actions: [
+        {
+          actionId: 'action_end_burn',
+          type: 'end_novel_branch',
+          parameters: {
+            endingNodeId: 'ENDING_DESTROY_EVIDENCE',
+            outcomeDescription: 'คุณตัดสินใจทำลายเทปปริศนาทิ้ง บางทีการไม่รู้ อาจจะเป็นสิ่งที่ดีที่สุดแล้ว คุณพยายามจะลืมเรื่องราวแปลกๆ และใช้ชีวิตต่อไป',
+            endingTitle: 'ทำลายหลักฐาน',
+            endingType: 'BAD'
+          }
+        }
+      ],
       isMajorChoice: false,
     },
     {
