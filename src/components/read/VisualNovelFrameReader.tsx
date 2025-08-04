@@ -112,21 +112,39 @@ export default function VisualNovelFrameReader({
   
   // Advance Trigger
   const [advanceTrigger, setAdvanceTrigger] = useState(0);
-  const handleAdvance = () => setAdvanceTrigger(t => t + 1);
+  const [handleAdvanceRef, setHandleAdvanceRef] = useState<(() => void) | null>(null);
+  
+  const handleAdvance = useCallback(() => {
+    // Always use the ref function if available for consistency with click behavior
+    if (handleAdvanceRef) {
+      handleAdvanceRef();
+    } else {
+      // Fallback to trigger method if ref is not available
+      setAdvanceTrigger(t => t + 1);
+    }
+  }, [handleAdvanceRef]);
+
+  // Safely set the advance function reference
+  const setAdvanceFunction = useCallback((fn: () => void) => {
+    setHandleAdvanceRef(() => fn);
+  }, []);
 
   // Add keyboard event listener for spacebar
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Only handle spacebar when no panels are open
+      // Only handle spacebar when no panels are open and no choices are available
       if (e.key === ' ' && !showSettings && !showHistory && !showEpisodeNav && !showStoryStatus) {
         e.preventDefault(); // Prevent default spacebar behavior (page scroll)
-        handleAdvance();
+        // Use the same advance function that click uses for consistency
+        if (handleAdvanceRef) {
+          handleAdvanceRef();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [showSettings, showHistory, showEpisodeNav, showStoryStatus]);
+  }, [handleAdvanceRef, showSettings, showHistory, showEpisodeNav, showStoryStatus]);
 
   // Prevent body scroll when any panel is open
   useEffect(() => {
@@ -379,6 +397,7 @@ export default function VisualNovelFrameReader({
                 onDialogueEntry={handleDialogueEntry}
                 onEpisodeEnd={handleEpisodeEnd}
                 advanceTrigger={advanceTrigger}
+                onAdvance={setAdvanceFunction} // Pass the setAdvanceFunction to VisualNovelContent
             />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -435,7 +454,7 @@ export default function VisualNovelFrameReader({
                         <div className="max-w-xl mx-auto bg-black/30 backdrop-blur-md rounded-full flex items-center justify-evenly text-white p-2 border border-white/20 shadow-lg">
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowEpisodeNav(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Episode List"><List size={20} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowHistory(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Dialogue History"><MessageSquareText size={20} /></motion.button>
-                           <motion.button whileTap={{ scale: 0.9 }} onClick={handleAdvance} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Skip"><SkipForward size={24} /></motion.button>
+                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleAdvanceRef && handleAdvanceRef()} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Skip"><SkipForward size={24} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowStoryStatus(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Story Status"><Swords size={20} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowSettings(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Settings"><Settings size={20} /></motion.button>
                         </div>

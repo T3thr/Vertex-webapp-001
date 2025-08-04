@@ -134,6 +134,7 @@ interface VisualNovelContentProps {
   onSceneDataChange: (scene: SerializedScene | null) => void;
   onDialogueEntry: (entry: DialogueHistoryItem) => void;
   onEpisodeEnd: (ending?: ISceneEnding) => void;
+  onAdvance?: (handleAdvanceFn: () => void) => void;
 }
 
 // --- Audio Hook ---
@@ -251,6 +252,7 @@ function VisualNovelContent({
   onSceneDataChange,
   onDialogueEntry,
   onEpisodeEnd,
+  onAdvance,
 }: VisualNovelContentProps) {
   const [currentScene, setCurrentScene] = useState<SerializedScene | null>(null);
   const [previousScene, setPreviousScene] = useState<SerializedScene | null>(null);
@@ -264,6 +266,7 @@ function VisualNovelContent({
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const handleAdvanceRef = useRef<(() => void) | null>(null);
 
   const { gameplay: gameplaySettings, display: displaySettings } = userSettings;
   
@@ -675,6 +678,23 @@ function VisualNovelContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advanceTrigger]);
 
+  // Store the handleAdvance function in ref for external access
+  useEffect(() => {
+    handleAdvanceRef.current = handleAdvance;
+  }, [handleAdvance]);
+
+  // Register the handleAdvance function with the parent component
+  useEffect(() => {
+    if (onAdvance) {
+      onAdvance(() => {
+        // Ensure we're not in the middle of a render cycle
+        if (handleAdvanceRef.current) {
+          handleAdvanceRef.current();
+        }
+      });
+    }
+  }, [onAdvance]);
+
   if (!episodeData) {
     return (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -771,8 +791,7 @@ function VisualNovelContent({
                      src={
                        imageErrors[char.characterData?.characterCode || ''] || !char.characterData?.characterCode
                          ? '/images/default-avatar.png'
-                         : `/images/character/${char.characterData.characterCode}_fullbody.png`
-                     }
+                         : `/images/character/${char.characterData.characterCode}_fullbody.png`                     }
                      alt={char.characterData?.name || 'Character'}
                      className="h-full w-auto object-contain object-bottom protected-image vn-character-image"
                      onError={() => handleImageError(char.characterData?.characterCode || '')}

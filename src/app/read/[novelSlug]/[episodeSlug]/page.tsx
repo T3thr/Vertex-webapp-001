@@ -335,8 +335,8 @@ export default async function ReadPage({ params, searchParams }: ReadPageProps) 
 
   // แสดง reader โดยไม่มี loading
   return (
-    <div className="flex items-center justify-center w-screen h-screen bg-black p-2 sm:p-4">
-      <div className="relative w-full h-full max-w-full max-h-full aspect-[16/10] shadow-2xl rounded-lg overflow-hidden">
+    <div className="flex items-center justify-center w-full h-screen bg-black overflow-hidden">
+      <div className="relative w-full h-full max-w-full max-h-full shadow-2xl overflow-hidden">
         <VisualNovelFrameReader
           novel={serializedNovel}
           episode={serializedEpisode}
