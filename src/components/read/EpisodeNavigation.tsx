@@ -65,6 +65,19 @@ export default function EpisodeNavigation({
   const [purchasingEpisode, setPurchasingEpisode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   // Fetch episodes
   useEffect(() => {
     if (isOpen) {
@@ -217,14 +230,14 @@ export default function EpisodeNavigation({
 
           {/* Modal */}
           <motion.div
-            className="fixed inset-y-0 left-0 z-50 w-full max-w-lg bg-card border-r border-border"
+            className="fixed inset-y-0 left-0 z-50 w-full max-w-lg bg-card border-r border-border flex flex-col"
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
               <div>
                 <h2 className="text-card-foreground text-lg font-semibold">{novel.title}</h2>
                 <p className="text-muted-foreground text-sm">รายการตอน</p>
@@ -238,7 +251,7 @@ export default function EpisodeNavigation({
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
               {isLoading ? (
                 <div className="flex items-center justify-center h-32">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>

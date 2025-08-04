@@ -5,6 +5,7 @@ import EpisodeModel from '@/backend/models/Episode';
 import SceneModel from '@/backend/models/Scene';
 import CharacterModel from '@/backend/models/Character';
 import ChoiceModel from '@/backend/models/Choice';
+import StoryMapModel from '@/backend/models/StoryMap';
 
 export async function GET(
   request: NextRequest,
@@ -14,7 +15,7 @@ export async function GET(
     await dbConnect();
     const { slug, episodeId } = await params;
 
-    const novel = await NovelModel.findOne({ slug, isDeleted: { $ne: true } }).select('_id').lean();
+    const novel = await NovelModel.findOne({ slug, isDeleted: { $ne: true } }).select('_id endingType isCompleted totalEpisodesCount').lean();
     if (!novel) {
       return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
     }
@@ -24,10 +25,11 @@ export async function GET(
       return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
     }
 
-    const [scenes, characters, choices] = await Promise.all([
+    const [scenes, characters, choices, storyMap] = await Promise.all([
       SceneModel.find({ episodeId: episode._id }).sort({ sceneOrder: 1 }).lean(),
       CharacterModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
-      ChoiceModel.find({ novelId: novel._id }).lean()
+      ChoiceModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
+      StoryMapModel.findOne({ novelId: novel._id, isActive: true }).lean()
     ]);
 
     const characterLookup = characters.reduce((acc, char) => {
@@ -74,10 +76,12 @@ export async function GET(
         sceneOrder: scene.sceneOrder,
         title: scene.title,
         background: scene.background,
+        sceneTransitionOut: scene.sceneTransitionOut, // Add transition data for performance optimization
         characters: sceneCharacters,
         textContents,
         choices: sceneChoices,
-        nextSceneId: scene.defaultNextSceneId?.toString(),
+        defaultNextSceneId: scene.defaultNextSceneId?.toString(),
+        ending: scene.ending, // เพิ่มการส่ง ending data
         audioElements: scene.audios || [],
       };
     });
@@ -87,6 +91,19 @@ export async function GET(
       _id: episode._id.toString(),
       firstSceneId: episode.firstSceneId?.toString(),
       scenes: processedScenes,
+      storyMap: storyMap ? {
+        _id: storyMap._id.toString(),
+        nodes: storyMap.nodes,
+        edges: storyMap.edges,
+        storyVariables: storyMap.storyVariables,
+        startNodeId: storyMap.startNodeId
+      } : null,
+      // Add novel metadata for ending logic
+      novelMeta: {
+        endingType: novel.endingType,
+        isCompleted: novel.isCompleted,
+        totalEpisodesCount: novel.totalEpisodesCount
+      }
     };
     
     // The top-level choices property is removed as choices are now embedded in scenes

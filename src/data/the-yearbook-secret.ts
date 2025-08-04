@@ -3,10 +3,22 @@ import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
 import NovelModel, { NovelStatus, NovelAccessLevel, NovelEndingType, NovelContentType } from '@/backend/models/Novel';
 import EpisodeModel, { EpisodeStatus, EpisodeAccessType } from '@/backend/models/Episode';
-import SceneModel from '@/backend/models/Scene';
-import CharacterModel from '@/backend/models/Character';
-import ChoiceModel from '@/backend/models/Choice';
-import UserModel from '@/backend/models/User';
+import SceneModel, { TextContentType, ISceneEnding } from '@/backend/models/Scene';
+import CharacterModel, { CharacterRoleInStory, CharacterGenderIdentity } from '@/backend/models/Character';
+import ChoiceModel, { ChoiceActionType } from '@/backend/models/Choice';
+import UserModel, { IUser } from '@/backend/models/User';
+import UserProfileModel, { IUserProfile } from '@/backend/models/UserProfile';
+import CategoryModel, { CategoryType } from '@/backend/models/Category';
+import StoryMapModel, { 
+  StoryMapNodeType, 
+  IStoryMapNode, 
+  IStoryMapEdge, 
+  IStoryVariableDefinition,
+  StoryVariableDataType
+} from '@/backend/models/StoryMap';
+import { v4 as uuidv4 } from 'uuid';
+import redis from '@/backend/lib/redis';
+import dbConnect from '@/backend/lib/mongodb';
 
 // โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
 config({ path: '.env' });
@@ -56,14 +68,7 @@ export const createMockAuthor = async () => {
     
 };
 
-enum ChoiceActionType {
-    GO_TO_NODE = "go_to_node",
-    UPDATE_RELATIONSHIP = "update_relationship",
-    SET_STORY_VARIABLE = "set_story_variable",
-    MODIFY_PLAYER_STAT = "modify_player_stat",
-    END_NOVEL_BRANCH = "end_novel_branch"
-    // Add other action types as needed
-  }
+// ChoiceActionType is now imported from '@/backend/models/Choice'
 
 
 // ตัวละคร
@@ -1082,13 +1087,18 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
     return savedChoices;
 };
 
-// สมมติว่ามี SceneModel สำหรับการบันทึกลง MongoDB
-// declare const SceneModel: any;
-// ฉาก
+/**
+ * สร้าง scenes สำหรับ Episode ของนิยาย "The Yearbook's Secret"
+ * @param novelId - ID ของนิยาย
+ * @param episodeId - ID ของ episode
+ * @param characters - Array ของ characters ที่ถูกสร้างแล้ว
+ * @returns Array ของ Scene documents ที่สร้างเสร็จแล้ว
+ */
 const createtheyearbooksecretscenes = async (
     novelId: mongoose.Types.ObjectId,
     episodeId: mongoose.Types.ObjectId,
-    characters: any[]
+    characters: any[],
+    choices: any[] = []
 ) => {
     // แก้ไขข้อมูล audios ที่มี type: 'sound_effect' เป็น 'audio_effect'
     const fixAudioTypes = (audios: any[]) => {
@@ -1121,6 +1131,30 @@ const createtheyearbooksecretscenes = async (
         acc[char.characterCode] = char._id;
         return acc;
     }, {} as Record<string, mongoose.Types.ObjectId>);
+    
+    const choiceMap = choices.reduce((acc, choice) => {
+        acc[choice.choiceCode] = choice._id;
+        return acc;
+    }, {} as Record<string, mongoose.Types.ObjectId>);
+    
+    // แปลง nodeId เป็น ObjectId ในภายหลัง
+    const updateDefaultNextSceneIds = (scenes: any[]) => {
+        const nodeIdToSceneMap = new Map(scenes.map(s => [s.nodeId, s]));
+        
+        for (const scene of scenes) {
+            if (scene.defaultNextSceneId && typeof scene.defaultNextSceneId === 'string' && scene.defaultNextSceneId.startsWith('scene_')) {
+                const nextScene = nodeIdToSceneMap.get(scene.defaultNextSceneId);
+                if (nextScene && nextScene._id) {
+                    scene.defaultNextSceneId = nextScene._id;
+                } else {
+                    console.warn(`⚠️ ไม่พบฉากถัดไปที่มี nodeId: ${scene.defaultNextSceneId} สำหรับฉาก ${scene.nodeId}`);
+                    scene.defaultNextSceneId = null;
+                }
+            }
+        }
+        
+        return scenes;
+    };
 
     // ใช้ฟังก์ชัน validateCharacters กับ characters array ในทุก scene
     const processScene = (sceneData: any) => {
@@ -1130,6 +1164,24 @@ const createtheyearbooksecretscenes = async (
         if (sceneData.audios && Array.isArray(sceneData.audios)) {
             sceneData.audios = fixAudioTypes(sceneData.audios);
         }
+        
+        // เพิ่ม ending ให้กับฉากจบ
+        if (sceneData.nodeId && sceneData.nodeId.includes('_ending_')) {
+            const endingType = sceneData.nodeId.includes('_good_ending_') ? 'GOOD' :
+                              sceneData.nodeId.includes('_bad_ending_') ? 'BAD' :
+                              sceneData.nodeId.includes('_true_ending_') ? 'TRUE' : 
+                              sceneData.nodeId.includes('_normal_ending_') ? 'NORMAL' : 'ALTERNATE';
+            
+            sceneData.ending = {
+                endingType,
+                title: sceneData.title || `${endingType} ENDING`,
+                description: `คุณได้พบกับ ${endingType} ENDING ของเรื่องราวนี้`,
+                endingId: `yearbook_${endingType.toLowerCase()}_ending_${uuidv4().slice(0, 8)}`
+            };
+            
+            console.log(`✅ เพิ่ม ${endingType} ENDING ให้กับฉาก ${sceneData.nodeId}`);
+        }
+        
         return sceneData;
     };
 
@@ -1140,7 +1192,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 1,
-            nodeId: 'scene_ep1_intro',
+            nodeId: 'scene_ep1_intro', // ใช้ nodeId เป็น unique identifier สำหรับอ้างอิงจาก choices,
             title: 'การพบกันครั้งแรกกับ...ความเข้าใจผิด',
             background: {
                 type: 'image',
@@ -1149,10 +1201,10 @@ const createtheyearbooksecretscenes = async (
                 fitMode: 'cover'
             },
             characters: [],
-            textContents: [
+            textContents: [ // ใช้ TextContentType ที่ถูกต้องตาม Scene Model
                 {
                     instanceId: 'narration_ep1_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'วันนี้เป็นวันแรกที่คุณย้ายมาเรียนที่โรงเรียนแสงอรุณ ทุกอย่างดูใหม่และน่าตื่นเต้นไปหมด คุณกำลังเดินหาห้องสมุดตามแผนที่ในมือ แต่จู่ๆ ก็มีใครบางคนเดินชนเข้าอย่างจังจนหนังสือหล่นกระจัดกระจาย',
                     fontSize: 16,
                     color: '#ffffff',
@@ -1214,7 +1266,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"นี่เธอ...เดินยังไงไม่ดูตาม้าตาเรือเลย"',
@@ -1261,7 +1313,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ขะ...ขอโทษค่ะ ฉันไม่ทันมองจริงๆ"',
@@ -1308,7 +1360,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"หึ...นักเรียนใหม่สินะ ถึงได้ซุ่มซ่ามขนาดนี้" (ก้มลงหยิบหนังสือเล่มหนึ่งขึ้นมาดูอย่างไม่ใส่ใจ) "หนังสือเรียนเหรอ? ดูท่าทางเธอคงต้องปรับตัวอีกเยอะนะ"',
@@ -1362,7 +1414,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fah_sai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ดิน อย่าแกล้งเพื่อนใหม่สิ! ขอโทษแทนดินด้วยนะจ๊ะ เธอไม่เป็นไรใช่ไหม?"',
@@ -1416,7 +1468,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ไม่เป็นไรค่ะ..." (มองดินที่ยังคงยืนนิ่งๆ)',
@@ -1470,7 +1522,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ถ้าไม่มีอะไรแล้ว ฉันไปล่ะ" (เดินจากไปทันที)',
@@ -1533,7 +1585,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fah_sai_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ไม่ต้องสนใจเขาหรอกนะ ดินก็เป็นแบบนี้แหละ...บางทีก็ปากไม่ตรงกับใจ" (ยิ้ม) "ฉันฟ้าใสนะ ยินดีที่ได้รู้จัก"',
@@ -1580,7 +1632,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep1',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'คุณจะตอบฟ้าใสว่าอย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -1626,7 +1678,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fah_sai_A_response',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"มีอะไรให้ช่วยก็บอกได้เลยนะ"',
@@ -1666,7 +1718,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fah_sai_B_response',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ไม่หรอก เขาแค่ไม่ค่อยแสดงออกเฉยๆ"',
@@ -1706,7 +1758,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fah_sai_C_response',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อย่าคิดมากเลย บางทีเขาก็แค่หงุดหงิดน่ะ"',
@@ -1738,7 +1790,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_next_event',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากนั้น คุณกับฟ้าใสก็เดินไปที่ห้องเรียนวิชาต่อไป...',
                     fontSize: 16,
                     color: '#ffffff',
@@ -1784,7 +1836,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep2_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'วิชาคณิตศาสตร์เป็นวิชาที่คุณไม่ถนัดเอาเสียเลย ยิ่งวันแรกของการเรียน คุณครูก็ให้การบ้านมาเต็มไปหมด คุณพยายามทำความเข้าใจบทเรียน แต่ก็ยังงงๆ อยู่ดี',
                     fontSize: 16,
                     color: '#ffffff',
@@ -1847,7 +1899,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_teacher_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.somsri, // ใช้ ID ของครูสมศรี
                     speakerDisplayName: 'คุณครูสมศรี',
                     content: '"นักเรียนทุกคน การบ้านเรื่องสมการเชิงเส้น มีใครติดตรงไหนบ้างไหมคะ? ถ้ามีก็ยกมือถามได้เลยนะ"',
@@ -1859,7 +1911,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_no_one_raise_hand',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ไม่มีใครยกมือเลย...ยกเว้นคุณ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -1911,7 +1963,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_ep2_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เอ่อ...คุณครูคะ หนูไม่เข้าใจตรงนี้เลยค่ะ"',
@@ -1965,7 +2017,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_teacher_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.somsri, // ใช้ ID ของครูสมศรี
                     speakerDisplayName: 'คุณครูสมศรี',
                     content: '"ตรงไหนคะ [ชื่อคุณ] ลองบอกมาสิ"',
@@ -1977,7 +2029,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep2_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ตรงที่ต้องย้ายข้างตัวแปรแล้วเครื่องหมายมันเปลี่ยนน่ะค่ะ หนูสับสนไปหมดเลย"',
@@ -2031,7 +2083,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_teacher_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.somsri, // ใช้ ID ของครูสมศรี
                     speakerDisplayName: 'คุณครูสมศรี',
                     content: '"ไม่เป็นไรค่ะ เดี๋ยวครูอธิบายซ้ำให้..." (กำลังจะอธิบาย)',
@@ -2043,7 +2095,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep2_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ก็แค่มองว่ามันคือกระจก สลับฝั่งเมื่อไหร่ก็กลับด้านทันที" (กระซิบข้างๆ คุณ เสียงเบาจนแทบไม่ได้ยิน)',
@@ -2090,7 +2142,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_ep2_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"อะ...อะไรนะ?" (หันไปมองดินอย่างแปลกใจ)',
@@ -2137,7 +2189,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_din_ep2_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ถ้ามันเป็นบวก ย้ายไปอีกฝั่งก็เป็นลบ ถ้าเป็นคูณก็เป็นหาร ง่ายๆ แค่นี้" (ไม่มองหน้าคุณ แต่พูดต่อด้วยเสียงเรียบนิ่ง)',
@@ -2184,7 +2236,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep2',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'คุณจะตอบดินว่าอย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2236,7 +2288,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_2A',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ขอบคุณนะดิน เข้าใจขึ้นเยอะเลย!"',
@@ -2248,7 +2300,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_2A_response',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"อืม..."',
@@ -2259,7 +2311,7 @@ const createtheyearbooksecretscenes = async (
                     displaySpeed: 50
                 }
             ],
-            defaultNextSceneId: 'scene_ep2_end_of_class', // ไปยังฉากถัดไปของเนื้อเรื่อง
+            defaultNextSceneId: 'scene_ep3_intro_club_fair', // ไปยังฉากถัดไปของเนื้อเรื่อง
             timelineTracks: []
         },
 
@@ -2295,7 +2347,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_2B',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เข้าใจแล้วค่ะคุณครู" (พยักหน้าให้ครู)',
@@ -2306,7 +2358,7 @@ const createtheyearbooksecretscenes = async (
                     displaySpeed: 50
                 }
             ],
-            defaultNextSceneId: 'scene_ep2_end_of_class',
+            defaultNextSceneId: 'scene_ep3_intro_club_fair',
             timelineTracks: []
         },
 
@@ -2342,7 +2394,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_2C',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นาย...ช่วยฉันทำไม?"',
@@ -2354,7 +2406,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_2C_response',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"รำคาญเสียงบ่นของครูต่างหาก"',
@@ -2365,7 +2417,7 @@ const createtheyearbooksecretscenes = async (
                     displaySpeed: 50
                 }
             ],
-            defaultNextSceneId: 'scene_ep2_end_of_class',
+            defaultNextSceneId: 'scene_ep3_intro_club_fair',
             timelineTracks: []
         },
 
@@ -2387,7 +2439,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep3_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'โรงเรียนจัดกิจกรรมเปิดบ้านชมรม คุณกำลังเดินเลือกชมรมที่สนใจ สายตาไปสะดุดกับบูธชมรมดนตรี ที่มีเสียงเพลงไพเราะลอยออกมา คุณเห็นฟ้าใสกำลังยิ้มทักทายนักเรียนใหม่ที่สนใจชมรมนี้',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2450,7 +2502,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fahsai_ep3_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อ้าว [ชื่อคุณ]! มาหาชมรมเหรอ? สนใจชมรมดนตรีไหมล่ะ?" (โบกมือทักคุณ)',
@@ -2462,7 +2514,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep3_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ก็...ยังไม่แน่ใจน่ะค่ะ กำลังดูๆ อยู่" (คุณมองไปรอบๆ พลันสายตาก็เห็นดินกำลังเดินผ่านบูธชมรมศิลปะไปอย่างช้าๆ)',
@@ -2474,7 +2526,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep3_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"งั้นลองมาฟังพี่ๆ เล่นดนตรีก่อนสิ อาจจะชอบก็ได้นะ" (ยิ้มชวน)',
@@ -2521,7 +2573,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep3',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'คุณจะตอบฟ้าใสว่าอย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2558,7 +2610,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep3_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'โรงเรียนจัดกิจกรรมเปิดบ้านชมรม คุณกำลังเดินเลือกชมรมที่สนใจ สายตาไปสะดุดกับบูธชมรมดนตรี ที่มีเสียงเพลงไพเราะลอยออกมา คุณเห็นฟ้าใสกำลังยิ้มทักทายนักเรียนใหม่ที่สนใจชมรมนี้',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2621,7 +2673,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_fahsai_ep3_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อ้าว [ชื่อคุณ]! มาหาชมรมเหรอ? สนใจชมรมดนตรีไหมล่ะ?" (โบกมือทักคุณ)',
@@ -2633,7 +2685,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep3_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ก็...ยังไม่แน่ใจน่ะค่ะ กำลังดูๆ อยู่" (คุณมองไปรอบๆ พลันสายตาก็เห็นดินกำลังเดินผ่านบูธชมรมศิลปะไปอย่างช้าๆ)',
@@ -2645,7 +2697,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep3_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"งั้นลองมาฟังพี่ๆ เล่นดนตรีก่อนสิ อาจจะชอบก็ได้นะ" (ยิ้มชวน)',
@@ -2692,7 +2744,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep3',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'คุณจะตอบฟ้าใสว่าอย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2744,7 +2796,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_ep4_A_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"โอ้โห...เครื่องดนตรีเยอะแยะไปหมดเลยค่ะ!"',
@@ -2756,7 +2808,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep4_A_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ใช่แล้วล่ะ! ที่นี่คือสวรรค์ของคนรักดนตรีเลยนะ" (เธอยิ้มกว้าง) "มาทางนี้สิ เดี๋ยวฉันแนะนำให้รู้จักพี่ๆ ในชมรม"',
@@ -2768,7 +2820,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep4_A_intro_pmew',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ฟ้าใสแนะนำคุณให้รู้จักกับรุ่นพี่และเพื่อนร่วมชมรม คุณได้ลองสัมผัสเครื่องดนตรีต่างๆ และรับรู้ถึงบรรยากาศที่เป็นกันเองและอบอุ่นของชมรมดนตรี)',
                     fontSize: 16,
                     color: '#D3D3D3',
@@ -2778,7 +2830,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_pmew_ep4_A_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.mew, // ID รุ่นพี่มิว
                     speakerDisplayName: 'พี่มิว',
                     content: '"ยินดีต้อนรับสู่ชมรมดนตรีนะน้อง! มีอะไรให้ช่วยบอกได้เลยนะ เรามีกิจกรรมเยอะแยะเลย ทั้งซ้อมดนตรี จัดคอนเสิร์ตเล็กๆ ในโรงเรียน หรือจะแค่มานั่งฟังเพลงก็ได้"',
@@ -2790,7 +2842,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep4_A_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ขอบคุณค่ะพี่มิว หนูรู้สึกดีมากๆ เลยที่นี่" (ยิ้มอย่างสบายใจ)',
@@ -2802,7 +2854,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep4_A_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"เห็นไหมล่ะ ฉันบอกแล้วว่าเธอต้องชอบ" (เธอหันมามองคุณด้วยแววตาเป็นประกาย) "อีกไม่นานเราอาจจะได้ขึ้นเวทีด้วยกันก็ได้นะ!"',
@@ -2814,7 +2866,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep4_A_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'บางทีการมาโรงเรียนใหม่ก็ไม่ได้แย่ไปซะทั้งหมด การได้เจอฟ้าใสและเพื่อนๆ ในชมรมดนตรีก็ทำให้ฉันรู้สึกไม่โดดเดี่ยวอีกต่อไป...',
@@ -2861,7 +2913,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_ep4_B_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"โอ๊ย! ขอโทษค่ะดิน ฉันไม่ได้ตั้งใจ" (แกล้งเดินไปชนดินเบาๆ)',
@@ -2873,7 +2925,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep4_B_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"อีกแล้วเหรอเธอ..."',
@@ -2885,7 +2937,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep4_B_art_club_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเหตุการณ์อลหม่านเล็กน้อย ดินก็เดินเข้าไปในห้องชมรมศิลปะ คุณตัดสินใจเดินตามเข้าไปอย่างเงียบๆ ห้องชมรมค่อนข้างเงียบ มีเพียงนักเรียนไม่กี่คนที่กำลังวาดรูปอยู่',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2895,7 +2947,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep4_B_1',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'รูปนี้...ดินหยุดดูมันอยู่พักนึง ทำไมนะ? มันดูเศร้าๆ ยังไงไม่รู้...',
@@ -2907,7 +2959,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep4_B_art_club_explore',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณสำรวจรอบๆ ห้อง และเห็นว่ามุมหนึ่งของห้องมีรูปปั้นดินเผาที่ดูแปลกตา มันเป็นรูปปั้นที่ยังไม่เสร็จดี แต่แฝงไปด้วยพลังงานบางอย่าง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -2917,7 +2969,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_aida_ep4_B_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.aida, // ID ไอด้า
                     speakerDisplayName: 'ไอด้า',
                     content: '"อ้าว! มาสมัครชมรมเหรอ? ไม่ค่อยมีใครมาเลยช่วงนี้" (เดินเข้ามาเห็นคุณ)',
@@ -2929,7 +2981,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep4_B_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เปล่าค่ะ พอดี...ผ่านมาเห็นน่ะค่ะ"',
@@ -2941,7 +2993,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_aida_ep4_B_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.aida,
                     speakerDisplayName: 'ไอด้า',
                     content: '"อ้อ...งั้นลองดูรอบๆ ก่อนก็ได้นะ ชมรมเราอาจจะเงียบๆ หน่อย แต่ก็มีอะไรให้ทำเยอะนะ" (เธอหันไปมองรูปปั้นดินเผา) "ผลงานของ **\'ดิน\'** น่ะ เขาไม่ค่อยมาชมรมหรอก แต่ถ้ามาทีไรก็สร้างอะไรแปลกๆ ตลอดเลย"',
@@ -2953,7 +3005,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep4_B_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน...?" (พึมพำ)',
@@ -2965,7 +3017,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_aida_ep4_B_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.aida,
                     speakerDisplayName: 'ไอด้า',
                     content: '"ใช่ เขาชื่อดินน่ะ ชอบทำอะไรแปลกๆ แบบนี้แหละ บางทีก็ดูเข้าถึงยากหน่อย"',
@@ -2977,7 +3029,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep4_B_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'เขาไม่ได้สนใจแค่รูปวาด แต่เขายังสร้างสรรค์ผลงานเองด้วยงั้นเหรอ? ดิน...นายเป็นคนยังไงกันแน่?',
@@ -3017,7 +3069,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_lisa_ep4_C_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ชมรมศิลปะ...ก็เงียบดีนะ น่าจะเหมาะกับการคิดอะไรเพลินๆ',
@@ -3029,7 +3081,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep4_C_art_club_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณเดินเข้าไปในห้องชมรมศิลปะอย่างเงียบๆ สายตาไปสะดุดกับรูปวาดนามธรรมรูปหนึ่งที่ดูคุ้นตา มันเป็นรูปที่ใช้สีโทนหม่นๆ แต่แฝงไปด้วยความรู้สึกบางอย่าง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3039,7 +3091,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep4_C_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'รูปนี้...เหมือนกับที่ฉันเห็นดินหยุดมองเมื่อกี้เลยนี่นา',
@@ -3051,7 +3103,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep4_C_art_club_explore',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณสำรวจรอบๆ ห้อง และเห็นว่ามุมหนึ่งของห้องมีรูปปั้นดินเผาที่ดูแปลกตา มันเป็นรูปปั้นที่ยังไม่เสร็จดี แต่แฝงไปด้วยพลังงานบางอย่าง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3061,7 +3113,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_aida_ep4_C_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.aida, // ID ไอด้า
                     speakerDisplayName: 'ไอด้า',
                     content: '"อ้าว! มาสมัครชมรมเหรอ? ไม่ค่อยมีใครมาเลยช่วงนี้" (เดินเข้ามาเห็นคุณ)',
@@ -3073,7 +3125,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep4_C_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เปล่าค่ะ พอดี...ผ่านมาเห็นน่ะค่ะ"',
@@ -3085,7 +3137,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_aida_ep4_C_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.aida,
                     speakerDisplayName: 'ไอด้า',
                     content: '"อ้อ...งั้นลองดูรอบๆ ก่อนก็ได้นะ ชมรมเราอาจจะเงียบๆ หน่อย แต่ก็มีอะไรให้ทำเยอะนะ" (เธอหันไปมองรูปปั้นดินเผา) "ผลงานของ **\'ดิน\'** น่ะ เขาไม่ค่อยมาชมรมหรอก แต่ถ้ามาทีไรก็สร้างอะไรแปลกๆ ตลอดเลย"',
@@ -3097,7 +3149,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep4_C_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน...?" (พึมพำ)',
@@ -3109,7 +3161,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_aida_ep4_C_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.aida,
                     speakerDisplayName: 'ไอด้า',
                     content: '"ใช่ เขาชื่อดินน่ะ ชอบทำอะไรแปลกๆ แบบนี้แหละ บางทีก็ดูเข้าถึงยากหน่อย"',
@@ -3121,7 +3173,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep4_C_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'เขาไม่ได้สนใจแค่รูปวาด แต่เขายังสร้างสรรค์ผลงานเองด้วยงั้นเหรอ? ดิน...นายเป็นคนยังไงกันแน่?',
@@ -3168,7 +3220,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep5_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'วิชาคณิตศาสตร์ยังคงเป็นความท้าทายสำหรับคุณ วันนี้คุณครูสมศรีมีการทดสอบย่อยเรื่องสมการเชิงเส้นที่คุณยังไม่ค่อยถนัดเท่าไหร่',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3224,7 +3276,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_teacher_ep5_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.somsri,
                     speakerDisplayName: 'คุณครูสมศรี',
                     content: '"เอาล่ะนักเรียนทุกคน วันนี้เราจะมาทดสอบความเข้าใจเรื่องสมการเชิงเส้นกันนะคะ ครูจะให้เวลา 15 นาที ใครเสร็จก่อนส่งได้เลยค่ะ"',
@@ -3236,7 +3288,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep5_1',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ตายแล้ว...ทำไมฉันยังงงอยู่อีกนะ! ถ้าทำไม่ได้คะแนนน้อย คุณครูสมศรีจะต้องผิดหวังแน่ๆ',
@@ -3283,7 +3335,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep5_din_whisper_action',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณก้มหน้ามองข้อสอบอย่างเคร่งเครียด พยายามนึกถึงสิ่งที่ดินเคยกระซิบสอนในคาบที่แล้ว "ก็แค่มองว่ามันคือกระจก สลับฝั่งเมื่อไหร่ก็กลับด้านทันที") (ในขณะที่คุณกำลังขมวดคิ้วคิดอย่างหนัก คุณรู้สึกได้ถึงแรงสะกิดเบาๆ ที่แขน)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3293,7 +3345,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep5_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ข้อแรก...ดูที่เครื่องหมายให้ดีๆ" (กระซิบเบาๆ ข้างหูคุณ เสียงเย็นชาแต่ชัดเจน)',
@@ -3305,7 +3357,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep5_lisa_observe_din',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณเงยหน้ามองดินเล็กน้อย เขาไม่ได้มองคุณตรงๆ แต่สายตาของเขากลับมองไปที่ข้อสอบของคุณแวบหนึ่ง ก่อนจะกลับไปจดจ่อที่ข้อสอบของตัวเอง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3315,7 +3367,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep5_2',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'จริงด้วย...มันไม่ได้ยากอย่างที่คิดนี่นา! ดิน...เขากำลังช่วยฉันเหรอเนี่ย?',
@@ -3376,7 +3428,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep5_finish_exam',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณเริ่มลงมือทำข้อสอบข้ออื่นๆ ด้วยความมั่นใจมากขึ้น และส่งข้อสอบทันเวลา)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3386,7 +3438,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_teacher_ep5_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.somsri,
                     speakerDisplayName: 'คุณครูสมศรี',
                     content: '"ดีมากค่ะ [ชื่อคุณ] ดูท่าจะเข้าใจขึ้นแล้วนะ" (ยิ้มให้เล็กน้อย)',
@@ -3398,7 +3450,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep5_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ค่ะคุณครู ขอบคุณค่ะ" (คุณหันไปมองดินอีกครั้ง เขากำลังเก็บของเตรียมออกจากห้องเรียนเหมือนไม่มีอะไรเกิดขึ้น)',
@@ -3410,7 +3462,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep5_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"เป็นไงบ้างข้อสอบคณิต? ยากไหม? ฉันเห็นเธอทำหน้าเครียดเชียว" (เดินมาหาคุณหลังเลิกเรียน)',
@@ -3422,7 +3474,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep5_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ก็เกือบไปแล้วค่ะฟ้าใส โชคดีที่พอทำได้บ้าง"',
@@ -3434,7 +3486,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep5_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ดีเลย! ถ้ามีอะไรให้ช่วยเรื่องการเรียนบอกฉันได้เลยนะ ฉันพอจะช่วยได้บ้าง" (เธอยิ้มให้กำลังใจ)',
@@ -3446,7 +3498,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep5_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันควรจะบอกฟ้าใสดีไหมนะว่าดินช่วยฉัน? หรือเก็บเป็นความลับระหว่างฉันกับเขาดี?',
@@ -3502,7 +3554,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep6_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากคาบเรียนที่ผ่านมา คุณยังคงคิดถึงเรื่องที่ดินแอบช่วยในวิชาคณิตศาสตร์ คุณตั้งใจจะมาหาหนังสือเพิ่มเติมในห้องสมุดเพื่อทำความเข้าใจเนื้อหาให้มากขึ้น และก็ต้องประหลาดใจกับสิ่งที่ได้เห็น',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3512,7 +3564,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep6_1',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันควรจะบอกฟ้าใสเรื่องดินดีไหมนะ...หรือว่าปล่อยไปแบบนี้แหละ? ช่างเถอะ ตอนนี้ไปหาหนังสือคณิตศาสตร์ก่อนดีกว่า',
@@ -3570,7 +3622,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep6_fahsai_spot',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณเดินเข้าไปในโซนหนังสือเรียน แต่สายตาก็พลันเห็นร่างคุ้นเคยที่มุมหนึ่งของห้องสมุด **ฟ้าใส** กำลังนั่งก้มหน้าอยู่กับโต๊ะ ปกติเธอจะยิ้มแย้มสดใสเสมอ แต่วันนี้กลับดูหม่นหมอง เธอถือกำไลข้อมืออันหนึ่งไว้ในมือและพึมพำกับตัวเองเบาๆ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3580,7 +3632,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep6_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ไม่น่าทำหายเลย...แม่ต้องโกรธแน่ๆ เลย" (เสียงแผ่วเบา สังเกตเห็นได้ถึงความกังวล)',
@@ -3592,7 +3644,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep6_2',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฟ้าใส...ดูไม่เหมือนปกติเลยแฮะ เกิดอะไรขึ้นกับเธอนะ?',
@@ -3646,7 +3698,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep6_din_spot',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในเวลาเดียวกัน คุณก็ได้ยินเสียงกระดาษพลิกเบาๆ จากอีกมุมหนึ่งของห้องสมุด คุณหันไปมอง และเห็น **ดิน** กำลังนั่งอ่านหนังสือเล่มหนึ่งที่ไม่ได้ดูเหมือนตำราเรียน มันเป็นหนังสือปกเก่าๆ ดูลึกลับ เขาอ่านอย่างจดจ่อ แต่สีหน้าของเขากลับดูเหม่อลอยคล้ายกำลังครุ่นคิดอะไรบางอย่าง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3656,7 +3708,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep6_3',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'หนังสืออะไรน่ะ...ไม่เคยเห็นดินอ่านหนังสือแบบนี้มาก่อนเลย...แล้วทำไมเขาถึงดูเศร้าๆ แบบนั้นนะ?',
@@ -3668,7 +3720,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep6_lisa_hesitates',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณลังเลว่าจะเข้าไปทักใครดี แต่สุดท้ายก็ตัดสินใจว่าจะไม่เข้าไปขัดจังหวะทั้งคู่ในตอนนี้ เพราะดูเหมือนต่างคนต่างก็มีเรื่องของตัวเองให้คิด)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3706,7 +3758,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep7_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'โรงเรียนกำลังเตรียมจัดงานวัฒนธรรมประจำปี "แสงอรุณเฟสติวัล" ซึ่งเป็นงานใหญ่ที่นักเรียนทุกคนต้องมีส่วนร่วม คุณเองก็ถูกมอบหมายให้เข้ามาช่วยงานนี้เช่นกัน ไม่ว่าจะในฐานะสมาชิกชมรมที่คุณเลือก หรืออาสาสมัครทั่วไป',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3716,7 +3768,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep7_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"โห...งานใหญ่กว่าที่คิดไว้เยอะเลยแฮะ" (ถือกล่องอุปกรณ์เดินเข้าไปในห้องโถง)',
@@ -3784,7 +3836,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'dialogue_senior_ep7_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.mew, // แก้ไข characterId เป็น 'p_mew' หรือ 'aida'
                     speakerDisplayName: 'พี่มิว', // หรือ พี่ไอด้า
                     content: '"อ้าว [ชื่อคุณ]! มาพอดีเลย มาช่วยพี่ทางนี้หน่อยสิ เรากำลังจัดเตรียมบูธเกมส์อยู่พอดีเลย"', // หรือ "มาช่วยพี่ดูเรื่องพร็อพบนเวทีหน่อยสิ"
@@ -3796,7 +3848,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep7_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ได้เลยค่ะ!" (วางกล่องและเริ่มช่วยงาน)',
@@ -3843,7 +3895,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep7_fahsai_spot',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณช่วยงานไปเรื่อยๆ จนกระทั่งเดินผ่านเวทีหลัก ที่นั่น **ฟ้าใส** กำลังซ้อมเล่นเปียโนกับเพื่อนในชมรมดนตรี เธอเล่นได้อย่างไพเราะ แต่สีหน้ายังแฝงความกังวลเล็กน้อย)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3853,7 +3905,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep7_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"โอ๊ย! เหนื่อยจัง [ชื่อคุณ]! การแสดงของเราต้องออกมาดีที่สุดเลยนะ" (เห็นคุณและโบกมือยิ้มเล็กน้อย)',
@@ -3865,7 +3917,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep7_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"สู้ๆ นะฟ้าใส! เสียงเปียโนฟ้าใสเพราะมากๆ เลย" (ยิ้มตอบ)',
@@ -3919,7 +3971,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep7_din_spot',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(หลังจากนั้น คุณเดินไปที่โซนจัดแสดงผลงานศิลปะเพื่อนำอุปกรณ์ไปเก็บ และเห็น **ดิน** กำลังช่วยรุ่นพี่จัดเรียงรูปภาพบนแผงจัดแสดง เขาดูนิ่งเงียบแต่ทำงานได้คล่องแคล่วและจัดวางได้อย่างแม่นยำ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3929,7 +3981,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_p_oak_ep7_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.p_oak,
                     speakerDisplayName: 'พี่โอ๊ค',
                     content: '"ดิน! ช่วยยกรูปปั้นอันนี้มาวางตรงกลางหน่อยสิ!"',
@@ -3941,7 +3993,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep7_din_action_sculpture',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ดินพยักหน้าเล็กน้อยและค่อยๆ ยกรูปปั้นดินเผาขนาดเล็กชิ้นหนึ่ง ซึ่งดูคุ้นตาคุณ...มันคือรูปปั้นชิ้นเดียวกับที่คุณเคยเห็นในชมรมศิลปะ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -3951,7 +4003,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep7_1',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'รูปปั้นนั้น...มันของดินจริงๆ ด้วย! เขาทำมันได้ยังไงกันนะ...',
@@ -3991,7 +4043,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep8_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'งาน "แสงอรุณเฟสติวัล" ดำเนินไปอย่างราบรื่น ผู้คนมากมายมาร่วมงาน เสียงเพลงและเสียงหัวเราะดังไปทั่ว คุณกำลังช่วยงานอยู่หลังบูธของคุณ...',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4001,7 +4053,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep8_1',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'งานสนุกกว่าที่คิดไว้เยอะเลยแฮะ! ผู้คนก็เยอะมากๆ ด้วย',
@@ -4061,7 +4113,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep8_power_loss',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(จู่ๆ เสียงเพลงที่กำลังบรรเลงอยู่บนเวทีก็ขาดหายไป มีเสียงซ่าๆ ดังขึ้นแทนที่ ไฟบนเวทีกระพริบสองสามครั้งแล้วก็ดับลง บรรยากาศที่คึกคักเมื่อครู่พลันเงียบลง มีเสียงพึมพำและเสียงฮือฮาดังขึ้นแทนที่)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4071,7 +4123,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_teacher_ep8_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.somchai,
                     speakerDisplayName: 'คุณครูผู้ดูแลงาน',
                     content: '"เกิดอะไรขึ้นน่ะ! ระบบไฟมีปัญหาเหรอ!?" (เสียงลนลาน)',
@@ -4083,7 +4135,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep8_2',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'อะไรกันเนี่ย! ระบบไฟดับเหรอ? แล้วการแสดงของชมรมดนตรีจะทำยังไง? ฟ้าใสจะเป็นยังไงบ้างนะ?',
@@ -4154,7 +4206,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep8_observe_fahsai',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณมองไปที่เวที เห็นฟ้าใสยืนอยู่ข้างเปียโนด้วยสีหน้าตื่นตระหนกเล็กน้อย ใกล้ๆ กัน มีสายไฟบางเส้นที่ดูเหมือนถูกเหยียบจนขาด หรือมีปลั๊กหลุดออกมา)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4164,7 +4216,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep8_observe_din',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(จากอีกมุมหนึ่งของห้องโถง ดินซึ่งปกติจะอยู่เงียบๆ กำลังจ้องมองไปที่สายไฟที่ชำรุดนั้นด้วยสีหน้าเรียบนิ่ง แต่แววตาของเขาดูเหมือนกำลังวิเคราะห์อะไรบางอย่าง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4174,7 +4226,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_p_mew_ep8_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.mew, // แก้ไข characterId เป็น 'p_mew'
                     speakerDisplayName: 'พี่มิว',
                     content: '"แย่แล้ว! สายไฟขาด! แบบนี้การแสดงต้องหยุดชะงักแน่ๆ!" (วิ่งเข้ามาด้วยสีหน้ากังวล)',
@@ -4230,7 +4282,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep8',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'ในสถานการณ์ฉุกเฉินนี้ คุณจะตัดสินใจทำอย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4283,7 +4335,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep9_din_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังเหตุการณ์ระบบไฟขัดข้องที่ดินดูเหมือนจะรู้อะไรบางอย่างแต่ก็ยังนิ่งเงียบ คุณรู้สึกสนใจในตัวเขามากขึ้นและตัดสินใจเข้าไปคุยกับเขาหลังจากเหตุการณ์วุ่นวายจบลง คุณพบเขาอยู่ที่ห้องเรียนว่างๆ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4293,7 +4345,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน...นายอยู่ที่นี่เอง" (เดินเข้าไปในห้องเรียนอย่างระมัดระวัง)',
@@ -4305,7 +4357,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"มีอะไร?" (เงยหน้าขึ้นจากหนังสือเล่มเก่าที่อ่านอยู่ สีหน้าเรียบนิ่งเหมือนเดิม)',
@@ -4317,7 +4369,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เรื่องเมื่อกี้...ตอนที่ไฟดับน่ะ นายดูเหมือนจะรู้อะไรบางอย่าง"',
@@ -4329,7 +4381,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ก็แค่...เคยเจอเหตุการณ์คล้ายๆ กันมาก่อน" (หลบสายตาเล็กน้อย)',
@@ -4341,7 +4393,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"แล้วทำไมนายไม่บอกใครล่ะ? ถ้าบอกเร็วกว่านี้ อาจจะไม่วุ่นวายขนาดนั้นก็ได้นะ"',
@@ -4353,7 +4405,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"มันไม่ใช่เรื่องของฉัน...อีกอย่าง พวกนั้นก็คงไม่ฟังคนที่ชอบเก็บตัวอย่างฉันหรอก" (ถอนหายใจเล็กน้อย) "แต่...ฉันก็ไม่ได้อยากให้งานมันพังหรอกนะ"',
@@ -4365,7 +4417,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นาย...เป็นห่วงใช่ไหม?" (สังเกตเห็นแววตาบางอย่างในตัวดิน)',
@@ -4377,7 +4429,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"เปล่า...แค่รำคาญเฉยๆ" (หันมามองคุณตรงๆ แววตาแฝงความประหลาดใจเล็กน้อย ก่อนจะเบือนหน้าหนี แต่เสียงของเขาไม่ได้เย็นชาเท่าครั้งก่อน)',
@@ -4389,7 +4441,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_5',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นายไม่จำเป็นต้องเย็นชาตลอดเวลาก็ได้นะดิน...บางทีการเปิดใจก็ไม่ได้แย่อย่างที่คิดหรอก" (ยิ้มเล็กน้อย)',
@@ -4401,7 +4453,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep9_din_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ดินคนนี้...เขาไม่ได้แค่เย็นชา แต่เขายังมีมุมที่เป็นห่วงคนอื่น และอาจจะยังซ่อนความรู้สึกอะไรบางอย่างไว้มากกว่าที่ฉันคิด',
@@ -4459,7 +4511,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep9_fahsai_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังเหตุการณ์ระบบไฟขัดข้องที่ดินดูเหมือนจะรู้อะไรบางอย่างแต่ก็ยังนิ่งเงียบ คุณรู้สึกสนใจในตัวเขามากขึ้นและตัดสินใจเข้าไปคุยกับเขาหลังจากเหตุการณ์วุ่นวายจบลง คุณพบเขาอยู่ที่ห้องเรียนว่างๆ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4469,7 +4521,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฟ้าใส...เธอไม่เป็นไรนะ? ฉันเห็นตอนนั้นเธอตกใจมากเลย"',
@@ -4481,7 +4533,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep9_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ก็...นิดหน่อยน่ะลิสา ฉันแค่กลัวว่าทุกอย่างจะพังเพราะฉันน่ะ...เพราะว่าฉัน...ทำกำไลนำโชคของแม่หาย" (มองเหม่อไปที่ท้องฟ้า)',
@@ -4493,7 +4545,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_fahsai_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"กำไลนำโชคเหรอ?"',
@@ -4505,7 +4557,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep9_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ใช่...มันเป็นกำไลที่แม่ให้ฉันไว้ตั้งแต่เด็กๆ บอกว่าเป็นเครื่องรางนำโชคให้ฉันทำทุกอย่างสำเร็จ วันงานเปิดบ้านชมรมฉันคงทำมันหายที่ไหนสักแห่งน่ะ พอเกิดเรื่องไฟดับขึ้นมา ฉันก็เลยคิดว่า...มันเป็นเพราะฉันไม่มีกำไลนั่นแล้ว" (เสียงสั่นเล็กน้อย) "มันฟังดูงี่เง่าใช่ไหมล่ะ?"',
@@ -4517,7 +4569,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_fahsai_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ไม่เลยฟ้าใส...มันไม่ใช่ความผิดของเธอหรอกนะ กำไลนั่นอาจจะสำคัญกับเธอมาก แต่มันไม่ใช่สิ่งที่ทำให้ฟ้าใสเป็นฟ้าใสที่เก่งและสดใสอย่างทุกวันนี้หรอกนะ ที่ผ่านมาเธอก็ทำทุกอย่างได้ดีมาตลอดไม่ใช่เหรอ?" (จับมือฟ้าใสเบาๆ)',
@@ -4529,7 +4581,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep9_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ลิสา..." (เธอค่อยๆ ยิ้มออกมาเล็กน้อย) "ขอบคุณนะ...ขอบคุณจริงๆ ที่เข้าใจ" (เงยหน้ามองคุณช้าๆ)',
@@ -4541,7 +4593,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep9_fahsai_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฟ้าใสที่อ่อนแอแบบนี้...เป็นอีกมุมที่ฉันไม่เคยเห็นเลย เธอไม่ได้เป็นแค่ดาวโรงเรียนที่สมบูรณ์แบบเสมอไปจริงๆ ด้วย',
@@ -4600,7 +4652,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep9_din_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังเหตุการณ์ระบบไฟขัดข้องที่ดินดูเหมือนจะรู้อะไรบางอย่างแต่ก็ยังนิ่งเงียบ คุณรู้สึกสนใจในตัวเขามากขึ้นและตัดสินใจเข้าไปคุยกับเขาหลังจากเหตุการณ์วุ่นวายจบลง คุณพบเขาอยู่ที่ห้องเรียนว่างๆ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4610,7 +4662,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน...นายอยู่ที่นี่เอง" (เดินเข้าไปในห้องเรียนอย่างระมัดระวัง)',
@@ -4622,7 +4674,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"มีอะไร?" (เงยหน้าขึ้นจากหนังสือเล่มเก่าที่อ่านอยู่ สีหน้าเรียบนิ่งเหมือนเดิม)',
@@ -4634,7 +4686,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เรื่องเมื่อกี้...ตอนที่ไฟดับน่ะ นายดูเหมือนจะรู้อะไรบางอย่าง"',
@@ -4646,7 +4698,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ก็แค่...เคยเจอเหตุการณ์คล้ายๆ กันมาก่อน" (หลบสายตาเล็กน้อย)',
@@ -4658,7 +4710,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"แล้วทำไมนายไม่บอกใครล่ะ? ถ้าบอกเร็วกว่านี้ อาจจะไม่วุ่นวายขนาดนั้นก็ได้นะ"',
@@ -4670,7 +4722,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"มันไม่ใช่เรื่องของฉัน...อีกอย่าง พวกนั้นก็คงไม่ฟังคนที่ชอบเก็บตัวอย่างฉันหรอก" (ถอนหายใจเล็กน้อย) "แต่...ฉันก็ไม่ได้อยากให้งานมันพังหรอกนะ"',
@@ -4682,7 +4734,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นาย...เป็นห่วงใช่ไหม?" (สังเกตเห็นแววตาบางอย่างในตัวดิน)',
@@ -4694,7 +4746,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep9_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"เปล่า...แค่รำคาญเฉยๆ" (หันมามองคุณตรงๆ แววตาแฝงความประหลาดใจเล็กน้อย ก่อนจะเบือนหน้าหนี แต่เสียงของเขาไม่ได้เย็นชาเท่าครั้งก่อน)',
@@ -4706,7 +4758,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep9_din_5',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นายไม่จำเป็นต้องเย็นชาตลอดเวลาก็ได้นะดิน...บางทีการเปิดใจก็ไม่ได้แย่อย่างที่คิดหรอก" (ยิ้มเล็กน้อย)',
@@ -4718,7 +4770,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep9_din_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ดินคนนี้...เขาไม่ได้แค่เย็นชา แต่เขายังมีมุมที่เป็นห่วงคนอื่น และอาจจะยังซ่อนความรู้สึกอะไรบางอย่างไว้มากกว่าที่ฉันคิด',
@@ -4777,7 +4829,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep11_intro_din_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเหตุการณ์ในห้องเรียนคณิตฯ และการค้นพบมุมใหม่ของดิน ความสัมพันธ์ระหว่างคุณกับเขาเริ่มพัฒนาไปในทิศทางที่ซับซ้อนขึ้น วันนี้ คุณบังเอิญเห็นเหตุการณ์ที่ไม่คาดฝันในสนามบาสฯ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4787,7 +4839,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep11_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ทางนี้" (โบกมือเรียกคุณเบาๆ)',
@@ -4799,7 +4851,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep11_1_din_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"มีอะไรเหรอดิน? ทำไมมานั่งอยู่ตรงนี้คนเดียว?" (เดินไปหาเขาด้วยความแปลกใจเล็กน้อย)',
@@ -4811,7 +4863,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep11_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"เธอ...ชอบเสียงเพลงใช่ไหม?" (เขาไม่ตอบทันที แต่จ้องมองคุณนิ่งๆ เหมือนกำลังตัดสินใจอะไรบางอย่าง)',
@@ -4823,7 +4875,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep11_2_din_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"อ่า...ก็ชอบค่ะ ทำไมเหรอ?"',
@@ -4835,7 +4887,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep11_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ถ้าอย่างนั้น...มาฟังฉันเล่นดนตรีไหม?" (เขาลุกขึ้นยืน ก้าวเข้ามาใกล้คุณเล็กน้อย) "ไม่ใช่เปียโน...แต่เป็นกีตาร์" (เขาพูดด้วยเสียงเรียบๆ แต่แววตาจริงจัง)',
@@ -4900,7 +4952,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep11_fahsai_appears_din_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้นเอง **ฟ้าใส** ที่เพิ่งเดินผ่านมาพร้อมเพื่อนอีกคน ก็หยุดชะงักเมื่อได้ยินคำชวนของดิน เธอมองมาที่คุณกับดินสลับกัน แววตาของเธอเปลี่ยนไปเล็กน้อยจากความสดใสเป็นความประหลาดใจและแฝงความกังวลบางอย่าง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -4910,7 +4962,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep11_1_din_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อ้าว...คุยอะไรกันอยู่เหรอจ๊ะ?" (เดินเข้ามาหาคุณกับดินด้วยรอยยิ้มที่ดูพยายาม)',
@@ -4922,7 +4974,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep11_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ไม่มีอะไร...แค่ชวนเธอไปฟังดนตรี" (หันไปมองฟ้าใสเพียงครู่เดียว ก่อนจะกลับมาจ้องมองคุณอีกครั้ง)',
@@ -4934,7 +4986,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep11_2_din_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"เหรอ...แต่ [ชื่อคุณ] อยู่ชมรมดนตรีกับฉันนะ ถ้าชอบดนตรีก็มาซ้อมด้วยกันที่ชมรมสิ" (ยิ้มเจื่อนๆ) (เธอยื่นมือมาจับแขนคุณเบาๆ เหมือนจะดึงให้ไปกับเธอ)',
@@ -4946,7 +4998,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep11_din_path_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ดินชวนฉันฟังเขาเล่นดนตรี? นี่เขาจริงจังเหรอ? แล้วฟ้าใส...ทำไมเธอถึงดูแปลกๆ ไปนะ?',
@@ -4993,7 +5045,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep11_intro_fahsai_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเหตุการณ์ในห้องเรียนคณิตฯ และการค้นพบมุมใหม่ของฟ้าใส ความสัมพันธ์ระหว่างคุณกับเธอก็เริ่มพัฒนาไปในทิศทางที่ซับซ้อนขึ้น วันนี้คุณกำลังเดินกลับจากโรงอาหารกับฟ้าใส เธอพูดคุยเรื่องชมรมดนตรีอย่างกระตือรือร้น แต่คุณรู้สึกว่าวันนี้เธอดูติดคุณเป็นพิเศษ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5003,7 +5055,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep11_1_fahsai_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"[ชื่อคุณ]! อาทิตย์หน้าชมรมเราจะมีการแสดงพิเศษนะ เธอต้องมาช่วยฉันเลือกเพลงนะ! แล้วก็...หลังเลิกเรียนวันนี้ไปดูหนังกันไหม? ฉันได้ตั๋วมาสองใบพอดีเลย!" (เธอยิ้มกว้างและจับมือคุณแน่น)',
@@ -5015,7 +5067,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep11_1_fahsai_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"เอ่อ...วันนี้เลยเหรอฟ้าใส? ฉันก็อยากไปนะ แต่..."',
@@ -5080,7 +5132,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep11_din_appears_fahsai_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ทันใดนั้น **ดิน** ที่กำลังเดินผ่านมาพร้อมหนังสือในมือ ก็หยุดกะทันหันเมื่อเห็นคุณกับฟ้าใส เขาหรี่ตาลงเล็กน้อย มองมือที่ฟ้าใสจับคุณอยู่ ก่อนจะถอนหายใจออกมาเบาๆ อย่างไม่พอใจ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5090,7 +5142,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep11_1_fahsai_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"เสียงดัง" (เสียงเรียบนิ่ง แต่สัมผัสได้ถึงความขุ่นมัว)',
@@ -5102,7 +5154,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep11_2_fahsai_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อะไรของนายดิน! นายไม่เกี่ยวซะหน่อย!" (หันไปมองดินอย่างไม่พอใจ)',
@@ -5114,7 +5166,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep11_3_fahsai_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ถ้าอยากรู้เรื่องสมการยากๆ มากกว่านี้...พรุ่งนี้หลังเลิกเรียนฉันว่าง" (เมินหน้าหนีฟ้าใส แต่จ้องมองคุณนิ่งๆ) (เขาพูดแค่นั้นแล้วเดินจากไปทันที โดยไม่รอคำตอบ)',
@@ -5126,7 +5178,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep11_4_fahsai_path',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อะไรของเขานะ! ไม่เคยเข้าใจเลยคนแบบเนี้ย! อย่าไปสนใจเลย [ชื่อคุณ] ไปดูหนังกันดีกว่านะ!" (บ่นอุบอิบ)',
@@ -5138,7 +5190,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep11_fahsai_path_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ดิน...เขามาไม้ไหนเนี่ย? แล้วฟ้าใสก็ดูไม่ชอบดินเอามากๆ เลย...นี่ฉันกำลังอยู่ตรงกลางของอะไรบางอย่างอยู่เหรอเนี่ย?',
@@ -5178,7 +5230,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep11',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'คุณจะตอบรับคำชวนของใคร หรือเลือกที่จะจัดการกับสถานการณ์นี้อย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5231,7 +5283,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep12_fahsai_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเหตุการณ์ที่สนามบาสฯ หรือเหตุการณ์ที่ฟ้าใสแสดงออกชัดเจนขึ้น คุณรู้สึกว่าต้องเคลียร์ใจกับเธอ คุณชวนฟ้าใสมาคุยกันที่ห้องชมรมศิลปะ เพราะรู้ว่าที่นี่มักจะเงียบสงบ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5241,7 +5293,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฟ้าใส...ฉันมีเรื่องอยากจะคุยกับเธอหน่อยน่ะ"',
@@ -5253,7 +5305,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep12_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"เรื่องอะไรเหรอ? เรื่องที่ฉันดูแปลกๆ ไปใช่ไหม? หรือว่า...เรื่องดิน?" (ยิ้มเศร้าๆ)',
@@ -5265,7 +5317,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_fahsai_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉัน...ฉันแค่รู้สึกว่าช่วงนี้เธอไม่ค่อยสบายใจน่ะ มีอะไรที่ฉันพอจะช่วยได้ไหม?"',
@@ -5277,7 +5329,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep12_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"จริงๆ แล้ว...ฉันชอบเธอนะ [ชื่อคุณ]" (ถอนหายใจ) (เธอพูดออกมาอย่างตรงไปตรงมา แต่แววตาเต็มไปด้วยความกังวล) "ตั้งแต่เธอเข้ามา ฉันก็รู้สึกดีๆ กับเธอมาตลอดเลย เธอเป็นคนแรกที่มองทะลุรอยยิ้มของฉันออกไป...เป็นคนแรกที่ทำให้ฉันรู้สึกว่าไม่ต้องสมบูรณ์แบบก็ได้"',
@@ -5289,7 +5341,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_fahsai_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฟ้าใส..." (ตกใจเล็กน้อยกับคำสารภาพของฟ้าใส)',
@@ -5301,7 +5353,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep12_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"และฉันก็รู้...ว่าดินก็สนใจเธอเหมือนกัน" (เธอก้มหน้า) "กำไลนำโชคของแม่ที่หายไปน่ะ...จริงๆ แล้วฉันไม่ได้กลัวว่าจะทำให้แม่โกรธอย่างเดียวหรอกนะ ฉันกลัวว่าฉันจะไม่มีอะไรพิเศษพอที่จะอยู่ข้างเธอได้ต่างหาก...ฉันกลัวว่าถ้าไม่มีกำไลนั่น ฉันก็ไม่ใช่ฟ้าใสที่คู่ควรกับความรู้สึกดีๆ ของใคร"',
@@ -5313,7 +5365,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_fahsai_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฟ้าใส...เธอไม่จำเป็นต้องมีกำไลนำโชคอะไรเลย เธอดีพออยู่แล้ว...และฉันก็ชอบเธอที่เป็นเธอแบบนี้จริงๆ นะ" (สวมกอดฟ้าใสเบาๆ)',
@@ -5372,7 +5424,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep12_din_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเหตุการณ์ที่สนามบาสฯ หรือท่าทีของดินที่เปลี่ยนไป คุณรู้สึกว่าต้องทำความเข้าใจกับเขาให้ชัดเจน คุณชวนดินมาคุยกันที่ห้องชมรมศิลปะ ซึ่งเป็นที่ที่คุณรู้ว่าเขามักจะมาอยู่เงียบๆ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5382,7 +5434,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน...นายมีอะไรอยากจะบอกฉันใช่ไหม?"',
@@ -5394,7 +5446,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep12_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"นี่...คือสมุดของปู่ฉัน" (เขานั่งเงียบอยู่ครู่หนึ่ง ก่อนจะลุกขึ้นยืนแล้วเดินไปที่มุมหนึ่งของห้อง และหยิบสมุดเก่าๆ เล่มหนึ่งออกมา มันคือ "สมุดรุ่น" เล่มเก่าๆ ที่มีหน้ากระดาษว่างเปล่าเหลืออยู่ไม่มากนัก)',
@@ -5406,7 +5458,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"สมุดรุ่น?"',
@@ -5418,7 +5470,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep12_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ปู่ฉัน...เป็นนักดนตรี เขาเคยรักดนตรีมาก แต่ก็ถูกสังคมกดดันให้ไปทำอาชีพอื่น ตอนที่เขาเสียไป เขาขอให้ฉันวาดรูปเขาเล่นดนตรีในสมุดเล่มนี้...แต่ฉันก็ไม่เคยทำได้เลย" (เปิดหน้าสมุดออก หน้าแรกๆ มีรูปวาดง่ายๆ ของเด็กผู้ชายคนหนึ่งกำลังเล่นเปียโน) (เขาใช้มือลูบภาพวาดเหล่านั้น) "ฉันกลัว...กลัวว่าถ้าฉันจริงจังกับอะไรมากๆ แล้วมันจะไม่เป็นอย่างที่หวัง...เหมือนที่ปู่ฉันเคยเป็น"',
@@ -5430,7 +5482,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep12_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นายเลยเลือกที่จะเก็บตัว ไม่แสดงความรู้สึกใช่ไหม?"',
@@ -5442,7 +5494,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep12_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ฉันไม่ชอบความวุ่นวาย ไม่ชอบการถูกตัดสิน...และฉันก็ไม่คิดว่าจะมีใครเข้าใจ" (พยักหน้า) (เขาหันมามองคุณตรงๆ แววตาที่เคยเย็นชาตอนนี้กลับแฝงความอ่อนโยนและเจ็บปวด) "จนกระทั่ง...เธอเข้ามา"',
@@ -5454,7 +5506,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep12_din_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'นี่คือปมของเขาจริงๆ ด้วย...ความกลัวที่จะผิดหวังเหมือนกับคนที่เขารัก',
@@ -5466,7 +5518,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep12_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ฉันรู้ว่าฉัน...ปากไม่ดี บางทีก็ทำให้เธอเข้าใจผิด...แต่ฉัน...ฉันอยากอยู่ข้างๆ เธอ" (เขาพูดออกมาอย่างยากลำบาก แต่คำพูดนั้นหนักแน่น) "ฉันอยากจะลองกล้าหาญมากขึ้น...เพื่อเธอ"',
@@ -5518,7 +5570,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'วันนี้คือวันสำคัญ วันสุดท้ายในรั้วโรงเรียนแสงอรุณ ก่อนที่ทุกคนจะแยกย้ายกันไปตามเส้นทางของตัวเอง คุณยืนอยู่ท่ามกลางเพื่อนๆ พร้อมกับความรู้สึกที่หลากหลายในใจ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5567,7 +5619,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep13',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเผชิญหน้ากับความจริงในใจของตนเอง คุณจะตัดสินใจเลือกเส้นทางความสัมพันธ์หลักในตอนนี้อย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5619,7 +5671,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_fahsai_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยืนอยู่กับ **ฟ้าใส** เธอสวมชุดครุยสีขาวบริสุทธิ์และยิ้มอย่างสดใส เธอเป็นคนแรกที่คุณมองหาในวันนี้)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5629,7 +5681,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ดีใจจังเลยนะ [ชื่อคุณ] ที่ได้เจอเธอที่นี่" (จับมือคุณเบาๆ)',
@@ -5641,7 +5693,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็เหมือนกันฟ้าใส...ดีใจที่ได้รู้จักเธอ"',
@@ -5653,7 +5705,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"หลังจากนี้...ถึงเราจะไม่ได้เรียนที่เดียวกัน แต่เราก็ยังเป็นเพื่อนที่ดีต่อกันได้เสมอใช่ไหม?" (เธอจ้องตาคุณด้วยแววตาที่เต็มไปด้วยความหวังและความรู้สึก)',
@@ -5665,7 +5717,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_fahsai_2_choice',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"แน่นอนอยู่แล้วฟ้าใส! ไม่ว่าเราจะไปที่ไหน มิตรภาพของเราก็จะยังคงอยู่เสมอ...และฉันก็อยากให้มันพัฒนาต่อไปด้วยนะ" (กระชับมือฟ้าใสแน่น) (คุณส่งยิ้มที่อบอุ่นที่สุดให้เธอ)',
@@ -5677,7 +5729,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"จริงนะ! ฉัน...ฉันก็จะพยายามให้ดีที่สุดเหมือนกัน! เพื่อเรา" (รอยยิ้มของเธอกว้างขึ้น และดวงตาเป็นประกาย)',
@@ -5731,7 +5783,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_din_passing_fahsai_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้น คุณเห็น **ดิน** เดินผ่านมา เขามองมาที่คุณสองคนเล็กน้อย แล้วพยักหน้าให้คุณเบาๆ ก่อนจะเดินจากไปเงียบๆ แม้จะมีร่องรอยของความรู้สึกบางอย่างในแววตา แต่ก็เป็นการยอมรับและก้าวต่อไป)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5741,7 +5793,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_fahsai_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'เส้นทางใหม่กำลังจะเริ่มต้นขึ้น...และฉันก็พร้อมที่จะเดินไปกับความสัมพันธ์นี้',
@@ -5788,7 +5840,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_din_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณกำลังยืนอยู่กับ **ดิน** ที่มุมหนึ่งของสนาม เขาดูเนี้ยบในชุดครุย แต่ยังคงมีแววตาที่สงบนิ่ง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5798,7 +5850,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ไม่น่าเชื่อเลยนะดิน...ว่าวันนี้จะมาถึงแล้ว"',
@@ -5810,7 +5862,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"อืม...เวลาผ่านไปเร็วจริงๆ" (หันมามองคุณ) (เขายกมือขึ้นมาลูบผมคุณเบาๆ ซึ่งเป็นการกระทำที่ไม่บ่อยนักจากเขา) "ขอบคุณนะที่ทำให้ฉัน...กล้าที่จะลอง"',
@@ -5822,7 +5874,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็ขอบคุณนายเหมือนกันนะดิน...ที่ทำลายกำแพงของตัวเองเพื่อฉัน"',
@@ -5834,7 +5886,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ฉัน...จะพยายามแสดงออกให้มากกว่านี้" (มุมปากยกขึ้นเล็กน้อยเป็นรอยยิ้มที่หาดูยาก) (เขาพูดด้วยเสียงแผ่วเบา แต่จริงใจ) "หลังจากนี้...ไม่ว่าเธอจะไปเรียนที่ไหน...ฉันก็จะอยู่ข้างๆ เสมอ"',
@@ -5846,7 +5898,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็จะอยู่ข้างๆ นายเสมอเหมือนกันนะดิน" (จับมือเขาแน่น)',
@@ -5900,7 +5952,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_fahsai_passing_din_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้น คุณเห็น **ฟ้าใส** กำลังมองมาที่คุณสองคนจากระยะไกล เธอไม่ได้เข้ามาทัก แต่ส่งรอยยิ้มที่เต็มไปด้วยความเข้าใจและคำอวยพรให้คุณ ก่อนจะหันไปเดินกับกลุ่มเพื่อนของเธอ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5910,7 +5962,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_din_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันเลือกทางเดินนี้แล้ว...และฉันก็พร้อมที่จะเรียนรู้ความรักไปพร้อมกับเขา',
@@ -5950,7 +6002,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_friendship_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยืนอยู่คนเดียวเล็กน้อย มองดูเพื่อนๆ ถ่ายรูปกันอย่างสนุกสนาน คุณมีความสุขที่ได้เห็นทุกคนมีความสุข)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -5960,7 +6012,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_friend_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"[ชื่อคุณ]! มาถ่ายรูปด้วยกันสิ!" (เดินเข้ามาพร้อมรอยยิ้ม)',
@@ -5972,7 +6024,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_friend_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ยินดีด้วยนะ" (เดินเข้ามาจากอีกทางหนึ่ง)',
@@ -5984,7 +6036,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_friend_1_choice',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ขอบคุณนะฟ้าใส ขอบคุณนะดิน" (ยิ้มให้ทั้งสองคน) (คุณรู้สึกถึงความผูกพันที่แน่นแฟ้นกับทั้งคู่) "ดีใจนะที่ได้เป็นเพื่อนกับพวกเธอ"',
@@ -5996,7 +6048,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_friend_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"แน่นอนอยู่แล้วสิ! เราเป็นเพื่อนกันตลอดไปนะ!" (เธอกอดคุณเบาๆ)',
@@ -6008,7 +6060,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_friend_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ถ้ามีอะไร...ก็บอกแล้วกัน" (พยักหน้าเล็กน้อย) (แม้คำพูดจะสั้นๆ แต่แววตากลับเต็มไปด้วยความห่วงใย)',
@@ -6020,7 +6072,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_friendship_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันอาจจะยังไม่พร้อมที่จะตัดสินใจเรื่องความรักในตอนนี้ แต่การมีมิตรภาพที่แข็งแกร่งแบบนี้ก็ถือเป็นของขวัญที่ล้ำค่าที่สุดแล้ว...',
@@ -6061,7 +6113,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'วันนี้คือวันสำคัญ วันสุดท้ายในรั้วโรงเรียนแสงอรุณ ก่อนที่ทุกคนจะแยกย้ายกันไปตามเส้นทางของตัวเอง คุณยืนอยู่ท่ามกลางเพื่อนๆ พร้อมกับความรู้สึกที่หลากหลายในใจ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6110,7 +6162,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep13',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเผชิญหน้ากับความจริงในใจของตนเอง คุณจะตัดสินใจเลือกเส้นทางความสัมพันธ์หลักในตอนนี้อย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6162,7 +6214,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_fahsai_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยืนอยู่กับ **ฟ้าใส** เธอสวมชุดครุยสีขาวบริสุทธิ์และยิ้มอย่างสดใส เธอเป็นคนแรกที่คุณมองหาในวันนี้)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6172,7 +6224,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ดีใจจังเลยนะ [ชื่อคุณ] ที่ได้เจอเธอที่นี่" (จับมือคุณเบาๆ)',
@@ -6184,7 +6236,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็เหมือนกันฟ้าใส...ดีใจที่ได้รู้จักเธอ"',
@@ -6196,7 +6248,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"หลังจากนี้...ถึงเราจะไม่ได้เรียนที่เดียวกัน แต่เราก็ยังเป็นเพื่อนที่ดีต่อกันได้เสมอใช่ไหม?" (เธอจ้องตาคุณด้วยแววตาที่เต็มไปด้วยความหวังและความรู้สึก)',
@@ -6208,7 +6260,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_fahsai_2_choice',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"แน่นอนอยู่แล้วฟ้าใส! ไม่ว่าเราจะไปที่ไหน มิตรภาพของเราก็จะยังคงอยู่เสมอ...และฉันก็อยากให้มันพัฒนาต่อไปด้วยนะ" (กระชับมือฟ้าใสแน่น) (คุณส่งยิ้มที่อบอุ่นที่สุดให้เธอ)',
@@ -6220,7 +6272,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"จริงนะ! ฉัน...ฉันก็จะพยายามให้ดีที่สุดเหมือนกัน! เพื่อเรา" (รอยยิ้มของเธอกว้างขึ้น และดวงตาเป็นประกาย)',
@@ -6274,7 +6326,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_din_passing_fahsai_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้น คุณเห็น **ดิน** เดินผ่านมา เขามองมาที่คุณสองคนเล็กน้อย แล้วพยักหน้าให้คุณเบาๆ ก่อนจะเดินจากไปเงียบๆ แม้จะมีร่องรอยของความรู้สึกบางอย่างในแววตา แต่ก็เป็นการยอมรับและก้าวต่อไป)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6284,7 +6336,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_fahsai_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'เส้นทางใหม่กำลังจะเริ่มต้นขึ้น...และฉันก็พร้อมที่จะเดินไปกับความสัมพันธ์นี้',
@@ -6331,7 +6383,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_din_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณกำลังยืนอยู่กับ **ดิน** ที่มุมหนึ่งของสนาม เขาดูเนี้ยบในชุดครุย แต่ยังคงมีแววตาที่สงบนิ่ง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6341,7 +6393,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ไม่น่าเชื่อเลยนะดิน...ว่าวันนี้จะมาถึงแล้ว"',
@@ -6353,7 +6405,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"อืม...เวลาผ่านไปเร็วจริงๆ" (หันมามองคุณ) (เขายกมือขึ้นมาลูบผมคุณเบาๆ ซึ่งเป็นการกระทำที่ไม่บ่อยนักจากเขา) "ขอบคุณนะที่ทำให้ฉัน...กล้าที่จะลอง"',
@@ -6365,7 +6417,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็ขอบคุณนายเหมือนกันนะดิน...ที่ทำลายกำแพงของตัวเองเพื่อฉัน"',
@@ -6377,7 +6429,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ฉัน...จะพยายามแสดงออกให้มากกว่านี้" (มุมปากยกขึ้นเล็กน้อยเป็นรอยยิ้มที่หาดูยาก) (เขาพูดด้วยเสียงแผ่วเบา แต่จริงใจ) "หลังจากนี้...ไม่ว่าเธอจะไปเรียนที่ไหน...ฉันก็จะอยู่ข้างๆ เสมอ"',
@@ -6389,7 +6441,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็จะอยู่ข้างๆ นายเสมอเหมือนกันนะดิน" (จับมือเขาแน่น)',
@@ -6443,7 +6495,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_fahsai_passing_din_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้น คุณเห็น **ฟ้าใส** กำลังมองมาที่คุณสองคนจากระยะไกล เธอไม่ได้เข้ามาทัก แต่ส่งรอยยิ้มที่เต็มไปด้วยความเข้าใจและคำอวยพรให้คุณ ก่อนจะหันไปเดินกับกลุ่มเพื่อนของเธอ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6453,7 +6505,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_din_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันเลือกทางเดินนี้แล้ว...และฉันก็พร้อมที่จะเรียนรู้ความรักไปพร้อมกับเขา',
@@ -6494,7 +6546,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'วันนี้คือวันสำคัญ วันสุดท้ายในรั้วโรงเรียนแสงอรุณ ก่อนที่ทุกคนจะแยกย้ายกันไปตามเส้นทางของตัวเอง คุณยืนอยู่ท่ามกลางเพื่อนๆ พร้อมกับความรู้สึกที่หลากหลายในใจ',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6543,7 +6595,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep13',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลังจากเผชิญหน้ากับความจริงในใจของตนเอง คุณจะตัดสินใจเลือกเส้นทางความสัมพันธ์หลักในตอนนี้อย่างไร?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6595,7 +6647,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_fahsai_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยืนอยู่กับ **ฟ้าใส** เธอสวมชุดครุยสีขาวบริสุทธิ์และยิ้มอย่างสดใส เธอเป็นคนแรกที่คุณมองหาในวันนี้)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6605,7 +6657,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ดีใจจังเลยนะ [ชื่อคุณ] ที่ได้เจอเธอที่นี่" (จับมือคุณเบาๆ)',
@@ -6617,7 +6669,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็เหมือนกันฟ้าใส...ดีใจที่ได้รู้จักเธอ"',
@@ -6629,7 +6681,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"หลังจากนี้...ถึงเราจะไม่ได้เรียนที่เดียวกัน แต่เราก็ยังเป็นเพื่อนที่ดีต่อกันได้เสมอใช่ไหม?" (เธอจ้องตาคุณด้วยแววตาที่เต็มไปด้วยความหวังและความรู้สึก)',
@@ -6641,7 +6693,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_fahsai_2_choice',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"แน่นอนอยู่แล้วฟ้าใส! ไม่ว่าเราจะไปที่ไหน มิตรภาพของเราก็จะยังคงอยู่เสมอ...และฉันก็อยากให้มันพัฒนาต่อไปด้วยนะ" (กระชับมือฟ้าใสแน่น) (คุณส่งยิ้มที่อบอุ่นที่สุดให้เธอ)',
@@ -6653,7 +6705,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"จริงนะ! ฉัน...ฉันก็จะพยายามให้ดีที่สุดเหมือนกัน! เพื่อเรา" (รอยยิ้มของเธอกว้างขึ้น และดวงตาเป็นประกาย)',
@@ -6707,7 +6759,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_din_passing_fahsai_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้น คุณเห็น **ดิน** เดินผ่านมา เขามองมาที่คุณสองคนเล็กน้อย แล้วพยักหน้าให้คุณเบาๆ ก่อนจะเดินจากไปเงียบๆ แม้จะมีร่องรอยของความรู้สึกบางอย่างในแววตา แต่ก็เป็นการยอมรับและก้าวต่อไป)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6717,7 +6769,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_fahsai_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'เส้นทางใหม่กำลังจะเริ่มต้นขึ้น...และฉันก็พร้อมที่จะเดินไปกับความสัมพันธ์นี้',
@@ -6764,7 +6816,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_din_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณกำลังยืนอยู่กับ **ดิน** ที่มุมหนึ่งของสนาม เขาดูเนี้ยบในชุดครุย แต่ยังคงมีแววตาที่สงบนิ่ง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6774,7 +6826,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ไม่น่าเชื่อเลยนะดิน...ว่าวันนี้จะมาถึงแล้ว"',
@@ -6786,7 +6838,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"อืม...เวลาผ่านไปเร็วจริงๆ" (หันมามองคุณ) (เขายกมือขึ้นมาลูบผมคุณเบาๆ ซึ่งเป็นการกระทำที่ไม่บ่อยนักจากเขา) "ขอบคุณนะที่ทำให้ฉัน...กล้าที่จะลอง"',
@@ -6798,7 +6850,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็ขอบคุณนายเหมือนกันนะดิน...ที่ทำลายกำแพงของตัวเองเพื่อฉัน"',
@@ -6810,7 +6862,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ฉัน...จะพยายามแสดงออกให้มากกว่านี้" (มุมปากยกขึ้นเล็กน้อยเป็นรอยยิ้มที่หาดูยาก) (เขาพูดด้วยเสียงแผ่วเบา แต่จริงใจ) "หลังจากนี้...ไม่ว่าเธอจะไปเรียนที่ไหน...ฉันก็จะอยู่ข้างๆ เสมอ"',
@@ -6822,7 +6874,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉันก็จะอยู่ข้างๆ นายเสมอเหมือนกันนะดิน" (จับมือเขาแน่น)',
@@ -6876,7 +6928,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_fahsai_passing_din_path',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ในขณะนั้น คุณเห็น **ฟ้าใส** กำลังมองมาที่คุณสองคนจากระยะไกล เธอไม่ได้เข้ามาทัก แต่ส่งรอยยิ้มที่เต็มไปด้วยความเข้าใจและคำอวยพรให้คุณ ก่อนจะหันไปเดินกับกลุ่มเพื่อนของเธอ)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6886,7 +6938,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_din_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันเลือกทางเดินนี้แล้ว...และฉันก็พร้อมที่จะเรียนรู้ความรักไปพร้อมกับเขา',
@@ -6926,7 +6978,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep13_friendship_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยืนอยู่คนเดียวเล็กน้อย มองดูเพื่อนๆ ถ่ายรูปกันอย่างสนุกสนาน คุณมีความสุขที่ได้เห็นทุกคนมีความสุข)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -6936,7 +6988,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_friend_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"[ชื่อคุณ]! มาถ่ายรูปด้วยกันสิ!" (เดินเข้ามาพร้อมรอยยิ้ม)',
@@ -6948,7 +7000,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_friend_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ยินดีด้วยนะ" (เดินเข้ามาจากอีกทางหนึ่ง)',
@@ -6960,7 +7012,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep13_friend_1_choice',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ขอบคุณนะฟ้าใส ขอบคุณนะดิน" (ยิ้มให้ทั้งสองคน) (คุณรู้สึกถึงความผูกพันที่แน่นแฟ้นกับทั้งคู่) "ดีใจนะที่ได้เป็นเพื่อนกับพวกเธอ"',
@@ -6972,7 +7024,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep13_friend_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"แน่นอนอยู่แล้วสิ! เราเป็นเพื่อนกันตลอดไปนะ!" (เธอกอดคุณเบาๆ)',
@@ -6984,7 +7036,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep13_friend_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ถ้ามีอะไร...ก็บอกแล้วกัน" (พยักหน้าเล็กน้อย) (แม้คำพูดจะสั้นๆ แต่แววตากลับเต็มไปด้วยความห่วงใย)',
@@ -6996,7 +7048,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep13_friendship_final',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฉันอาจจะยังไม่พร้อมที่จะตัดสินใจเรื่องความรักในตอนนี้ แต่การมีมิตรภาพที่แข็งแกร่งแบบนี้ก็ถือเป็นของขวัญที่ล้ำค่าที่สุดแล้ว...',
@@ -7036,7 +7088,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep14_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'แม้ว่าคุณจะได้ตัดสินใจเลือกเส้นทางความสัมพันธ์ของคุณไปแล้ว แต่ก็ยังมีบางความรู้สึกที่ไม่สามารถละทิ้งไปได้ง่ายๆ ในวันสุดท้ายของการเป็นนักเรียนมัธยมปลาย คุณได้มีโอกาสพูดคุยกับ...',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7082,7 +7134,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep14_fahsai_unchosen_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณกำลังเดินไปที่มุมหนึ่งของสนามหญ้า และเห็น **ฟ้าใส** กำลังยืนอยู่คนเดียว เธอกำลังมองไปยังกลุ่มเพื่อนของเธอ แต่ไม่ได้เดินเข้าไปรวมกับใคร)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7092,7 +7144,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฟ้าใส...เธอไม่ได้ไปถ่ายรูปกับเพื่อนๆ เหรอ?"',
@@ -7104,7 +7156,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep14_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"อ้าว [ชื่อคุณ]! ฉันกำลังคิดอะไรเพลินๆ อยู่น่ะจ้ะ" (หันมามองคุณพร้อมรอยยิ้มอ่อนโยน) (รอยยิ้มของเธอดูสงบ แต่แฝงความเศร้าจางๆ)',
@@ -7116,7 +7168,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_fahsai_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉัน...อยากขอบคุณเธอนะฟ้าใส ขอบคุณสำหรับทุกอย่างที่ผ่านมา"',
@@ -7128,7 +7180,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep14_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ไม่ต้องขอบคุณหรอก...ฉันเองก็มีความสุขมากที่ได้รู้จักเธอ และได้อยู่ข้างๆ เธอในช่วงเวลานี้" (เธอมองลึกเข้ามาในดวงตาของคุณ) "ฉันรู้ว่าเธอเลือกทางไหน...และฉันก็เข้าใจนะ"',
@@ -7140,7 +7192,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_fahsai_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฟ้าใส..."',
@@ -7152,7 +7204,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep14_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ไม่เป็นไรหรอก" (เธอยื่นมือมาจับมือคุณเบาๆ) "ความสุขของเธอก็คือความสุขของฉันนะ [ชื่อคุณ] ไม่ว่าเราจะไปเรียนที่ไหน หรือเจอใครใหม่ๆ...เราก็ยังเป็นเพื่อนที่ดีต่อกันได้เสมอใช่ไหม?"',
@@ -7164,7 +7216,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_fahsai_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"แน่นอนอยู่แล้วฟ้าใส! เธอจะเป็นเพื่อนคนสำคัญของฉันตลอดไป" (บีบมือเธอตอบ)',
@@ -7176,7 +7228,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep14_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส',
                     content: '"ดีใจจัง...ดูแลตัวเองดีๆ นะ แล้วก็...มีความสุขกับเส้นทางที่เลือกนะจ๊ะ" (ยิ้มกว้างขึ้น น้ำตาคลอเล็กน้อย) (เธอกอดคุณเบาๆ ก่อนจะผละออกแล้วเดินไปรวมกลุ่มกับเพื่อนๆ อย่างเข้มแข็ง)',
@@ -7188,7 +7240,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep14_fahsai_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ฟ้าใส...เธอเป็นคนใจดีและเข้มแข็งจริงๆ ฉันจะไม่ลืมช่วงเวลาที่เรามีร่วมกันเลย',
@@ -7235,7 +7287,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep14_din_unchosen_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณกำลังเดินไปที่มุมหนึ่งของสนามหญ้า และเห็น **ดิน** กำลังนั่งอยู่บนม้านั่งอย่างเงียบๆ เขามองเหม่อไปยังท้องฟ้า)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7245,7 +7297,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน...นายไม่ไปถ่ายรูปกับเพื่อนๆ เหรอ?"',
@@ -7257,7 +7309,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep14_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ไม่อ่ะ...คนเยอะ" (หันมามองคุณนิ่งๆ) (เสียงของเขายังคงเรียบเฉย แต่แววตาไม่ได้เย็นชาเหมือนวันแรกๆ)',
@@ -7269,7 +7321,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฉัน...อยากมาคุยกับนายหน่อยน่ะ"',
@@ -7281,7 +7333,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep14_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ไม่ต้องขอบคุณ" (พยักหน้าเล็กน้อย) (เขาหลบสายตาไปทางอื่น) "ฉันก็...ได้เรียนรู้อะไรบางอย่างจากเธอเหมือนกัน" (เขาหยุดไปครู่หนึ่ง) "เรื่องนั้น...ฉันเข้าใจ"',
@@ -7293,7 +7345,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_din_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ดิน..."',
@@ -7305,7 +7357,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep14_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"ความรู้สึก...มันบังคับกันไม่ได้" (เขามองมาที่คุณอีกครั้ง) "แต่...มิตรภาพมันอยู่ได้นานกว่า" (เขาพูดคำที่ดูไม่ใช่ตัวเขาเลย) "ดูแลตัวเองดีๆ แล้วกัน"',
@@ -7317,7 +7369,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep14_din_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"นาย...ก็เหมือนกันนะดิน นายจะเป็นเพื่อนคนสำคัญของฉันเสมอ" (ประหลาดใจกับคำพูดของเขา)',
@@ -7329,7 +7381,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep14_4',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน',
                     content: '"อืม" (มุมปากกระตุกเล็กน้อยคล้ายรอยยิ้ม) (เขาไม่พูดอะไรอีก แต่คุณรู้สึกได้ถึงความเข้าใจที่ส่งผ่านมา) (เขาลุกขึ้นยืนและเดินจากไปอย่างเงียบๆ ทิ้งไว้เพียงความรู้สึกอบอุ่นในใจคุณ)',
@@ -7341,7 +7393,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep14_din_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ดิน...นายเองก็มีมุมที่อ่อนโยนแบบนี้ด้วยสินะ ฉันดีใจจริงๆ ที่ได้รู้จักนาย',
@@ -7382,7 +7434,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep15_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'หลายเดือนผ่านไปหลังจากพิธีจบการศึกษา วันนี้คือวันแรกของการเริ่มต้นชีวิตบทใหม่ในรั้วมหาวิทยาลัย คุณยืนอยู่หน้าประตูทางเข้ามหาวิทยาลัยที่คุณเลือก ความรู้สึกตื่นเต้น ประหม่า และคาดหวังปะปนกันไป',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7392,7 +7444,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep15_1',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'มหาวิทยาลัย...มันใหญ่กว่าที่คิดไว้เยอะเลยแฮะ...แต่ฉันก็ตื่นเต้นมากๆ เลย!',
@@ -7443,7 +7495,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep15_fahsai_call_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ทันใดนั้น โทรศัพท์ของคุณก็สั่น คุณหยิบขึ้นมาดู ปรากฏเป็นสายเรียกเข้าจาก **\'ฟ้าใส\'** คุณกดรับสายด้วยรอยยิ้ม)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7453,7 +7505,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep15_fahsai_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฮัลโหลฟ้าใส!"',
@@ -7465,7 +7517,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep15_1_call',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส (เสียงจากโทรศัพท์)',
                     content: '"ถึงแล้วเหรอ [ชื่อคุณ]! ฉันอยู่หน้าหอพักแล้วนะ! ห้องของฉันอยู่ชั้นสาม ใกล้ๆ โรงอาหารเลย! เธอถึงไหนแล้ว? ให้ฉันไปช่วยไหม?"',
@@ -7477,7 +7529,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep15_fahsai_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"ฮ่าๆ ไม่เป็นไรจ้ะฟ้าใส ฉันจัดการได้! อีกเดี๋ยวก็ถึงแล้วแหละ!"',
@@ -7489,7 +7541,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep15_2_call',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส (เสียงจากโทรศัพท์)',
                     content: '"งั้นรีบมานะ! ฉันมีเรื่องอยากเล่าให้ฟังเยอะแยะเลย! แล้วก็...คืนนี้เราไปหาอะไรอร่อยๆ กินกันนะ! ฉันคิดถึงเธอจะแย่แล้ว!"',
@@ -7501,7 +7553,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep15_fahsai_3',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ',
                     content: '"อื้อ! รีบไปหาแน่นอน! แล้วเจอกันนะ!"',
@@ -7513,7 +7565,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep15_fahsai_call_end',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณวางสาย ใบหน้าเปื้อนยิ้มอบอุ่น การรู้ว่าฟ้าใสอยู่ใกล้ๆ ทำให้หัวใจของคุณพองโต)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7523,7 +7575,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep15_fahsai_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ชีวิตมหาวิทยาลัยกำลังจะเริ่มต้นขึ้น...และฉันก็ไม่ได้เดินอยู่คนเดียว',
@@ -7563,7 +7615,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep15_din_message_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ข้อความเข้า...คุณหยิบโทรศัพท์ขึ้นมาดู ข้อความจาก **\'ดิน\'**)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7573,7 +7625,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep15_1_message',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din, // ให้มี speakerDisplayName แต่จะอยู่ในกรอบข้อความ
                     speakerDisplayName: 'ดิน (ข้อความ)',
                     content: '"ถึงแล้ว?"',
@@ -7585,7 +7637,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep15_lisa_smile_din_message',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยิ้มเล็กน้อยกับความสั้นกระชับของเขา)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7595,7 +7647,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep15_din_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (พิมพ์ตอบ)',
                     content: '"ถึงแล้ว! นายอยู่ไหน?"',
@@ -7607,7 +7659,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep15_din_message_location',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(ไม่นานนัก ข้อความก็เด้งกลับมาพร้อมตำแหน่ง)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7617,7 +7669,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep15_2_message',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน (ข้อความ)',
                     content: '"ตึกคณะวิศวะ...จะแวะมาดูงานศิลปะแถวนี้"',
@@ -7629,7 +7681,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep15_lisa_look_din_location',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณหันไปมองตามทิศทางที่ดินส่งมา ตึกคณะวิศวะอยู่ไม่ไกลนักจากจุดที่คุณยืนอยู่)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7639,7 +7691,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep15_din_2',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (พิมพ์ตอบ)',
                     content: '"งั้นเดี๋ยวฉันเก็บของเสร็จแล้วจะแวะไปหานะ!"',
@@ -7651,7 +7703,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep15_3_message',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน (ข้อความ)',
                     content: '"อืม"',
@@ -7663,7 +7715,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep15_din_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'ชีวิตมหาวิทยาลัยกำลังจะเริ่มต้นขึ้น...และฉันก็ไม่ได้เดินอยู่คนเดียว',
@@ -7703,7 +7755,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'narration_ep15_chat_intro',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(โทรศัพท์ของคุณสั่น มีข้อความจากกลุ่มแชท **\'เพื่อนซี้แสงอรุณ\'** เด้งขึ้นมา)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7713,7 +7765,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_fahsai_ep15_1_chat',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.fah_sai,
                     speakerDisplayName: 'ฟ้าใส (ในแชท)',
                     content: '"ฉันถึงหอแล้วนะ! [ชื่อคุณ] ถึงไหนแล้ว? ไว้ว่างๆ มาเที่ยวหอฉันนะ!"',
@@ -7725,7 +7777,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_din_ep15_1_chat',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.din,
                     speakerDisplayName: 'ดิน (ในแชท)',
                     content: '"ตั้งใจเรียน"',
@@ -7737,7 +7789,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'narration_ep15_lisa_smile_chat',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: '(คุณยิ้มเล็กน้อยกับความแตกต่างของทั้งสองคน)',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7747,7 +7799,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'dialogue_lisa_ep15_chat_1',
-                    type: 'dialogue',
+                    type: TextContentType.DIALOGUE,
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (พิมพ์ตอบ)',
                     content: '"ถึงแล้วจ้าาา! ไว้ว่างๆ เจอกันนะทุกคน! จะตั้งใจเรียนแน่นอน!"',
@@ -7759,7 +7811,7 @@ const createtheyearbooksecretscenes = async (
                 },
                 {
                     instanceId: 'lisa_thought_ep15_friendship_final',
-                    type: 'dialogue', // ความคิดในใจ
+                    type: TextContentType.DIALOGUE, // ความคิดในใจ
                     characterId: characterMap.lisa,
                     speakerDisplayName: 'คุณ (คิดในใจ)',
                     content: 'มิตรภาพยังคงอยู่เสมอ...และฉันก็พร้อมที่จะค้นหาตัวเองและสร้างเรื่องราวบทใหม่ในรั้วมหาวิทยาลัยแห่งนี้',
@@ -7799,7 +7851,7 @@ const createtheyearbooksecretscenes = async (
             textContents: [
                 {
                     instanceId: 'choice_prompt_ep15',
-                    type: 'narration',
+                    type: TextContentType.NARRATION,
                     content: 'คุณจะก้าวเข้าสู่ชีวิตมหาวิทยาลัยด้วยความคิดแบบไหน?',
                     fontSize: 16,
                     color: '#ffffff',
@@ -7862,7 +7914,43 @@ const createtheyearbooksecretscenes = async (
 // declare const createtheyearbooksecretChoices: (novelId: mongoose.Types.ObjectId, authorId: mongoose.Types.ObjectId) => Promise<any[]>;
 // declare const createtheyearbooksecretscenes: (novelId: mongoose.Types.ObjectId, episodeId: mongoose.Types.ObjectId, characters: any[]) => Promise<any[]>;
 
+const findOrCreateCategory = async (name: string, type: CategoryType, slug: string) => {
+    // Check for existing category by slug and type (most reliable)
+    let category = await CategoryModel.findOne({ slug, categoryType: type });
+    
+    // If not found by slug, check by name and type (fallback)
+    if (!category) {
+        category = await CategoryModel.findOne({ name, categoryType: type });
+    }
+    
+    if (!category) {
+        console.log(`- Creating new category: "${name}"`);
+        category = await CategoryModel.create({
+            name,
+            slug,
+            categoryType: type,
+            description: `Category for ${name}`,
+            isSystemDefined: true,
+        });
+    } else {
+        console.log(`- Using existing category: "${category.name}" (Type: ${category.categoryType}, ID: ${category._id})`);
+    }
+    return category._id;
+};
+
 export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.ObjectId) => {
+    // Find or create necessary categories before creating the novel
+    console.log('🔍 Finding or creating necessary categories...');
+    const themeCatId = await findOrCreateCategory('School Romance', CategoryType.GENRE, 'school-romance');
+    const subTheme1CatId = await findOrCreateCategory('Coming-of-Age', CategoryType.GENRE, 'coming-of-age');
+    const subTheme2CatId = await findOrCreateCategory('Drama', CategoryType.GENRE, 'drama');
+    const langCatId = await findOrCreateCategory('ภาษาไทย', CategoryType.LANGUAGE, 'th');
+    const ageRatingCatId = await findOrCreateCategory('PG-13', CategoryType.AGE_RATING, 'pg-13');
+    const narrativePerspectiveCatId = await findOrCreateCategory('First Person', CategoryType.NARRATIVE_PERSPECTIVE, 'first-person');
+    const artStyleCatId = await findOrCreateCategory('Anime', CategoryType.ART_STYLE, 'anime');
+    const interactivityLevelCatId = await findOrCreateCategory('High', CategoryType.INTERACTIVITY_LEVEL, 'high');
+    const lengthTagCatId = await findOrCreateCategory('Medium', CategoryType.LENGTH_TAG, 'medium');
+    
     const novel = new NovelModel({
         title: 'The Yearbook\'s Secret',
         slug: 'the-yearbook-secret',
@@ -7873,38 +7961,32 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
         bannerImageUrl: '/images/banners/the-yearbook-secret_banner.png',
         themeAssignment: {
             mainTheme: {
-                categoryId: new mongoose.Types.ObjectId(),
+                categoryId: themeCatId,
                 customName: 'School Romance'
             },
             subThemes: [
                 {
-                    categoryId: new mongoose.Types.ObjectId(),
+                    categoryId: subTheme1CatId,
                     customName: 'Coming-of-Age'
                 },
                 {
-                    categoryId: new mongoose.Types.ObjectId(),
+                    categoryId: subTheme2CatId,
                     customName: 'Drama'
                 }
             ],
-            moodAndTone: [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()],
-            contentWarnings: [new mongoose.Types.ObjectId()],
             customTags: ['วัยเรียน', 'ความรัก', 'มิตรภาพ', 'การตัดสินใจ', 'ปมในอดีต', 'รักสามเส้า']
         },
         narrativeFocus: {
-            narrativePacingTags: [new mongoose.Types.ObjectId()],
-            primaryConflictTypes: [new mongoose.Types.ObjectId()],
-            narrativePerspective: new mongoose.Types.ObjectId(),
-            artStyle: new mongoose.Types.ObjectId(),
-            commonTropes: [new mongoose.Types.ObjectId()],
-            interactivityLevel: new mongoose.Types.ObjectId(),
-            lengthTag: new mongoose.Types.ObjectId(),
-            targetAudienceProfileTags: [new mongoose.Types.ObjectId()]
+            narrativePerspective: narrativePerspectiveCatId,
+            artStyle: artStyleCatId,
+            interactivityLevel: interactivityLevelCatId,
+            lengthTag: lengthTagCatId,
         },
         worldBuildingDetails: {
             loreSummary: 'เรื่องราวความรักและมิตรภาพในโรงเรียนเอกชนชื่อดัง "แสงอรุณ" ที่ซึ่งความสัมพันธ์ของนักเรียนมีความสำคัญยิ่งกว่าสิ่งอื่นใด',
             technologyPrinciples: 'สมัยใหม่ในโรงเรียนไฮสคูลปกติ'
         },
-        ageRatingCategoryId: new mongoose.Types.ObjectId(),
+        ageRatingCategoryId: ageRatingCatId,
         status: NovelStatus.PUBLISHED,
         accessLevel: NovelAccessLevel.PUBLIC,
         isCompleted: false,
@@ -7912,7 +7994,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
         sourceType: {
             type: NovelContentType.INTERACTIVE_FICTION
         },
-        language: new mongoose.Types.ObjectId(),
+        language: langCatId,
         totalEpisodesCount: 15,
         publishedEpisodesCount: 3,
         stats: {
@@ -7976,6 +8058,10 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
 
     // สร้างตัวละคร
     const characters = await createTheYearbookSecretCharacters(novel._id, authorId);
+
+    // สร้าง Choices
+    const choices = await createtheyearbooksecretchoices(novel._id, authorId);
+    console.log(`✅ สร้าง ${choices.length} ตัวเลือกสำเร็จ`);
 
     // สร้าง Episodes ทั้งหมด
     const episodeData = [
@@ -8246,7 +8332,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
     const episodes = await EpisodeModel.insertMany(episodeData);
 
     // สร้างฉากทั้งหมด แล้วแจกจ่ายให้ episode
-    const allScenes = await createtheyearbooksecretscenes(novel._id, episodes[0]._id, characters);
+    const allScenes = await createtheyearbooksecretscenes(novel._id, episodes[0]._id, characters, choices);
 
     // แจกจ่ายฉากตามสัดส่วนที่เหมาะสม (ตัวอย่าง: 3 ฉากต่อตอนสำหรับตอน 1-12)
     const episode1Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep1_'));
@@ -8303,7 +8389,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
     // TODO: ทำเช่นเดียวกันสำหรับตอนที่เหลือ
 
     // สร้างตัวเลือก
-    const choices = await createtheyearbooksecretchoices(novel._id, authorId);
+    // หมายเหตุ: เราสร้าง choices ไว้ก่อนหน้านี้แล้ว แต่ส่วนนี้จะเชื่อมโยง choices กับ scenes
 
     // --- New Logic: Associate Choices with Scenes ---
     console.log('🔗 กำลังเชื่อมโยง Choices เข้ากับ Scenes ที่ถูกต้อง (The Yearbook\'s Secret)...');

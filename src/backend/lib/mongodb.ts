@@ -4,7 +4,7 @@ import mongoose, { ConnectOptions, Mongoose } from 'mongoose';
 
 // ดึงค่าตัวแปรจากไฟล์ .env และกำหนดประเภทให้เป็น string หรือ undefined
 const MONGODB_URI: string | undefined = process.env.MONGODB_URI;
-const DB_NAME: string = process.env.DB_NAME || 'default_db';
+const DB_NAME: string = process.env.DB_NAME || 'DivWy';
 
 // ตรวจสอบว่า MONGODB_URI ถูกกำหนดไว้หรือไม่
 if (!MONGODB_URI) {
@@ -45,6 +45,7 @@ const cached: MongooseGlobalCache = globalWithMongoose.mongooseCache;
 export default async function dbConnect(): Promise<Mongoose> {
   // หากมีการเชื่อมต่ออยู่แล้ว ให้คืนค่า instance ที่แคชไว้
   if (cached.conn) {
+    console.log(`✅ [MongoDB] ใช้การเชื่อมต่อจาก Cache (${DB_NAME})`);
     return cached.conn;
   }
 

@@ -322,7 +322,7 @@ UserLibraryItemSchema.statics.updateReadingProgress = async function (
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-const UserLibraryItemModel = (models.UserLibraryItem as mongoose.Model<IUserLibraryItem, IUserLibraryItemModel>) || model<IUserLibraryItem, IUserLibraryItemModel>("UserLibraryItem", UserLibraryItemSchema);
+const UserLibraryItemModel = (models.UserLibraryItem as IUserLibraryItemModel) || model<IUserLibraryItem, IUserLibraryItemModel>("UserLibraryItem", UserLibraryItemSchema);
 
 export default UserLibraryItemModel;
 

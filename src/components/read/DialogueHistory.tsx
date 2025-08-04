@@ -22,6 +22,19 @@ export default function DialogueHistory({ isOpen, onClose, history }: DialogueHi
   const [filteredHistory, setFilteredHistory] = useState<HistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   // Filter history based on search
   useEffect(() => {
     if (!isOpen) {
@@ -54,14 +67,14 @@ export default function DialogueHistory({ isOpen, onClose, history }: DialogueHi
 
           {/* Modal */}
           <motion.div
-            className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-card border-l border-border"
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-card border-l border-border flex flex-col"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
               <h2 className="text-card-foreground text-lg font-semibold">ประวัติการสนทนา</h2>
               <button
                 onClick={onClose}
@@ -72,7 +85,7 @@ export default function DialogueHistory({ isOpen, onClose, history }: DialogueHi
             </div>
 
             {/* Search */}
-            <div className="p-4 border-b border-border">
+            <div className="p-4 border-b border-border flex-shrink-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={18} />
                 <input
@@ -86,7 +99,7 @@ export default function DialogueHistory({ isOpen, onClose, history }: DialogueHi
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
               {history.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                     <Clock size={32} className="mb-2" />

@@ -336,7 +336,6 @@ const CharacterSchema = new Schema<ICharacter>(
       type: String,
       required: [true, "กรุณาระบุรหัสตัวละคร (Character Code is required)"],
       trim: true,
-      unique: true,
       index: true,
       maxlength: [50, "รหัสตัวละครยาวเกินไป (Character Code is too long)"],
       validate: {
