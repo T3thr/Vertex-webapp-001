@@ -10,7 +10,7 @@ import EpisodeModel from '@/backend/models/Episode';
 import StoryMapModel from '@/backend/models/StoryMap';
 import { ICategory } from '@/backend/models/Category'; // Import interface สำหรับ type checking
 
-import NovelWorkspace from './components/NovelWorkspace';
+import StoryCanvas from './components/StoryCanvas';
 import CreateStoryMapPrompt from './components/CreateStoryMapPrompt';
 import NovelHeader from './components/NovelHeader';
 
@@ -228,9 +228,20 @@ export default async function NovelOverviewPage({ params }: PageProps) {
 
   console.log(`[DEBUG] พบนิยาย: ${novel.title} (ID: ${novel._id})`);
 
-  // ดึงข้อมูล Episodes และ StoryMap (เหมือนเดิม)
+  // ดึงข้อมูล Episodes, StoryMap, Characters, Scenes, และ Media
   const episodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 }).lean();
   const storyMap = await StoryMapModel.findOne({ novelId: novel._id, isActive: true }).lean();
+  
+  // Import additional models
+  const CharacterModel = (await import('@/backend/models/Character')).default;
+  const SceneModel = (await import('@/backend/models/Scene')).default;
+  const MediaModel = (await import('@/backend/models/Media')).default;
+  const OfficialMediaModel = (await import('@/backend/models/OfficialMedia')).default;
+  
+  const characters = await CharacterModel.find({ novelId: novel._id, isArchived: false }).lean();
+  const scenes = await SceneModel.find({ novelId: novel._id }).sort({ episodeId: 1, sceneOrder: 1 }).lean();
+  const userMedia = await MediaModel.find({ userId: session.user.id, status: 'available', isDeleted: { $ne: true } }).lean();
+  const officialMedia = await OfficialMediaModel.find({ status: 'available', isDeleted: { $ne: true } }).lean();
   
   // SECTION: วิธีที่ง่ายและปลอดภัยที่สุดในการ Serialize คือใช้ JSON.stringify และ JSON.parse
   // วิธีนี้จะแปลง ObjectId, Date, และ BSON types อื่นๆ เป็น string โดยอัตโนมัติ
@@ -238,18 +249,30 @@ export default async function NovelOverviewPage({ params }: PageProps) {
   const serializedNovel: NovelData = JSON.parse(JSON.stringify(novel, null, 2));
   const serializedEpisodes: EpisodeData[] = JSON.parse(JSON.stringify(episodes, null, 2));
   const serializedStoryMap: StoryMapData | null = storyMap ? JSON.parse(JSON.stringify(storyMap, null, 2)) : null;
+  const serializedCharacters = JSON.parse(JSON.stringify(characters, null, 2));
+  const serializedScenes = JSON.parse(JSON.stringify(scenes, null, 2));
+  const serializedUserMedia = JSON.parse(JSON.stringify(userMedia, null, 2));
+  const serializedOfficialMedia = JSON.parse(JSON.stringify(officialMedia, null, 2));
 
   console.log(`[DEBUG] จำนวนตอนที่พบ: ${serializedEpisodes.length}`);
   console.log(`[DEBUG] สถานะ StoryMap: ${serializedStoryMap ? 'พบ StoryMap' : 'ไม่พบ StoryMap'}`);
+  console.log(`[DEBUG] จำนวนตัวละคร: ${serializedCharacters.length}`);
+  console.log(`[DEBUG] จำนวนฉาก: ${serializedScenes.length}`);
 
   return (
     <div className="min-h-screen bg-background">
       <Suspense fallback={<div className="h-screen flex items-center justify-center"><p>กำลังโหลด...</p></div>}>
         {serializedStoryMap ? (
-          <NovelWorkspace 
-            novel={serializedNovel} 
-            episodes={serializedEpisodes} 
+          <StoryCanvas
+            novel={serializedNovel}
+            episodes={serializedEpisodes}
             storyMap={serializedStoryMap}
+            characters={serializedCharacters}
+            scenes={serializedScenes}
+            userMedia={serializedUserMedia}
+            officialMedia={serializedOfficialMedia}
+            initialMode="blueprint"
+            selectedSceneId={undefined}
           />
         ) : (
           <div className="container-custom py-6">

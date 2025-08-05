@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
-import StoryMapModel from '@/backend/models/StoryMap';
+import SceneModel from '@/backend/models/Scene';
 import NovelModel from '@/backend/models/Novel';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string; sceneId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -16,7 +16,7 @@ export async function GET(
     }
 
     await dbConnect();
-    const { slug } = await params;
+    const { slug, sceneId } = await params;
 
     // Verify novel ownership
     const novel = await NovelModel.findOne({ slug });
@@ -24,22 +24,26 @@ export async function GET(
       return NextResponse.json({ error: 'Novel not found or access denied' }, { status: 404 });
     }
 
-    // Get active story map
-    const storyMap = await StoryMapModel.findOne({
-      novelId: novel._id,
-      isActive: true
+    // Get scene
+    const scene = await SceneModel.findOne({
+      _id: sceneId,
+      novelId: novel._id
     }).lean();
 
-    return NextResponse.json({ storyMap });
+    if (!scene) {
+      return NextResponse.json({ error: 'Scene not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ scene });
   } catch (error) {
-    console.error('Error fetching story map:', error);
+    console.error('Error fetching scene:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string; sceneId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -48,7 +52,7 @@ export async function PUT(
     }
 
     await dbConnect();
-    const { slug } = await params;
+    const { slug, sceneId } = await params;
 
     // Verify novel ownership
     const novel = await NovelModel.findOne({ slug });
@@ -57,35 +61,35 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { nodes, edges, storyVariables, editorMetadata } = body;
+    const updateData = { ...body };
 
-    // Update story map
-    const storyMap = await StoryMapModel.findOneAndUpdate(
+    // Remove _id from update data if present
+    delete updateData._id;
+
+    // Update scene
+    const scene = await SceneModel.findOneAndUpdate(
       {
-        novelId: novel._id,
-        isActive: true
+        _id: sceneId,
+        novelId: novel._id
       },
-      {
-        nodes,
-        edges,
-        storyVariables,
-        editorMetadata,
-        lastModifiedByUserId: session.user.id,
-        version: { $inc: 1 }
-      },
-      { new: true, upsert: true }
+      updateData,
+      { new: true }
     );
 
-    return NextResponse.json({ storyMap });
+    if (!scene) {
+      return NextResponse.json({ error: 'Scene not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ scene });
   } catch (error) {
-    console.error('Error updating story map:', error);
+    console.error('Error updating scene:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function POST(
+export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string; sceneId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -94,7 +98,7 @@ export async function POST(
     }
 
     await dbConnect();
-    const { slug } = await params;
+    const { slug, sceneId } = await params;
 
     // Verify novel ownership
     const novel = await NovelModel.findOne({ slug });
@@ -102,43 +106,19 @@ export async function POST(
       return NextResponse.json({ error: 'Novel not found or access denied' }, { status: 404 });
     }
 
-    const body = await request.json();
-    const { title, description } = body;
-
-    // Create new story map with default start node
-    const storyMap = new StoryMapModel({
-      novelId: novel._id,
-      title: title || `${novel.title} - Story Map`,
-      description,
-      version: 1,
-      nodes: [
-        {
-          nodeId: 'start-node-1',
-          nodeType: 'start_node',
-          title: 'Story Beginning',
-          position: { x: 100, y: 100 },
-          dimensions: { width: 160, height: 80 }
-        }
-      ],
-      edges: [],
-      storyVariables: [],
-      startNodeId: 'start-node-1',
-      lastModifiedByUserId: session.user.id,
-      isActive: true,
-      editorMetadata: {
-        zoomLevel: 1,
-        viewOffsetX: 0,
-        viewOffsetY: 0,
-        gridSize: 20,
-        showGrid: true
-      }
+    // Delete scene
+    const scene = await SceneModel.findOneAndDelete({
+      _id: sceneId,
+      novelId: novel._id
     });
 
-    await storyMap.save();
+    if (!scene) {
+      return NextResponse.json({ error: 'Scene not found' }, { status: 404 });
+    }
 
-    return NextResponse.json({ storyMap }, { status: 201 });
+    return NextResponse.json({ message: 'Scene deleted successfully' });
   } catch (error) {
-    console.error('Error creating story map:', error);
+    console.error('Error deleting scene:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
