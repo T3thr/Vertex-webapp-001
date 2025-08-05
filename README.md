@@ -34,5 +34,15 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Deployment Notes
+
+This project includes specific configurations to resolve dependency conflicts during deployment:
+
+- Downgraded `nodemailer` from v7.x to v6.x to resolve compatibility issues with `next-auth`
+- Added `.npmrc` with `legacy-peer-deps=true` to handle peer dependency conflicts
+- Added `vercel.json` with explicit build configuration
+
+These changes ensure successful deployment to Vercel without dependency resolution errors.
 "# DivWy" 
 "# Vertex-webapp-001" 
