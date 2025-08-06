@@ -115,10 +115,10 @@ export default function InspectorPanel() {
   // ถ้าไม่มี Node ที่เลือกหรือ Inspector ถูกปิด
   if (!selectedNode || !inspectorOpen) {
     return (
-      <div className="w-10 h-full border-l border-border flex items-center justify-center">
+      <div className="w-8 sm:w-10 h-full border-l border-border bg-card flex items-center justify-center">
         <button
           onClick={toggleInspector}
-          className="p-2 rounded-full hover:bg-accent"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
           title="เปิดแผงรายละเอียด"
         >
           <ChevronRight className="w-4 h-4" />
@@ -131,22 +131,22 @@ export default function InspectorPanel() {
     <AnimatePresence>
       <motion.div
         initial={{ width: 0, opacity: 0 }}
-        animate={{ width: 320, opacity: 1 }}
+        animate={{ width: 'auto', opacity: 1 }}
         exit={{ width: 0, opacity: 0 }}
-        className="h-full bg-card border-l border-border overflow-hidden"
+        className="w-72 sm:w-80 lg:w-96 h-full bg-card text-card-foreground border-l border-border overflow-hidden flex flex-col"
       >
-        <div className="p-4 border-b border-border flex justify-between items-center">
-          <h3 className="font-semibold text-foreground">รายละเอียด</h3>
+        <div className="p-3 sm:p-4 border-b border-border flex justify-between items-center flex-shrink-0">
+          <h3 className="font-semibold text-foreground text-sm sm:text-base">รายละเอียด</h3>
           <button
             onClick={toggleInspector}
-            className="p-1 rounded-full hover:bg-accent"
+            className="p-1.5 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
             title="ปิดแผงรายละเอียด"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
         
-        <div className="overflow-y-auto" style={{ height: 'calc(100% - 57px)' }}>
+        <div className="overflow-y-auto flex-1 custom-scrollbar p-3 sm:p-4">
           {selectedNode.type === 'episode' ? (
             <div className="p-4 space-y-6">
               {/* ข้อมูลตอน */}

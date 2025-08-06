@@ -1,3 +1,4 @@
+// src/app/novels/[slug]/overview/components/StoryCanvas.tsx
 "use client";
 
 import React, { useState, useCallback, useMemo } from 'react';
@@ -19,6 +20,7 @@ import {
 // Import sub-components
 import BlueprintRoom from './canvas/BlueprintRoom';
 import DirectorsStage from './canvas/DirectorsStage';
+import PreviewPublishTab from './PreviewPublishTab';
 import CanvasToolbar from './canvas/CanvasToolbar';
 import ModeToggle from './canvas/ModeToggle';
 
@@ -31,11 +33,11 @@ interface StoryCanvasProps {
   scenes: any[];
   userMedia: any[];
   officialMedia: any[];
-  initialMode: 'blueprint' | 'director';
+  initialMode: 'blueprint' | 'director' | 'preview';
   selectedSceneId?: string;
 }
 
-export type CanvasMode = 'blueprint' | 'director';
+export type CanvasMode = 'blueprint' | 'director' | 'preview';
 
 export interface CanvasState {
   mode: CanvasMode;
@@ -49,6 +51,7 @@ export interface CanvasState {
   showMinimap: boolean;
   autoSave: boolean;
   lastSaved: Date | null;
+  isDirectorsStageOpen: boolean;
 }
 
 const StoryCanvas: React.FC<StoryCanvasProps> = ({
@@ -74,7 +77,8 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
     showGrid: true,
     showMinimap: true,
     autoSave: true,
-    lastSaved: null
+    lastSaved: null,
+    isDirectorsStageOpen: false
   });
 
   // Memoized data preparation
@@ -94,8 +98,25 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
       ...prev,
       mode: newMode,
       selectedSceneId: sceneId || prev.selectedSceneId,
-      selectedNodeId: newMode === 'director' ? null : prev.selectedNodeId,
-      selectedElementId: newMode === 'blueprint' ? null : prev.selectedElementId
+      selectedNodeId: newMode === 'director' || newMode === 'preview' ? null : prev.selectedNodeId,
+      selectedElementId: newMode === 'blueprint' || newMode === 'preview' ? null : prev.selectedElementId,
+      isDirectorsStageOpen: newMode === 'director'
+    }));
+  }, []);
+
+  // Handle Director's Stage modal
+  const openDirectorsStage = useCallback((sceneId?: string) => {
+    setCanvasState(prev => ({
+      ...prev,
+      isDirectorsStageOpen: true,
+      selectedSceneId: sceneId || prev.selectedSceneId
+    }));
+  }, []);
+
+  const closeDirectorsStage = useCallback(() => {
+    setCanvasState(prev => ({
+      ...prev,
+      isDirectorsStageOpen: false
     }));
   }, []);
 
@@ -103,8 +124,7 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
   const handleSceneSelect = useCallback((sceneId: string) => {
     setCanvasState(prev => ({
       ...prev,
-      selectedSceneId: sceneId,
-      mode: 'director' // Auto-switch to director mode when selecting a scene
+      selectedSceneId: sceneId
     }));
   }, []);
 
@@ -116,7 +136,7 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
     }));
   }, []);
 
-  // Element selection handler (for director mode)
+  // Element selection handler (for Director's Stage)
   const handleElementSelect = useCallback((elementId: string | null) => {
     setCanvasState(prev => ({
       ...prev,
@@ -124,95 +144,112 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
     }));
   }, []);
 
-  // Playback controls
-  const togglePlayback = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      isPlaying: !prev.isPlaying
-    }));
+  // Toolbar action handlers
+  const handlePlayToggle = useCallback(() => {
+    setCanvasState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
   }, []);
 
-  // Canvas controls
-  const resetView = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      zoomLevel: 1,
-      panOffset: { x: 0, y: 0 }
-    }));
+  const handleResetView = useCallback(() => {
+    setCanvasState(prev => ({ ...prev, zoomLevel: 1, panOffset: { x: 0, y: 0 } }));
   }, []);
 
-  const toggleGrid = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      showGrid: !prev.showGrid
-    }));
+  const handleToggleGrid = useCallback(() => {
+    setCanvasState(prev => ({ ...prev, showGrid: !prev.showGrid }));
   }, []);
 
-  const toggleMinimap = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      showMinimap: !prev.showMinimap
-    }));
+  const handleToggleMinimap = useCallback(() => {
+    setCanvasState(prev => ({ ...prev, showMinimap: !prev.showMinimap }));
   }, []);
 
-  // Save handler
-  const handleSave = useCallback(async () => {
-    try {
-      // Implement save logic here
-      setCanvasState(prev => ({
-        ...prev,
-        lastSaved: new Date()
-      }));
-      console.log('Canvas saved successfully');
-    } catch (error) {
-      console.error('Failed to save canvas:', error);
-    }
+  const handleSave = useCallback(() => {
+    setCanvasState(prev => ({ ...prev, lastSaved: new Date() }));
+  }, []);
+
+  // Database update handlers
+  const handleStoryMapUpdate = useCallback(async (updates: any) => {
+    // TODO: Implement API call to update StoryMap
+    console.log('Update StoryMap:', updates);
+    setCanvasState(prev => ({ ...prev, lastSaved: new Date() }));
+  }, []);
+
+  const handleSceneUpdate = useCallback(async (sceneId: string, updates: any) => {
+    // TODO: Implement API call to update Scene
+    console.log('Update Scene:', sceneId, updates);
+    setCanvasState(prev => ({ ...prev, lastSaved: new Date() }));
+  }, []);
+
+  const handleNovelUpdate = useCallback(async (updates: any) => {
+    // TODO: Implement API call to update Novel
+    console.log('Update Novel:', updates);
+    setCanvasState(prev => ({ ...prev, lastSaved: new Date() }));
   }, []);
 
   return (
-    <div className="story-canvas h-screen bg-slate-100 dark:bg-slate-900 flex flex-col overflow-hidden">
-      {/* Canvas Header */}
-      <div className="canvas-header bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-bold">SC</span>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Story Canvas
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {novel.title}
-              </p>
-            </div>
+    <div className="story-canvas relative w-full h-full bg-background text-foreground">
+      {/* ✅ Enhanced Mode Tabs */}
+      <div className="absolute top-2 sm:top-4 left-1/2 -translate-x-1/2 z-30">
+        <div className="bg-card/95 text-card-foreground backdrop-blur-sm border border-border rounded-lg p-0.5 sm:p-1 shadow-lg">
+          <div className="flex items-center gap-0.5 sm:gap-1">
+            <button
+              onClick={() => switchMode('blueprint')}
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                canvasState.mode === 'blueprint'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <span className="hidden sm:inline">Blueprint Room</span>
+              <span className="sm:hidden">Blueprint</span>
+            </button>
+            <button
+              onClick={() => switchMode('director')}
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                canvasState.mode === 'director'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <span className="hidden sm:inline">Director's Stage</span>
+              <span className="sm:hidden">Director</span>
+            </button>
+            <button
+              onClick={() => switchMode('preview')}
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                canvasState.mode === 'preview'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <span className="hidden sm:inline">Preview & Publish</span>
+              <span className="sm:hidden">Preview</span>
+            </button>
           </div>
-
-          <ModeToggle 
-            currentMode={canvasState.mode}
-            onModeChange={switchMode}
-          />
         </div>
-
-        <CanvasToolbar
-          canvasState={canvasState}
-          onPlayToggle={togglePlayback}
-          onResetView={resetView}
-          onToggleGrid={toggleGrid}
-          onToggleMinimap={toggleMinimap}
-          onSave={handleSave}
-        />
       </div>
 
-      {/* Canvas Content */}
-      <div className="canvas-content flex-1 flex overflow-hidden">
+      {/* Canvas Toolbar (only for blueprint mode) */}
+      {canvasState.mode === 'blueprint' && (
+        <div className="absolute top-16 sm:top-20 left-2 sm:left-4 z-20">
+          <CanvasToolbar
+            canvasState={canvasState}
+            onPlayToggle={handlePlayToggle}
+            onResetView={handleResetView}
+            onToggleGrid={handleToggleGrid}
+            onToggleMinimap={handleToggleMinimap}
+            onSave={handleSave}
+          />
+        </div>
+      )}
+
+      {/* Main Canvas Area */}
+      <div className="w-full h-full pt-12 sm:pt-16">
         <AnimatePresence mode="wait">
-          {canvasState.mode === 'blueprint' ? (
+          {canvasState.mode === 'blueprint' && (
             <motion.div
               key="blueprint"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
               className="w-full h-full"
             >
@@ -221,54 +258,78 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
                 canvasState={canvasState}
                 onSceneSelect={handleSceneSelect}
                 onNodeSelect={handleNodeSelect}
-                onModeSwitch={switchMode}
+                onModeSwitch={openDirectorsStage}
+                onStoryMapUpdate={handleStoryMapUpdate}
               />
             </motion.div>
-          ) : (
+          )}
+
+          {canvasState.mode === 'director' && (
             <motion.div
               key="director"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
               className="w-full h-full"
             >
-              <DirectorsStage
+              <BlueprintRoom
                 canvasData={canvasData}
                 canvasState={canvasState}
-                onElementSelect={handleElementSelect}
-                onModeSwitch={switchMode}
+                onSceneSelect={handleSceneSelect}
+                onNodeSelect={handleNodeSelect}
+                onModeSwitch={openDirectorsStage}
+                onStoryMapUpdate={handleStoryMapUpdate}
+              />
+            </motion.div>
+          )}
+
+          {canvasState.mode === 'preview' && (
+            <motion.div
+              key="preview"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="w-full h-full"
+            >
+              <PreviewPublishTab
+                novel={novel}
+                episodes={episodes}
+                storyMap={storyMap}
+                characters={characters}
+                scenes={scenes}
+                userMedia={userMedia}
+                officialMedia={officialMedia}
+                onNovelUpdate={handleNovelUpdate}
               />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Canvas Status Bar */}
-      <div className="canvas-status bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-        <div className="flex items-center space-x-4">
-          <span>
-            Mode: <span className="font-medium capitalize">{canvasState.mode}</span>
-          </span>
-          <span>
-            Zoom: {Math.round(canvasState.zoomLevel * 100)}%
-          </span>
-          {canvasState.selectedSceneId && (
-            <span>
-              Scene: {scenes.find(s => s._id === canvasState.selectedSceneId)?.title || 'Untitled'}
-            </span>
-          )}
-        </div>
+      {/* ✅ Director's Stage Modal */}
+      <DirectorsStage
+        canvasData={canvasData}
+        canvasState={canvasState}
+        onElementSelect={handleElementSelect}
+        onModeSwitch={switchMode}
+        onSceneUpdate={handleSceneUpdate}
+        isOpen={canvasState.isDirectorsStageOpen}
+        onClose={closeDirectorsStage}
+      />
 
-        <div className="flex items-center space-x-4">
-          {canvasState.lastSaved && (
-            <span>
-              Saved: {canvasState.lastSaved.toLocaleTimeString()}
-            </span>
-          )}
-          <div className="flex items-center space-x-1">
-            <div className={`w-2 h-2 rounded-full ${canvasState.autoSave ? 'bg-green-500' : 'bg-gray-400'}`} />
-            <span>Auto-save {canvasState.autoSave ? 'On' : 'Off'}</span>
+      {/* Status Bar */}
+      <div className="absolute bottom-4 left-4 z-20">
+        <div className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-4">
+            <span>Mode: <span className="text-foreground capitalize">{canvasState.mode}</span></span>
+            {canvasState.selectedSceneId && (
+              <span>Scene: <span className="text-foreground">{canvasState.selectedSceneId}</span></span>
+            )}
+            {canvasState.autoSave && (
+              <span>Auto-save: <span className="text-green-600">{canvasState.lastSaved ? 'Saved' : 'Enabled'}</span></span>
+            )}
           </div>
         </div>
       </div>

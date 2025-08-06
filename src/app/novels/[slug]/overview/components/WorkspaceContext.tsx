@@ -392,18 +392,28 @@ export function WorkspaceProvider({
    * บันทึก StoryMap ทั้งหมด
    */
   const saveStoryMap = useCallback(async () => {
-    if (!storyMap) return;
-    
     setIsSaving(true);
     
     try {
+      // Prepare story map data according to the API schema
       const storyMapData = {
+        title: storyMap?.title || `${novel.title} - Story Map`,
+        description: (storyMap as any)?.description || '',
         nodes: convertToStoryMapNodes(nodes),
         edges: convertToStoryMapEdges(edges),
+        storyVariables: storyMap?.storyVariables || [],
+        editorMetadata: {
+          zoomLevel: 1,
+          viewOffsetX: 0,
+          viewOffsetY: 0,
+          gridSize: 20,
+          showGrid: true,
+          ...(storyMap as any)?.editorMetadata
+        }
       };
       
       const response = await fetch(`/api/novels/${novel.slug}/storymap`, {
-        method: 'POST',
+        method: storyMap ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -411,17 +421,27 @@ export function WorkspaceProvider({
       });
       
       if (!response.ok) {
-        throw new Error('ไม่สามารถบันทึก StoryMap ได้');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'ไม่สามารถบันทึก StoryMap ได้');
       }
       
       const data = await response.json();
       console.log('บันทึก StoryMap สำเร็จ:', data);
-    } catch (error) {
+      
+      // Show success notification
+      console.log('✅ บันทึก StoryMap สำเร็จ!');
+      
+    } catch (error: any) {
       console.error('เกิดข้อผิดพลาดในการบันทึก StoryMap:', error);
+      
+      // Show error notification
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert('เกิดข้อผิดพลาดในการบันทึก: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+      }
     } finally {
       setIsSaving(false);
     }
-  }, [storyMap, novel.slug, nodes, edges]);
+  }, [storyMap, novel.slug, novel.title, nodes, edges]);
   
   // ค่า Context ที่จะส่งให้ Component ลูก
   const contextValue: WorkspaceContextType = {

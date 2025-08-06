@@ -47,31 +47,31 @@ export default function CreateStoryMapPrompt({ novelSlug }: CreateStoryMapPrompt
   };
 
   return (
-    <div className="h-[600px] flex items-center justify-center">
+    <div className="min-h-[400px] sm:h-[600px] flex items-center justify-center p-4">
       <motion.div
-        className="text-center text-muted-foreground"
+        className="text-center text-muted-foreground max-w-lg mx-auto"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <GitBranch className="w-16 h-16 mx-auto mb-6 opacity-30" />
-        <h3 className="text-xl font-semibold text-foreground mb-2">
+        <GitBranch className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 sm:mb-6 opacity-30" />
+        <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">
           เริ่มต้นสร้างโครงเรื่องของคุณ
         </h3>
-        <p className="max-w-md mx-auto mb-6">
-          ยังไม่มีแผนผังเรื่องราวสำหรับนิยายเรื่องนี้ สร้างแผนผังเพื่อวางโครงสร้าง, กำหนดเส้นทาง และจัดการฉากต่างๆ ได้อย่างเป็นระบบ
+        <p className="text-sm sm:text-base mb-4 sm:mb-6 px-4">
+          ยังไม่มีแผนผังเรื่องราวสำหรับนิยายเรื่องนี้ สร้างแผนผังเพื่อวางโครงสร้าง กำหนดเส้นทาง และจัดการฉากต่างๆ ได้อย่างเป็นระบบ
         </p>
         <motion.button
           onClick={handleCreateStoryMap}
           disabled={isCreating}
-          className="flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary-hover transition-colors disabled:bg-muted disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:bg-muted disabled:cursor-not-allowed text-sm sm:text-base"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
           {isCreating ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
           ) : (
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
           )}
           <span>{isCreating ? 'กำลังสร้าง...' : 'สร้างแผนผังเรื่องราวแรก'}</span>
         </motion.button>

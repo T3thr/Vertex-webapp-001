@@ -36,7 +36,7 @@ export default function NovelWorkspace({ novel, episodes, storyMap }: NovelWorks
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col h-screen bg-background"
+        className="flex flex-col h-screen bg-background text-foreground"
       >
         {/* Header */}
         <WorkspaceHeader novel={novel} />
@@ -47,7 +47,7 @@ export default function NovelWorkspace({ novel, episodes, storyMap }: NovelWorks
           <SidePanel />
           
           {/* Canvas */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative bg-background">
             <TimelineCanvas />
           </div>
           

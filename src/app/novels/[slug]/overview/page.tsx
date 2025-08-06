@@ -125,6 +125,7 @@ export interface StoryMapData {
   _id: string;
   novelId: string;
   title: string;
+  description?: string;
   version: number;
   nodes: any[];
   edges: any[];
@@ -132,6 +133,13 @@ export interface StoryMapData {
   startNodeId: string;
   lastModifiedByUserId: string;
   isActive: boolean;
+  editorMetadata?: {
+    zoomLevel: number;
+    viewOffsetX: number;
+    viewOffsetY: number;
+    gridSize: number;
+    showGrid: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -260,8 +268,15 @@ export default async function NovelOverviewPage({ params }: PageProps) {
   console.log(`[DEBUG] จำนวนฉาก: ${serializedScenes.length}`);
 
   return (
-    <div className="min-h-screen bg-background">
-      <Suspense fallback={<div className="h-screen flex items-center justify-center"><p>กำลังโหลด...</p></div>}>
+    <div className="min-h-screen bg-background text-foreground">
+      <Suspense fallback={
+        <div className="h-screen flex items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">กำลังโหลด...</p>
+          </div>
+        </div>
+      }>
         {serializedStoryMap ? (
           <StoryCanvas
             novel={serializedNovel}
@@ -275,9 +290,9 @@ export default async function NovelOverviewPage({ params }: PageProps) {
             selectedSceneId={undefined}
           />
         ) : (
-          <div className="container-custom py-6">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-7xl">
             <NovelHeader novel={serializedNovel} />
-            <div className="mt-6 bg-card border border-border rounded-xl p-6 flex items-center justify-center">
+            <div className="mt-6 bg-card text-card-foreground border border-border rounded-xl p-4 sm:p-6 flex items-center justify-center shadow-sm">
               <CreateStoryMapPrompt novelSlug={serializedNovel.slug} />
             </div>
           </div>

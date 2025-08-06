@@ -57,12 +57,12 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="h-14 border-b border-border bg-card flex items-center justify-between px-4"
+      className="h-14 border-b border-border bg-card text-card-foreground flex items-center justify-between px-4 sm:px-6 shadow-sm"
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
         <button
           onClick={toggleSidebar}
-          className="p-2 rounded-full hover:bg-accent"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors flex-shrink-0"
           title="เมนู"
         >
           <Menu className="w-4 h-4" />
@@ -70,21 +70,23 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         
         <button
           onClick={() => router.push('/dashboard')}
-          className="p-2 rounded-full hover:bg-accent"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors flex-shrink-0"
           title="กลับไปหน้า Dashboard"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
         
-        <h1 className="text-lg font-semibold text-foreground hidden sm:block">
-          {novel.title}
-        </h1>
+        <div className="border-l border-border pl-2 sm:pl-4 min-w-0 flex-1">
+          <h1 className="text-sm sm:text-lg font-semibold text-foreground truncate">
+            {novel.title}
+          </h1>
+        </div>
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         <button
           onClick={() => router.push(`/novels/${novel.slug}/preview`)}
-          className="p-2 rounded-full hover:bg-accent hidden sm:flex"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
           title="ดูตัวอย่าง"
         >
           <Eye className="w-4 h-4" />
@@ -92,7 +94,7 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         
         <button
           onClick={handleShare}
-          className="p-2 rounded-full hover:bg-accent hidden sm:flex"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors hidden sm:inline-flex"
           title="แชร์"
         >
           <Share2 className="w-4 h-4" />
@@ -100,7 +102,7 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         
         <button
           onClick={handleDownload}
-          className="p-2 rounded-full hover:bg-accent hidden sm:flex"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors hidden md:inline-flex"
           title="ดาวน์โหลด"
         >
           <Download className="w-4 h-4" />
@@ -108,7 +110,7 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         
         <button
           onClick={() => router.push(`/novels/${novel.slug}/settings`)}
-          className="p-2 rounded-full hover:bg-accent"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors hidden md:inline-flex"
           title="ตั้งค่า"
         >
           <Settings className="w-4 h-4" />
@@ -116,7 +118,7 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         
         <button
           onClick={() => router.push('/help/workspace')}
-          className="p-2 rounded-full hover:bg-accent hidden sm:flex"
+          className="p-2 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors hidden lg:inline-flex"
           title="วิธีใช้"
         >
           <HelpCircle className="w-4 h-4" />
@@ -125,7 +127,7 @@ export default function WorkspaceHeader({ novel }: WorkspaceHeaderProps) {
         <button
           onClick={saveStoryMap}
           disabled={isSaving}
-          className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg flex items-center gap-2 text-sm disabled:opacity-50 hover:bg-primary-hover transition-colors"
+          className="px-2 sm:px-3 py-1.5 bg-primary text-primary-foreground rounded-lg flex items-center gap-1 sm:gap-2 text-xs sm:text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors"
           title="บันทึก"
         >
           <Save className="w-4 h-4" />

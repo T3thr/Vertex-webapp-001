@@ -50,9 +50,9 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="bg-card border border-border rounded-xl p-6 shadow-md"
+      className="bg-card text-card-foreground border border-border rounded-xl p-4 sm:p-6 shadow-md"
     >
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col sm:flex-row lg:flex-row gap-4 sm:gap-6">
         {/* รูปปกนิยาย */}
         <motion.div
           whileHover={{ scale: 1.05 }}
@@ -64,18 +64,18 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
               <img
                 src={novel.coverImageUrl}
                 alt={`ปกนิยาย ${novel.title}`}
-                className="w-32 h-44 lg:w-40 lg:h-56 object-cover rounded-lg border border-border shadow-lg transition-shadow group-hover:shadow-xl"
+                className="w-24 h-32 sm:w-32 sm:h-44 lg:w-40 lg:h-56 object-cover rounded-lg border border-border shadow-lg transition-shadow group-hover:shadow-xl"
               />
             ) : (
-              <div className="w-32 h-44 lg:w-40 lg:h-56 bg-muted border border-border rounded-lg flex items-center justify-center">
-                <Book className="w-12 h-12 text-muted-foreground" />
+              <div className="w-24 h-32 sm:w-32 sm:h-44 lg:w-40 lg:h-56 bg-muted border border-border rounded-lg flex items-center justify-center">
+                <Book className="w-8 h-8 sm:w-12 sm:h-12 text-muted-foreground" />
               </div>
             )}
             
             {/* ป้ายสถานะ */}
-            <div className="absolute top-2 left-2">
+            <div className="absolute top-1 sm:top-2 left-1 sm:left-2">
               <span
-                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                className={`px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs font-medium rounded-full ${
                   novel.status === 'published'
                     ? 'bg-alert-success text-alert-success-foreground'
                     : novel.status === 'completed'
@@ -91,9 +91,9 @@ export default function NovelHeader({ novel }: NovelHeaderProps) {
             </div>
 
             {/* ป้ายจำนวนตอน */}
-            <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur-sm px-2 py-1 rounded-md">
+            <div className="absolute bottom-1 sm:bottom-2 right-1 sm:right-2 bg-background/90 backdrop-blur-sm px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md">
               <span className="text-xs font-medium text-foreground">
-                {novel.publishedEpisodesCount}/{novel.totalEpisodesCount} ตอน
+                {novel.publishedEpisodesCount || 0}/{novel.totalEpisodesCount || 0} ตอน
               </span>
             </div>
           </div>

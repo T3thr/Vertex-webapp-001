@@ -82,12 +82,12 @@ export default function SidePanel() {
         </div>
         
         {/* แท็บ */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border flex-shrink-0">
           <button
             onClick={() => setActiveTab('info')}
             className={`
-              flex-1 py-2 text-sm font-medium
-              ${activeTab === 'info' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}
+              flex-1 py-2 px-2 text-xs sm:text-sm font-medium transition-colors
+              ${activeTab === 'info' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}
             `}
           >
             ข้อมูล
@@ -96,8 +96,8 @@ export default function SidePanel() {
           <button
             onClick={() => setActiveTab('stats')}
             className={`
-              flex-1 py-2 text-sm font-medium
-              ${activeTab === 'stats' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}
+              flex-1 py-2 px-2 text-xs sm:text-sm font-medium transition-colors
+              ${activeTab === 'stats' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}
             `}
           >
             สถิติ
@@ -106,8 +106,8 @@ export default function SidePanel() {
           <button
             onClick={() => setActiveTab('recent')}
             className={`
-              flex-1 py-2 text-sm font-medium
-              ${activeTab === 'recent' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'}
+              flex-1 py-2 px-2 text-xs sm:text-sm font-medium transition-colors
+              ${activeTab === 'recent' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}
             `}
           >
             ตอนล่าสุด
@@ -115,7 +115,7 @@ export default function SidePanel() {
         </div>
         
         {/* เนื้อหาแท็บ */}
-        <div className="p-4 overflow-y-auto" style={{ height: 'calc(100% - 96px)' }}>
+        <div className="p-3 sm:p-4 overflow-y-auto flex-1 custom-scrollbar">
           {activeTab === 'info' && (
             <div className="space-y-4">
               {/* ชื่อนิยายและเรื่องย่อ */}
@@ -130,23 +130,23 @@ export default function SidePanel() {
               </div>
               
               {/* ข้อมูลผู้เขียน */}
-              <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-2 sm:gap-3 p-3 bg-card border border-border rounded-lg">
                 {novel.author?.profile?.avatarUrl ? (
                   <img 
                     src={novel.author.profile.avatarUrl} 
                     alt={novel.author.profile.displayName || 'Author'}
-                    className="w-8 h-8 rounded-full object-cover"
+                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                    <span className="text-xs font-medium text-muted-foreground">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">
                       {novel.author?.profile?.displayName?.charAt(0) || 'A'}
                     </span>
                   </div>
                 )}
                 {novel.author && novel.author.profile && (
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                       {novel.author.profile.displayName || 'ไม่ระบุชื่อ'}
                     </p>
                     <p className="text-xs text-muted-foreground">ผู้เขียน</p>
@@ -155,9 +155,9 @@ export default function SidePanel() {
               </div>
               
               {/* หมวดหมู่ */}
-              <div className="mt-4">
-                <h3 className="text-sm font-medium text-foreground mb-2 flex items-center gap-1">
-                  <Tag className="w-3 h-3" />
+              <div className="bg-secondary/30 rounded-lg p-3">
+                <h3 className="text-xs sm:text-sm font-medium text-foreground mb-2 flex items-center gap-1">
+                  <Tag className="w-3 h-3 flex-shrink-0" />
                   หมวดหมู่
                 </h3>
                 <div className="flex flex-wrap gap-1">
@@ -165,7 +165,7 @@ export default function SidePanel() {
                     novel.categories.map((category: string, index: number) => (
                       <span 
                         key={index}
-                        className="px-2 py-1 bg-accent text-accent-foreground rounded-full text-xs"
+                        className="px-2 py-1 bg-accent text-accent-foreground rounded-full text-xs font-medium"
                       >
                         {category}
                       </span>
@@ -177,10 +177,10 @@ export default function SidePanel() {
               </div>
               
               {/* ข้อมูลเพิ่มเติม */}
-              <div className="mt-4 space-y-2">
+              <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">สถานะ</span>
-                  <span className="text-xs font-medium text-foreground">
+                  <span className="text-xs text-muted-foreground flex-shrink-0">สถานะ</span>
+                  <span className="text-xs font-medium text-foreground text-right">
                     {novel.status === 'ongoing' ? 'กำลังเขียน' : 
                      novel.status === 'completed' ? 'จบแล้ว' : 
                      novel.status === 'hiatus' ? 'หยุดชั่วคราว' : 'ไม่ระบุ'}
@@ -188,15 +188,15 @@ export default function SidePanel() {
                 </div>
                 
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">วันที่เริ่มเขียน</span>
-                  <span className="text-xs font-medium text-foreground">
+                  <span className="text-xs text-muted-foreground flex-shrink-0">วันที่เริ่ม</span>
+                  <span className="text-xs font-medium text-foreground text-right">
                     {formatDate(novel.createdAt)}
                   </span>
                 </div>
                 
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">อัปเดตล่าสุด</span>
-                  <span className="text-xs font-medium text-foreground">
+                  <span className="text-xs text-muted-foreground flex-shrink-0">อัปเดตล่าสุด</span>
+                  <span className="text-xs font-medium text-foreground text-right">
                     {formatDate(novel.updatedAt)}
                   </span>
                 </div>
