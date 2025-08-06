@@ -398,7 +398,7 @@ const DirectorsStage: React.FC<DirectorsStageProps> = ({
                 
                 <div>
                   <h1 className="text-lg font-semibold text-foreground">
-                    Director's Stage
+                    Director&apos;s Stage
                   </h1>
                   <p className="text-sm text-muted-foreground">
                     Scene: {currentScene?.title || 'Untitled Scene'}

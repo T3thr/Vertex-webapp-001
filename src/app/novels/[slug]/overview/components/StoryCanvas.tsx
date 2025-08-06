@@ -209,7 +209,7 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              <span className="hidden sm:inline">Director's Stage</span>
+              <span className="hidden sm:inline">Director&apos;s Stage</span>
               <span className="sm:hidden">Director</span>
             </button>
             <button

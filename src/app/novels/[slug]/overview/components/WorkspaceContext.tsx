@@ -385,7 +385,7 @@ export function WorkspaceProvider({
           setIsSaving(false);
         });
     }, 1000),
-    [storyMap, novel.slug]
+    [storyMap, novel.slug, setIsSaving]
   );
   
   /**

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronLeft, 
@@ -132,9 +133,11 @@ export default function SidePanel() {
               {/* ข้อมูลผู้เขียน */}
               <div className="flex items-center gap-2 sm:gap-3 p-3 bg-card border border-border rounded-lg">
                 {novel.author?.profile?.avatarUrl ? (
-                  <img 
+                  <Image 
                     src={novel.author.profile.avatarUrl} 
                     alt={novel.author.profile.displayName || 'Author'}
+                    width={40}
+                    height={40}
                     className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover flex-shrink-0"
                   />
                 ) : (
