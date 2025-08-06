@@ -58,7 +58,9 @@ const SceneCanvas: React.FC<SceneCanvasProps> = ({
           zIndex: char.transform?.zIndex || 1
         },
         isVisible: char.isVisible !== false,
-        isLocked: false
+        isLocked: false,
+        name: char.name || 'Unnamed',
+        isSelected: false
       });
     });
 
@@ -78,7 +80,9 @@ const SceneCanvas: React.FC<SceneCanvasProps> = ({
           zIndex: text.transform?.zIndex || 10
         },
         isVisible: true,
-        isLocked: false
+        isLocked: false,
+        name: text.speakerDisplayName || 'Narrator',
+        isSelected: false
       });
     });
 
@@ -98,7 +102,9 @@ const SceneCanvas: React.FC<SceneCanvasProps> = ({
           zIndex: image.transform?.zIndex || 5
         },
         isVisible: image.isVisible !== false,
-        isLocked: false
+        isLocked: false,
+        name: 'Image',
+        isSelected: false
       });
     });
 
