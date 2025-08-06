@@ -31,6 +31,7 @@ import {
 
 // Import reader components
 import VisualNovelFrameReader from '@/components/read/VisualNovelFrameReader';
+import Image from 'next/image';
 
 interface PreviewPublishTabProps {
   novel: any;
@@ -181,7 +182,7 @@ const PreviewPublishTab: React.FC<PreviewPublishTabProps> = ({
       episode: serializedEpisode,
       firstSceneId: firstSceneId
     };
-  }, [episodes, scenes, storyMap, novel]);
+  }, [episodes, storyMap, novel]);
 
   // Handle form updates
   const handleFormUpdate = useCallback((field: string, value: any) => {
@@ -371,9 +372,11 @@ const PreviewPublishTab: React.FC<PreviewPublishTabProps> = ({
                   </div>
                   {novelForm.coverImage && (
                     <div className="mt-2">
-                      <img
+                      <Image
                         src={novelForm.coverImage}
                         alt="Cover preview"
+                        width={96}
+                        height={128}
                         className="w-24 h-32 object-cover rounded-md border border-border"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
@@ -653,7 +656,7 @@ const PreviewPublishTab: React.FC<PreviewPublishTabProps> = ({
                       Ready to Preview
                     </h4>
                     <p className="text-muted-foreground mb-4">
-                      Click "Start Preview" to experience your visual novel exactly as readers will see it.
+                      Click &quot;Start Preview&quot; to experience your visual novel exactly as readers will see it.
                     </p>
                     <div className="bg-card border border-border rounded-lg p-4 text-left">
                       <h5 className="font-medium text-foreground mb-2">Preview will include:</h5>
