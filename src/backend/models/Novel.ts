@@ -992,8 +992,17 @@ export async function updateWriterStatsAfterNovelChange(_novelId: Types.ObjectId
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-const NovelModel = (models.Novel as mongoose.Model<INovel>) ||
-                   model<INovel>("Novel", NovelSchema);
+
+// Guard against client-side execution
+let NovelModel: mongoose.Model<INovel>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  NovelModel = (models.Novel as mongoose.Model<INovel>) || model<INovel>("Novel", NovelSchema);
+} else {
+  // Client-side - throw error if accessed
+  NovelModel = {} as mongoose.Model<INovel>;
+}
 
 export default NovelModel;
 

@@ -727,7 +727,16 @@ StoryMapSchema.post<IStoryMap>("save", async function (doc) {
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-const StoryMapModel = (models.StoryMap as mongoose.Model<IStoryMap>) || model<IStoryMap>("StoryMap", StoryMapSchema);
+// Guard against client-side execution
+let StoryMapModel: mongoose.Model<IStoryMap>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  StoryMapModel = (models.StoryMap as mongoose.Model<IStoryMap>) || model<IStoryMap>("StoryMap", StoryMapSchema);
+} else {
+  // Client-side - throw error if accessed
+  StoryMapModel = {} as mongoose.Model<IStoryMap>;
+}
 
 export default StoryMapModel;
 

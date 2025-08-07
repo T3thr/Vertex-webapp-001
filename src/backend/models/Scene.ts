@@ -1293,7 +1293,17 @@ SceneSchema.post<mongoose.Query<IScene | null, IScene>>("findOneAndDelete", asyn
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-const SceneModel = (mongoose.models.Scene as mongoose.Model<IScene>) || mongoose.model<IScene>("Scene", SceneSchema);
+
+// Guard against client-side execution
+let SceneModel: mongoose.Model<IScene>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  SceneModel = (mongoose.models.Scene as mongoose.Model<IScene>) || mongoose.model<IScene>("Scene", SceneSchema);
+} else {
+  // Client-side - throw error if accessed
+  SceneModel = {} as mongoose.Model<IScene>;
+}
 
 export default SceneModel;
 

@@ -10,7 +10,7 @@ import EpisodeModel from '@/backend/models/Episode';
 import StoryMapModel from '@/backend/models/StoryMap';
 import { ICategory } from '@/backend/models/Category'; // Import interface สำหรับ type checking
 
-import StoryCanvas from './components/StoryCanvas';
+import NovelEditor from './components/NovelEditor';
 import CreateStoryMapPrompt from './components/CreateStoryMapPrompt';
 import NovelHeader from './components/NovelHeader';
 
@@ -278,7 +278,7 @@ export default async function NovelOverviewPage({ params }: PageProps) {
         </div>
       }>
         {serializedStoryMap ? (
-          <StoryCanvas
+          <NovelEditor
             novel={serializedNovel}
             episodes={serializedEpisodes}
             storyMap={serializedStoryMap}
@@ -286,7 +286,7 @@ export default async function NovelOverviewPage({ params }: PageProps) {
             scenes={serializedScenes}
             userMedia={serializedUserMedia}
             officialMedia={serializedOfficialMedia}
-            initialMode="blueprint"
+            initialTab="blueprint"
             selectedSceneId={undefined}
           />
         ) : (

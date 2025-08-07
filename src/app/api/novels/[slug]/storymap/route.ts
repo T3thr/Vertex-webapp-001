@@ -1,144 +1,219 @@
+// src/app/api/novels/[slug]/storymap/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-import dbConnect from '@/backend/lib/mongodb';
-import StoryMapModel from '@/backend/models/StoryMap';
-import NovelModel from '@/backend/models/Novel';
 
+import dbConnect from '@/backend/lib/mongodb';
+import NovelModel from '@/backend/models/Novel';
+import StoryMapModel from '@/backend/models/StoryMap';
+
+// GET - ดึงข้อมูล StoryMap
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    const { slug } = await params;
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     await dbConnect();
-    const { slug } = await params;
 
-    // Verify novel ownership
-    const novel = await NovelModel.findOne({ slug });
-    if (!novel || novel.author.toString() !== session.user.id) {
-      return NextResponse.json({ error: 'Novel not found or access denied' }, { status: 404 });
+    // ตรวจสอบสิทธิ์ในการเข้าถึงนิยาย
+    const novel = await NovelModel.findOne({
+      slug: decodeURIComponent(slug),
+      author: session.user.id,
+      isDeleted: { $ne: true }
+    });
+
+    if (!novel) {
+      return NextResponse.json(
+        { error: 'Novel not found' },
+        { status: 404 }
+      );
     }
 
-    // Get active story map
+    // ดึงข้อมูล StoryMap
     const storyMap = await StoryMapModel.findOne({
       novelId: novel._id,
       isActive: true
     }).lean();
 
-    return NextResponse.json({ storyMap });
+    return NextResponse.json({
+      success: true,
+      data: storyMap
+    });
+
   } catch (error) {
-    console.error('Error fetching story map:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error fetching StoryMap:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
+// PUT - อัปเดต StoryMap
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    await dbConnect();
     const { slug } = await params;
+    const session = await getServerSession(authOptions);
 
-    // Verify novel ownership
-    const novel = await NovelModel.findOne({ slug });
-    if (!novel || novel.author.toString() !== session.user.id) {
-      return NextResponse.json({ error: 'Novel not found or access denied' }, { status: 404 });
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     const body = await request.json();
-    const { nodes, edges, storyVariables, editorMetadata } = body;
+    const { nodes, edges, editorMetadata } = body;
 
-    // Update story map
-    const storyMap = await StoryMapModel.findOneAndUpdate(
+    await dbConnect();
+
+    // ตรวจสอบสิทธิ์ในการเข้าถึงนิยาย
+    const novel = await NovelModel.findOne({
+      slug: decodeURIComponent(slug),
+      author: session.user.id,
+      isDeleted: { $ne: true }
+    });
+
+    if (!novel) {
+      return NextResponse.json(
+        { error: 'Novel not found' },
+        { status: 404 }
+      );
+    }
+
+    // อัปเดต StoryMap
+    const updatedStoryMap = await StoryMapModel.findOneAndUpdate(
       {
         novelId: novel._id,
         isActive: true
       },
       {
-        nodes,
-        edges,
-        storyVariables,
-        editorMetadata,
-        lastModifiedByUserId: session.user.id,
-        version: { $inc: 1 }
+        $set: {
+          nodes: nodes || [],
+          edges: edges || [],
+          editorMetadata: editorMetadata || {},
+          lastModifiedByUserId: session.user.id,
+          version: { $inc: 1 }
+        }
       },
-      { new: true, upsert: true }
+      {
+        new: true,
+        upsert: true
+      }
     );
 
-    return NextResponse.json({ storyMap });
+    return NextResponse.json({
+      success: true,
+      data: updatedStoryMap
+    });
+
   } catch (error) {
-    console.error('Error updating story map:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error updating StoryMap:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
+// POST - สร้าง Node ใหม่
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    await dbConnect();
     const { slug } = await params;
+    const session = await getServerSession(authOptions);
 
-    // Verify novel ownership
-    const novel = await NovelModel.findOne({ slug });
-    if (!novel || novel.author.toString() !== session.user.id) {
-      return NextResponse.json({ error: 'Novel not found or access denied' }, { status: 404 });
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     const body = await request.json();
-    const { title, description } = body;
+    const { nodeType, title, position, nodeSpecificData } = body;
 
-    // Create new story map with default start node
-    const storyMap = new StoryMapModel({
-      novelId: novel._id,
-      title: title || `${novel.title} - Story Map`,
-      description,
-      version: 1,
-      nodes: [
-        {
-          nodeId: 'start-node-1',
-          nodeType: 'start_node',
-          title: 'Story Beginning',
-          position: { x: 100, y: 100 },
-          dimensions: { width: 160, height: 80 }
+    await dbConnect();
+
+    // ตรวจสอบสิทธิ์ในการเข้าถึงนิยาย
+    const novel = await NovelModel.findOne({
+      slug: decodeURIComponent(slug),
+      author: session.user.id,
+      isDeleted: { $ne: true }
+    });
+
+    if (!novel) {
+      return NextResponse.json(
+        { error: 'Novel not found' },
+        { status: 404 }
+      );
+    }
+
+    // สร้าง Node ใหม่
+    const newNode = {
+      nodeId: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      nodeType,
+      title: title || `${nodeType} Node`,
+      position: position || { x: 100, y: 100 },
+      nodeSpecificData: nodeSpecificData || {},
+      notesForAuthor: '',
+      authorDefinedEmotionTags: [],
+      authorDefinedPsychologicalImpact: 0,
+      lastEdited: new Date(),
+      editorVisuals: {
+        color: '#3B82F6',
+        icon: 'default',
+        zIndex: 1
+      }
+    };
+
+    // เพิ่ม Node ลงใน StoryMap
+    const updatedStoryMap = await StoryMapModel.findOneAndUpdate(
+      {
+        novelId: novel._id,
+        isActive: true
+      },
+      {
+        $push: { nodes: newNode },
+        $set: {
+          lastModifiedByUserId: session.user.id,
+          version: { $inc: 1 }
         }
-      ],
-      edges: [],
-      storyVariables: [],
-      startNodeId: 'start-node-1',
-      lastModifiedByUserId: session.user.id,
-      isActive: true,
-      editorMetadata: {
-        zoomLevel: 1,
-        viewOffsetX: 0,
-        viewOffsetY: 0,
-        gridSize: 20,
-        showGrid: true
+      },
+      {
+        new: true,
+        upsert: true
+      }
+    );
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        node: newNode,
+        storyMap: updatedStoryMap
       }
     });
 
-    await storyMap.save();
-
-    return NextResponse.json({ storyMap }, { status: 201 });
   } catch (error) {
-    console.error('Error creating story map:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error creating node:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

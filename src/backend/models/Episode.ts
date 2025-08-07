@@ -807,7 +807,16 @@ EpisodeSchema.post<mongoose.Query<IEpisode, IEpisode>>("findOneAndDelete", async
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-const EpisodeModel = (models.Episode as mongoose.Model<IEpisode>) || model<IEpisode>("Episode", EpisodeSchema);
+// Guard against client-side execution
+let EpisodeModel: mongoose.Model<IEpisode>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  EpisodeModel = (models.Episode as mongoose.Model<IEpisode>) || model<IEpisode>("Episode", EpisodeSchema);
+} else {
+  // Client-side - throw error if accessed
+  EpisodeModel = {} as mongoose.Model<IEpisode>;
+}
 
 export default EpisodeModel;
 

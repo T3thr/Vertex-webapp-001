@@ -17,7 +17,10 @@ import {
   EyeOff
 } from 'lucide-react';
 
-// Import sub-components
+// Import the new Unified Storytelling Environment
+import UnifiedStorytellingEnvironment from './unified/UnifiedStorytellingEnvironment';
+
+// Import legacy components for fallback
 import BlueprintRoom from './canvas/BlueprintRoom';
 import DirectorsStage from './canvas/DirectorsStage';
 import PreviewPublishTab from './PreviewPublishTab';
@@ -65,6 +68,9 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
   initialMode,
   selectedSceneId
 }) => {
+  // Feature flag to enable/disable the new Unified Storytelling Environment
+  const [useUnifiedEnvironment, setUseUnifiedEnvironment] = useState(true);
+
   // Canvas state management
   const [canvasState, setCanvasState] = useState<CanvasState>({
     mode: initialMode,
@@ -184,8 +190,52 @@ const StoryCanvas: React.FC<StoryCanvasProps> = ({
     setCanvasState(prev => ({ ...prev, lastSaved: new Date() }));
   }, []);
 
+  // Use the new Unified Storytelling Environment if enabled
+  if (useUnifiedEnvironment) {
+    return (
+      <div className="story-canvas h-full w-full relative">
+        {/* Feature Toggle (temporary for development) */}
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            onClick={() => setUseUnifiedEnvironment(false)}
+            className="px-3 py-1 text-xs bg-yellow-500 text-white rounded-full hover:bg-yellow-600 transition-colors"
+          >
+            Switch to Legacy
+          </button>
+        </div>
+
+        <UnifiedStorytellingEnvironment
+          novel={novel}
+          episodes={episodes}
+          storyMap={storyMap}
+          characters={characters}
+          scenes={scenes}
+          userMedia={userMedia}
+          officialMedia={officialMedia}
+          initialMode={
+            initialMode === 'blueprint' ? 'narrative' :
+            initialMode === 'director' ? 'canvas' :
+            'preview'
+          }
+          selectedSceneId={selectedSceneId}
+        />
+      </div>
+    );
+  }
+
+  // Legacy implementation
   return (
     <div className="story-canvas relative w-full h-full bg-background text-foreground">
+      {/* Feature Toggle */}
+      <div className="absolute top-4 right-4 z-50">
+        <button
+          onClick={() => setUseUnifiedEnvironment(true)}
+          className="px-3 py-1 text-xs bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
+        >
+          Try New Interface
+        </button>
+      </div>
+
       {/* ✅ Enhanced Mode Tabs */}
       <div className="absolute top-2 sm:top-4 left-1/2 -translate-x-1/2 z-30">
         <div className="bg-card/95 text-card-foreground backdrop-blur-sm border border-border rounded-lg p-0.5 sm:p-1 shadow-lg">

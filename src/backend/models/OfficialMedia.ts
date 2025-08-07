@@ -448,7 +448,16 @@ OfficialMediaSchema.pre<IOfficialMedia>("save", async function (next) {
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-const OfficialMediaModel = (models.OfficialMedia as mongoose.Model<IOfficialMedia>) || model<IOfficialMedia>("OfficialMedia", OfficialMediaSchema);
+// Guard against client-side execution
+let OfficialMediaModel: mongoose.Model<IOfficialMedia>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  OfficialMediaModel = (models.OfficialMedia as mongoose.Model<IOfficialMedia>) || model<IOfficialMedia>("OfficialMedia", OfficialMediaSchema);
+} else {
+  // Client-side - throw error if accessed
+  OfficialMediaModel = {} as mongoose.Model<IOfficialMedia>;
+}
 
 export default OfficialMediaModel;
 
