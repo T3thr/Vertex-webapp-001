@@ -634,6 +634,301 @@ html[data-theme-ready="true"] {
   }
 }
 
+/* Novel Editor Styles */
+.bg-grid-pattern {
+  background-image: 
+    linear-gradient(hsl(var(--border)) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border)) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Novel Editor Responsive Styles */
+.canvas-content {
+  width: 100%;
+  height: 100%;
+}
+
+/* Blueprint Tab Responsive */
+.blueprint-canvas {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.blueprint-sidebar {
+  transition: transform 0.3s ease-in-out;
+}
+
+.blueprint-properties {
+  transition: transform 0.3s ease-in-out;
+}
+
+/* Director Tab Responsive */
+.director-canvas {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.director-timeline {
+  transition: transform 0.3s ease-in-out;
+}
+
+.visual-novel-preview {
+  aspect-ratio: 16/9;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+}
+
+/* Mobile Responsive (< 768px) */
+@media (max-width: 767px) {
+  .novel-editor-mobile .canvas-content {
+    padding: 4px;
+  }
+  
+  .novel-editor-mobile .node-palette-item {
+    padding: 6px;
+  }
+  
+  .novel-editor-mobile .properties-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50vh;
+    z-index: 50;
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* Blueprint Mobile */
+  .blueprint-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 40;
+    transform: translateX(-100%);
+  }
+  
+  .blueprint-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .blueprint-properties {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 40;
+    transform: translateX(100%);
+  }
+  
+  .blueprint-properties.open {
+    transform: translateX(0);
+  }
+
+  /* Director Mobile */
+  .director-timeline {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 200px;
+    z-index: 30;
+    transform: translateY(100%);
+  }
+  
+  .director-timeline.open {
+    transform: translateY(0);
+  }
+
+  .visual-novel-preview {
+    width: 100%;
+    height: auto;
+    max-height: 60vh;
+  }
+
+  /* Mobile Canvas Controls */
+  .canvas-controls-mobile {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 30;
+  }
+
+  /* Touch-friendly buttons */
+  .touch-button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px;
+  }
+}
+
+/* Tablet Responsive (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .novel-editor-tablet .properties-panel {
+    width: 300px;
+  }
+
+  .novel-editor-tablet .sidebar-panel {
+    width: 300px;
+  }
+
+  .visual-novel-preview {
+    width: 90%;
+    height: auto;
+    max-height: 70vh;
+  }
+
+  /* Tablet Canvas */
+  .blueprint-canvas,
+  .director-canvas {
+    padding: 8px;
+  }
+
+  /* Tablet Timeline */
+  .director-timeline {
+    height: 180px;
+  }
+}
+
+/* Desktop Responsive (>= 1024px) */
+@media (min-width: 1024px) {
+  .visual-novel-preview {
+    width: 1280px;
+    height: 720px;
+    max-width: 90vw;
+    max-height: 60vh;
+  }
+
+  /* Desktop panels */
+  .blueprint-sidebar,
+  .blueprint-properties {
+    width: 320px;
+  }
+
+  .director-timeline {
+    height: 240px;
+  }
+}
+
+/* Large Desktop (>= 1440px) */
+@media (min-width: 1440px) {
+  .visual-novel-preview {
+    width: 1600px;
+    height: 900px;
+    max-width: 85vw;
+    max-height: 65vh;
+  }
+
+  .blueprint-sidebar,
+  .blueprint-properties {
+    width: 360px;
+  }
+
+  .director-timeline {
+    height: 280px;
+  }
+}
+
+/* Ultra-wide (>= 1920px) */
+@media (min-width: 1920px) {
+  .visual-novel-preview {
+    width: 1920px;
+    height: 1080px;
+    max-width: 80vw;
+    max-height: 70vh;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  /* Touch-specific styles */
+  .draggable-element {
+    touch-action: none;
+  }
+
+  .canvas-zoom-controls {
+    display: flex;
+    gap: 12px;
+  }
+
+  .touch-zoom-button {
+    min-height: 48px;
+    min-width: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Larger hit targets for mobile */
+  .node-handle {
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  .element-resize-handle {
+    min-width: 24px;
+    min-height: 24px;
+  }
+}
+
+/* High DPI Displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+  .visual-novel-preview {
+    image-rendering: -webkit-optimize-contrast;
+  }
+}
+
+/* Dark Mode Responsive Adjustments */
+.dark .visual-novel-preview {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Animation Performance */
+@media (prefers-reduced-motion: reduce) {
+  .blueprint-sidebar,
+  .blueprint-properties,
+  .director-timeline {
+    transition: none;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .novel-editor-container {
+    display: none;
+  }
+}
+
+.canvas-content {
+  transform-origin: 0 0;
+}
+
+/* Mobile Novel Editor Adjustments */
+@media (max-width: 768px) {
+  .novel-editor-mobile .canvas-content {
+    transform: scale(0.7);
+  }
+  
+  .novel-editor-mobile .node-palette-item {
+    padding: 0.5rem;
+  }
+  
+  .novel-editor-mobile .properties-panel {
+    font-size: 0.875rem;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 1280px) {
   .novel-row-nav-left {

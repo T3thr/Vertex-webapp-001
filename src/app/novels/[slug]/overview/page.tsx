@@ -8,11 +8,9 @@ import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
 import EpisodeModel from '@/backend/models/Episode';
 import StoryMapModel from '@/backend/models/StoryMap';
-import { ICategory } from '@/backend/models/Category'; // Import interface สำหรับ type checking
+import CategoryModel, { ICategory } from '@/backend/models/Category'; // Import both model and interface
 
 import NovelEditor from './components/NovelEditor';
-import CreateStoryMapPrompt from './components/CreateStoryMapPrompt';
-import NovelHeader from './components/NovelHeader';
 
 // SECTION: Interfaces สำหรับข้อมูลที่ Serialize แล้ว (ปรับปรุงให้สมบูรณ์)
 // =================================================================
@@ -196,21 +194,24 @@ export default async function NovelOverviewPage({ params }: PageProps) {
 
   // SECTION: แก้ไขการ Query และ Populate ให้ครอบคลุมทุก Fields
   // =================================================================
+  // Ensure CategoryModel is loaded before populate operations
+  void CategoryModel; // This ensures the model is registered
+  
+  // Access Control: Check if user is author or co-author
   const novel = await NovelModel.findOne({
     slug: decodedSlug,
-    author: session.user.id,
     isDeleted: { $ne: true }
   })
-  .populate<{ author: AuthorData }>('author', 'profile') // Populate profile ของผู้เขียน
-  // Populate themeAssignment ทั้งหมด
-  .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory }, subThemes: { categoryId: ICategory }[], moodAndTone: ICategory[], contentWarnings: ICategory[] } }>([
+  .populate('author', 'profile') // Populate profile ของผู้เขียน
+  // Populate themeAssignment ทั้งหมด - simplified without complex type annotations
+  .populate([
     { path: 'themeAssignment.mainTheme.categoryId' },
     { path: 'themeAssignment.subThemes.categoryId' },
     { path: 'themeAssignment.moodAndTone' },
     { path: 'themeAssignment.contentWarnings' },
   ])
   // Populate narrativeFocus ทั้งหมด (นี่คือส่วนสำคัญที่ขาดไป)
-  .populate<{ narrativeFocus: NarrativeFocusData }>([
+  .populate([
     { path: 'narrativeFocus.narrativePacingTags' },
     { path: 'narrativeFocus.primaryConflictTypes' },
     { path: 'narrativeFocus.narrativePerspective' },
@@ -225,12 +226,25 @@ export default async function NovelOverviewPage({ params }: PageProps) {
     { path: 'narrativeFocus.avoidIfYouDislikeTags' },
   ])
   // Populate fields ที่เหลือ
-  .populate<{ ageRatingCategoryId: ICategory }>('ageRatingCategoryId')
-  .populate<{ language: ICategory }>('language')
+  .populate('ageRatingCategoryId')
+  .populate('language')
+  .populate('coAuthors', 'profile') // Populate co-authors
   .lean({ virtuals: true }); // ใช้ .lean() เพื่อประสิทธิภาพ
 
   if (!novel) {
-    console.log(`[DEBUG] ไม่พบนิยายสำหรับ slug: ${decodedSlug} และ author: ${session.user.id}`);
+    console.log(`[DEBUG] ไม่พบนิยายสำหรับ slug: ${decodedSlug}`);
+    redirect('/novels');
+  }
+
+  // Access Control: Verify user is author or co-author
+  const userId = session.user!.id; // We already checked for session.user.id above
+  const isAuthor = novel.author?._id?.toString() === userId;
+  const isCoAuthor = novel.coAuthors?.some((coAuthor: any) => 
+    coAuthor._id?.toString() === userId || coAuthor.toString() === userId
+  );
+  
+  if (!isAuthor && !isCoAuthor) {
+    console.log(`[DEBUG] ผู้ใช้ ${userId} ไม่มีสิทธิ์เข้าถึงนิยาย ${novel.title}`);
     redirect('/novels');
   }
 
@@ -248,8 +262,8 @@ export default async function NovelOverviewPage({ params }: PageProps) {
   
   const characters = await CharacterModel.find({ novelId: novel._id, isArchived: false }).lean();
   const scenes = await SceneModel.find({ novelId: novel._id }).sort({ episodeId: 1, sceneOrder: 1 }).lean();
-  const userMedia = await MediaModel.find({ userId: session.user.id, status: 'available', isDeleted: { $ne: true } }).lean();
-  const officialMedia = await OfficialMediaModel.find({ status: 'available', isDeleted: { $ne: true } }).lean();
+  const userMedia = await MediaModel.find({ userId: userId, status: 'available', isDeleted: { $ne: true } }).lean();
+  const officialMedia = await OfficialMediaModel.find({ status: 'approved_for_library', isDeleted: { $ne: true } }).lean();
   
   // SECTION: วิธีที่ง่ายและปลอดภัยที่สุดในการ Serialize คือใช้ JSON.stringify และ JSON.parse
   // วิธีนี้จะแปลง ObjectId, Date, และ BSON types อื่นๆ เป็น string โดยอัตโนมัติ
@@ -277,26 +291,15 @@ export default async function NovelOverviewPage({ params }: PageProps) {
           </div>
         </div>
       }>
-        {serializedStoryMap ? (
-          <NovelEditor
-            novel={serializedNovel}
-            episodes={serializedEpisodes}
-            storyMap={serializedStoryMap}
-            characters={serializedCharacters}
-            scenes={serializedScenes}
-            userMedia={serializedUserMedia}
-            officialMedia={serializedOfficialMedia}
-            initialTab="blueprint"
-            selectedSceneId={undefined}
-          />
-        ) : (
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-7xl">
-            <NovelHeader novel={serializedNovel} />
-            <div className="mt-6 bg-card text-card-foreground border border-border rounded-xl p-4 sm:p-6 flex items-center justify-center shadow-sm">
-              <CreateStoryMapPrompt novelSlug={serializedNovel.slug} />
-            </div>
-          </div>
-        )}
+        <NovelEditor
+          novel={serializedNovel}
+          episodes={serializedEpisodes}
+          storyMap={serializedStoryMap}
+          characters={serializedCharacters}
+          scenes={serializedScenes}
+          userMedia={serializedUserMedia}
+          officialMedia={serializedOfficialMedia}
+        />
       </Suspense>
     </div>
   );

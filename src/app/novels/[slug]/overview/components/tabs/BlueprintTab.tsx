@@ -1,652 +1,755 @@
-// src/app/novels/[slug]/overview/components/tabs/BlueprintTab.tsx
-"use client";
+// app/novels/[slug]/overview/components/tabs/BlueprintTab.tsx
+'use client';
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Plus,
+import ReactFlow, {
+  Node,
+  Edge,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  Connection,
+  ReactFlowProvider,
+  ReactFlowInstance,
+  MarkerType,
+  Panel,
+  NodeChange,
+  EdgeChange,
+  useReactFlow
+} from 'reactflow';
+
+import 'reactflow/dist/style.css';
+
+// Components
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
+
+// Icons
+import { 
+  Plus, 
+  Save, 
+  RefreshCw, 
+  ZoomIn, 
+  ZoomOut, 
+  Maximize2,
   Play,
   Square,
-  Diamond,
   Circle,
-  ArrowRight,
   GitBranch,
-  MessageSquare,
+  MessageCircle,
+  Flag,
   Settings,
+  Eye,
+  EyeOff,
+  Grid3X3,
+  MousePointer2,
+  ShieldAlert,
+  LayoutGrid,
   Trash2,
   Copy,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-  Grid3X3,
-  Maximize2,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  EyeOff
+  Edit,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Menu,
+  X
 } from 'lucide-react';
 
-import { NovelData, EpisodeData, StoryMapData } from '../../page';
+// Types from backend models
+import { StoryMapNodeType, IStoryMapNode, IStoryMapEdge, IStoryVariableDefinition } from '@/backend/models/StoryMap';
 
-// Interface สำหรับ Node Types
-export interface StoryNode {
-  id: string;
-  type: 'start' | 'scene' | 'choice' | 'branch' | 'ending' | 'comment';
-  title: string;
-  position: { x: number; y: number };
-  data: any;
-  connections: string[];
-}
-
-// Interface สำหรับ Blueprint Tab Props
+// Props interface
 interface BlueprintTabProps {
-  novel: NovelData;
-  episodes: EpisodeData[];
-  storyMap: StoryMapData | null;
-  characters: any[];
-  scenes: any[];
-  userMedia: any[];
-  officialMedia: any[];
-  editorState: any;
-  updateEditorState: (updates: any) => void;
-  isMobile: boolean;
-  isTablet: boolean;
-  isDesktop: boolean;
+  novel: any;
+  storyMap: any;
+  onStoryMapUpdate: (storyMap: any) => void;
 }
 
-// Interface สำหรับ Canvas State
-interface CanvasState {
-  zoom: number;
-  pan: { x: number; y: number };
-  selectedNodeId: string | null;
-  selectedEdgeId: string | null;
-  isDragging: boolean;
-  isConnecting: boolean;
-  connectingFrom: string | null;
-  showGrid: boolean;
-  showMinimap: boolean;
-}
-
-const BlueprintTab: React.FC<BlueprintTabProps> = ({
-  novel,
-  episodes,
-  storyMap,
-  characters,
-  scenes,
-  userMedia,
-  officialMedia,
-  editorState,
-  updateEditorState,
-  isMobile,
-  isTablet,
-  isDesktop
-}) => {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(!isMobile);
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(!isMobile);
-
-  // Canvas State
-  const [canvasState, setCanvasState] = useState<CanvasState>({
-    zoom: 1,
-    pan: { x: 0, y: 0 },
-    selectedNodeId: null,
-    selectedEdgeId: null,
-    isDragging: false,
-    isConnecting: false,
-    connectingFrom: null,
-    showGrid: true,
-    showMinimap: true
-  });
-
-  // Convert StoryMap data to nodes (ใช้ข้อมูลจริงจาก MongoDB)
-  const nodes = useMemo((): StoryNode[] => {
-    if (!storyMap || !storyMap.nodes) return [];
-    
-    return storyMap.nodes.map(node => ({
-      id: node.nodeId,
-      type: node.nodeType === 'start_node' ? 'start' :
-            node.nodeType === 'scene_node' ? 'scene' :
-            node.nodeType === 'choice_node' ? 'choice' :
-            node.nodeType === 'branch_node' ? 'branch' :
-            node.nodeType === 'ending_node' ? 'ending' : 'comment',
-      title: node.title,
-      position: node.position,
-      data: node.nodeSpecificData,
-      connections: storyMap.edges
-        .filter(edge => edge.sourceNodeId === node.nodeId)
-        .map(edge => edge.targetNodeId)
-    })) as StoryNode[];
-  }, [storyMap]);
-
-  // Node Type Configurations
-  const nodeTypes = [
-    {
-      type: 'scene',
-      label: 'ฉาก',
-      icon: Square,
-      color: 'bg-blue-500',
-      description: 'ฉากในเรื่อง'
-    },
-    {
-      type: 'choice',
-      label: 'ตัวเลือก',
-      icon: GitBranch,
-      color: 'bg-green-500',
-      description: 'ทางเลือกสำหรับผู้อ่าน'
-    },
-    {
-      type: 'branch',
-      label: 'เงื่อนไข',
-      icon: Diamond,
-      color: 'bg-yellow-500',
-      description: 'เงื่อนไขในการแยกเส้นเรื่อง'
-    },
-    {
-      type: 'ending',
-      label: 'จบ',
-      icon: Circle,
-      color: 'bg-red-500',
-      description: 'จุดจบของเรื่อง'
-    },
-    {
-      type: 'comment',
-      label: 'หมายเหตุ',
-      icon: MessageSquare,
-      color: 'bg-gray-500',
-      description: 'หมายเหตุสำหรับนักเขียน'
+// Custom Node Components
+const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
+  const getNodeIcon = (type: StoryMapNodeType) => {
+    switch (type) {
+      case StoryMapNodeType.START_NODE: return <Play className="w-4 h-4" />;
+      case StoryMapNodeType.SCENE_NODE: return <Square className="w-4 h-4" />;
+      case StoryMapNodeType.CHOICE_NODE: return <Circle className="w-4 h-4" />;
+      case StoryMapNodeType.BRANCH_NODE: return <GitBranch className="w-4 h-4" />;
+      case StoryMapNodeType.ENDING_NODE: return <Flag className="w-4 h-4" />;
+      case StoryMapNodeType.COMMENT_NODE: return <MessageCircle className="w-4 h-4" />;
+      default: return <Square className="w-4 h-4" />;
     }
+  };
+
+  const getNodeColor = (type: StoryMapNodeType) => {
+    switch (type) {
+      case StoryMapNodeType.START_NODE: return 'bg-green-500';
+      case StoryMapNodeType.SCENE_NODE: return 'bg-blue-500';
+      case StoryMapNodeType.CHOICE_NODE: return 'bg-yellow-500';
+      case StoryMapNodeType.BRANCH_NODE: return 'bg-purple-500';
+      case StoryMapNodeType.ENDING_NODE: return 'bg-red-500';
+      case StoryMapNodeType.COMMENT_NODE: return 'bg-gray-500';
+      default: return 'bg-gray-400';
+    }
+  };
+
+  return (
+    <div className={`
+      px-4 py-2 rounded-lg border-2 bg-background text-foreground min-w-32
+      ${selected ? 'border-primary shadow-lg' : 'border-muted'}
+      ${data.hasError ? 'border-destructive' : ''}
+      hover:shadow-md transition-all duration-200
+    `}>
+      <div className="flex items-center gap-2 mb-1">
+        <div className={`p-1 rounded text-white ${getNodeColor(data.nodeType)}`}>
+          {getNodeIcon(data.nodeType)}
+        </div>
+        <span className="font-medium text-sm truncate">{data.title}</span>
+      </div>
+      {data.hasError && (
+        <div className="flex items-center gap-1 text-destructive text-xs">
+          <AlertTriangle className="w-3 h-3" />
+          <span>Error</span>
+        </div>
+      )}
+      {data.nodeType === StoryMapNodeType.VARIABLE_MODIFIER_NODE && (
+        <Badge variant="secondary" className="text-xs">
+          Variables: {data.nodeSpecificData?.operations?.length || 0}
+        </Badge>
+      )}
+    </div>
+  );
+};
+
+// Node Palette Component
+const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) => void }) => {
+  const nodeTypes = [
+    { type: StoryMapNodeType.SCENE_NODE, label: 'Scene', icon: Square, color: 'bg-blue-500' },
+    { type: StoryMapNodeType.CHOICE_NODE, label: 'Choice', icon: Circle, color: 'bg-yellow-500' },
+    { type: StoryMapNodeType.BRANCH_NODE, label: 'Branch', icon: GitBranch, color: 'bg-purple-500' },
+    { type: StoryMapNodeType.ENDING_NODE, label: 'Ending', icon: Flag, color: 'bg-red-500' },
+    { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, label: 'Variable', icon: Settings, color: 'bg-orange-500' },
+    { type: StoryMapNodeType.COMMENT_NODE, label: 'Comment', icon: MessageCircle, color: 'bg-gray-500' },
   ];
 
-  // Canvas Handlers
-  const handleZoomIn = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      zoom: Math.min(prev.zoom * 1.2, 3)
-    }));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      zoom: Math.max(prev.zoom / 1.2, 0.1)
-    }));
-  }, []);
-
-  const handleResetView = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      zoom: 1,
-      pan: { x: 0, y: 0 }
-    }));
-  }, []);
-
-  const handleToggleGrid = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      showGrid: !prev.showGrid
-    }));
-  }, []);
-
-  // Node Handlers
-  const handleNodeSelect = useCallback((nodeId: string) => {
-    setCanvasState(prev => ({
-      ...prev,
-      selectedNodeId: nodeId
-    }));
-    updateEditorState({ selectedNodeId: nodeId });
-  }, [updateEditorState]);
-
-  const handleAddNode = useCallback(async (type: string, position?: { x: number; y: number }) => {
-    try {
-      const response = await fetch(`/api/novels/${novel.slug}/storymap`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          nodeType: `${type}_node`,
-          title: `${type.charAt(0).toUpperCase() + type.slice(1)} Node`,
-          position: position || { x: 100, y: 100 },
-          nodeSpecificData: {}
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Node added successfully:', result.data.node);
-        updateEditorState({ hasUnsavedChanges: false });
-        // TODO: Refresh storyMap data
-      } else {
-        console.error('Failed to add node:', await response.text());
-      }
-    } catch (error) {
-      console.error('Error adding node:', error);
-    }
-  }, [novel.slug, updateEditorState]);
-
-  const handleDeleteNode = useCallback(async (nodeId: string) => {
-    // TODO: Implement API call to delete node from StoryMap
-    console.log('Deleting node:', nodeId);
-    updateEditorState({ hasUnsavedChanges: true });
-  }, [updateEditorState]);
-
-  const handleDuplicateNode = useCallback(async (nodeId: string) => {
-    // TODO: Implement API call to duplicate node
-    console.log('Duplicating node:', nodeId);
-    updateEditorState({ hasUnsavedChanges: true });
-  }, [updateEditorState]);
-
-  // Render Node Component
-  const renderNode = useCallback((node: StoryNode) => {
-    const nodeTypeConfig = nodeTypes.find(nt => nt.type === node.type);
-    if (!nodeTypeConfig) return null;
-
-    const Icon = nodeTypeConfig.icon;
-    const isSelected = canvasState.selectedNodeId === node.id;
-    const isStart = node.type === 'start';
-
-    return (
-      <motion.div
-        key={node.id}
-        className={`
-          absolute cursor-pointer select-none
-          ${isSelected ? 'z-20' : 'z-10'}
-        `}
-        style={{
-          left: `${node.position.x}px`,
-          top: `${node.position.y}px`,
-          transform: `scale(${canvasState.zoom})`
-        }}
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: canvasState.zoom, opacity: 1 }}
-        whileHover={{ scale: canvasState.zoom * 1.05 }}
-        whileTap={{ scale: canvasState.zoom * 0.95 }}
-        onClick={() => handleNodeSelect(node.id)}
-      >
-        {/* Node Body */}
-        <div className={`
-          relative min-w-32 p-3 rounded-lg shadow-lg border-2 transition-all
-          ${isSelected 
-            ? 'border-primary shadow-primary/20' 
-            : 'border-border hover:border-primary/50'
-          }
-          ${isStart 
-            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
-            : 'bg-card text-card-foreground'
-          }
-        `}>
-          {/* Node Icon */}
-          <div className={`
-            flex items-center justify-center w-8 h-8 rounded-full mb-2
-            ${isStart ? 'bg-white/20' : nodeTypeConfig.color}
-          `}>
-            {isStart ? (
-              <Play className="w-4 h-4 text-white" />
-            ) : (
-              <Icon className="w-4 h-4 text-white" />
-            )}
-          </div>
-
-          {/* Node Title */}
-          <div className="text-sm font-medium mb-1 line-clamp-2">
-            {node.title}
-          </div>
-
-          {/* Node Type Label */}
-          <div className={`
-            text-xs px-2 py-1 rounded-full inline-block
-            ${isStart 
-              ? 'bg-white/20 text-white' 
-              : 'bg-muted text-muted-foreground'
-            }
-          `}>
-            {isStart ? 'เริ่มต้น' : nodeTypeConfig.label}
-          </div>
-
-          {/* Connection Points */}
-          {node.connections.map((_, index) => (
-            <div
-              key={index}
-              className="absolute w-3 h-3 bg-primary rounded-full border-2 border-background cursor-crosshair"
-                          style={{
-              right: '-6px',
-              top: `${20 + (index * 15)}px`
-            }}
-              title="จุดเชื่อมต่อ"
-            />
-          ))}
-
-          {/* Input Connection Point */}
-          {!isStart && (
-            <div
-              className="absolute w-3 h-3 bg-muted-foreground rounded-full border-2 border-background"
-                          style={{
-              left: '-6px',
-              top: '20px'
-            }}
-              title="จุดรับเชื่อมต่อ"
-            />
-          )}
-
-          {/* Selection Ring */}
-          {isSelected && (
-            <motion.div
-              className="absolute inset-0 border-2 border-primary rounded-lg pointer-events-none"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              style={{
-                boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)'
-              }}
-            />
-          )}
-        </div>
-      </motion.div>
-    );
-  }, [canvasState, nodeTypes, handleNodeSelect]);
-
-  // Render Left Panel (Node Palette)
-  const renderLeftPanel = () => (
-    <AnimatePresence>
-      {isLeftPanelOpen && (
-        <motion.div
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: isMobile ? '100%' : 280, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          className="bg-card border-r border-border flex flex-col"
-        >
-          {/* Panel Header */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">Node Palette</h3>
-              <button
-                onClick={() => setIsLeftPanelOpen(false)}
-                className="p-1 text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+  return (
+    <div className="p-4 bg-background border-r">
+      <h3 className="font-semibold mb-3">Node Palette</h3>
+      <div className="space-y-2">
+        {nodeTypes.map(({ type, label, icon: Icon, color }) => (
+          <Button
+            key={type}
+            variant="outline"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => onAddNode(type)}
+          >
+            <div className={`p-1 rounded text-white mr-2 ${color}`}>
+              <Icon className="w-3 h-3" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              ลากเพื่อเพิ่ม Node ใหม่
-            </p>
-          </div>
-
-          {/* Node Types */}
-          <div className="flex-1 p-4 space-y-2">
-            {nodeTypes.map((nodeType) => {
-              const Icon = nodeType.icon;
-              
-              return (
-                <motion.button
-                  key={nodeType.type}
-                  className="w-full flex items-center p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-colors"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleAddNode(nodeType.type)}
-                >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${nodeType.color}`}>
-                    <Icon className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <div className="text-sm font-medium text-foreground">
-                      {nodeType.label}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {nodeType.description}
-                    </div>
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
-
-          {/* Episode List */}
-          <div className="p-4 border-t border-border">
-            <h4 className="text-sm font-medium text-foreground mb-2">ตอน</h4>
-            <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-              {episodes.map((episode) => (
-                <button
-                  key={episode._id}
-                  className="w-full text-left p-2 text-xs rounded hover:bg-accent transition-colors"
-                >
-                  <div className="font-medium text-foreground">
-                    {episode.title}
-                  </div>
-                  <div className="text-muted-foreground">
-                    ตอนที่ {episode.episodeOrder}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
-  // Render Right Panel (Properties)
-  const renderRightPanel = () => (
-    <AnimatePresence>
-      {isRightPanelOpen && (
-        <motion.div
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: isMobile ? '100%' : 300, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          className="bg-card border-l border-border flex flex-col"
-        >
-          {/* Panel Header */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">Properties</h3>
-              <button
-                onClick={() => setIsRightPanelOpen(false)}
-                className="p-1 text-muted-foreground hover:text-foreground"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Properties Content */}
-          <div className="flex-1 p-4">
-            {canvasState.selectedNodeId ? (
-              <div>
-                <h4 className="text-sm font-medium text-foreground mb-3">
-                  Node Properties
-                </h4>
-                {/* TODO: Implement node properties editor */}
-                <div className="text-sm text-muted-foreground">
-                  Selected: {canvasState.selectedNodeId}
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground text-center py-8">
-                เลือก Node เพื่อแสดง Properties
-              </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          {canvasState.selectedNodeId && (
-            <div className="p-4 border-t border-border space-y-2">
-              <button
-                onClick={() => handleDuplicateNode(canvasState.selectedNodeId!)}
-                className="w-full flex items-center justify-center px-3 py-2 text-sm bg-accent text-accent-foreground rounded-lg hover:bg-accent/80 transition-colors"
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Duplicate
-              </button>
-              <button
-                onClick={() => handleDeleteNode(canvasState.selectedNodeId!)}
-                className="w-full flex items-center justify-center px-3 py-2 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/80 transition-colors"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </button>
-            </div>
-          )}
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
-  // Render Canvas Toolbar
-  const renderCanvasToolbar = () => (
-    <div className="absolute top-4 right-4 z-30 flex items-center space-x-2">
-      {/* Panel Toggles */}
-      {!isLeftPanelOpen && (
-        <button
-          onClick={() => setIsLeftPanelOpen(true)}
-          className="p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground shadow-sm"
-          title="แสดง Node Palette"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      )}
-
-      {!isRightPanelOpen && (
-        <button
-          onClick={() => setIsRightPanelOpen(true)}
-          className="p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground shadow-sm"
-          title="แสดง Properties"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-      )}
-
-      {/* Canvas Controls */}
-      <div className="flex items-center bg-card border border-border rounded-lg shadow-sm">
-        <button
-          onClick={handleZoomIn}
-          className="p-2 text-muted-foreground hover:text-foreground"
-          title="ขยาย"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleZoomOut}
-          className="p-2 text-muted-foreground hover:text-foreground border-l border-border"
-          title="ย่อ"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleResetView}
-          className="p-2 text-muted-foreground hover:text-foreground border-l border-border"
-          title="รีเซ็ต"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleToggleGrid}
-          className={`p-2 border-l border-border ${canvasState.showGrid ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-          title="แสดง/ซ่อน Grid"
-        >
-          <Grid3X3 className="w-4 h-4" />
-        </button>
+            {label}
+          </Button>
+        ))}
       </div>
     </div>
   );
+};
+
+// Properties Panel Component
+const PropertiesPanel = ({ 
+  selectedNode, 
+  selectedEdge, 
+  onNodeUpdate, 
+  onEdgeUpdate,
+  storyVariables 
+}: {
+  selectedNode: Node | null;
+  selectedEdge: Edge | null;
+  onNodeUpdate: (nodeId: string, data: any) => void;
+  onEdgeUpdate: (edgeId: string, data: any) => void;
+  storyVariables: IStoryVariableDefinition[];
+}) => {
+  const [nodeTitle, setNodeTitle] = useState('');
+  const [nodeNotes, setNodeNotes] = useState('');
+  const [edgeLabel, setEdgeLabel] = useState('');
+  const [edgeCondition, setEdgeCondition] = useState('');
+
+  useEffect(() => {
+    if (selectedNode) {
+      setNodeTitle(selectedNode.data.title || '');
+      setNodeNotes(selectedNode.data.notesForAuthor || '');
+    }
+  }, [selectedNode]);
+
+  useEffect(() => {
+    if (selectedEdge) {
+      setEdgeLabel(String(selectedEdge.label || ''));
+      setEdgeCondition(selectedEdge.data?.condition?.expression || '');
+    }
+  }, [selectedEdge]);
+
+  if (!selectedNode && !selectedEdge) {
+    return (
+      <div className="p-4 text-center text-muted-foreground">
+        Select a node or edge to edit properties
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex bg-background">
-      {/* Left Panel - Node Palette */}
-      {renderLeftPanel()}
-
-      {/* Main Canvas Area */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Canvas Toolbar */}
-        {renderCanvasToolbar()}
-
-        {/* Canvas */}
-        <div
-          ref={canvasRef}
-          className="w-full h-full relative cursor-grab active:cursor-grabbing"
-          style={{
-            backgroundImage: canvasState.showGrid 
-              ? `radial-gradient(circle, hsl(var(--muted-foreground)) 1px, transparent 1px)`
-              : 'none',
-            backgroundSize: '20px 20px',
-            backgroundPosition: `${canvasState.pan.x}px ${canvasState.pan.y}px`
-          }}
-        >
-          {/* Nodes */}
-          <div className="absolute inset-0">
-            {nodes.map(renderNode)}
-          </div>
-
-          {/* Connections/Edges */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            {storyMap?.edges?.map((edge) => {
-              const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
-              const targetNode = nodes.find(n => n.id === edge.targetNodeId);
-              
-              if (!sourceNode || !targetNode) return null;
-              
-              const startX = (sourceNode.position.x + 128) * canvasState.zoom + canvasState.pan.x;
-              const startY = (sourceNode.position.y + 40) * canvasState.zoom + canvasState.pan.y;
-              const endX = targetNode.position.x * canvasState.zoom + canvasState.pan.x;
-              const endY = (targetNode.position.y + 40) * canvasState.zoom + canvasState.pan.y;
-
-              return (
-                <motion.path
-                  key={edge.edgeId}
-                  d={`M ${startX} ${startY} Q ${startX + 50} ${startY} ${endX} ${endY}`}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth="2"
-                  fill="none"
-                  className="drop-shadow-sm"
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: 1 }}
-                  transition={{ duration: 0.5 }}
-                  markerEnd="url(#arrowhead)"
-                />
-              );
-            })}
+    <ScrollArea className="h-full">
+      <div className="p-4 space-y-4">
+        {selectedNode && (
+          <>
+            <div>
+              <Label htmlFor="node-title">Node Title</Label>
+              <Input
+                id="node-title"
+                value={nodeTitle}
+                onChange={(e) => setNodeTitle(e.target.value)}
+                onBlur={() => onNodeUpdate(selectedNode.id, { title: nodeTitle })}
+                placeholder="Enter node title"
+              />
+            </div>
             
-            {/* Arrow marker */}
-            <defs>
-              <marker
-                id="arrowhead"
-                markerWidth="10"
-                markerHeight="7"
-                refX="9"
-                refY="3.5"
-                orient="auto"
-              >
-                <polygon
-                  points="0 0, 10 3.5, 0 7"
-                  fill="hsl(var(--primary))"
-                />
-              </marker>
-            </defs>
-          </svg>
+            <div>
+              <Label htmlFor="node-notes">Author Notes</Label>
+              <Textarea
+                id="node-notes"
+                value={nodeNotes}
+                onChange={(e) => setNodeNotes(e.target.value)}
+                onBlur={() => onNodeUpdate(selectedNode.id, { notesForAuthor: nodeNotes })}
+                placeholder="Enter notes for this node"
+                rows={3}
+              />
+            </div>
 
-          {/* Empty State */}
-          {nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-4">🎯</div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  เริ่มสร้าง Story Map
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  เพิ่ม Node แรกเพื่อเริ่มต้นการวางโครงเรื่อง
-                </p>
-                <button
-                  onClick={() => handleAddNode('scene')}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <Plus className="w-4 h-4 mr-2 inline" />
-                  เพิ่ม Scene แรก
-                </button>
+            <div>
+              <Label>Node Type</Label>
+              <Badge variant="secondary">{selectedNode.data.nodeType}</Badge>
+            </div>
+
+            {selectedNode.data.nodeType === StoryMapNodeType.VARIABLE_MODIFIER_NODE && (
+              <div>
+                <Label>Variable Operations</Label>
+                <div className="space-y-2 mt-2">
+                  {selectedNode.data.nodeSpecificData?.operations?.map((op: any, index: number) => (
+                    <div key={index} className="p-2 border rounded text-sm">
+                      <div><strong>Variable:</strong> {op.variableId}</div>
+                      <div><strong>Operation:</strong> {op.operation}</div>
+                      <div><strong>Value:</strong> {op.value}</div>
+                    </div>
+                  )) || <div className="text-muted-foreground text-sm">No operations defined</div>}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedEdge && (
+          <>
+            <div>
+              <Label htmlFor="edge-label">Edge Label</Label>
+              <Input
+                id="edge-label"
+                value={edgeLabel}
+                onChange={(e) => setEdgeLabel(e.target.value)}
+                onBlur={() => onEdgeUpdate(selectedEdge.id, { label: edgeLabel })}
+                placeholder="Enter edge label"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="edge-condition">Condition Expression</Label>
+              <Textarea
+                id="edge-condition"
+                value={edgeCondition}
+                onChange={(e) => setEdgeCondition(e.target.value)}
+                onBlur={() => onEdgeUpdate(selectedEdge.id, { 
+                  condition: { expression: edgeCondition } 
+                })}
+                placeholder="Enter condition expression (e.g., $karma > 50)"
+                rows={2}
+              />
+            </div>
+
+            <div>
+              <Label>Available Variables</Label>
+              <div className="space-y-1 mt-2 max-h-32 overflow-y-auto">
+                {storyVariables.map((variable) => (
+                  <div key={variable.variableId} className="text-xs p-1 bg-muted rounded">
+                    <strong>${variable.variableName}</strong> ({variable.dataType})
+                  </div>
+                ))}
               </div>
             </div>
-          )}
+          </>
+        )}
+      </div>
+    </ScrollArea>
+  );
+};
+
+// Validation Component
+const ValidationPanel = ({ 
+  nodes, 
+  edges, 
+  storyVariables 
+}: { 
+  nodes: Node[]; 
+  edges: Edge[]; 
+  storyVariables: IStoryVariableDefinition[] 
+}) => {
+  const validationResults = useMemo(() => {
+    const errors: Array<{ type: 'error' | 'warning'; message: string; nodeId?: string; edgeId?: string }> = [];
+    
+    // Check for start node
+    const startNodes = nodes.filter(n => n.data.nodeType === StoryMapNodeType.START_NODE);
+    if (startNodes.length === 0) {
+      errors.push({ type: 'error', message: 'No start node found' });
+    } else if (startNodes.length > 1) {
+      errors.push({ type: 'error', message: 'Multiple start nodes found' });
+    }
+
+    // Check for orphaned nodes
+    const connectedNodeIds = new Set();
+    edges.forEach(edge => {
+      connectedNodeIds.add(edge.source);
+      connectedNodeIds.add(edge.target);
+    });
+
+    nodes.forEach(node => {
+      if (node.data.nodeType !== StoryMapNodeType.START_NODE && !connectedNodeIds.has(node.id)) {
+        errors.push({ 
+          type: 'warning', 
+          message: `Node "${node.data.title}" is not connected`, 
+          nodeId: node.id 
+        });
+      }
+    });
+
+    // Check for duplicate node IDs
+    const nodeIds = new Set();
+    nodes.forEach(node => {
+      if (nodeIds.has(node.id)) {
+        errors.push({ 
+          type: 'error', 
+          message: `Duplicate node ID: ${node.id}`, 
+          nodeId: node.id 
+        });
+      }
+      nodeIds.add(node.id);
+    });
+
+    return errors;
+  }, [nodes, edges, storyVariables]);
+
+  return (
+    <div className="p-4">
+      <h3 className="font-semibold mb-3 flex items-center gap-2">
+        <ShieldAlert className="w-4 h-4" />
+        Validation Results
+      </h3>
+      
+      {validationResults.length === 0 ? (
+        <div className="flex items-center gap-2 text-green-600">
+          <CheckCircle className="w-4 h-4" />
+          <span className="text-sm">No issues found</span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {validationResults.map((result, index) => (
+            <Alert key={index} variant={result.type === 'error' ? 'destructive' : 'default'}>
+              <div className="flex items-center gap-2">
+                {result.type === 'error' ? 
+                  <XCircle className="w-4 h-4" /> : 
+                  <AlertTriangle className="w-4 h-4" />
+                }
+                <AlertDescription className="text-sm">
+                  {result.message}
+                </AlertDescription>
+              </div>
+            </Alert>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Main Blueprint Tab Component
+const BlueprintTab: React.FC<BlueprintTabProps> = ({ novel, storyMap, onStoryMapUpdate }) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
+  const [isValidationOpen, setIsValidationOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+
+  // Initialize nodes and edges from storyMap
+  useEffect(() => {
+    if (storyMap) {
+      const flowNodes: Node[] = storyMap.nodes.map((node: IStoryMapNode) => ({
+        id: node.nodeId,
+        type: 'custom',
+        position: node.position,
+        data: {
+          ...node,
+          hasError: false // Will be set by validation
+        }
+      }));
+
+      const flowEdges: Edge[] = storyMap.edges.map((edge: IStoryMapEdge) => ({
+        id: edge.edgeId,
+        source: edge.sourceNodeId,
+        target: edge.targetNodeId,
+        label: edge.label,
+        data: edge,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+        },
+        style: {
+          strokeWidth: 2,
+          stroke: edge.condition ? '#8b5cf6' : '#64748b'
+        }
+      }));
+
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+    }
+  }, [storyMap, setNodes, setEdges]);
+
+  // Add new node
+  const onAddNode = useCallback((nodeType: StoryMapNodeType) => {
+    const newNodeId = `node-${Date.now()}`;
+    const newNode: Node = {
+      id: newNodeId,
+      type: 'custom',
+      position: { x: Math.random() * 500, y: Math.random() * 300 },
+      data: {
+        nodeId: newNodeId,
+        nodeType,
+        title: `New ${nodeType.replace('_', ' ')}`,
+        position: { x: Math.random() * 500, y: Math.random() * 300 },
+        notesForAuthor: '',
+        nodeSpecificData: {}
+      }
+    };
+
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]);
+
+  // Handle node updates
+  const onNodeUpdate = useCallback((nodeId: string, updates: any) => {
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, ...updates } }
+          : node
+      )
+    );
+  }, [setNodes]);
+
+  // Handle edge updates
+  const onEdgeUpdate = useCallback((edgeId: string, updates: any) => {
+    setEdges((eds) =>
+      eds.map((edge) =>
+        edge.id === edgeId
+          ? { ...edge, ...updates, data: { ...edge.data, ...updates } }
+          : edge
+      )
+    );
+  }, [setEdges]);
+
+  // Handle connection
+  const onConnect = useCallback((params: Connection) => {
+    const newEdge = {
+      ...params,
+      id: `edge-${Date.now()}`,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 20,
+        height: 20,
+      },
+      style: {
+        strokeWidth: 2,
+        stroke: '#64748b'
+      }
+    };
+    setEdges((eds) => addEdge(newEdge, eds));
+  }, [setEdges]);
+
+  // Handle node selection
+  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+    setSelectedNode(node);
+    setSelectedEdge(null);
+  }, []);
+
+  // Handle edge selection
+  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null);
+  }, []);
+
+  // Save storymap
+  const handleSave = useCallback(async () => {
+    if (!novel?.slug) return;
+
+    setIsSaving(true);
+    try {
+      const storyMapData = {
+        title: storyMap?.title || 'Story Map',
+        description: storyMap?.description || '',
+        nodes: nodes.map(node => ({
+          nodeId: node.id,
+          nodeType: node.data.nodeType,
+          title: node.data.title,
+          position: node.position,
+          notesForAuthor: node.data.notesForAuthor,
+          nodeSpecificData: node.data.nodeSpecificData || {}
+        })),
+        edges: edges.map(edge => ({
+          edgeId: edge.id,
+          sourceNodeId: edge.source,
+          targetNodeId: edge.target,
+          label: edge.label,
+          condition: edge.data?.condition
+        })),
+        storyVariables: storyMap?.storyVariables || [],
+        startNodeId: storyMap?.startNodeId || nodes.find(n => n.data.nodeType === StoryMapNodeType.START_NODE)?.id || '',
+        editorMetadata: {
+          zoomLevel: reactFlowInstance?.getZoom() || 1,
+          viewOffsetX: reactFlowInstance?.getViewport().x || 0,
+          viewOffsetY: reactFlowInstance?.getViewport().y || 0,
+          gridSize: 20,
+          showGrid
+        }
+      };
+
+      const response = await fetch(`/api/novels/${novel.slug}/storymap`, {
+        method: storyMap ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(storyMapData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save story map');
+      }
+
+      const result = await response.json();
+      onStoryMapUpdate(result.storyMap);
+      toast.success('Story map saved successfully');
+    } catch (error) {
+      console.error('Error saving story map:', error);
+      toast.error('Failed to save story map');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [novel, storyMap, nodes, edges, reactFlowInstance, showGrid, onStoryMapUpdate]);
+
+  // Auto layout
+  const handleAutoLayout = useCallback(() => {
+    // Simple auto layout - distribute nodes in a grid
+    const gridSize = Math.ceil(Math.sqrt(nodes.length));
+    const spacing = 200;
+    
+    const layoutedNodes = nodes.map((node, index) => ({
+      ...node,
+      position: {
+        x: (index % gridSize) * spacing,
+        y: Math.floor(index / gridSize) * spacing
+      }
+    }));
+
+    setNodes(layoutedNodes);
+  }, [nodes, setNodes]);
+
+  const nodeTypes = {
+    custom: CustomNode,
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-background">
+      {/* Mobile Header */}
+      <div className="lg:hidden flex items-center justify-between p-4 border-b">
+        <h2 className="text-lg font-semibold">Blueprint</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsSidebarOpen(true)}
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsPropertiesOpen(true)}
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
-      {/* Right Panel - Properties */}
-      {renderRightPanel()}
+      <div className="flex-1 flex">
+        {/* Desktop Sidebar */}
+        <div className="hidden lg:block w-64 border-r bg-background">
+          <Tabs defaultValue="palette" className="h-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="palette">Palette</TabsTrigger>
+              <TabsTrigger value="validation">Validation</TabsTrigger>
+            </TabsList>
+            <TabsContent value="palette" className="h-full">
+              <NodePalette onAddNode={onAddNode} />
+            </TabsContent>
+            <TabsContent value="validation" className="h-full">
+              <ValidationPanel 
+                nodes={nodes} 
+                edges={edges} 
+                storyVariables={storyMap?.storyVariables || []} 
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Main Canvas */}
+        <div className="flex-1 relative">
+          <ReactFlowProvider>
+            <div ref={reactFlowWrapper} className="h-full w-full">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={onNodeClick}
+                onEdgeClick={onEdgeClick}
+                onInit={setReactFlowInstance}
+                nodeTypes={nodeTypes}
+                fitView
+                className="bg-background"
+              >
+                <Controls className="bg-background border border-border" />
+                <Background 
+                  gap={20} 
+                  size={1} 
+                  style={{ display: showGrid ? 'block' : 'none' }}
+                />
+                
+                {/* Floating Toolbar */}
+                <Panel position="top-right" className="bg-background border border-border rounded-lg p-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowGrid(!showGrid)}
+                    >
+                      <Grid3X3 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoLayout}
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </Panel>
+              </ReactFlow>
+            </div>
+          </ReactFlowProvider>
+        </div>
+
+        {/* Desktop Properties Panel */}
+        <div className="hidden lg:block w-80 border-l bg-background">
+          <div className="p-4 border-b">
+            <h3 className="font-semibold">Properties</h3>
+          </div>
+          <PropertiesPanel
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            onNodeUpdate={onNodeUpdate}
+            onEdgeUpdate={onEdgeUpdate}
+            storyVariables={storyMap?.storyVariables || []}
+          />
+        </div>
+      </div>
+
+      {/* Mobile Sidebar Sheet */}
+      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+        <SheetContent side="left" className="w-80">
+          <SheetHeader>
+            <SheetTitle>Node Palette</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <Tabs defaultValue="palette">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="palette">Palette</TabsTrigger>
+                <TabsTrigger value="validation">Validation</TabsTrigger>
+              </TabsList>
+              <TabsContent value="palette">
+                <NodePalette onAddNode={onAddNode} />
+              </TabsContent>
+              <TabsContent value="validation">
+                <ValidationPanel 
+                  nodes={nodes} 
+                  edges={edges} 
+                  storyVariables={storyMap?.storyVariables || []} 
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Mobile Properties Sheet */}
+      <Sheet open={isPropertiesOpen} onOpenChange={setIsPropertiesOpen}>
+        <SheetContent side="right" className="w-80">
+          <SheetHeader>
+            <SheetTitle>Properties</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <PropertiesPanel
+              selectedNode={selectedNode}
+              selectedEdge={selectedEdge}
+              onNodeUpdate={onNodeUpdate}
+              onEdgeUpdate={onEdgeUpdate}
+              storyVariables={storyMap?.storyVariables || []}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

@@ -1,121 +1,165 @@
+// API Route: /api/novels/[slug]/episodes/[episodeId]
+// GET: Fetch Episode data
+// PUT: Update existing Episode
+// DELETE: Delete Episode
+
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
-import NovelModel from '@/backend/models/Novel';
-import EpisodeModel from '@/backend/models/Episode';
-import SceneModel from '@/backend/models/Scene';
-import CharacterModel from '@/backend/models/Character';
-import ChoiceModel from '@/backend/models/Choice';
-import StoryMapModel from '@/backend/models/StoryMap';
+import EpisodeModel, { IEpisode } from '@/backend/models/Episode';
+import { validateNovelAccess } from '../../storymap/auth-helper';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; episodeId: string }> }
 ) {
   try {
-    await dbConnect();
     const { slug, episodeId } = await params;
-
-    const novel = await NovelModel.findOne({ slug, isDeleted: { $ne: true } }).select('_id endingType isCompleted totalEpisodesCount').lean();
-    if (!novel) {
-      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
     }
 
-    const episode = await EpisodeModel.findOne({ _id: episodeId, novelId: novel._id }).lean();
+    await dbConnect();
+
+    // Validate access
+    const { error, novel } = await validateNovelAccess(slug, session.user.id);
+    if (error) return error;
+
+    // Get episode
+    const episode = await EpisodeModel.findOne({
+      _id: episodeId,
+      novelId: novel!._id
+    }).lean();
+
     if (!episode) {
-      return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
+      return NextResponse.json({ 
+        error: 'ไม่พบตอนที่ระบุ' 
+      }, { status: 404 });
     }
 
-    const [scenes, characters, choices, storyMap] = await Promise.all([
-      SceneModel.find({ episodeId: episode._id }).sort({ sceneOrder: 1 }).lean(),
-      CharacterModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
-      ChoiceModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
-      StoryMapModel.findOne({ novelId: novel._id, isActive: true }).lean()
-    ]);
-
-    const characterLookup = characters.reduce((acc, char) => {
-      acc[char._id.toString()] = char;
-      return acc;
-    }, {} as Record<string, any>);
-
-    const choiceLookup = choices.reduce((acc, choice) => {
-        acc[choice._id.toString()] = choice;
-        return acc;
-    }, {} as Record<string, any>);
-
-    const processedScenes = scenes.map((scene: any) => {
-      const sceneCharacters = (scene.characters || []).map((char: any) => ({
-        instanceId: char.instanceId,
-        characterId: char.characterId.toString(),
-        characterData: characterLookup[char.characterId.toString()],
-        expressionId: char.expressionId,
-        transform: char.transform,
-        isVisible: char.isVisible !== false,
-      }));
-      
-      const textContents = (scene.textContents || []).map((tc: any) => ({
-        instanceId: tc.instanceId,
-        type: tc.type,
-        characterId: tc.characterId?.toString(),
-        speakerDisplayName: tc.speakerDisplayName,
-        content: tc.content,
-      }));
-      
-      const sceneChoices = (scene.choiceIds || []).map((choiceId: any) => {
-          const choiceData = choiceLookup[choiceId.toString()];
-          return choiceData ? {
-              _id: choiceData._id.toString(),
-              text: choiceData.text,
-              hoverText: choiceData.hoverText,
-              actions: choiceData.actions,
-          } : null;
-      }).filter(Boolean);
-
-      return {
-        _id: scene._id.toString(),
-        nodeId: scene.nodeId,
-        sceneOrder: scene.sceneOrder,
-        title: scene.title,
-        background: scene.background,
-        sceneTransitionOut: scene.sceneTransitionOut, // Add transition data for performance optimization
-        characters: sceneCharacters,
-        textContents,
-        choices: sceneChoices,
-        defaultNextSceneId: scene.defaultNextSceneId?.toString(),
-        ending: scene.ending, // เพิ่มการส่ง ending data
-        audioElements: scene.audios || [],
-      };
+    return NextResponse.json({ 
+      episode: JSON.parse(JSON.stringify(episode)),
+      success: true 
     });
 
-    const response = {
-      ...episode,
-      _id: episode._id.toString(),
-      firstSceneId: episode.firstSceneId?.toString(),
-      scenes: processedScenes,
-      storyMap: storyMap ? {
-        _id: storyMap._id.toString(),
-        nodes: storyMap.nodes,
-        edges: storyMap.edges,
-        storyVariables: storyMap.storyVariables,
-        startNodeId: storyMap.startNodeId
-      } : null,
-      // Add novel metadata for ending logic
-      novelMeta: {
-        endingType: novel.endingType,
-        isCompleted: novel.isCompleted,
-        totalEpisodesCount: novel.totalEpisodesCount
-      }
-    };
-    
-    // The top-level choices property is removed as choices are now embedded in scenes
-    delete (response as any).choices;
+  } catch (error) {
+    console.error('[Episode GET] Error:', error);
+    return NextResponse.json({ 
+      error: 'เกิดข้อผิดพลาดในการดึงข้อมูลตอน' 
+    }, { status: 500 });
+  }
+}
 
-    return NextResponse.json(response);
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; episodeId: string }> }
+) {
+  try {
+    const { slug, episodeId } = await params;
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // Validate access
+    const { error, novel } = await validateNovelAccess(slug, session.user.id);
+    if (error) return error;
+
+    const body = await request.json();
+
+    // Find existing episode
+    const existingEpisode = await EpisodeModel.findOne({
+      _id: episodeId,
+      novelId: novel!._id
+    });
+
+    if (!existingEpisode) {
+      return NextResponse.json({ 
+        error: 'ไม่พบตอนที่ระบุ' 
+      }, { status: 404 });
+    }
+
+    // Update episode
+    const updateData: Partial<IEpisode> = {
+      ...body,
+      updatedAt: new Date()
+    };
+
+    // Remove _id from updateData to prevent conflicts
+    delete (updateData as any)._id;
+
+    // Handle status changes
+    if (updateData.status === 'published' && existingEpisode.status !== 'published') {
+      updateData.publishedAt = new Date();
+    }
+
+    const updatedEpisode = await EpisodeModel.findByIdAndUpdate(
+      episodeId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    return NextResponse.json({ 
+      episode: JSON.parse(JSON.stringify(updatedEpisode!.toObject())),
+      success: true,
+      message: 'อัพเดตตอนสำเร็จ'
+    });
 
   } catch (error) {
-    console.error('Error fetching episode:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch episode data' },
-      { status: 500 }
-    );
+    console.error('[Episode PUT] Error:', error);
+    return NextResponse.json({ 
+      error: 'เกิดข้อผิดพลาดในการอัพเดตตอน' 
+    }, { status: 500 });
   }
-} 
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; episodeId: string }> }
+) {
+  try {
+    const { slug, episodeId } = await params;
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // Validate access
+    const { error, novel } = await validateNovelAccess(slug, session.user.id);
+    if (error) return error;
+
+    // Find and delete episode
+    const episode = await EpisodeModel.findOne({
+      _id: episodeId,
+      novelId: novel!._id
+    });
+
+    if (!episode) {
+      return NextResponse.json({ 
+        error: 'ไม่พบตอนที่ระบุ' 
+      }, { status: 404 });
+    }
+
+    await EpisodeModel.findByIdAndDelete(episodeId);
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'ลบตอนสำเร็จ'
+    });
+
+  } catch (error) {
+    console.error('[Episode DELETE] Error:', error);
+    return NextResponse.json({ 
+      error: 'เกิดข้อผิดพลาดในการลบตอน' 
+    }, { status: 500 });
+  }
+}
