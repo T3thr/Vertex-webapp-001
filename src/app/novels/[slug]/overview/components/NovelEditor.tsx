@@ -61,6 +61,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(true)
+  const [autoSaveIntervalSec, setAutoSaveIntervalSec] = useState<15 | 30>(15)
+  const [isDirty, setIsDirty] = useState(false)
 
   // Handlers for data updates
   const handleStoryMapUpdate = (updatedStoryMap: any) => {
@@ -228,9 +230,20 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           </Button>
 
           {/* Settings */}
-          <Button variant="outline" size="sm">
-            <Settings className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <select
+              className="text-xs bg-background border border-border rounded px-2 py-1"
+              value={autoSaveIntervalSec}
+              onChange={(e) => setAutoSaveIntervalSec(Number(e.target.value) as 15 | 30)}
+              title="Auto-save interval"
+            >
+              <option value={15}>15s</option>
+              <option value={30}>30s</option>
+            </select>
+            <Button variant="outline" size="sm">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -378,7 +391,20 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
               <BlueprintTab
                 novel={currentNovel}
                 storyMap={currentStoryMap}
+                scenes={currentScenes}
+                characters={characters}
+                userMedia={userMedia}
+                officialMedia={officialMedia}
+                episodes={currentEpisodes}
                 onStoryMapUpdate={handleStoryMapUpdate}
+                isAutoSaveEnabled={isAutoSaveEnabled}
+                onManualSave={handleManualSave}
+                autoSaveIntervalSec={autoSaveIntervalSec}
+                onDirtyChange={setIsDirty}
+                onNavigateToDirector={(sceneId?: string) => {
+                  setActiveTab('director')
+                  // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus
+                }}
               />
             </TabsContent>
 

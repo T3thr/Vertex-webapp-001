@@ -55,7 +55,29 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Menu
+  Menu,
+  Brain,
+  Shield,
+  Globe,
+  Smartphone,
+  Monitor,
+  Tablet,
+  Filter,
+  Search,
+  ExternalLink,
+  Copy,
+  MoreHorizontal,
+  PlayCircle,
+  PauseCircle,
+  StopCircle,
+  Zap,
+  Info,
+  HelpCircle,
+  ChevronRight,
+  ChevronDown,
+  SortAsc,
+  SortDesc,
+  Save
 } from 'lucide-react';
 
 // Props interface
@@ -322,6 +344,468 @@ const ReviewsRatings = ({ novel }: { novel: any }) => {
   );
 };
 
+// Mental Wellbeing Insights Component
+const MentalWellbeingInsights = ({ novel }: { novel: any }) => {
+  const [isOptedIn, setIsOptedIn] = useState(true);
+  const [insights, setInsights] = useState({
+    overallSentiment: 'positive',
+    sensitiveTopicCount: 2,
+    readerFeedbackSentiment: 'mostly_positive',
+    recommendedBreaks: 3,
+    contentWarnings: ['mild_violence', 'emotional_themes'],
+    lastAnalysisDate: new Date().toISOString()
+  });
+
+  if (!isOptedIn) {
+    return (
+      <Card className="bg-background">
+        <CardContent className="p-6 text-center">
+          <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <h4 className="font-semibold mb-2">Mental Wellbeing Insights</h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            Get AI-powered insights about your story's emotional impact and reader wellbeing.
+          </p>
+          <Button onClick={() => setIsOptedIn(true)} variant="outline">
+            <Brain className="w-4 h-4 mr-2" />
+            Enable Insights
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold">Mental Wellbeing Analysis</h4>
+        <Button variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Update Analysis
+        </Button>
+      </div>
+
+      {/* Overall Sentiment */}
+      <Card className="bg-background">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className={`p-2 rounded-full ${
+              insights.overallSentiment === 'positive' ? 'bg-green-100 text-green-600' :
+              insights.overallSentiment === 'negative' ? 'bg-red-100 text-red-600' :
+              'bg-yellow-100 text-yellow-600'
+            }`}>
+              <Brain className="w-4 h-4" />
+            </div>
+            <div>
+              <h5 className="font-medium">Overall Story Sentiment</h5>
+              <p className="text-sm text-muted-foreground capitalize">
+                {insights.overallSentiment.replace('_', ' ')}
+              </p>
+            </div>
+          </div>
+          <Progress 
+            value={insights.overallSentiment === 'positive' ? 85 : 
+                   insights.overallSentiment === 'negative' ? 25 : 60} 
+            className="h-2" 
+          />
+        </CardContent>
+      </Card>
+
+      {/* Content Warnings */}
+      <Card className="bg-background">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="w-4 h-4 text-orange-500" />
+            <h5 className="font-medium">Content Considerations</h5>
+          </div>
+          <div className="space-y-2">
+            {insights.contentWarnings.map((warning, index) => (
+              <div key={index} className="flex items-center justify-between">
+                <span className="text-sm capitalize">{warning.replace('_', ' ')}</span>
+                <Badge variant="outline" className="text-xs">
+                  Active
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" className="w-full mt-3">
+            <Settings className="w-4 h-4 mr-2" />
+            Manage Warnings
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Reader Recommendations */}
+      <Card className="bg-background">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <HelpCircle className="w-4 h-4 text-blue-500" />
+            <h5 className="font-medium">Reader Wellbeing</h5>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Suggested reading breaks</span>
+              <span className="text-sm font-medium">{insights.recommendedBreaks} per episode</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Reader feedback sentiment</span>
+              <Badge variant={insights.readerFeedbackSentiment === 'mostly_positive' ? 'default' : 'secondary'}>
+                {insights.readerFeedbackSentiment.replace('_', ' ')}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Analysis Settings */}
+      <Card className="bg-background">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h5 className="font-medium">Analysis Settings</h5>
+            <Button variant="ghost" size="sm">
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="auto-analysis">Auto-analysis</Label>
+              <Switch id="auto-analysis" defaultChecked />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="sensitive-content">Sensitive content detection</Label>
+              <Switch id="sensitive-content" defaultChecked />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="reader-feedback">Reader feedback analysis</Label>
+              <Switch id="reader-feedback" defaultChecked />
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
+            Last updated: {new Date(insights.lastAnalysisDate).toLocaleDateString()}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Advanced Analytics Component
+const AdvancedAnalytics = ({ novel }: { novel: any }) => {
+  const [timeRange, setTimeRange] = useState('30d');
+  const [analyticsData, setAnalyticsData] = useState({
+    deviceBreakdown: [
+      { device: 'Mobile', percentage: 65, count: 2340 },
+      { device: 'Desktop', percentage: 25, count: 900 },
+      { device: 'Tablet', percentage: 10, count: 360 }
+    ],
+    geographicData: [
+      { country: 'Thailand', percentage: 45, count: 1620 },
+      { country: 'Singapore', percentage: 20, count: 720 },
+      { country: 'Malaysia', percentage: 15, count: 540 },
+      { country: 'Others', percentage: 20, count: 720 }
+    ],
+    readingPatterns: {
+      averageSessionTime: '12.5 min',
+      bounceRate: '15%',
+      returnReaderRate: '68%',
+      peakReadingHours: ['19:00-21:00', '21:00-23:00']
+    },
+    choiceAnalytics: [
+      { choiceText: 'Help the mysterious stranger', percentage: 72, count: 864 },
+      { choiceText: 'Walk away quietly', percentage: 28, count: 336 }
+    ]
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold">Advanced Analytics</h4>
+        <Select value={timeRange} onValueChange={setTimeRange}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+            <SelectItem value="1y">Last year</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Device Breakdown */}
+        <Card className="bg-background">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4" />
+              Device Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {analyticsData.deviceBreakdown.map((device, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {device.device === 'Mobile' && <Smartphone className="w-4 h-4" />}
+                      {device.device === 'Desktop' && <Monitor className="w-4 h-4" />}
+                      {device.device === 'Tablet' && <Tablet className="w-4 h-4" />}
+                      <span className="text-sm">{device.device}</span>
+                    </div>
+                    <span className="text-sm font-medium">{device.percentage}%</span>
+                  </div>
+                  <Progress value={device.percentage} className="h-2" />
+                  <div className="text-xs text-muted-foreground">
+                    {device.count.toLocaleString()} readers
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Geographic Distribution */}
+        <Card className="bg-background">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="w-4 h-4" />
+              Geographic Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {analyticsData.geographicData.map((location, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{location.country}</span>
+                    <span className="text-sm font-medium">{location.percentage}%</span>
+                  </div>
+                  <Progress value={location.percentage} className="h-2" />
+                  <div className="text-xs text-muted-foreground">
+                    {location.count.toLocaleString()} readers
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Reading Patterns */}
+        <Card className="bg-background">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Reading Patterns
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                <div className="text-lg font-bold text-primary">
+                  {analyticsData.readingPatterns.averageSessionTime}
+                </div>
+                <div className="text-xs text-muted-foreground">Avg. Session</div>
+              </div>
+              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                <div className="text-lg font-bold text-primary">
+                  {analyticsData.readingPatterns.bounceRate}
+                </div>
+                <div className="text-xs text-muted-foreground">Bounce Rate</div>
+              </div>
+              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                <div className="text-lg font-bold text-primary">
+                  {analyticsData.readingPatterns.returnReaderRate}
+                </div>
+                <div className="text-xs text-muted-foreground">Return Rate</div>
+              </div>
+              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                <div className="text-lg font-bold text-primary">
+                  {analyticsData.readingPatterns.peakReadingHours.length}
+                </div>
+                <div className="text-xs text-muted-foreground">Peak Hours</div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t">
+              <h6 className="text-sm font-medium mb-2">Peak Reading Times</h6>
+              <div className="flex flex-wrap gap-2">
+                {analyticsData.readingPatterns.peakReadingHours.map((hour, index) => (
+                  <Badge key={index} variant="outline">{hour}</Badge>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Choice Analytics */}
+        <Card className="bg-background">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Choice Analytics
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground mb-4">
+                Most recent choice from Episode 5: "The Crossroads"
+              </p>
+              {analyticsData.choiceAnalytics.map((choice, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{choice.choiceText}</span>
+                    <span className="text-sm">{choice.percentage}%</span>
+                  </div>
+                  <Progress value={choice.percentage} className="h-2" />
+                  <div className="text-xs text-muted-foreground">
+                    {choice.count} readers chose this option
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button variant="outline" size="sm" className="w-full mt-4">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              View All Choice Data
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// SEO & Discoverability Component
+const SEODiscoverability = ({ novel, onNovelUpdate }: { novel: any; onNovelUpdate: (data: any) => void }) => {
+  const [seoData, setSeoData] = useState({
+    title: novel.title || '',
+    description: novel.synopsis || '',
+    tags: novel.themeAssignment?.customTags || [],
+    searchKeywords: ['visual novel', 'interactive fiction', 'romance'],
+    seoScore: 85
+  });
+
+  const [newTag, setNewTag] = useState('');
+
+  const addTag = () => {
+    if (newTag.trim() && !seoData.tags.includes(newTag.trim())) {
+      setSeoData(prev => ({
+        ...prev,
+        tags: [...prev.tags, newTag.trim()]
+      }));
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setSeoData(prev => ({
+      ...prev,
+      tags: prev.tags.filter((tag: string) => tag !== tagToRemove)
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold">SEO & Discoverability</h4>
+        <Badge variant={seoData.seoScore >= 80 ? 'default' : seoData.seoScore >= 60 ? 'secondary' : 'destructive'}>
+          SEO Score: {seoData.seoScore}/100
+        </Badge>
+      </div>
+
+      {/* SEO Optimization */}
+      <Card className="bg-background">
+        <CardHeader>
+          <CardTitle>Search Optimization</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="seo-title">SEO Title</Label>
+            <Input
+              id="seo-title"
+              value={seoData.title}
+              onChange={(e) => setSeoData(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="Optimized title for search engines"
+            />
+            <div className="text-xs text-muted-foreground mt-1">
+              {seoData.title.length}/60 characters
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="seo-description">Meta Description</Label>
+            <Textarea
+              id="seo-description"
+              value={seoData.description}
+              onChange={(e) => setSeoData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Brief description for search results"
+              rows={3}
+            />
+            <div className="text-xs text-muted-foreground mt-1">
+              {seoData.description.length}/160 characters
+            </div>
+          </div>
+
+          <div>
+            <Label>Tags & Keywords</Label>
+            <div className="flex gap-2 mt-2 mb-3">
+              <Input
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                placeholder="Add tag..."
+                onKeyPress={(e) => e.key === 'Enter' && addTag()}
+              />
+              <Button onClick={addTag} size="sm">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {seoData.tags.map((tag: string, index: number) => (
+                <Badge key={index} variant="outline" className="gap-1">
+                  {tag}
+                  <button onClick={() => removeTag(tag)}>
+                    <XCircle className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <Button className="w-full">
+            <Save className="w-4 h-4 mr-2" />
+            Update SEO Settings
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Discoverability Metrics */}
+      <Card className="bg-background">
+        <CardHeader>
+          <CardTitle>Discoverability Metrics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-3 bg-muted/50 rounded-lg">
+              <div className="text-lg font-bold text-primary">1,234</div>
+              <div className="text-xs text-muted-foreground">Search Impressions</div>
+            </div>
+            <div className="text-center p-3 bg-muted/50 rounded-lg">
+              <div className="text-lg font-bold text-primary">8.5%</div>
+              <div className="text-xs text-muted-foreground">Click-through Rate</div>
+            </div>
+            <div className="text-center p-3 bg-muted/50 rounded-lg">
+              <div className="text-lg font-bold text-primary">23</div>
+              <div className="text-xs text-muted-foreground">Trending Position</div>
+            </div>
+            <div className="text-center p-3 bg-muted/50 rounded-lg">
+              <div className="text-lg font-bold text-primary">567</div>
+              <div className="text-xs text-muted-foreground">Social Shares</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 // Main Summary Tab Component
 const SummaryTab: React.FC<SummaryTabProps> = ({ 
   novel, 
@@ -373,8 +857,11 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
               {[
                 { id: 'overview', label: 'Overview', icon: BarChart3 },
                 { id: 'revenue', label: 'Revenue', icon: DollarSign },
+                { id: 'analytics', label: 'Analytics', icon: Activity },
                 { id: 'audience', label: 'Audience', icon: Users },
                 { id: 'reviews', label: 'Reviews', icon: Star },
+                { id: 'wellbeing', label: 'Wellbeing', icon: Brain },
+                { id: 'seo', label: 'SEO', icon: Search },
                 { id: 'episodes', label: 'Episodes', icon: BookOpen },
                 { id: 'publish', label: 'Publish', icon: Upload },
               ].map((item) => (
@@ -523,6 +1010,13 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                 </div>
               )}
 
+              {activeTab === 'analytics' && (
+                <div className="space-y-6">
+                  <h3 className="text-2xl font-bold">Advanced Analytics</h3>
+                  <AdvancedAnalytics novel={novel} />
+                </div>
+              )}
+
               {activeTab === 'audience' && (
                 <div className="space-y-6">
                   <h3 className="text-2xl font-bold">Audience Insights</h3>
@@ -534,6 +1028,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                 <div className="space-y-6">
                   <h3 className="text-2xl font-bold">Reviews & Ratings</h3>
                   <ReviewsRatings novel={novel} />
+                </div>
+              )}
+
+              {activeTab === 'wellbeing' && (
+                <div className="space-y-6">
+                  <h3 className="text-2xl font-bold">Mental Wellbeing Insights</h3>
+                  <MentalWellbeingInsights novel={novel} />
+                </div>
+              )}
+
+              {activeTab === 'seo' && (
+                <div className="space-y-6">
+                  <h3 className="text-2xl font-bold">SEO & Discoverability</h3>
+                  <SEODiscoverability novel={novel} onNovelUpdate={onNovelUpdate} />
                 </div>
               )}
 
@@ -609,8 +1117,11 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
               {[
                 { id: 'overview', label: 'Overview', icon: BarChart3 },
                 { id: 'revenue', label: 'Revenue', icon: DollarSign },
+                { id: 'analytics', label: 'Analytics', icon: Activity },
                 { id: 'audience', label: 'Audience', icon: Users },
                 { id: 'reviews', label: 'Reviews', icon: Star },
+                { id: 'wellbeing', label: 'Wellbeing', icon: Brain },
+                { id: 'seo', label: 'SEO', icon: Search },
                 { id: 'episodes', label: 'Episodes', icon: BookOpen },
                 { id: 'publish', label: 'Publish', icon: Upload },
               ].map((item) => (

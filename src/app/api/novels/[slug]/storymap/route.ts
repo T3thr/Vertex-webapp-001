@@ -1,16 +1,13 @@
-// API Route: /api/novels/[slug]/storymap
-// GET: Fetch StoryMap data
-// POST: Create new StoryMap
-// PUT: Update existing StoryMap
-// DELETE: Delete StoryMap
-
+// src/app/api/novels/[slug]/storymap/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import mongoose from 'mongoose';
 import dbConnect from '@/backend/lib/mongodb';
-import StoryMapModel, { IStoryMap } from '@/backend/models/StoryMap';
-import { validateNovelAccess } from './auth-helper';
-import { Types } from 'mongoose';
+import NovelModel from '@/backend/models/Novel';
+import StoryMapModel from '@/backend/models/StoryMap';
+import SceneModel from '@/backend/models/Scene';
+import ChoiceModel from '@/backend/models/Choice';
 
 export async function GET(
   request: NextRequest,
@@ -18,119 +15,81 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const session = await getServerSession(authOptions);
+    const decodedSlug = decodeURIComponent(slug);
     
+    const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await dbConnect();
 
-    // Validate access
-    const { error, novel } = await validateNovelAccess(slug, session.user.id);
-    if (error) return error;
+    // Check access permissions
+    const novel = await NovelModel.findOne({
+      slug: decodedSlug,
+      isDeleted: { $ne: true }
+    }).lean();
 
-    // Get active StoryMap
+    if (!novel) {
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    }
+
+    // Verify user is author or co-author
+    const userId = session.user.id;
+    const isAuthor = novel.author?.toString() === userId;
+    const isCoAuthor = novel.coAuthors?.some((coAuthor: any) => 
+      coAuthor.toString() === userId
+    );
+    
+    if (!isAuthor && !isCoAuthor) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // Get story map with validation data
     const storyMap = await StoryMapModel.findOne({
-      novelId: novel!._id,
+      novelId: novel._id,
       isActive: true
     }).lean();
 
     if (!storyMap) {
       return NextResponse.json({ 
         storyMap: null,
-        message: 'ไม่พบ StoryMap สำหรับนิยายนี้' 
+        validation: {
+          orphanedNodes: [],
+          missingConnections: [],
+          cycles: [],
+          unreachableNodes: []
+        }
       });
     }
 
-    return NextResponse.json({ 
+    // Get related scenes and choices for validation
+    const scenes = await SceneModel.find({ 
+      novelId: novel._id,
+      isDeleted: { $ne: true }
+    }).lean();
+
+    const choices = await ChoiceModel.find({ 
+      novelId: novel._id,
+      isArchived: false 
+    }).lean();
+
+    // Perform validation
+    const validation = performStoryMapValidation(storyMap, scenes, choices);
+
+    return NextResponse.json({
       storyMap: JSON.parse(JSON.stringify(storyMap)),
-      success: true 
+      validation,
+      scenes: JSON.parse(JSON.stringify(scenes)),
+      choices: JSON.parse(JSON.stringify(choices))
     });
 
   } catch (error) {
-    console.error('[StoryMap GET] Error:', error);
-    return NextResponse.json({ 
-      error: 'เกิดข้อผิดพลาดในการดึงข้อมูล StoryMap' 
-    }, { status: 500 });
-  }
-}
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
-    const { slug } = await params;
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
-    }
-
-    await dbConnect();
-
-    // Validate access
-    const { error, novel } = await validateNovelAccess(slug, session.user.id);
-    if (error) return error;
-
-    const body = await request.json();
-    const { title, description, startNodeId, nodes = [], edges = [], storyVariables = [] } = body;
-
-    // Validate required fields
-    if (!title || !startNodeId) {
-      return NextResponse.json({ 
-        error: 'ข้อมูลไม่ครบถ้วน: ต้องมี title และ startNodeId' 
-      }, { status: 400 });
-    }
-
-    // Check if active StoryMap already exists
-    const existingStoryMap = await StoryMapModel.findOne({
-      novelId: novel!._id,
-      isActive: true
-    });
-
-    if (existingStoryMap) {
-      return NextResponse.json({ 
-        error: 'มี StoryMap ที่ใช้งานอยู่แล้ว ใช้ PUT เพื่ออัพเดต' 
-      }, { status: 409 });
-    }
-
-    // Create new StoryMap
-    const newStoryMap = new StoryMapModel({
-      novelId: novel!._id,
-      title,
-      description,
-      version: 1,
-      nodes,
-      edges,
-      storyVariables,
-      startNodeId,
-      lastModifiedByUserId: new Types.ObjectId(session.user.id),
-      isActive: true,
-      editorMetadata: {
-        zoomLevel: 1,
-        viewOffsetX: 0,
-        viewOffsetY: 0,
-        gridSize: 20,
-        showGrid: true,
-        autoLayoutAlgorithm: 'dagre'
-      }
-    });
-
-    await newStoryMap.save();
-
-    return NextResponse.json({ 
-      storyMap: JSON.parse(JSON.stringify(newStoryMap.toObject())),
-      success: true,
-      message: 'สร้าง StoryMap สำเร็จ'
-    }, { status: 201 });
-
-  } catch (error) {
-    console.error('[StoryMap POST] Error:', error);
-    return NextResponse.json({ 
-      error: 'เกิดข้อผิดพลาดในการสร้าง StoryMap' 
-    }, { status: 500 });
+    console.error('Error fetching story map:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
@@ -140,132 +99,212 @@ export async function PUT(
 ) {
   try {
     const { slug } = await params;
-    const session = await getServerSession(authOptions);
+    const decodedSlug = decodeURIComponent(slug);
     
+    const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const body = await request.json();
+    const { nodes, edges, storyVariables, episodeFilter } = body;
 
     await dbConnect();
 
-    // Validate access
-    const { error, novel } = await validateNovelAccess(slug, session.user.id);
-    if (error) return error;
+    // Check access permissions
+    const novel = await NovelModel.findOne({
+      slug: decodedSlug,
+      isDeleted: { $ne: true }
+    });
 
-    const body = await request.json();
-    const { 
-      title, 
-      description, 
-      nodes, 
-      edges, 
-      storyVariables, 
-      startNodeId, 
-      editorMetadata 
-    } = body;
+    if (!novel) {
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    }
 
-    // Find existing active StoryMap
-    const existingStoryMap = await StoryMapModel.findOne({
-      novelId: novel!._id,
+    // Verify user is author or co-author
+    const userId = session.user.id;
+    const isAuthor = novel.author?.toString() === userId;
+    const isCoAuthor = novel.coAuthors?.some((coAuthor: any) => 
+      coAuthor.toString() === userId
+    );
+    
+    if (!isAuthor && !isCoAuthor) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // Update or create story map
+    let storyMap = await StoryMapModel.findOne({
+      novelId: novel._id,
       isActive: true
     });
 
-    if (!existingStoryMap) {
-      return NextResponse.json({ 
-        error: 'ไม่พบ StoryMap ที่ใช้งานอยู่' 
-      }, { status: 404 });
+    if (storyMap) {
+      // Update existing story map
+      storyMap.nodes = nodes;
+      storyMap.edges = edges;
+      storyMap.storyVariables = storyVariables || storyMap.storyVariables;
+      storyMap.version += 1;
+      storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(userId);
+      storyMap.updatedAt = new Date();
+      
+      // Store episode filter metadata if provided
+      if (episodeFilter) {
+        storyMap.editorMetadata = {
+          ...storyMap.editorMetadata,
+          selectedEpisodeId: episodeFilter
+        };
+      }
+      
+      await storyMap.save();
+    } else {
+      // Create new story map
+      storyMap = new StoryMapModel({
+        novelId: novel._id,
+        title: `${novel.title} - Story Map`,
+        description: 'Auto-generated story map',
+        version: 1,
+        nodes: nodes || [],
+        edges: edges || [],
+        storyVariables: storyVariables || [],
+        startNodeId: nodes?.find((node: any) => node.nodeType === 'start_node')?.nodeId || '',
+        lastModifiedByUserId: new mongoose.Types.ObjectId(userId),
+        isActive: true,
+        editorMetadata: episodeFilter ? {
+          selectedEpisodeId: episodeFilter,
+          zoomLevel: 1,
+          viewOffsetX: 0,
+          viewOffsetY: 0,
+          gridSize: 20,
+          showGrid: true
+        } : undefined
+      });
+      
+      await storyMap.save();
     }
 
-    // Update StoryMap
-    const updateData: Partial<IStoryMap> = {
-      lastModifiedByUserId: new Types.ObjectId(session.user.id),
-      version: existingStoryMap.version + 1,
-      updatedAt: new Date()
-    };
+    // Perform validation on updated data
+    const scenes = await SceneModel.find({ 
+      novelId: novel._id,
+      isDeleted: { $ne: true }
+    }).lean();
 
-    if (title !== undefined) updateData.title = title;
-    if (description !== undefined) updateData.description = description;
-    if (nodes !== undefined) updateData.nodes = nodes;
-    if (edges !== undefined) updateData.edges = edges;
-    if (storyVariables !== undefined) updateData.storyVariables = storyVariables;
-    if (startNodeId !== undefined) updateData.startNodeId = startNodeId;
-    if (editorMetadata !== undefined) updateData.editorMetadata = editorMetadata;
+    const choices = await ChoiceModel.find({ 
+      novelId: novel._id,
+      isArchived: false 
+    }).lean();
 
-    // Add edit history entry
-    if (!existingStoryMap.editHistory) {
-      existingStoryMap.editHistory = [];
-    }
-    existingStoryMap.editHistory.push({
-      timestamp: new Date(),
-      userId: new Types.ObjectId(session.user.id),
-      operationType: 'update',
-      description: 'Updated StoryMap via API',
-      details: { fieldsChanged: Object.keys(updateData) }
-    });
+    const validation = performStoryMapValidation(storyMap, scenes, choices);
 
-    const updatedStoryMap = await StoryMapModel.findByIdAndUpdate(
-      existingStoryMap._id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    return NextResponse.json({ 
-      storyMap: JSON.parse(JSON.stringify(updatedStoryMap!.toObject())),
-      success: true,
-      message: 'อัพเดต StoryMap สำเร็จ'
+    return NextResponse.json({
+      storyMap: JSON.parse(JSON.stringify(storyMap)),
+      validation
     });
 
   } catch (error) {
-    console.error('[StoryMap PUT] Error:', error);
-    return NextResponse.json({ 
-      error: 'เกิดข้อผิดพลาดในการอัพเดต StoryMap' 
-    }, { status: 500 });
+    console.error('Error updating story map:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
-    const { slug } = await params;
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
-    }
+// Validation function
+function performStoryMapValidation(storyMap: any, scenes: any[], choices: any[]) {
+  const validation = {
+    orphanedNodes: [] as string[],
+    missingConnections: [] as string[],
+    cycles: [] as string[],
+    unreachableNodes: [] as string[],
+    missingScenes: [] as string[],
+    missingChoices: [] as string[]
+  };
 
-    await dbConnect();
-
-    // Validate access
-    const { error, novel } = await validateNovelAccess(slug, session.user.id);
-    if (error) return error;
-
-    // Find and deactivate StoryMap instead of hard delete
-    const storyMap = await StoryMapModel.findOne({
-      novelId: novel!._id,
-      isActive: true
-    });
-
-    if (!storyMap) {
-      return NextResponse.json({ 
-        error: 'ไม่พบ StoryMap ที่ใช้งานอยู่' 
-      }, { status: 404 });
-    }
-
-    // Soft delete by setting isActive to false
-    storyMap.isActive = false;
-    storyMap.lastModifiedByUserId = new Types.ObjectId(session.user.id);
-    await storyMap.save();
-
-    return NextResponse.json({ 
-      success: true,
-      message: 'ปิดการใช้งาน StoryMap สำเร็จ'
-    });
-
-  } catch (error) {
-    console.error('[StoryMap DELETE] Error:', error);
-    return NextResponse.json({ 
-      error: 'เกิดข้อผิดพลาดในการลบ StoryMap' 
-    }, { status: 500 });
+  if (!storyMap.nodes || storyMap.nodes.length === 0) {
+    return validation;
   }
+
+  // Check for orphaned nodes (not connected to anything)
+  const connectedNodes = new Set();
+  storyMap.edges?.forEach((edge: any) => {
+    connectedNodes.add(edge.sourceNodeId);
+    connectedNodes.add(edge.targetNodeId);
+  });
+
+  storyMap.nodes.forEach((node: any) => {
+    if (!connectedNodes.has(node.nodeId) && node.nodeType !== 'start_node') {
+      validation.orphanedNodes.push(node.nodeId);
+    }
+  });
+
+  // Check for missing scene connections
+  storyMap.nodes.forEach((node: any) => {
+    if (node.nodeType === 'scene_node' && node.nodeSpecificData?.sceneId) {
+      const sceneExists = scenes.find(scene => scene._id.toString() === node.nodeSpecificData.sceneId);
+      if (!sceneExists) {
+        validation.missingScenes.push(node.nodeId);
+      }
+    }
+  });
+
+  // Check for missing choice connections
+  storyMap.nodes.forEach((node: any) => {
+    if (node.nodeType === 'choice_node' && node.nodeSpecificData?.choiceIds) {
+      node.nodeSpecificData.choiceIds.forEach((choiceId: string) => {
+        const choiceExists = choices.find(choice => choice._id.toString() === choiceId);
+        if (!choiceExists) {
+          validation.missingChoices.push(node.nodeId);
+        }
+      });
+    }
+  });
+
+  // Check for cycles (simplified detection)
+  const visited = new Set();
+  const recursionStack = new Set();
+
+  const hasCycle = (nodeId: string): boolean => {
+    if (recursionStack.has(nodeId)) return true;
+    if (visited.has(nodeId)) return false;
+
+    visited.add(nodeId);
+    recursionStack.add(nodeId);
+
+    const outgoingEdges = storyMap.edges?.filter((edge: any) => edge.sourceNodeId === nodeId) || [];
+    for (const edge of outgoingEdges) {
+      if (hasCycle(edge.targetNodeId)) {
+        validation.cycles.push(nodeId);
+        return true;
+      }
+    }
+
+    recursionStack.delete(nodeId);
+    return false;
+  };
+
+  // Start cycle detection from start nodes
+  const startNodes = storyMap.nodes.filter((node: any) => node.nodeType === 'start_node');
+  startNodes.forEach((node: any) => {
+    hasCycle(node.nodeId);
+  });
+
+  // Check for unreachable nodes
+  const reachable = new Set();
+  const traverse = (nodeId: string) => {
+    if (reachable.has(nodeId)) return;
+    reachable.add(nodeId);
+    
+    const outgoing = storyMap.edges?.filter((edge: any) => edge.sourceNodeId === nodeId) || [];
+    outgoing.forEach((edge: any) => traverse(edge.targetNodeId));
+  };
+
+  startNodes.forEach((node: any) => traverse(node.nodeId));
+  
+  storyMap.nodes.forEach((node: any) => {
+    if (!reachable.has(node.nodeId) && node.nodeType !== 'start_node') {
+      validation.unreachableNodes.push(node.nodeId);
+    }
+  });
+
+  return validation;
 }

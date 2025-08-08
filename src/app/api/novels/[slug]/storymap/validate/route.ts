@@ -1,178 +1,473 @@
-// app/api/novels/[slug]/storymap/validate/route.ts
+// API Route: /api/novels/[slug]/storymap/validate
+// POST: Validate StoryMap structure and provide detailed feedback
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
-import NovelModel from '@/backend/models/Novel';
+import { validateNovelAccess } from '../auth-helper';
+import { StoryMapNodeType, IStoryMapNode, IStoryMapEdge, IStoryVariableDefinition } from '@/backend/models/StoryMap';
 
-type ValidateInput = {
-  title?: string;
-  nodes: Array<{
-    nodeId: string;
-    nodeType: string;
-    title?: string;
-    position?: { x: number; y: number };
-  }>;
-  edges: Array<{
-    edgeId: string;
-    sourceNodeId: string;
-    targetNodeId: string;
-    label?: string;
-    condition?: { expression?: string } | null;
-    priority?: number;
-  }>;
-  storyVariables?: any[];
-  startNodeId?: string;
-};
+interface ValidationError {
+  type: 'error' | 'warning' | 'info';
+  category: 'Structure' | 'Connectivity' | 'Data' | 'Logic' | 'Performance' | 'Best Practice';
+  message: string;
+  nodeId?: string;
+  edgeId?: string;
+  variableId?: string;
+  fix?: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+}
+
+interface ValidationResult {
+  isValid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationError[];
+  suggestions: ValidationError[];
+  statistics: {
+    totalNodes: number;
+    totalEdges: number;
+    totalVariables: number;
+    complexityScore: number;
+    estimatedPlaytimeMinutes: number;
+  };
+}
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ success: false, error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
-    }
-
     const { slug } = await params;
-    const decodedSlug = decodeURIComponent(slug);
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+    }
 
     await dbConnect();
 
-    // Verify novel ownership
-    const novel = await NovelModel.findOne({
-      slug: decodedSlug,
-      author: session.user.id,
-      isDeleted: { $ne: true },
-    }).select('_id');
+    // Validate access
+    const { error, novel } = await validateNovelAccess(slug, session.user.id);
+    if (error) return error;
 
-    if (!novel) {
-      return NextResponse.json({ success: false, error: 'ไม่พบนิยาย' }, { status: 404 });
-    }
+    const body = await request.json();
+    const { nodes = [], edges = [], storyVariables = [], startNodeId } = body;
 
-    const body = (await request.json()) as ValidateInput;
-    const nodes = body.nodes || [];
-    const edges = body.edges || [];
-    const startNodeId = body.startNodeId || (nodes[0]?.nodeId ?? '');
-
-    const problems: Array<{
-      severity: 'error' | 'warning' | 'info';
-      code: string;
-      message: string;
-      location?: { nodeId?: string; edgeId?: string };
-    }> = [];
-
-    // Unique nodeId
-    const nodeIdSet = new Set<string>();
-    for (const n of nodes) {
-      if (!n.nodeId) {
-        problems.push({ severity: 'error', code: 'NODE_ID_MISSING', message: 'พบ node ที่ไม่มี nodeId' });
-        continue;
+    const validationResult: ValidationResult = {
+      isValid: true,
+      errors: [],
+      warnings: [],
+      suggestions: [],
+      statistics: {
+        totalNodes: nodes.length,
+        totalEdges: edges.length,
+        totalVariables: storyVariables.length,
+        complexityScore: 0,
+        estimatedPlaytimeMinutes: 0
       }
-      if (nodeIdSet.has(n.nodeId)) {
-        problems.push({ severity: 'error', code: 'NODE_ID_DUPLICATE', message: `nodeId ซ้ำ: ${n.nodeId}`, location: { nodeId: n.nodeId } });
-      } else {
-        nodeIdSet.add(n.nodeId);
-      }
-    }
-
-    // Unique edgeId & broken edges
-    const edgeIdSet = new Set<string>();
-    for (const e of edges) {
-      if (!e.edgeId) {
-        problems.push({ severity: 'error', code: 'EDGE_ID_MISSING', message: 'พบ edge ที่ไม่มี edgeId' });
-        continue;
-      }
-      if (edgeIdSet.has(e.edgeId)) {
-        problems.push({ severity: 'error', code: 'EDGE_ID_DUPLICATE', message: `edgeId ซ้ำ: ${e.edgeId}`, location: { edgeId: e.edgeId } });
-      } else {
-        edgeIdSet.add(e.edgeId);
-      }
-      if (!nodeIdSet.has(e.sourceNodeId)) {
-        problems.push({ severity: 'error', code: 'EDGE_SOURCE_MISSING', message: `แหล่งที่มาของเส้นไม่พบ: ${e.sourceNodeId}`, location: { edgeId: e.edgeId } });
-      }
-      if (!nodeIdSet.has(e.targetNodeId)) {
-        problems.push({ severity: 'error', code: 'EDGE_TARGET_MISSING', message: `ปลายทางของเส้นไม่พบ: ${e.targetNodeId}`, location: { edgeId: e.edgeId } });
-      }
-    }
-
-    // Start node
-    if (!startNodeId || !nodeIdSet.has(startNodeId)) {
-      problems.push({ severity: 'error', code: 'START_NODE_MISSING', message: 'ไม่มี startNodeId หรือ node ไม่พบ' });
-    }
-
-    // Graph reachability and cycles
-    const adjacency = new Map<string, string[]>();
-    for (const id of nodeIdSet) adjacency.set(id, []);
-    for (const e of edges) {
-      if (adjacency.has(e.sourceNodeId)) {
-        adjacency.get(e.sourceNodeId)!.push(e.targetNodeId);
-      }
-    }
-
-    // Reachability
-    const visited = new Set<string>();
-    const stack: string[] = [];
-    if (startNodeId && nodeIdSet.has(startNodeId)) {
-      stack.push(startNodeId);
-      while (stack.length) {
-        const cur = stack.pop()!;
-        if (visited.has(cur)) continue;
-        visited.add(cur);
-        for (const nxt of adjacency.get(cur) || []) stack.push(nxt);
-      }
-      for (const id of nodeIdSet) {
-        if (!visited.has(id)) {
-          problems.push({ severity: 'warning', code: 'NODE_UNREACHABLE', message: `Node ไม่สามารถเข้าถึงได้: ${id}`, location: { nodeId: id } });
-        }
-      }
-    }
-
-    // Cycle detection (DFS coloring)
-    const color = new Map<string, number>(); // 0=unseen,1=visiting,2=done
-    const cycleEdges: Array<{ from: string; to: string }> = [];
-    const dfs = (u: string) => {
-      color.set(u, 1);
-      for (const v of adjacency.get(u) || []) {
-        const c = color.get(v) || 0;
-        if (c === 0) dfs(v);
-        else if (c === 1) cycleEdges.push({ from: u, to: v });
-      }
-      color.set(u, 2);
-    };
-    if (startNodeId && nodeIdSet.has(startNodeId)) {
-      dfs(startNodeId);
-      if (cycleEdges.length > 0) {
-        problems.push({ severity: 'warning', code: 'CYCLE_DETECTED', message: `พบวัฏจักรจำนวน ${cycleEdges.length} จุด` });
-      }
-    }
-
-    // Condition lint (very light-weight)
-    for (const e of edges) {
-      const expr = e.condition?.expression?.trim();
-      if (expr && /\beval\b|\bFunction\b/.test(expr)) {
-        problems.push({ severity: 'warning', code: 'UNSAFE_EXPRESSION', message: 'Expression มีโค้ดที่ไม่ปลอดภัย (eval/Function)', location: { edgeId: e.edgeId } });
-      }
-      if (expr === '') {
-        problems.push({ severity: 'info', code: 'EMPTY_EXPRESSION', message: 'Expression ว่าง', location: { edgeId: e.edgeId } });
-      }
-    }
-
-    const summary = {
-      totalNodes: nodes.length,
-      totalEdges: edges.length,
-      unreachableNodes: nodes.length - visited.size,
-      errorCount: problems.filter(p => p.severity === 'error').length,
-      warningCount: problems.filter(p => p.severity === 'warning').length,
-      infoCount: problems.filter(p => p.severity === 'info').length,
     };
 
-    return NextResponse.json({ success: true, summary, problems });
+    // Comprehensive validation
+    await validateStoryMapStructure(nodes, edges, storyVariables, startNodeId, validationResult);
+    await validateConnectivity(nodes, edges, validationResult);
+    await validateDataIntegrity(nodes, edges, storyVariables, validationResult);
+    await validateLogicFlow(nodes, edges, storyVariables, validationResult);
+    await calculateStatistics(nodes, edges, storyVariables, validationResult);
+
+    // Determine overall validity
+    validationResult.isValid = validationResult.errors.length === 0;
+
+    return NextResponse.json({
+      validation: validationResult,
+      success: true,
+      timestamp: new Date().toISOString()
+    });
+
   } catch (error) {
-    console.error('[API] StoryMap Validate Error:', error);
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    console.error('[StoryMap Validate] Error:', error);
+    return NextResponse.json({ 
+      error: 'เกิดข้อผิดพลาดในการตรวจสอบ StoryMap' 
+    }, { status: 500 });
   }
 }
 
+async function validateStoryMapStructure(
+  nodes: IStoryMapNode[],
+  edges: IStoryMapEdge[],
+  storyVariables: IStoryVariableDefinition[],
+  startNodeId: string,
+  result: ValidationResult
+) {
+  // 1. Check for start node
+  const startNodes = nodes.filter(n => n.nodeType === StoryMapNodeType.START_NODE);
+  if (startNodes.length === 0) {
+    result.errors.push({
+      type: 'error',
+      category: 'Structure',
+      message: 'No start node found in the story map',
+      severity: 'critical',
+      fix: 'Add a start node to define the entry point of your story'
+    });
+  } else if (startNodes.length > 1) {
+    result.errors.push({
+      type: 'error',
+      category: 'Structure',
+      message: 'Multiple start nodes found',
+      severity: 'critical',
+      fix: 'Remove duplicate start nodes, keep only one'
+    });
+  }
 
+  // 2. Check for ending nodes
+  const endingNodes = nodes.filter(n => n.nodeType === StoryMapNodeType.ENDING_NODE);
+  if (endingNodes.length === 0) {
+    result.warnings.push({
+      type: 'warning',
+      category: 'Structure',
+      message: 'No ending nodes found',
+      severity: 'medium',
+      fix: 'Add ending nodes to provide closure to your story'
+    });
+  }
+
+  // 3. Validate unique IDs
+  const nodeIds = new Set<string>();
+  const edgeIds = new Set<string>();
+  const variableIds = new Set<string>();
+
+  nodes.forEach(node => {
+    if (nodeIds.has(node.nodeId)) {
+      result.errors.push({
+        type: 'error',
+        category: 'Data',
+        message: `Duplicate node ID: ${node.nodeId}`,
+        nodeId: node.nodeId,
+        severity: 'critical',
+        fix: 'Ensure all node IDs are unique'
+      });
+    }
+    nodeIds.add(node.nodeId);
+  });
+
+  edges.forEach(edge => {
+    if (edgeIds.has(edge.edgeId)) {
+      result.errors.push({
+        type: 'error',
+        category: 'Data',
+        message: `Duplicate edge ID: ${edge.edgeId}`,
+        edgeId: edge.edgeId,
+        severity: 'critical',
+        fix: 'Ensure all edge IDs are unique'
+      });
+    }
+    edgeIds.add(edge.edgeId);
+  });
+
+  storyVariables.forEach(variable => {
+    if (variableIds.has(variable.variableId)) {
+      result.errors.push({
+        type: 'error',
+        category: 'Data',
+        message: `Duplicate variable ID: ${variable.variableId}`,
+        variableId: variable.variableId,
+        severity: 'high',
+        fix: 'Ensure all variable IDs are unique'
+      });
+    }
+    variableIds.add(variable.variableId);
+  });
+
+  // 4. Validate startNodeId exists
+  if (startNodeId && !nodeIds.has(startNodeId)) {
+    result.errors.push({
+      type: 'error',
+      category: 'Structure',
+      message: `Start node ID "${startNodeId}" does not exist in nodes`,
+      severity: 'critical',
+      fix: 'Set startNodeId to an existing node ID'
+    });
+  }
+}
+
+async function validateConnectivity(
+  nodes: IStoryMapNode[],
+  edges: IStoryMapEdge[],
+  result: ValidationResult
+) {
+  const nodeIds = new Set(nodes.map(n => n.nodeId));
+  
+  // 1. Validate edge references
+  edges.forEach(edge => {
+    if (!nodeIds.has(edge.sourceNodeId)) {
+      result.errors.push({
+        type: 'error',
+        category: 'Connectivity',
+        message: `Edge "${edge.edgeId}" references non-existent source node: ${edge.sourceNodeId}`,
+        edgeId: edge.edgeId,
+        severity: 'critical',
+        fix: 'Update edge to reference existing nodes'
+      });
+    }
+    
+    if (!nodeIds.has(edge.targetNodeId)) {
+      result.errors.push({
+        type: 'error',
+        category: 'Connectivity',
+        message: `Edge "${edge.edgeId}" references non-existent target node: ${edge.targetNodeId}`,
+        edgeId: edge.edgeId,
+        severity: 'critical',
+        fix: 'Update edge to reference existing nodes'
+      });
+    }
+  });
+
+  // 2. Check for orphaned nodes
+  const connectedNodeIds = new Set<string>();
+  edges.forEach(edge => {
+    connectedNodeIds.add(edge.sourceNodeId);
+    connectedNodeIds.add(edge.targetNodeId);
+  });
+
+  nodes.forEach(node => {
+    if (!connectedNodeIds.has(node.nodeId) && node.nodeType !== StoryMapNodeType.START_NODE) {
+      result.warnings.push({
+        type: 'warning',
+        category: 'Connectivity',
+        message: `Orphaned node: "${node.title}" (${node.nodeId})`,
+        nodeId: node.nodeId,
+        severity: 'medium',
+        fix: 'Connect this node to the story flow or remove it'
+      });
+    }
+  });
+
+  // 3. Check for dead ends
+  const outgoingConnections: Record<string, string[]> = {};
+  edges.forEach(edge => {
+    if (!outgoingConnections[edge.sourceNodeId]) {
+      outgoingConnections[edge.sourceNodeId] = [];
+    }
+    outgoingConnections[edge.sourceNodeId].push(edge.targetNodeId);
+  });
+
+  nodes.forEach(node => {
+    const hasOutgoing = !!outgoingConnections[node.nodeId];
+    const isEndingNode = node.nodeType === StoryMapNodeType.ENDING_NODE;
+    
+    if (!hasOutgoing && !isEndingNode) {
+      result.warnings.push({
+        type: 'warning',
+        category: 'Connectivity',
+        message: `Dead end node: "${node.title}" has no outgoing connections`,
+        nodeId: node.nodeId,
+        severity: 'medium',
+        fix: 'Add connections from this node or convert to ending node'
+      });
+    }
+  });
+
+  // 4. Detect circular references
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
+  
+  const hasCycle = (nodeId: string): boolean => {
+    if (recursionStack.has(nodeId)) return true;
+    if (visited.has(nodeId)) return false;
+    
+    visited.add(nodeId);
+    recursionStack.add(nodeId);
+    
+    const outgoing = outgoingConnections[nodeId] || [];
+    for (const targetId of outgoing) {
+      if (hasCycle(targetId)) return true;
+    }
+    
+    recursionStack.delete(nodeId);
+    return false;
+  };
+
+  for (const node of nodes) {
+    if (hasCycle(node.nodeId)) {
+      result.warnings.push({
+        type: 'warning',
+        category: 'Logic',
+        message: 'Circular reference detected in story flow',
+        severity: 'medium',
+        fix: 'Remove circular connections between nodes'
+      });
+      break;
+    }
+  }
+}
+
+async function validateDataIntegrity(
+  nodes: IStoryMapNode[],
+  edges: IStoryMapEdge[],
+  storyVariables: IStoryVariableDefinition[],
+  result: ValidationResult
+) {
+  const variableIds = new Set(storyVariables.map(v => v.variableId));
+
+  // 1. Validate choice nodes have sufficient outgoing edges
+  nodes.filter(n => n.nodeType === StoryMapNodeType.CHOICE_NODE).forEach(node => {
+    const outgoing = edges.filter(e => e.sourceNodeId === node.nodeId);
+    if (outgoing.length < 2) {
+      result.warnings.push({
+        type: 'warning',
+        category: 'Logic',
+        message: `Choice node "${node.title}" should have at least 2 options`,
+        nodeId: node.nodeId,
+        severity: 'medium',
+        fix: 'Add more choice options or change node type'
+      });
+    }
+  });
+
+  // 2. Validate variable modifier nodes reference valid variables
+  nodes.filter(n => n.nodeType === StoryMapNodeType.VARIABLE_MODIFIER_NODE).forEach(node => {
+    if (node.nodeSpecificData?.operations) {
+      node.nodeSpecificData.operations.forEach((operation: any) => {
+        if (operation.variableId && !variableIds.has(operation.variableId)) {
+          result.errors.push({
+            type: 'error',
+            category: 'Data',
+            message: `Variable modifier references undefined variable: ${operation.variableId}`,
+            nodeId: node.nodeId,
+            severity: 'high',
+            fix: 'Create the referenced variable or update the reference'
+          });
+        }
+      });
+    }
+  });
+
+  // 3. Validate scene nodes have scene data
+  nodes.filter(n => n.nodeType === StoryMapNodeType.SCENE_NODE).forEach(node => {
+    if (!node.nodeSpecificData?.sceneId) {
+      result.warnings.push({
+        type: 'warning',
+        category: 'Data',
+        message: `Scene node "${node.title}" is not linked to a scene`,
+        nodeId: node.nodeId,
+        severity: 'medium',
+        fix: 'Link to a scene or create new scene content'
+      });
+    }
+  });
+}
+
+async function validateLogicFlow(
+  nodes: IStoryMapNode[],
+  edges: IStoryMapEdge[],
+  storyVariables: IStoryVariableDefinition[],
+  result: ValidationResult
+) {
+  // 1. Validate branch conditions
+  nodes.filter(n => n.nodeType === StoryMapNodeType.BRANCH_NODE).forEach(node => {
+    if (node.nodeSpecificData?.conditions) {
+      node.nodeSpecificData.conditions.forEach((condition: any, index: number) => {
+        if (!condition.expression || condition.expression.trim() === '') {
+          result.warnings.push({
+            type: 'warning',
+            category: 'Logic',
+            message: `Branch node "${node.title}" has empty condition at index ${index}`,
+            nodeId: node.nodeId,
+            severity: 'medium',
+            fix: 'Add a valid condition expression'
+          });
+        }
+      });
+    }
+  });
+
+  // 2. Check for unreachable nodes
+  const reachableNodes = new Set<string>();
+  const startNodes = nodes.filter(n => n.nodeType === StoryMapNodeType.START_NODE);
+  
+  const markReachable = (nodeId: string) => {
+    if (reachableNodes.has(nodeId)) return;
+    reachableNodes.add(nodeId);
+    
+    const outgoingEdges = edges.filter(e => e.sourceNodeId === nodeId);
+    outgoingEdges.forEach(edge => markReachable(edge.targetNodeId));
+  };
+
+  startNodes.forEach(startNode => markReachable(startNode.nodeId));
+
+  nodes.forEach(node => {
+    if (!reachableNodes.has(node.nodeId) && node.nodeType !== StoryMapNodeType.START_NODE) {
+      result.warnings.push({
+        type: 'warning',
+        category: 'Logic',
+        message: `Unreachable node: "${node.title}"`,
+        nodeId: node.nodeId,
+        severity: 'low',
+        fix: 'Connect this node to the main story flow'
+      });
+    }
+  });
+}
+
+async function calculateStatistics(
+  nodes: IStoryMapNode[],
+  edges: IStoryMapEdge[],
+  storyVariables: IStoryVariableDefinition[],
+  result: ValidationResult
+) {
+  // Calculate complexity score
+  let complexityScore = 0;
+  
+  // Base score from node count
+  complexityScore += nodes.length * 2;
+  
+  // Additional score for complex node types
+  nodes.forEach(node => {
+    switch (node.nodeType) {
+      case StoryMapNodeType.CHOICE_NODE:
+        complexityScore += 5;
+        break;
+      case StoryMapNodeType.BRANCH_NODE:
+        complexityScore += 8;
+        break;
+      case StoryMapNodeType.VARIABLE_MODIFIER_NODE:
+        complexityScore += 3;
+        break;
+      case StoryMapNodeType.CUSTOM_LOGIC_NODE:
+        complexityScore += 10;
+        break;
+    }
+  });
+
+  // Score from edges and variables
+  complexityScore += edges.length * 1;
+  complexityScore += storyVariables.length * 2;
+
+  // Estimate playtime (rough calculation)
+  const sceneNodes = nodes.filter(n => n.nodeType === StoryMapNodeType.SCENE_NODE);
+  const estimatedPlaytime = Math.max(5, sceneNodes.length * 2 + nodes.length * 0.5);
+
+  result.statistics.complexityScore = complexityScore;
+  result.statistics.estimatedPlaytimeMinutes = Math.round(estimatedPlaytime);
+
+  // Add performance suggestions based on complexity
+  if (complexityScore > 200) {
+    result.suggestions.push({
+      type: 'info',
+      category: 'Performance',
+      message: 'High complexity detected. Consider breaking into smaller story maps',
+      severity: 'low',
+      fix: 'Use sub-storymap nodes to organize complex narratives'
+    });
+  }
+
+  if (nodes.length > 50) {
+    result.suggestions.push({
+      type: 'info',
+      category: 'Best Practice',
+      message: 'Large number of nodes. Consider using groups for organization',
+      severity: 'low',
+      fix: 'Group related nodes together for better visualization'
+    });
+  }
+}
