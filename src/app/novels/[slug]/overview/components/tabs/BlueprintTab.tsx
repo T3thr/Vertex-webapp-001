@@ -199,52 +199,64 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
   const getNodeTheme = (type: StoryMapNodeType) => {
     switch (type) {
       case StoryMapNodeType.START_NODE: return {
-        gradient: 'from-emerald-400 to-emerald-600',
-        shadow: 'shadow-emerald-500/30',
-        glow: 'shadow-emerald-400/50',
+        gradient: 'from-emerald-400 via-emerald-500 to-emerald-600',
+        shadow: 'shadow-emerald-500/30 shadow-lg',
+        glow: 'shadow-emerald-400/60 shadow-2xl',
         ring: 'ring-emerald-300',
         shape: 'rounded-full',
-        handles: { top: false, bottom: true, left: false, right: false }
+        handles: { top: false, bottom: true, left: false, right: false },
+        sparkle: true,
+        isSpecial: true
       };
       case StoryMapNodeType.SCENE_NODE: return {
-        gradient: 'from-blue-400 to-blue-600',
-        shadow: 'shadow-blue-500/30',
-        glow: 'shadow-blue-400/50',
+        gradient: 'from-blue-400 via-blue-500 to-blue-600',
+        shadow: 'shadow-blue-500/30 shadow-lg',
+        glow: 'shadow-blue-400/60 shadow-2xl',
         ring: 'ring-blue-300',
         shape: 'rounded-xl',
-        handles: { top: true, bottom: true, left: false, right: false }
+        handles: { top: true, bottom: true, left: false, right: false },
+        sparkle: false,
+        isSpecial: false
       };
       case StoryMapNodeType.CHOICE_NODE: return {
-        gradient: 'from-amber-400 to-amber-600',
-        shadow: 'shadow-amber-500/30',
-        glow: 'shadow-amber-400/50',
+        gradient: 'from-amber-400 via-amber-500 to-amber-600',
+        shadow: 'shadow-amber-500/30 shadow-lg',
+        glow: 'shadow-amber-400/60 shadow-2xl',
         ring: 'ring-amber-300',
         shape: 'rounded-xl',
-        handles: { top: true, bottom: false, left: false, right: true }
+        handles: { top: true, bottom: false, left: false, right: true },
+        sparkle: false,
+        isSpecial: false
       };
       case StoryMapNodeType.ENDING_NODE: return {
-        gradient: 'from-red-400 to-red-600',
-        shadow: 'shadow-red-500/30',
-        glow: 'shadow-red-400/50',
+        gradient: 'from-red-400 via-red-500 to-red-600',
+        shadow: 'shadow-red-500/30 shadow-lg',
+        glow: 'shadow-red-400/60 shadow-2xl',
         ring: 'ring-red-300',
         shape: 'rounded-full',
-        handles: { top: true, bottom: false, left: false, right: false }
+        handles: { top: true, bottom: false, left: false, right: false },
+        sparkle: true,
+        isSpecial: true
       };
       case StoryMapNodeType.BRANCH_NODE: return {
-        gradient: 'from-purple-400 to-purple-600',
-        shadow: 'shadow-purple-500/30',
-        glow: 'shadow-purple-400/50',
+        gradient: 'from-purple-400 via-purple-500 to-purple-600',
+        shadow: 'shadow-purple-500/30 shadow-lg',
+        glow: 'shadow-purple-400/60 shadow-2xl',
         ring: 'ring-purple-300',
         shape: 'rounded-lg',
-        handles: { top: true, bottom: true, left: true, right: true }
+        handles: { top: true, bottom: true, left: true, right: true },
+        sparkle: false,
+        isSpecial: false
       };
       default: return {
-        gradient: 'from-gray-400 to-gray-600',
-        shadow: 'shadow-gray-500/30',
-        glow: 'shadow-gray-400/50',
+        gradient: 'from-gray-400 via-gray-500 to-gray-600',
+        shadow: 'shadow-gray-500/30 shadow-lg',
+        glow: 'shadow-gray-400/60 shadow-2xl',
         ring: 'ring-gray-300',
         shape: 'rounded-lg',
-        handles: { top: true, bottom: true, left: false, right: false }
+        handles: { top: true, bottom: true, left: false, right: false },
+        sparkle: false,
+        isSpecial: false
       };
     }
   };
@@ -266,12 +278,34 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
           hover:scale-105 hover:${theme.glow} hover:shadow-2xl
           cursor-pointer relative overflow-hidden
           gpu-accelerated
+          ${theme.isSpecial ? 'animate-pulse' : ''}
         `}
       >
+        {/* Sparkle Effect for Special Nodes */}
+        {theme.sparkle && (
+          <div className="absolute inset-0 opacity-30">
+            <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-ping" />
+            <div className="absolute top-4 left-3 w-1 h-1 bg-white rounded-full animate-pulse [animation-delay:0.5s]" />
+            <div className="absolute bottom-3 right-4 w-1.5 h-1.5 bg-white rounded-full animate-ping [animation-delay:1s]" />
+            <Sparkles className="absolute top-1 left-1 w-3 h-3 animate-spin [animation-duration:3s]" />
+          </div>
+        )}
+
         {/* Animated Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 animate-pulse" />
         </div>
+
+        {/* Special Node Crown for Start/End */}
+        {theme.isSpecial && (
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg animate-bounce">
+            {data.nodeType === StoryMapNodeType.START_NODE ? (
+              <Target className="w-3 h-3 text-yellow-800" />
+            ) : (
+              <Flag className="w-3 h-3 text-yellow-800" />
+            )}
+          </div>
+        )}
 
         {/* Header with Icon and Title */}
         <div className="relative z-10 space-y-2">
@@ -434,28 +468,34 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
 
   const nodeCategories = {
     core: {
-      name: 'Core Story Nodes',
+      name: '🎭 Core Story Nodes',
+      icon: BookOpen,
+      color: 'from-blue-500 to-blue-600',
       nodes: [
-        { type: StoryMapNodeType.START_NODE, name: 'Start', desc: 'Story beginning' },
-        { type: StoryMapNodeType.SCENE_NODE, name: 'Scene', desc: 'Story scene' },
-        { type: StoryMapNodeType.CHOICE_NODE, name: 'Choice', desc: 'Player choice' },
-        { type: StoryMapNodeType.ENDING_NODE, name: 'Ending', desc: 'Story ending' }
+        { type: StoryMapNodeType.START_NODE, name: '✨ Start', desc: 'Story beginning', icon: Target, popular: true },
+        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 Scene', desc: 'Story scene', icon: Square, popular: true },
+        { type: StoryMapNodeType.CHOICE_NODE, name: '🔀 Choice', desc: 'Player choice', icon: GitBranch, popular: true },
+        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 Ending', desc: 'Story ending', icon: Flag, popular: false }
       ]
     },
     logic: {
-      name: 'Logic & Flow',
+      name: '⚡ Logic & Flow',
+      icon: Zap,
+      color: 'from-purple-500 to-purple-600',
       nodes: [
-        { type: StoryMapNodeType.BRANCH_NODE, name: 'Branch', desc: 'Conditional branch' },
-        { type: StoryMapNodeType.MERGE_NODE, name: 'Merge', desc: 'Merge paths' },
-        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: 'Variable', desc: 'Modify variables' }
+        { type: StoryMapNodeType.BRANCH_NODE, name: '🌿 Branch', desc: 'Conditional branch', icon: GitBranch, popular: false },
+        { type: StoryMapNodeType.MERGE_NODE, name: '🔗 Merge', desc: 'Merge paths', icon: Split, popular: false },
+        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: '🎛️ Variable', desc: 'Modify variables', icon: Settings, popular: false }
       ]
     },
     special: {
-      name: 'Special Nodes',
+      name: '🚀 Special Nodes',
+      icon: Sparkles,
+      color: 'from-amber-500 to-amber-600',
       nodes: [
-        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: 'Event', desc: 'Trigger event' },
-        { type: StoryMapNodeType.DELAY_NODE, name: 'Delay', desc: 'Time delay' },
-        { type: StoryMapNodeType.COMMENT_NODE, name: 'Comment', desc: 'Notes & comments' }
+        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: '⚡ Event', desc: 'Trigger event', icon: Zap, popular: false },
+        { type: StoryMapNodeType.DELAY_NODE, name: '⏰ Delay', desc: 'Time delay', icon: Clock, popular: false },
+        { type: StoryMapNodeType.COMMENT_NODE, name: '💭 Comment', desc: 'Notes & comments', icon: MessageCircle, popular: false }
       ]
     }
   };
@@ -481,9 +521,12 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
               variant="ghost"
               size="sm"
               onClick={() => toggleCategory(key)}
-              className="w-full justify-between text-xs"
+              className={`w-full justify-between text-xs bg-gradient-to-r ${category.color} text-white hover:opacity-90 transition-all`}
             >
-              {category.name}
+              <div className="flex items-center gap-2">
+                <category.icon className="w-4 h-4" />
+                {category.name}
+              </div>
               <ChevronRight className={`w-3 h-3 transition-transform ${
                 expandedCategories.includes(key) ? 'rotate-90' : ''
               }`} />
@@ -495,23 +538,36 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="grid grid-cols-1 gap-2"
+                  className="grid grid-cols-1 gap-2 pl-2"
                 >
                   {category.nodes.map(node => (
                     <motion.div
                       key={node.type}
-                      whileHover={{ scale: 1.02 }}
+                      whileHover={{ scale: 1.02, x: 4 }}
                       whileTap={{ scale: 0.98 }}
                     >
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => onAddNode(node.type)}
-                        className="w-full justify-start text-xs p-3 h-auto"
+                        className={`w-full justify-start text-xs p-3 h-auto hover:bg-gradient-to-r hover:${category.color} hover:text-white transition-all group relative ${
+                          node.popular ? 'border-orange-300 bg-orange-50 hover:border-orange-400' : ''
+                        }`}
                       >
-                        <div className="text-left">
-                          <div className="font-medium">{node.name}</div>
-                          <div className="text-muted-foreground text-xs">{node.desc}</div>
+                        <div className="flex items-center gap-3 w-full">
+                          <node.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          <div className="text-left flex-1">
+                            <div className="font-medium flex items-center gap-1">
+                              {node.name}
+                              {node.popular && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-orange-100 text-orange-800 border">
+                                  Hot
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-muted-foreground text-xs">{node.desc}</div>
+                          </div>
+                          <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       </Button>
                     </motion.div>
@@ -1029,7 +1085,7 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
     }
   }, [novel?.slug, storyMap?.storyVariables, selectedEpisode, onDirtyChange]);
 
-  // Enhanced auto-save system like Premiere Pro
+  // Enhanced auto-save system like Premiere Pro - Only auto-save when changes are detected
   const scheduleAutoSave = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
     if (!isAutoSaveEnabled) return;
     
@@ -1047,12 +1103,15 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
       onDirtyChange(true);
     }
     
-    // Schedule auto-save after 15 seconds of inactivity (like Premiere Pro)
+    // Schedule auto-save after specified seconds of inactivity (like Premiere Pro)
     const delayMs = (autoSaveIntervalSec ?? 15) * 1000;
     autoSaveTimer.current = setTimeout(() => {
-      saveStoryMapToDatabase(currentNodes, currentEdges, false);
+      // Only save if there are actually unsaved changes
+      if (saveState.hasUnsavedChanges) {
+        saveStoryMapToDatabase(currentNodes, currentEdges, false);
+      }
     }, delayMs);
-  }, [saveStoryMapToDatabase, isAutoSaveEnabled, autoSaveIntervalSec, onDirtyChange]);
+  }, [saveStoryMapToDatabase, isAutoSaveEnabled, autoSaveIntervalSec, onDirtyChange, saveState.hasUnsavedChanges]);
 
   // Manual save (always works regardless of auto-save setting)
   const handleManualSave = useCallback(async () => {
@@ -1089,7 +1148,7 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
     if (storyMap) {
       isInitializingRef.current = true;
       const flowNodes: Node[] = storyMap.nodes.map((node: IStoryMapNode) => {
-        let nodeData = { ...node, hasError: false };
+        const nodeData = { ...node, hasError: false };
         
         // Enrich scene nodes with actual scene data
         if (node.nodeType === StoryMapNodeType.SCENE_NODE && node.nodeSpecificData?.sceneId) {
@@ -1486,8 +1545,28 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
+                onNodesChange={(changes: NodeChange[]) => {
+                  // Prevent runtime error by safely handling changes
+                  try {
+                    onNodesChange(changes);
+                    if (!isInitializingRef.current && changes.length > 0) {
+                      saveToHistory(nodes, edges);
+                    }
+                  } catch (error) {
+                    console.error('Error handling node changes:', error);
+                  }
+                }}
+                onEdgesChange={(changes: EdgeChange[]) => {
+                  // Prevent runtime error by safely handling changes
+                  try {
+                    onEdgesChange(changes);
+                    if (!isInitializingRef.current && changes.length > 0) {
+                      saveToHistory(nodes, edges);
+                    }
+                  } catch (error) {
+                    console.error('Error handling edge changes:', error);
+                  }
+                }}
                 onConnect={onConnect}
                 onSelectionChange={onSelectionChange}
                 onInit={setReactFlowInstance}
@@ -1496,15 +1575,27 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
                 fitView
                 attributionPosition="bottom-left"
                 className="bg-background"
-                selectionMode={SelectionMode.Partial}
-                multiSelectionKeyCode={["Meta", "Control"]}
+                selectionMode={selection.multiSelectMode ? SelectionMode.Full : SelectionMode.Partial}
+                multiSelectionKeyCode={selection.multiSelectMode ? null : ["Meta", "Control"]}
                 deleteKeyCode={["Backspace", "Delete"]}
-                panOnDrag={!canvasState.isLocked}
+                panOnDrag={!canvasState.isLocked && !selection.multiSelectMode}
                 zoomOnScroll={!canvasState.isLocked}
                 zoomOnPinch={!canvasState.isLocked}
                 preventScrolling={canvasState.isLocked}
                 snapToGrid={canvasState.snapToGrid}
                 snapGrid={[canvasState.gridSize, canvasState.gridSize]}
+                onSelectionStart={() => {
+                  if (selection.multiSelectMode) {
+                    // Disable pan while selecting
+                    setCanvasState(prev => ({ ...prev, isLocked: true }));
+                  }
+                }}
+                onSelectionEnd={() => {
+                  if (selection.multiSelectMode) {
+                    // Re-enable pan after selection
+                    setCanvasState(prev => ({ ...prev, isLocked: false }));
+                  }
+                }}
               >
                 <Background 
                   variant={canvasState.showGrid ? BackgroundVariant.Dots : BackgroundVariant.Cross} 
@@ -1661,42 +1752,18 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
 
                     <Separator orientation="vertical" className="h-6" />
 
-                    {/* Save Status */}
-                    <div className="flex items-center gap-2 px-3 py-1 bg-muted/50 rounded text-xs">
-                      {saveState.isSaving ? (
-                        <div className="flex items-center gap-2 text-blue-600">
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          <span className="hidden sm:inline">Saving...</span>
-                        </div>
-                      ) : saveState.hasUnsavedChanges ? (
-                        <div className="flex items-center gap-2 text-amber-600">
-                          <Circle className="w-3 h-3 fill-current" />
-                          <span className="hidden sm:inline">Unsaved</span>
-                        </div>
-                      ) : saveState.lastSaved ? (
-                        <div className="flex items-center gap-2 text-green-600">
-                          <CheckCircle className="w-3 h-3" />
-                          <span className="hidden sm:inline">
-                            {saveState.lastSaved.toLocaleTimeString('th-TH')}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Circle className="w-3 h-3" />
-                          <span className="hidden sm:inline">Not saved</span>
-                        </div>
-                      )}
-                    </div>
-
                     {/* Multiple Select Toggle */}
                     <Button
                       variant={selection.multiSelectMode ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setSelection(prev => ({ ...prev, multiSelectMode: !prev.multiSelectMode }))}
                       className="h-8 px-2"
-                      title="Multiple select (hold Ctrl to box-select)"
+                      title="Multiple select mode (Click to toggle multi-select)"
                     >
-                      Multi
+                      <div className="flex items-center gap-1">
+                        <MousePointer2 className="w-3 h-3" />
+                        <span className="hidden sm:inline">Multi</span>
+                      </div>
                     </Button>
                   </div>
                 </Panel>
@@ -1718,9 +1785,56 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
                 </Panel>
 
               {/* Selection Info Panel (mobile: push down below toolbar) */}
-              {(selectedNode || selectedEdge) && (
+              {(selectedNode || selectedEdge || selection.selectedNodes.length > 1) && (
                 <Panel position="top-left" className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg max-w-80 mt-12 lg:mt-0">
-                  {selectedNode && (
+                  {/* Multiple Selection Info Panel */}
+                  {selection.selectedNodes.length > 1 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
+                          Multiple Selection
+                        </Badge>
+                        <span className="font-medium text-sm">
+                          {selection.selectedNodes.length} nodes selected
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Selected: {selection.selectedNodes.map(id => {
+                          const node = nodes.find(n => n.id === id);
+                          return node?.data?.title || 'Untitled';
+                        }).join(', ')}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => copySelected()}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => deleteSelected()}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Delete All
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [] }))}
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Single Selection Info Panel */}
+                  {selection.selectedNodes.length <= 1 && selectedNode && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
@@ -1760,7 +1874,9 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
                       </div>
                     </div>
                   )}
-                  {selectedEdge && (
+
+                  {/* Edge Selection Info Panel */}
+                  {selection.selectedNodes.length <= 1 && selectedEdge && !selectedNode && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <GitBranch className="w-4 h-4" />
@@ -1791,6 +1907,42 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
                       </div>
                     </div>
                   )}
+                </Panel>
+              )}
+
+              {/* Multiple Selection Bottom Notification (Mobile-friendly) */}
+              {selection.multiSelectMode && selection.selectedNodes.length > 0 && (
+                <Panel position="bottom-center" className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 shadow-lg">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        {selection.selectedNodes.length} node{selection.selectedNodes.length > 1 ? 's' : ''} selected
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [], multiSelectMode: false }))}
+                        className="h-8"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          // Confirm selection and close multi-select mode
+                          setSelection(prev => ({ ...prev, multiSelectMode: false }));
+                          toast.success(`Confirmed selection of ${selection.selectedNodes.length} nodes`);
+                        }}
+                        className="h-8"
+                      >
+                        Confirm
+                      </Button>
+                    </div>
+                  </div>
                 </Panel>
               )}
             </ReactFlow>
