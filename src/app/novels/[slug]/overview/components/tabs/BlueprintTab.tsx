@@ -923,7 +923,7 @@ const ValidationPanel = ({
 };
 
 // Main Blueprint Tab Component
-const BlueprintTab: React.FC<BlueprintTabProps> = ({ 
+const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({ 
   novel, 
   storyMap, 
   scenes = [], 
@@ -933,11 +933,10 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
   episodes = [],
   onStoryMapUpdate,
   isAutoSaveEnabled,
-  onManualSave,
   autoSaveIntervalSec = 15,
   onDirtyChange,
   onNavigateToDirector
-}) => {
+}, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -1473,6 +1472,11 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
   const nodeTypes: NodeTypes = useMemo(() => ({
     custom: CustomNode
   }), []);
+
+  // Expose methods to parent via ref
+  React.useImperativeHandle(ref, () => ({
+    handleManualSave
+  }), [handleManualSave]);
 
   return (
       <div className="h-full flex flex-col lg:flex-row bg-background text-foreground blueprint-canvas relative">
@@ -2057,6 +2061,8 @@ const BlueprintTab: React.FC<BlueprintTabProps> = ({
       </Sheet>
       </div>
   );
-};
+});
+
+BlueprintTab.displayName = 'BlueprintTab';
 
 export default BlueprintTab;

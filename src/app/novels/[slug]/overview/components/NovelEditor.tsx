@@ -159,13 +159,27 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     }
   }
 
-  // Manual save function
+  // Manual save function - triggers save for currently active tab
   const handleManualSave = async () => {
+    if (!isDirty) {
+      toast.info('No changes to save')
+      return
+    }
+    
     try {
       setIsSaving(true)
-      // This would trigger saves across all tabs
-      toast.success('All changes saved')
+      // Trigger manual save from the active tab
+      if (activeTab === 'blueprint' && blueprintTabRef.current?.handleManualSave) {
+        await blueprintTabRef.current.handleManualSave()
+      } else if (activeTab === 'director' && directorTabRef.current?.handleManualSave) {
+        await directorTabRef.current.handleManualSave()
+      } else if (activeTab === 'summary' && summaryTabRef.current?.handleManualSave) {
+        await summaryTabRef.current.handleManualSave()
+      }
+      
       setLastSaved(new Date())
+      setIsDirty(false)
+      toast.success('All changes saved successfully')
     } catch (error) {
       console.error('Error saving:', error)
       toast.error('Failed to save changes')
@@ -173,6 +187,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       setIsSaving(false)
     }
   }
+
+  // Refs for tab components to trigger their save methods
+  const blueprintTabRef = React.useRef<any>(null)
+  const directorTabRef = React.useRef<any>(null)
+  const summaryTabRef = React.useRef<any>(null)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -221,12 +240,16 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           {/* Manual Save */}
           <Button
             onClick={handleManualSave}
-            disabled={isSaving}
+            disabled={isSaving || !isDirty}
             size="sm"
-            className="flex items-center space-x-2"
+            className={`flex items-center space-x-2 ${
+              isDirty 
+                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                : 'bg-muted text-muted-foreground'
+            }`}
           >
             <Save className="h-4 w-4" />
-            <span>บันทึก</span>
+            <span>{isDirty ? 'บันทึก' : 'บันทึกแล้ว'}</span>
           </Button>
 
           {/* Settings */}
@@ -389,6 +412,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           <div className="flex-1 overflow-hidden">
             <TabsContent value="blueprint" className="h-full m-0 p-0">
               <BlueprintTab
+                ref={blueprintTabRef}
                 novel={currentNovel}
                 storyMap={currentStoryMap}
                 scenes={currentScenes}
@@ -398,7 +422,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 episodes={currentEpisodes}
                 onStoryMapUpdate={handleStoryMapUpdate}
                 isAutoSaveEnabled={isAutoSaveEnabled}
-                onManualSave={handleManualSave}
                 autoSaveIntervalSec={autoSaveIntervalSec}
                 onDirtyChange={setIsDirty}
                 onNavigateToDirector={(sceneId?: string) => {
