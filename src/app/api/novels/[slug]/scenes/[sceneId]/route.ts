@@ -237,8 +237,8 @@ export async function DELETE(
 // Helper function to analyze timeline
 function analyzeTimeline(tracks: any[]): any {
   let maxEndTime = 0;
-  let eventsByType: Record<string, number> = {};
-  let layerUsage: Record<string, number> = {};
+  const eventsByType: Record<string, number> = {};
+  const layerUsage: Record<string, number> = {};
 
   tracks.forEach(track => {
     track.events?.forEach((event: any) => {

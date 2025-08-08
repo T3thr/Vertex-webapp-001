@@ -363,7 +363,7 @@ const MentalWellbeingInsights = ({ novel }: { novel: any }) => {
           <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
           <h4 className="font-semibold mb-2">Mental Wellbeing Insights</h4>
           <p className="text-sm text-muted-foreground mb-4">
-            Get AI-powered insights about your story's emotional impact and reader wellbeing.
+            Get AI-powered insights about your story&apos;s emotional impact and reader wellbeing.
           </p>
           <Button onClick={() => setIsOptedIn(true)} variant="outline">
             <Brain className="w-4 h-4 mr-2" />
@@ -647,7 +647,7 @@ const AdvancedAnalytics = ({ novel }: { novel: any }) => {
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground mb-4">
-                Most recent choice from Episode 5: "The Crossroads"
+                Most recent choice from Episode 5: &quot;The Crossroads&quot;
               </p>
               {analyticsData.choiceAnalytics.map((choice, index) => (
                 <div key={index} className="space-y-2">
