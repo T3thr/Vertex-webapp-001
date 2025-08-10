@@ -153,6 +153,8 @@ interface SelectionState {
     edges: Edge[];
   };
   isSelectionMode: boolean;
+  pendingSelection: string[]; // For Canva-style multi-select confirmation
+  showSelectionBar: boolean; // Show bottom confirmation bar
 }
 
 // Canvas interaction state
@@ -173,8 +175,10 @@ interface SaveState {
   saveError: string | null;
 }
 
-// Enhanced Custom Node with gamified design and database integration
+// Enhanced Custom Node with improved connection system
 const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: string }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const [connectionMode, setConnectionMode] = useState<'none' | 'connecting'>('none');
   const getNodeIcon = (type: StoryMapNodeType) => {
     switch (type) {
       case StoryMapNodeType.START_NODE: return <Play className="w-5 h-5" />;
@@ -201,11 +205,11 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
       case StoryMapNodeType.START_NODE: return {
         gradient: 'from-emerald-400 via-emerald-500 to-emerald-600',
         shadow: 'shadow-emerald-500/30 shadow-lg',
-        glow: 'shadow-emerald-400/60 shadow-2xl',
+        glow: 'shadow-emerald-400/60 shadow-xl',
         ring: 'ring-emerald-300',
         shape: 'rounded-full',
         handles: { top: false, bottom: true, left: false, right: false },
-        sparkle: true,
+        sparkle: false,
         isSpecial: true
       };
       case StoryMapNodeType.SCENE_NODE: return {
@@ -231,11 +235,11 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
       case StoryMapNodeType.ENDING_NODE: return {
         gradient: 'from-red-400 via-red-500 to-red-600',
         shadow: 'shadow-red-500/30 shadow-lg',
-        glow: 'shadow-red-400/60 shadow-2xl',
+        glow: 'shadow-red-400/60 shadow-xl',
         ring: 'ring-red-300',
         shape: 'rounded-full',
         handles: { top: true, bottom: false, left: false, right: false },
-        sparkle: true,
+        sparkle: false,
         isSpecial: true
       };
       case StoryMapNodeType.BRANCH_NODE: return {
@@ -265,7 +269,11 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
   const isConnectable = !data.isArchived && !data.hasError;
 
   return (
-    <div className="relative group">
+    <div 
+      className="relative group"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       {/* Main Node Body */}
       <div 
         className={`
@@ -278,7 +286,6 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
           hover:scale-105 hover:${theme.glow} hover:shadow-2xl
           cursor-pointer relative overflow-hidden
           gpu-accelerated
-          ${theme.isSpecial ? 'animate-pulse' : ''}
         `}
       >
         {/* Sparkle Effect for Special Nodes */}
@@ -296,14 +303,21 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 animate-pulse" />
         </div>
 
-        {/* Special Node Crown for Start/End */}
+        {/* Special Node Crown for Start/End - No animation */}
         {theme.isSpecial && (
-          <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg animate-bounce">
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg">
             {data.nodeType === StoryMapNodeType.START_NODE ? (
               <Target className="w-3 h-3 text-yellow-800" />
             ) : (
               <Flag className="w-3 h-3 text-yellow-800" />
             )}
+          </div>
+        )}
+
+        {/* First Scene Indicator for Scene Nodes */}
+        {data.nodeType === StoryMapNodeType.SCENE_NODE && data.isFirstScene && (
+          <div className="absolute -top-1 -left-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+            <span className="text-white text-xs font-bold">1</span>
           </div>
         )}
 
@@ -363,18 +377,24 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
           </div>
         </div>
 
-        {/* Connection Points with Interactive Handles */}
+        {/* Enhanced Connection Points with Better Visual Feedback */}
         {theme.handles.top && (
           <Handle
             type="target"
             position={Position.Top}
             className={`
-              w-4 h-4 bg-white border-3 border-gray-300 rounded-full
-              hover:bg-blue-200 hover:border-blue-400 hover:scale-125
-              transition-all duration-200 cursor-crosshair
-              ${!isConnectable ? 'opacity-50 cursor-not-allowed' : ''}
+              w-4 h-4 border-3 rounded-full z-20
+              transition-all duration-300 ease-out
+              ${isConnectable 
+                ? 'bg-blue-200 border-blue-400 hover:bg-blue-300 hover:border-blue-500 cursor-crosshair hover:scale-150' 
+                : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
+              }
+              ${isHovered || selected ? 'opacity-100 scale-125 shadow-lg' : 'opacity-75'}
             `}
-            style={{ top: -8 }}
+            style={{ 
+              top: -8,
+              boxShadow: (isHovered || selected) ? '0 0 15px rgba(59, 130, 246, 0.6)' : 'none'
+            }}
             isConnectable={isConnectable}
           />
         )}
@@ -384,12 +404,18 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
             type="source"
             position={Position.Bottom}
             className={`
-              w-4 h-4 bg-white border-3 border-gray-300 rounded-full
-              hover:bg-green-200 hover:border-green-400 hover:scale-125
-              transition-all duration-200 cursor-crosshair
-              ${!isConnectable ? 'opacity-50 cursor-not-allowed' : ''}
+              w-4 h-4 border-3 rounded-full z-20
+              transition-all duration-300 ease-out
+              ${isConnectable 
+                ? 'bg-green-200 border-green-400 hover:bg-green-300 hover:border-green-500 cursor-crosshair hover:scale-150' 
+                : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
+              }
+              ${isHovered || selected ? 'opacity-100 scale-125 shadow-lg' : 'opacity-75'}
             `}
-            style={{ bottom: -8 }}
+            style={{ 
+              bottom: -8,
+              boxShadow: (isHovered || selected) ? '0 0 15px rgba(34, 197, 94, 0.6)' : 'none'
+            }}
             isConnectable={isConnectable}
           />
         )}
@@ -399,12 +425,18 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
             type="target"
             position={Position.Left}
             className={`
-              w-4 h-4 bg-white border-3 border-gray-300 rounded-full
-              hover:bg-blue-200 hover:border-blue-400 hover:scale-125
-              transition-all duration-200 cursor-crosshair
-              ${!isConnectable ? 'opacity-50 cursor-not-allowed' : ''}
+              w-4 h-4 border-3 rounded-full z-20
+              transition-all duration-300 ease-out
+              ${isConnectable 
+                ? 'bg-blue-200 border-blue-400 hover:bg-blue-300 hover:border-blue-500 cursor-crosshair hover:scale-150' 
+                : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
+              }
+              ${isHovered || selected ? 'opacity-100 scale-125 shadow-lg' : 'opacity-75'}
             `}
-            style={{ left: -8 }}
+            style={{ 
+              left: -8,
+              boxShadow: (isHovered || selected) ? '0 0 15px rgba(59, 130, 246, 0.6)' : 'none'
+            }}
             isConnectable={isConnectable}
           />
         )}
@@ -414,17 +446,23 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
             type="source"
             position={Position.Right}
             className={`
-              w-4 h-4 bg-white border-3 border-gray-300 rounded-full
-              hover:bg-green-200 hover:border-green-400 hover:scale-125
-              transition-all duration-200 cursor-crosshair
-              ${!isConnectable ? 'opacity-50 cursor-not-allowed' : ''}
+              w-4 h-4 border-3 rounded-full z-20
+              transition-all duration-300 ease-out
+              ${isConnectable 
+                ? 'bg-green-200 border-green-400 hover:bg-green-300 hover:border-green-500 cursor-crosshair hover:scale-150' 
+                : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
+              }
+              ${isHovered || selected ? 'opacity-100 scale-125 shadow-lg' : 'opacity-75'}
             `}
-            style={{ right: -8 }}
+            style={{ 
+              right: -8,
+              boxShadow: (isHovered || selected) ? '0 0 15px rgba(34, 197, 94, 0.6)' : 'none'
+            }}
             isConnectable={isConnectable}
           />
         )}
 
-        {/* Multiple choice handles for choice nodes */}
+        {/* Enhanced Multiple choice handles for choice nodes */}
         {data.nodeType === StoryMapNodeType.CHOICE_NODE && data.choiceCount > 1 && (
           <>
             {Array.from({ length: Math.min(data.choiceCount, 4) }, (_, i) => (
@@ -434,15 +472,19 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
                 position={Position.Right}
                 id={`choice-${i}`}
                 className={`
-                  w-3 h-3 bg-amber-200 border-2 border-amber-400 rounded-full
-                  hover:bg-amber-300 hover:scale-125
-                  transition-all duration-200 cursor-crosshair
-                  ${!isConnectable ? 'opacity-50 cursor-not-allowed' : ''}
+                  w-3 h-3 border-2 rounded-full z-20
+                  transition-all duration-300 ease-out
+                  ${isConnectable 
+                    ? 'bg-amber-200 border-amber-400 hover:bg-amber-300 hover:border-amber-500 cursor-crosshair hover:scale-150' 
+                    : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
+                  }
+                  ${isHovered || selected ? 'opacity-100 scale-125 shadow-md' : 'opacity-80'}
                 `}
                 style={{ 
                   right: -6, 
                   top: `${20 + (i * 15)}%`,
-                  transform: 'translateY(-50%)'
+                  transform: 'translateY(-50%)',
+                  boxShadow: (isHovered || selected) ? '0 0 10px rgba(245, 158, 11, 0.5)' : 'none'
                 }}
                 isConnectable={isConnectable}
               />
@@ -970,7 +1012,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     selectedEdges: [],
     multiSelectMode: false,
     clipboard: { nodes: [], edges: [] },
-    isSelectionMode: false
+    isSelectionMode: false,
+    pendingSelection: [],
+    showSelectionBar: false
   });
   
   // Save state
@@ -983,9 +1027,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const isInitializingRef = useRef<boolean>(true);
   const isApplyingServerUpdateRef = useRef<boolean>(false);
   
+  // Trash/Delete history state  
+  const [deletedItems, setDeletedItems] = useState<Array<{
+    id: string;
+    type: 'node' | 'edge';
+    data: Node | Edge;
+    deletedAt: Date;
+    description: string;
+  }>>([]);
+  const [isTrashHistoryOpen, setIsTrashHistoryOpen] = useState(false);
+  
   // React Flow instance and refs
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+
+  // Responsive detection for mobile-only adjustments
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const updateIsMobile = () => setIsMobile(window.innerWidth < 768);
+    updateIsMobile();
+    window.addEventListener('resize', updateIsMobile);
+    return () => window.removeEventListener('resize', updateIsMobile);
+  }, []);
 
   // Auto-save timer and debounce
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
@@ -1142,10 +1205,25 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // (keyboard shortcuts listener will be attached below after function declarations)
 
-  // Enhanced initialization with database integration
+  // Enhanced initialization with stable reference tracking
+  const storyMapRef = useRef(storyMap);
+  const lastProcessedVersionRef = useRef<number>(0);
+  
   useEffect(() => {
-    if (storyMap) {
-      isInitializingRef.current = true;
+    // Initialize nodes and edges from storyMap prop or create defaults
+    isInitializingRef.current = true;
+    
+    if (storyMap && storyMap.nodes && storyMap.edges) {
+      // Use existing storyMap data
+      const currentVersion = storyMap.version || 0;
+      if (currentVersion === lastProcessedVersionRef.current && storyMapRef.current) {
+        isInitializingRef.current = false;
+        return; // Skip if it's the same version
+      }
+      
+      storyMapRef.current = storyMap;
+      lastProcessedVersionRef.current = currentVersion;
+      
       const flowNodes: Node[] = storyMap.nodes.map((node: IStoryMapNode) => {
         const nodeData = { ...node, hasError: false };
         
@@ -1171,7 +1249,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           type: 'custom',
           position: node.position,
           data: nodeData,
-          selected: selection.selectedNodes.includes(node.nodeId)
+          selected: false // Don't preserve selection on re-init
         };
       });
 
@@ -1196,59 +1274,168 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           strokeDasharray: edge.condition ? '5,5' : 'none'
         },
         animated: edge.editorVisuals?.animated || false,
-        selected: selection.selectedEdges.includes(edge.edgeId)
+        selected: false // Don't preserve selection on re-init
       }));
 
-      setNodes(flowNodes);
-      setEdges(flowEdges);
-      // Do not push initial state to history or schedule autosave
-      isInitializingRef.current = false;
+      // Use stable update to prevent jitter
+      setNodes(() => flowNodes);
+      setEdges(() => flowEdges);
+      
+      // Clear selection state on re-init
+      setSelection(prev => ({
+        ...prev,
+        selectedNodes: [],
+        selectedEdges: []
+      }));
+      
+      setTimeout(() => {
+        isInitializingRef.current = false;
+      }, 100); // Small delay to ensure React has processed the updates
+      
+    } else {
+      // Create default empty canvas when no storyMap exists
+      console.log('[BlueprintTab] No storyMap found, creating empty canvas...');
+      
+      const defaultNodes: Node[] = [];
+      const defaultEdges: Edge[] = [];
+      
+      setNodes(defaultNodes);
+      setEdges(defaultEdges);
+      
+      setTimeout(() => {
+        isInitializingRef.current = false;
+      }, 100);
     }
-  }, [storyMap, scenes, selection.selectedNodes, selection.selectedEdges, setNodes, setEdges]);
+  }, [storyMap, scenes, setNodes, setEdges]);
 
-  // Enhanced history management with auto-save
-  const saveToHistory = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
+  // Enhanced history management with auto-save and description
+  const saveToHistory = useCallback((currentNodes: Node[], currentEdges: Edge[], description?: string) => {
     if (isInitializingRef.current || isApplyingServerUpdateRef.current) {
       return;
     }
+    
+    // Don't save if nothing has actually changed
+    if (history.length > 0) {
+      const lastState = history[historyIndex];
+      if (lastState && 
+          JSON.stringify(lastState.nodes) === JSON.stringify(currentNodes) &&
+          JSON.stringify(lastState.edges) === JSON.stringify(currentEdges)) {
+        return;
+      }
+    }
+    
     const newState: HistoryState = {
       nodes: JSON.parse(JSON.stringify(currentNodes)),
       edges: JSON.parse(JSON.stringify(currentEdges)),
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      description: description || 'Canvas change'
     };
     
     setHistory(prev => {
+      // Remove any future history if we're not at the end
       const newHistory = prev.slice(0, historyIndex + 1);
       newHistory.push(newState);
-      // Keep only last 50 states
+      // Keep only last 50 states for performance
       return newHistory.slice(-50);
     });
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
+    setHistoryIndex(prev => prev + 1);
     
-    // Trigger auto-save
-    scheduleAutoSave(currentNodes, currentEdges);
-  }, [historyIndex, scheduleAutoSave]);
+    // Trigger auto-save only if we have meaningful changes
+    if (description !== 'Initial state') {
+      scheduleAutoSave(currentNodes, currentEdges);
+    }
+  }, [history, historyIndex, scheduleAutoSave]);
 
-  // Undo/Redo functionality
+  // Enhanced Undo/Redo functionality with proper state restoration
   const undo = useCallback(() => {
     if (historyIndex > 0) {
+      isApplyingServerUpdateRef.current = true;
       const prevState = history[historyIndex - 1];
-      setNodes(prevState.nodes);
-      setEdges(prevState.edges);
+      
+      // Deep clone to prevent reference issues
+      const prevNodes = JSON.parse(JSON.stringify(prevState.nodes));
+      const prevEdges = JSON.parse(JSON.stringify(prevState.edges));
+      
+      setNodes(prevNodes);
+      setEdges(prevEdges);
       setHistoryIndex(prev => prev - 1);
-      toast.success('Undid last action');
+      
+      // Clear selection state on undo
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      setSelection(prev => ({
+        ...prev,
+        selectedNodes: [],
+        selectedEdges: []
+      }));
+      
+      toast.success(`Undid: ${prevState.description || 'action'}`);
+      
+      setTimeout(() => {
+        isApplyingServerUpdateRef.current = false;
+      }, 100);
+    } else {
+      toast.info('Nothing to undo');
     }
   }, [history, historyIndex, setNodes, setEdges]);
 
   const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
+      isApplyingServerUpdateRef.current = true;
       const nextState = history[historyIndex + 1];
-      setNodes(nextState.nodes);
-      setEdges(nextState.edges);
+      
+      // Deep clone to prevent reference issues
+      const nextNodes = JSON.parse(JSON.stringify(nextState.nodes));
+      const nextEdges = JSON.parse(JSON.stringify(nextState.edges));
+      
+      setNodes(nextNodes);
+      setEdges(nextEdges);
       setHistoryIndex(prev => prev + 1);
-      toast.success('Redid action');
+      
+      // Clear selection state on redo
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      setSelection(prev => ({
+        ...prev,
+        selectedNodes: [],
+        selectedEdges: []
+      }));
+      
+      toast.success(`Redid: ${nextState.description || 'action'}`);
+      
+      setTimeout(() => {
+        isApplyingServerUpdateRef.current = false;
+      }, 100);
+    } else {
+      toast.info('Nothing to redo');
     }
   }, [history, historyIndex, setNodes, setEdges]);
+
+  // Keyboard shortcuts for undo/redo (Photoshop-style)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Undo: Ctrl+Z
+      if (event.ctrlKey && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      }
+      // Redo: Ctrl+Shift+Z or Ctrl+Y
+      else if ((event.ctrlKey && event.shiftKey && event.key === 'Z') || 
+               (event.ctrlKey && event.key === 'y')) {
+        event.preventDefault();
+        redo();
+      }
+      // Save: Ctrl+S
+      else if (event.ctrlKey && event.key === 's') {
+        event.preventDefault();
+        // Trigger manual save through the parent component
+        handleManualSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, handleManualSave]);
 
   // Selection helpers
   const selectAll = useCallback(() => {
@@ -1265,23 +1452,54 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const deleteSelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
+    
     const nodesWithData = nodes.filter(n => selectedNodes.includes(n.id) && (n.data?.title || n.data?.notesForAuthor));
+    const edgesWithData = edges.filter(e => selectedEdges.includes(e.id));
+    
     if (nodesWithData.length > 0) {
-      const ok = window.confirm(`ลบโหนด ${nodesWithData.length} รายการหรือไม่?`);
+      const ok = window.confirm(`ลบโหนด ${nodesWithData.length} รายการหรือไม่? (สามารถกู้คืนได้จากถังขยะ)`);
       if (!ok) return;
     }
-    setNodes(nds => nds.filter(n => !selectedNodes.includes(n.id)));
-    setEdges(eds => eds.filter(e => !selectedEdges.includes(e.id)));
+    
+    // Store deleted items in trash history
+    const deletedNodeItems = nodesWithData.map(node => ({
+      id: node.id,
+      type: 'node' as const,
+      data: node,
+      deletedAt: new Date(),
+      description: `Node: ${node.data?.title || 'Untitled'}`
+    }));
+    
+    const deletedEdgeItems = edgesWithData.map(edge => ({
+      id: edge.id,
+      type: 'edge' as const,
+      data: edge,
+      deletedAt: new Date(),
+      description: `Connection: ${edge.label || 'Unlabeled'}`
+    }));
+    
+    setDeletedItems(prev => [...prev, ...deletedNodeItems, ...deletedEdgeItems]);
+    
+    const newNodes = nodes.filter(n => !selectedNodes.includes(n.id));
+    const newEdges = edges.filter(e => !selectedEdges.includes(e.id));
+    
+    setNodes(newNodes);
+    setEdges(newEdges);
     setSelection(prev => ({
       ...prev,
       selectedNodes: [],
       selectedEdges: []
     }));
+    
     saveToHistory(
-      nodes.filter(n => !selectedNodes.includes(n.id)),
-      edges.filter(e => !selectedEdges.includes(e.id))
+      newNodes,
+      newEdges,
+      `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections`
     );
-    toast.success(`Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections`);
+    
+    toast.success(
+      `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections. Check trash to recover.`
+    );
   }, [selection, nodes, edges, setNodes, setEdges, saveToHistory]);
 
   const copySelected = useCallback(() => {
@@ -1316,7 +1534,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }));
     setNodes(nds => [...nds, ...newNodes]);
     setEdges(eds => [...eds, ...newEdges]);
-    saveToHistory([...nodes, ...newNodes], [...edges, ...newEdges]);
+    saveToHistory([...nodes, ...newNodes], [...edges, ...newEdges], `Pasted ${newNodes.length} nodes and ${newEdges.length} connections`);
     toast.success(`Pasted ${newNodes.length} nodes and ${newEdges.length} connections`);
   }, [selection, nodes, edges, setNodes, setEdges, saveToHistory]);
 
@@ -1375,28 +1593,63 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [handleManualSave, toggleCanvasLock, selectedNode, selectedEdge, undo, redo]);
 
-  // Add new node
+  // Add new node with stable positioning and viewport center calculation
   const onAddNode = useCallback((nodeType: StoryMapNodeType) => {
+    const timestamp = Date.now();
+    const randomOffset = Math.floor(Math.random() * 50); // Add small random offset to prevent overlap
+    
+    // Calculate center of current viewport if reactFlowInstance is available
+    let centerPosition = { x: 100 + randomOffset, y: 100 + randomOffset };
+    if (reactFlowInstance) {
+      const viewport = reactFlowInstance.getViewport();
+      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+      if (bounds) {
+        centerPosition = reactFlowInstance.project({
+          x: bounds.width / 2,
+          y: bounds.height / 2,
+        });
+      }
+    }
+    
     const newNode: Node = {
-      id: `node-${Date.now()}`,
+      id: `node-${timestamp}-${randomOffset}`,
       type: 'custom',
-      position: { x: 100, y: 100 },
+      position: centerPosition,
       data: {
-        nodeId: `node-${Date.now()}`,
+        nodeId: `node-${timestamp}-${randomOffset}`,
         nodeType,
         title: `New ${nodeType.replace(/_/g, ' ')}`,
         notesForAuthor: '',
         authorDefinedEmotionTags: [],
         hasError: false,
-        isCompleted: false
+        isCompleted: false,
+        // Set as first scene if this is a scene node and no other scene nodes exist
+        isFirstScene: nodeType === StoryMapNodeType.SCENE_NODE && 
+          !nodes.some(n => n.data.nodeType === StoryMapNodeType.SCENE_NODE)
       }
     };
 
-    setNodes(nds => [...nds, newNode]);
-    saveToHistory([...nodes, newNode], edges);
+    // Add node using functional update to prevent stale state issues
+    setNodes(currentNodes => {
+      const newNodes = [...currentNodes, newNode];
+      // Schedule history save after state update
+      setTimeout(() => saveToHistory(newNodes, edges, `Added ${nodeType.replace(/_/g, ' ').toLowerCase()}`), 50);
+      return newNodes;
+    });
+    
     setIsSidebarOpen(false); // Close sidebar on mobile
     toast.success(`Added new ${nodeType.replace(/_/g, ' ').toLowerCase()}`);
-  }, [nodes, edges, setNodes, saveToHistory]);
+    
+    // Auto-select the new node after a brief delay
+    setTimeout(() => {
+      setSelectedNode(newNode);
+      setSelection(prev => ({
+        ...prev,
+        selectedNodes: [newNode.id],
+        selectedEdges: []
+      }));
+    }, 100);
+  }, [nodes, edges, setNodes, saveToHistory, reactFlowInstance]);
 
   // Update node data
   const onNodeUpdate = useCallback((nodeId: string, newData: any) => {
@@ -1416,16 +1669,52 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     ));
   }, [setEdges]);
 
-  // Handle connections
+  // Enhanced connections with database sync and validation
   const onConnect = useCallback((params: Connection) => {
     if (!params.source || !params.target) return;
     
+    // Prevent self-connections
+    if (params.source === params.target) {
+      toast.error('Cannot connect a node to itself');
+      return;
+    }
+    
+    // Check for duplicate connections
+    const existingConnection = edges.find(edge => 
+      edge.source === params.source && 
+      edge.target === params.target &&
+      edge.sourceHandle === params.sourceHandle &&
+      edge.targetHandle === params.targetHandle
+    );
+    
+    if (existingConnection) {
+      toast.warning('Connection already exists');
+      return;
+    }
+    
+    const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newEdge = {
       ...params,
-      id: `edge-${Date.now()}`,
+      id: edgeId,
       type: 'smoothstep',
       source: params.source,
       target: params.target,
+      sourceHandle: params.sourceHandle,
+      targetHandle: params.targetHandle,
+      data: {
+        edgeId: edgeId,
+        sourceNodeId: params.source,
+        targetNodeId: params.target,
+        sourceHandleId: params.sourceHandle,
+        targetHandleId: params.targetHandle,
+        label: '',
+        priority: 1,
+        editorVisuals: {
+          color: '#64748b',
+          lineStyle: 'solid',
+          animated: false
+        }
+      },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 20,
@@ -1435,24 +1724,44 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       style: {
         strokeWidth: 2,
         stroke: '#64748b'
-      }
+      },
+      animated: false
     };
     
     setEdges(eds => addEdge(newEdge, eds));
-    saveToHistory(nodes, [...edges, newEdge]);
+    saveToHistory(nodes, [...edges, newEdge], 'Connected nodes');
     toast.success('Connected nodes');
-  }, [nodes, edges, setEdges, saveToHistory]);
+    
+    // Auto-save the connection to database
+    if (isAutoSaveEnabled) {
+      scheduleAutoSave(nodes, [...edges, newEdge]);
+    }
+  }, [nodes, edges, setEdges, saveToHistory, isAutoSaveEnabled, scheduleAutoSave]);
 
-  // Selection handler
+  // Enhanced Selection handler with multi-selection support
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
+    // Set single selection states
     setSelectedNode(selectedNodes[0] || null);
     setSelectedEdge(selectedEdges[0] || null);
+    
+    // Update multi-selection state
     setSelection(prev => ({
       ...prev,
       selectedNodes: selectedNodes.map(n => n.id),
       selectedEdges: selectedEdges.map(e => e.id)
     }));
-  }, []);
+    
+    // If multi-selection mode is active and we have multiple selections, keep the mode active
+    if (selection.multiSelectMode && selectedNodes.length > 1) {
+      // Keep multi-select mode active
+    } else if (selectedNodes.length <= 1) {
+      // Auto-disable multi-select mode when single selection
+      setSelection(prev => ({
+        ...prev,
+        multiSelectMode: false
+      }));
+    }
+  }, [selection.multiSelectMode]);
 
   // Keyboard event listeners
   useEffect(() => {
@@ -1479,8 +1788,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }), [handleManualSave]);
 
   return (
-      <div className="h-full flex flex-col lg:flex-row bg-background text-foreground blueprint-canvas relative">
-        {/* Enhanced Desktop Sidebar - Collapsible */}
+      <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
+        {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
         <AnimatePresence mode="wait">
           {!isSidebarCollapsed && (
             <motion.div
@@ -1488,9 +1797,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="hidden lg:block border-r bg-card/50 blueprint-sidebar overflow-hidden"
+              className="hidden md:block border-r bg-card/50 blueprint-sidebar"
             >
-              <div className="p-4 border-b">
+              <div className="flex flex-col h-full">
+                {/* Fixed Header */}
+                <div className="p-4 border-b bg-card/80 backdrop-blur-sm">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Palette className="w-5 h-5" />
@@ -1507,29 +1818,45 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </div>
               </div>
               
-              <Tabs defaultValue="palette" className="h-[calc(100%-4rem)]">
-                <TabsList className="grid w-full grid-cols-2 mx-4 mt-2">
-                  <TabsTrigger value="palette">Nodes</TabsTrigger>
-                  <TabsTrigger value="validation">Validation</TabsTrigger>
-                </TabsList>
-                <TabsContent value="palette" className="h-full mt-2">
-                  <NodePalette onAddNode={onAddNode} />
-                </TabsContent>
-                <TabsContent value="validation" className="h-full mt-2">
-                  <ValidationPanel 
-                    nodes={nodes} 
-                    edges={edges} 
-                    storyVariables={storyMap?.storyVariables || []} 
-                  />
-                </TabsContent>
-              </Tabs>
+                {/* Scrollable Content */}
+              <div className="flex-1 overflow-hidden">
+                  <Tabs defaultValue="palette" className="flex flex-col h-full">
+                    <div className="px-4 pt-4">
+                      <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="palette">Nodes</TabsTrigger>
+                    <TabsTrigger value="validation">Validation</TabsTrigger>
+                  </TabsList>
+                    </div>
+                    
+                    <TabsContent value="palette" className="flex-1 overflow-hidden">
+                      <ScrollArea className="h-full px-4 pb-4 custom-scrollbar">
+                        <div className="space-y-4 pt-4">
+                        <NodePalette onAddNode={onAddNode} />
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                    
+                    <TabsContent value="validation" className="flex-1 overflow-hidden">
+                      <ScrollArea className="h-full px-4 pb-4 custom-scrollbar">
+                        <div className="space-y-4 pt-4">
+                        <ValidationPanel 
+                          nodes={nodes} 
+                          edges={edges} 
+                          storyVariables={storyMap?.storyVariables || []} 
+                        />
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Collapsed Sidebar Trigger */}
         {isSidebarCollapsed && (
-          <div className="hidden lg:flex flex-col items-center justify-start pt-4 w-12 border-r bg-card/50">
+          <div className="hidden md:flex flex-col items-center justify-start pt-4 w-12 border-r bg-card/50">
             <Button
               variant="ghost"
               size="sm"
@@ -1553,8 +1880,26 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   // Prevent runtime error by safely handling changes
                   try {
                     onNodesChange(changes);
-                    if (!isInitializingRef.current && changes.length > 0) {
-                      saveToHistory(nodes, edges);
+                    // Only save to history for meaningful changes (position, selection, etc.)
+                    const meaningfulChanges = changes.filter(change => 
+                      change.type === 'position' || 
+                      change.type === 'add' || 
+                      change.type === 'remove'
+                    );
+                    if (!isInitializingRef.current && meaningfulChanges.length > 0) {
+                      // Use a debounced version for position changes to avoid excessive history entries
+                      if (meaningfulChanges.every(change => change.type === 'position')) {
+                        // Debounce position changes
+                        if (saveDebounceTimer.current) {
+                          clearTimeout(saveDebounceTimer.current);
+                        }
+                        saveDebounceTimer.current = setTimeout(() => {
+                          saveToHistory(nodes, edges);
+                        }, 500);
+                      } else {
+                        // Immediate save for add/remove operations
+                        saveToHistory(nodes, edges);
+                      }
                     }
                   } catch (error) {
                     console.error('Error handling node changes:', error);
@@ -1564,7 +1909,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   // Prevent runtime error by safely handling changes
                   try {
                     onEdgesChange(changes);
-                    if (!isInitializingRef.current && changes.length > 0) {
+                    const meaningfulChanges = changes.filter(change => 
+                      change.type === 'add' || 
+                      change.type === 'remove'
+                    );
+                    if (!isInitializingRef.current && meaningfulChanges.length > 0) {
                       saveToHistory(nodes, edges);
                     }
                   } catch (error) {
@@ -1573,6 +1922,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }}
                 onConnect={onConnect}
                 onSelectionChange={onSelectionChange}
+                onNodeClick={(event, node) => {
+                  // Enhanced multi-select mode handling (Canva-style)
+                  if (selection.multiSelectMode) {
+                    const isAlreadySelected = selection.pendingSelection.includes(node.id);
+                    
+                    setSelection(prev => ({
+                      ...prev,
+                      pendingSelection: isAlreadySelected
+                        ? prev.pendingSelection.filter(id => id !== node.id)
+                        : [...prev.pendingSelection, node.id],
+                      showSelectionBar: true
+                    }));
+                  } else {
+                    // Regular single selection
+                    setSelectedNode(node);
+                    setSelectedEdge(null);
+                  }
+                }}
                 onInit={setReactFlowInstance}
                 nodeTypes={nodeTypes}
                 connectionMode={ConnectionMode.Loose}
@@ -1580,25 +1947,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 attributionPosition="bottom-left"
                 className="bg-background"
                 selectionMode={selection.multiSelectMode ? SelectionMode.Full : SelectionMode.Partial}
-                multiSelectionKeyCode={selection.multiSelectMode ? null : ["Meta", "Control"]}
+                multiSelectionKeyCode={selection.multiSelectMode ? null : ["Meta", "Control", "Shift"]}
                 deleteKeyCode={["Backspace", "Delete"]}
-                panOnDrag={!canvasState.isLocked && !selection.multiSelectMode}
+                panOnDrag={!canvasState.isLocked && !selection.isSelectionMode}
                 zoomOnScroll={!canvasState.isLocked}
                 zoomOnPinch={!canvasState.isLocked}
                 preventScrolling={canvasState.isLocked}
                 snapToGrid={canvasState.snapToGrid}
                 snapGrid={[canvasState.gridSize, canvasState.gridSize]}
                 onSelectionStart={() => {
-                  if (selection.multiSelectMode) {
-                    // Disable pan while selecting
-                    setCanvasState(prev => ({ ...prev, isLocked: true }));
-                  }
+                  setSelection(prev => ({ ...prev, isSelectionMode: true }));
                 }}
                 onSelectionEnd={() => {
-                  if (selection.multiSelectMode) {
-                    // Re-enable pan after selection
-                    setCanvasState(prev => ({ ...prev, isLocked: false }));
-                  }
+                  setSelection(prev => ({ ...prev, isSelectionMode: false }));
                 }}
               >
                 <Background 
@@ -1611,6 +1972,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 {/* Enhanced Zoom Controls */}
                 <Panel position="bottom-right" className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg">
                   <div className="flex flex-col gap-2">
+                    {/* Trash History Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsTrashHistoryOpen(true)}
+                      className="w-10 h-10 p-0 relative"
+                      title={`Trash History (${deletedItems.length} items)`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deletedItems.length > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {deletedItems.length > 9 ? '9+' : deletedItems.length}
+                        </span>
+                      )}
+                    </Button>
+
+                    <Separator />
+
                     <Button
                       variant="outline"
                       size="sm"
@@ -1674,8 +2053,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 />
               
                 {/* Enhanced Floating Toolbar */}
-                <Panel position="top-center" className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg">
-                  <div className="flex items-center gap-2">
+                <Panel
+                  position="top-left"
+                  className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg"
+                  style={{ top: isMobile ? 56 : undefined, left: isMobile ? 0 : undefined }}
+                >
+                  <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}`}>
                     {/* Episode Selector - Desktop */}
                     <div className="hidden lg:block">
                       <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
@@ -1695,30 +2078,54 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       </Select>
                     </div>
 
-                    {/* Mobile Controls */}
-                    <div className="flex lg:hidden items-center gap-1">
+                    {/* Enhanced Mobile Controls - Unified with Desktop */}
+                    <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex md:hidden items-center gap-1'}`}>
+                      {/* Story Blueprint Toggle */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setIsSidebarOpen(true)}
-                        className="h-8 w-8 p-0"
-                        title="Open Node Palette"
+                        className="h-8 w-8 p-0 bg-background/80 hover:bg-background/90 border-2"
+                        title="Story Blueprint"
                       >
-                        <Menu className="w-4 h-4" />
+                        <Plus className="w-4 h-4" />
                       </Button>
 
+                      {/* Properties Toggle - Show only when node is selected */}
+                      {selectedNode && (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setIsPropertiesOpen(true)}
-                        className="h-8 w-8 p-0"
-                        title="Open Properties"
+                          className="h-8 w-8 p-0 bg-background/80 hover:bg-background/90 border-2"
+                        title="Properties"
                       >
                         <Settings className="w-4 h-4" />
                       </Button>
+                      )}
+                      
+                      {/* Multi Select Toggle */}
+                      <Button
+                        variant={selection.multiSelectMode ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelection(prev => ({ 
+                            ...prev, 
+                          multiSelectMode: !prev.multiSelectMode,
+                          selectedNodes: [],
+                          selectedEdges: [],
+                          pendingSelection: [],
+                          showSelectionBar: false
+                        }))}
+                        className="h-8 w-8 p-0 bg-background/80 hover:bg-background/90 border-2"
+                        title="Multi Select Mode"
+                      >
+                        <MousePointer2 className="w-4 h-4" />
+                      </Button>
+
+                      {null}
                     </div>
 
-                    <Separator orientation="vertical" className="h-6" />
+                    <Separator orientation={isMobile ? "horizontal" : "vertical"} className={isMobile ? "w-full" : "h-6"} />
 
                     {/* Grid Toggle */}
                     <Button
@@ -1754,43 +2161,53 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       <Redo2 className="w-4 h-4" />
                     </Button>
 
-                    <Separator orientation="vertical" className="h-6" />
+                    <Separator orientation={isMobile ? "horizontal" : "vertical"} className={isMobile ? "w-full" : "h-6"} />
 
-                    {/* Multiple Select Toggle */}
-                    <Button
-                      variant={selection.multiSelectMode ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSelection(prev => ({ ...prev, multiSelectMode: !prev.multiSelectMode }))}
-                      className="h-8 px-2"
-                      title="Multiple select mode (Click to toggle multi-select)"
-                    >
-                      <div className="flex items-center gap-1">
-                        <MousePointer2 className="w-3 h-3" />
-                        <span className="hidden sm:inline">Multi</span>
-                      </div>
-                    </Button>
+                    {!isMobile && (
+                      <Button
+                        variant={selection.multiSelectMode ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelection(prev => ({ ...prev, multiSelectMode: !prev.multiSelectMode }))}
+                        className="h-8 px-2"
+                        title="Multiple select mode (Click to toggle multi-select)"
+                      >
+                        <div className="flex items-center gap-1">
+                          <MousePointer2 className="w-3 h-3" />
+                          <span className="hidden sm:inline">Multi</span>
+                        </div>
+                      </Button>
+                    )}
                   </div>
                 </Panel>
 
                 {/* Episode Selector - Mobile */}
-                <Panel position="top-left" className="lg:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg">
+                <Panel position="top-left" className="lg:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg" style={{ top: 8, left: 0 }}>
                   <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
                     <SelectTrigger className="w-32 h-8 text-xs bg-background/50">
-                      <SelectValue placeholder="Episode" />
+                      <SelectValue placeholder="Select Episode" />
                     </SelectTrigger>
                     <SelectContent>
                       {episodes.map((episode) => (
                         <SelectItem key={episode._id} value={episode._id} className="text-xs">
-                          Ep {episode.episodeOrder}
+                          <div className="flex items-center gap-2">
+                            <BookOpen className="w-3 h-3" />
+                            <span>Ep {episode.episodeOrder}: {episode.title}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </Panel>
 
-              {/* Selection Info Panel (mobile: push down below toolbar) */}
-              {(selectedNode || selectedEdge || selection.selectedNodes.length > 1) && (
-                <Panel position="top-left" className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg max-w-80 mt-12 lg:mt-0">
+
+
+              {/* Selection Info Panel - Mobile: top-right, Desktop: below toolbar */}
+              {(selectedNode || selectedEdge || (selection.selectedNodes.length > 1 && !selection.multiSelectMode)) && (
+                <Panel 
+                  position={isMobile ? "top-right" : "top-left"} 
+                  className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg max-w-80"
+                  style={isMobile ? { top: 8, right: -5 } : { top: 60 }}
+                >
                   {/* Multiple Selection Info Panel */}
                   {selection.selectedNodes.length > 1 && (
                     <div className="space-y-2">
@@ -1892,7 +2309,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => setIsPropertiesOpen(true)}
+                          onClick={() => {
+                            // Always navigate to Director Tab for edge editing
+                            if (typeof onNavigateToDirector === 'function') {
+                              // Try to get scene information from connected nodes
+                              const sourceNode = nodes.find(n => n.id === selectedEdge.source);
+                              const targetNode = nodes.find(n => n.id === selectedEdge.target);
+                              
+                              // If source node has scene data, pass its scene ID
+                              const sceneId = sourceNode?.data?.sceneData?._id || 
+                                            targetNode?.data?.sceneData?._id;
+                              
+                              onNavigateToDirector(sceneId);
+                            }
+                          }}
                         >
                           <Edit className="w-3 h-3 mr-1" />
                           Edit
@@ -1903,6 +2333,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           onClick={() => {
                             setEdges(edges => edges.filter(e => e.id !== selectedEdge.id));
                             setSelectedEdge(null);
+                            saveToHistory(nodes, edges.filter(e => e.id !== selectedEdge.id), 'Deleted connection');
                           }}
                         >
                           <Trash2 className="w-3 h-3 mr-1" />
@@ -1914,9 +2345,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </Panel>
               )}
 
-              {/* Multiple Selection Bottom Notification (Mobile-friendly) */}
+              {/* Multiple Selection Bottom Notification (Mobile-friendly) - positioned below toolbar */}
               {selection.multiSelectMode && selection.selectedNodes.length > 0 && (
-                <Panel position="bottom-center" className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 shadow-lg">
+                <Panel position="bottom-center" className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 shadow-lg mb-20 lg:mb-4">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-blue-600" />
@@ -1952,11 +2383,63 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             </ReactFlow>
           </div>
         </ReactFlowProvider>
+          
+          {/* Canva-style Selection Confirmation Bar */}
+          <AnimatePresence>
+            {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
+              <motion.div
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
+              >
+                <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
+                  <span className="text-sm font-medium">
+                    {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
+                  </span>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelection(prev => ({ 
+                        ...prev, 
+                        pendingSelection: [], 
+                        showSelectionBar: false 
+                      }))}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => {
+                        // Confirm selection and show Multiple Selection Info Panel
+                        setSelection(prev => ({
+                          ...prev,
+                          selectedNodes: prev.pendingSelection,
+                          pendingSelection: [],
+                          showSelectionBar: false,
+                          multiSelectMode: false
+                        }));
+                        
+                        // Clear single selection
+                        setSelectedNode(null);
+                        setSelectedEdge(null);
+                      }}
+                    >
+                      Confirm Selection
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
       </div>
 
         {/* Collapsed Properties Trigger */}
         {isPropertiesCollapsed && (
-          <div className="hidden lg:flex flex-col items-center justify-start pt-4 w-12 border-l bg-card/50">
+          <div className="hidden md:flex flex-col items-center justify-start pt-4 w-12 border-l bg-card/50">
             <Button
               variant="ghost"
               size="sm"
@@ -1969,7 +2452,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           </div>
         )}
 
-        {/* Enhanced Desktop Properties Panel - Collapsible */}
+        {/* Enhanced Desktop/Tablet Properties Panel - Scrollable */}
         <AnimatePresence mode="wait">
           {!isPropertiesCollapsed && (
             <motion.div
@@ -1977,9 +2460,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="hidden lg:block border-l bg-card/50 blueprint-properties overflow-hidden"
+              className="hidden md:block border-l bg-card/50 blueprint-properties"
             >
-              <div className="p-4 border-b">
+              <div className="flex flex-col h-full">
+                {/* Fixed Header */}
+                <div className="p-4 border-b bg-card/80 backdrop-blur-sm">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Settings className="w-5 h-5" />
@@ -1996,6 +2481,92 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </div>
               </div>
               
+                {/* Scrollable Content */}
+              <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full custom-scrollbar">
+                    <div className="p-4 space-y-4">
+                    <PropertiesPanel
+                      selectedNode={selectedNode}
+                      selectedEdge={selectedEdge}
+                      onNodeUpdate={onNodeUpdate}
+                      onEdgeUpdate={onEdgeUpdate}
+                      storyVariables={storyMap?.storyVariables || []}
+                      scenes={scenes}
+                      characters={characters}
+                      userMedia={userMedia}
+                      officialMedia={officialMedia}
+                    />
+                  </div>
+                </ScrollArea>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+      {/* Mobile Sidebar Sheet - Full Screen Modal */}
+      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+        <SheetContent side="left" className="w-full sm:w-80 p-0">
+          <div className="flex flex-col h-full bg-background">
+            <SheetHeader className="p-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="flex items-center gap-2">
+                  <Palette className="w-5 h-5" />
+                  Story Blueprint
+                </SheetTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden">
+              <Tabs defaultValue="palette" className="h-full flex flex-col">
+                <TabsList className="grid w-full grid-cols-2 mx-4 mt-2 rounded-lg">
+                  <TabsTrigger value="palette" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Nodes</TabsTrigger>
+                  <TabsTrigger value="validation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
+                </TabsList>
+                <TabsContent value="palette" className="flex-1 mt-2 overflow-hidden">
+                  <NodePalette onAddNode={onAddNode} />
+                </TabsContent>
+                <TabsContent value="validation" className="flex-1 mt-2 overflow-hidden">
+                  <ValidationPanel 
+                    nodes={nodes} 
+                    edges={edges} 
+                    storyVariables={storyMap?.storyVariables || []} 
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Mobile Properties Sheet - Full Screen Modal */}
+      <Sheet open={isPropertiesOpen} onOpenChange={setIsPropertiesOpen}>
+        <SheetContent side="right" className="w-full sm:w-80 p-0">
+          <div className="flex flex-col h-full bg-background">
+            <SheetHeader className="p-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  Properties
+                </SheetTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setIsPropertiesOpen(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden">
               <PropertiesPanel
                 selectedNode={selectedNode}
                 selectedEdge={selectedEdge}
@@ -2007,62 +2578,149 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 userMedia={userMedia}
                 officialMedia={officialMedia}
               />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-      {/* Mobile Sidebar Sheet */}
-      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-        <SheetContent side="left" className="w-80">
-          <SheetHeader>
-            <SheetTitle>Story Blueprint</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4 h-[calc(100%-4rem)]">
-            <Tabs defaultValue="palette" className="h-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="palette">Nodes</TabsTrigger>
-                <TabsTrigger value="validation">Validation</TabsTrigger>
-              </TabsList>
-              <TabsContent value="palette" className="h-full mt-2">
-                <NodePalette onAddNode={onAddNode} />
-              </TabsContent>
-              <TabsContent value="validation" className="h-full mt-2">
-                <ValidationPanel 
-                  nodes={nodes} 
-                  edges={edges} 
-                  storyVariables={storyMap?.storyVariables || []} 
-                />
-              </TabsContent>
-            </Tabs>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Mobile Properties Sheet */}
-      <Sheet open={isPropertiesOpen} onOpenChange={setIsPropertiesOpen}>
-        <SheetContent side="right" className="w-80">
-          <SheetHeader>
-            <SheetTitle>Properties</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4 h-[calc(100%-4rem)]">
-            <PropertiesPanel
-              selectedNode={selectedNode}
-              selectedEdge={selectedEdge}
-              onNodeUpdate={onNodeUpdate}
-              onEdgeUpdate={onEdgeUpdate}
-              storyVariables={storyMap?.storyVariables || []}
-              scenes={scenes}
-              characters={characters}
-              userMedia={userMedia}
-              officialMedia={officialMedia}
-            />
+      {/* Trash History Modal */}
+      <Dialog open={isTrashHistoryOpen} onOpenChange={setIsTrashHistoryOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5" />
+              Trash History ({deletedItems.length} items)
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-hidden">
+            {deletedItems.length === 0 ? (
+              <div className="text-center py-8">
+                <Trash2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">No deleted items</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-full">
+                <div className="space-y-2 pr-4">
+                  {deletedItems.map((item, index) => (
+                    <Card key={`${item.id}-${index}`} className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {item.type === 'node' ? (
+                              <Square className="w-4 h-4 text-blue-500" />
+                            ) : (
+                              <GitBranch className="w-4 h-4 text-purple-500" />
+                            )}
+                            <span className="font-medium text-sm">{item.description}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {item.type}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Deleted at {item.deletedAt.toLocaleString()}
+                          </p>
+                          {item.type === 'node' && (item.data as Node).data?.notesForAuthor && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              Notes: {(item.data as Node).data.notesForAuthor}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // Restore item
+                              if (item.type === 'node') {
+                                const nodeData = item.data as Node;
+                                setNodes(prev => [...prev, nodeData]);
+                                saveToHistory([...nodes, nodeData], edges, `Restored node: ${nodeData.data?.title || 'Untitled'}`);
+                              } else {
+                                const edgeData = item.data as Edge;
+                                setEdges(prev => [...prev, edgeData]);
+                                saveToHistory(nodes, [...edges, edgeData], `Restored connection: ${edgeData.label || 'Unlabeled'}`);
+                              }
+                              
+                              // Remove from deleted items
+                              setDeletedItems(prev => prev.filter((_, i) => i !== index));
+                              toast.success(`Restored ${item.description}`);
+                            }}
+                            title="Restore"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // Permanently delete
+                              setDeletedItems(prev => prev.filter((_, i) => i !== index));
+                              toast.success(`Permanently deleted ${item.description}`);
+                            }}
+                            title="Delete permanently"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </div>
-        </SheetContent>
-      </Sheet>
+          
+          <div className="flex gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Clear all deleted items
+                if (deletedItems.length > 0) {
+                  const ok = window.confirm(`Permanently delete all ${deletedItems.length} items from trash?`);
+                  if (ok) {
+                    setDeletedItems([]);
+                    toast.success('Trash cleared');
+                  }
+                }
+              }}
+              disabled={deletedItems.length === 0}
+            >
+              Clear All
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Restore all items
+                if (deletedItems.length > 0) {
+                  const ok = window.confirm(`Restore all ${deletedItems.length} items from trash?`);
+                  if (ok) {
+                    const nodesToRestore = deletedItems.filter(item => item.type === 'node').map(item => item.data as Node);
+                    const edgesToRestore = deletedItems.filter(item => item.type === 'edge').map(item => item.data as Edge);
+                    
+                    setNodes(prev => [...prev, ...nodesToRestore]);
+                    setEdges(prev => [...prev, ...edgesToRestore]);
+                    saveToHistory([...nodes, ...nodesToRestore], [...edges, ...edgesToRestore], 'Restored all items from trash');
+                    
+                    setDeletedItems([]);
+                    toast.success('All items restored');
+                  }
+                }
+              }}
+              disabled={deletedItems.length === 0}
+            >
+              Restore All
+            </Button>
+            <Button variant="default" onClick={() => setIsTrashHistoryOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       </div>
   );
 });
 
-BlueprintTab.displayName = 'BlueprintTab';
+BlueprintTab.displayName = 'BlueprintTab'; 
 
 export default BlueprintTab;

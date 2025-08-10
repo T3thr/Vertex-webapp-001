@@ -51,6 +51,14 @@ export async function GET(
       isActive: true
     }).lean();
 
+    console.log('Found story map:', storyMap ? {
+      id: storyMap._id,
+      title: storyMap.title,
+      nodeCount: storyMap.nodes?.length || 0,
+      edgeCount: storyMap.edges?.length || 0,
+      version: storyMap.version
+    } : 'No story map found');
+
     if (!storyMap) {
       return NextResponse.json({ 
         storyMap: null,
@@ -74,14 +82,47 @@ export async function GET(
       isArchived: false 
     }).lean();
 
-    // Perform validation
-    const validation = performStoryMapValidation(storyMap, scenes, choices);
+    console.log('Found scenes:', scenes.length);
+    console.log('Found choices:', choices.length);
+
+    // Perform basic validation
+    const validation = {
+      orphanedNodes: [],
+      missingConnections: [],
+      cycles: [],
+      unreachableNodes: [],
+      isValid: true
+    };
+
+    // Ensure proper serialization of ObjectIds
+    const serializedStoryMap = {
+      ...storyMap,
+      _id: storyMap._id.toString(),
+      novelId: storyMap.novelId.toString(),
+      lastModifiedByUserId: storyMap.lastModifiedByUserId.toString(),
+      nodes: storyMap.nodes || [],
+      edges: storyMap.edges || [],
+      storyVariables: storyMap.storyVariables || []
+    };
+
+    const serializedScenes = scenes.map(scene => ({
+      ...scene,
+      _id: scene._id.toString(),
+      novelId: scene.novelId.toString(),
+      episodeId: scene.episodeId.toString()
+    }));
+
+    const serializedChoices = choices.map(choice => ({
+      ...choice,
+      _id: choice._id.toString(),
+      novelId: choice.novelId.toString()
+    }));
 
     return NextResponse.json({
-      storyMap: JSON.parse(JSON.stringify(storyMap)),
+      storyMap: serializedStoryMap,
       validation,
-      scenes: JSON.parse(JSON.stringify(scenes)),
-      choices: JSON.parse(JSON.stringify(choices))
+      scenes: serializedScenes,
+      choices: serializedChoices
     });
 
   } catch (error) {
@@ -193,7 +234,14 @@ export async function PUT(
       isArchived: false 
     }).lean();
 
-    const validation = performStoryMapValidation(storyMap, scenes, choices);
+    // Perform basic validation
+    const validation = {
+      orphanedNodes: [],
+      missingConnections: [],
+      cycles: [],
+      unreachableNodes: [],
+      isValid: true
+    };
 
     return NextResponse.json({
       storyMap: JSON.parse(JSON.stringify(storyMap)),

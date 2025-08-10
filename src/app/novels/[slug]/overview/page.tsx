@@ -265,6 +265,19 @@ export default async function NovelOverviewPage({ params }: PageProps) {
   const userMedia = await MediaModel.find({ userId: userId, status: 'available', isDeleted: { $ne: true } }).lean();
   const officialMedia = await OfficialMediaModel.find({ status: 'approved_for_library', isDeleted: { $ne: true } }).lean();
   
+  // Debug logging
+  console.log(`[DEBUG] StoryMap raw data:`, storyMap ? {
+    id: storyMap._id,
+    title: storyMap.title,
+    nodeCount: storyMap.nodes?.length || 0,
+    edgeCount: storyMap.edges?.length || 0,
+    version: storyMap.version,
+    isActive: storyMap.isActive
+  } : 'No story map found');
+  
+  console.log(`[DEBUG] Scenes found:`, scenes.length);
+  console.log(`[DEBUG] Characters found:`, characters.length);
+  
   // SECTION: วิธีที่ง่ายและปลอดภัยที่สุดในการ Serialize คือใช้ JSON.stringify และ JSON.parse
   // วิธีนี้จะแปลง ObjectId, Date, และ BSON types อื่นๆ เป็น string โดยอัตโนมัติ
   // =================================================================
@@ -278,6 +291,15 @@ export default async function NovelOverviewPage({ params }: PageProps) {
 
   console.log(`[DEBUG] จำนวนตอนที่พบ: ${serializedEpisodes.length}`);
   console.log(`[DEBUG] สถานะ StoryMap: ${serializedStoryMap ? 'พบ StoryMap' : 'ไม่พบ StoryMap'}`);
+  if (serializedStoryMap) {
+    console.log(`[DEBUG] StoryMap details:`, {
+      id: serializedStoryMap._id,
+      title: serializedStoryMap.title,
+      nodeCount: serializedStoryMap.nodes?.length || 0,
+      edgeCount: serializedStoryMap.edges?.length || 0,
+      version: serializedStoryMap.version
+    });
+  }
   console.log(`[DEBUG] จำนวนตัวละคร: ${serializedCharacters.length}`);
   console.log(`[DEBUG] จำนวนฉาก: ${serializedScenes.length}`);
 
