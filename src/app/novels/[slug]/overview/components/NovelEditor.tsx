@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+
 import { 
   Layers3, 
   Film, 
@@ -12,7 +13,8 @@ import {
   Settings,
   Menu,
   X,
-  RefreshCw
+  RefreshCw,
+  Check
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -159,34 +161,48 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     }
   }
 
-  // Manual save function - triggers save for currently active tab
+  // Enhanced manual save function with comprehensive state management
   const handleManualSave = async () => {
     if (!isDirty) {
-      toast.info('No changes to save')
+      toast.info('ไม่มีการเปลี่ยนแปลงที่จะบันทึก')
       return
     }
     
     try {
       setIsSaving(true)
-      // Trigger manual save from the active tab
+      let savePromises: Promise<any>[] = []
+      
+      // Collect all save operations from active tabs
       if (activeTab === 'blueprint' && blueprintTabRef.current?.handleManualSave) {
-        await blueprintTabRef.current.handleManualSave()
+        savePromises.push(blueprintTabRef.current.handleManualSave())
       } else if (activeTab === 'director' && directorTabRef.current?.handleManualSave) {
-        await directorTabRef.current.handleManualSave()
+        savePromises.push(directorTabRef.current.handleManualSave())
       } else if (activeTab === 'summary' && summaryTabRef.current?.handleManualSave) {
-        await summaryTabRef.current.handleManualSave()
+        savePromises.push(summaryTabRef.current.handleManualSave())
       }
+      
+      // Execute all saves concurrently
+      await Promise.all(savePromises)
       
       setLastSaved(new Date())
       setIsDirty(false)
-      toast.success('All changes saved successfully')
+      toast.success('บันทึกการเปลี่ยนแปลงทั้งหมดเรียบร้อยแล้ว')
     } catch (error) {
       console.error('Error saving:', error)
-      toast.error('Failed to save changes')
+      toast.error('ไม่สามารถบันทึกการเปลี่ยนแปลงได้')
     } finally {
       setIsSaving(false)
     }
   }
+
+  // Enhanced dirty state change handler
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    setIsDirty(dirty)
+    if (dirty && !lastSaved) {
+      // First time marking as dirty - set initial timestamp
+      setLastSaved(new Date())
+    }
+  }, [lastSaved])
 
   // Refs for tab components to trigger their save methods
   const blueprintTabRef = React.useRef<any>(null)
@@ -227,16 +243,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             </span>
           </div>
 
-          {/* Auto-save Toggle */}
-          <Button
-            variant={isAutoSaveEnabled ? "default" : "outline"}
-            size="sm"
-            onClick={() => setIsAutoSaveEnabled(!isAutoSaveEnabled)}
-            className="text-xs"
-          >
-            Auto-save {isAutoSaveEnabled ? 'เปิด' : 'ปิด'}
-          </Button>
-
           {/* Manual Save */}
           <Button
             onClick={handleManualSave}
@@ -252,6 +258,16 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             <span>{isDirty ? 'บันทึก' : 'บันทึกแล้ว'}</span>
           </Button>
 
+          {/* Auto-save Toggle */}
+          <Button
+            variant={isAutoSaveEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsAutoSaveEnabled(!isAutoSaveEnabled)}
+            className="text-xs"
+          >
+            Auto-save {isAutoSaveEnabled ? 'เปิด' : 'ปิด'}
+          </Button>
+
           {/* Settings */}
           <div className="flex items-center gap-2">
             <select
@@ -263,9 +279,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
               <option value={15}>15s</option>
               <option value={30}>30s</option>
             </select>
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4" />
-            </Button>
           </div>
         </div>
       </div>
@@ -423,7 +436,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 onStoryMapUpdate={handleStoryMapUpdate}
                 isAutoSaveEnabled={isAutoSaveEnabled}
                 autoSaveIntervalSec={autoSaveIntervalSec}
-                onDirtyChange={setIsDirty}
+                onDirtyChange={handleDirtyChange}
                 onNavigateToDirector={(sceneId?: string) => {
                   setActiveTab('director')
                   // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus

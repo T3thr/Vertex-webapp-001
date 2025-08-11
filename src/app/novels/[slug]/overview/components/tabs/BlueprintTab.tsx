@@ -107,7 +107,9 @@ import {
   Target,
   Palette,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  Camera,
+  Package
 } from 'lucide-react';
 
 // Types from backend models
@@ -339,14 +341,43 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
 
           {/* Node-specific Info */}
           {data.nodeType === StoryMapNodeType.SCENE_NODE && data.sceneData && (
-            <div className="bg-white/10 rounded-lg p-2 space-y-1">
-              <div className="flex items-center gap-2 text-xs">
-                <User className="w-3 h-3" />
-                <span>{data.sceneData.characters?.length || 0} characters</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <Image className="w-3 h-3" />
-                <span>{data.sceneData.images?.length || 0} images</span>
+            <div className="bg-white/10 rounded-lg p-2 space-y-2">
+              {/* Scene Preview Image */}
+              {data.sceneData.background?.value && (
+                <div className="relative w-full h-16 rounded-md overflow-hidden bg-black/20">
+                  <img 
+                    src={data.sceneData.background.value} 
+                    alt="Scene preview"
+                    className="w-full h-full object-cover opacity-80"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                  <div className="absolute bottom-1 left-1 text-xs text-white/90">
+                    Background
+                  </div>
+                </div>
+              )}
+              
+              {/* Scene Stats */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  <span>{data.sceneData.characters?.length || 0}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Image className="w-3 h-3" />
+                  <span>{data.sceneData.images?.length || 0}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <MessageCircle className="w-3 h-3" />
+                  <span>{data.sceneData.textContents?.length || 0}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  <span>{Math.ceil((data.sceneData.estimatedTimelineDurationMs || 0) / 60000)}m</span>
+                </div>
               </div>
             </div>
           )}
@@ -506,38 +537,57 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
 
 // Node Palette Component
 const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) => void }) => {
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['core', 'logic']);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['story', 'interactive', 'logic']);
 
   const nodeCategories = {
-    core: {
-      name: '🎭 Core Story Nodes',
+    story: {
+      name: '📖 เนื้อเรื่อง (Story)',
       icon: BookOpen,
       color: 'from-blue-500 to-blue-600',
       nodes: [
-        { type: StoryMapNodeType.START_NODE, name: '✨ Start', desc: 'Story beginning', icon: Target },
-        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 Scene', desc: 'Story scene', icon: Square },
-        { type: StoryMapNodeType.CHOICE_NODE, name: '🔀 Choice', desc: 'Player choice', icon: GitBranch },
-        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 Ending', desc: 'Story ending', icon: Flag }
+        { type: StoryMapNodeType.START_NODE, name: '🚀 เริ่มต้น', desc: 'จุดเริ่มต้นของเรื่อง', icon: Play },
+        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 ฉาก', desc: 'ฉากในนิยาย', icon: Camera },
+        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 จบเรื่อง', desc: 'ตอนจบของเรื่อง', icon: Flag }
+      ]
+    },
+    interactive: {
+      name: '🎯 ตัวเลือกผู้เล่น (Choices)',
+      icon: MousePointer2,
+      color: 'from-green-500 to-green-600',
+      nodes: [
+        { type: StoryMapNodeType.CHOICE_NODE, name: '🔀 ตัวเลือก', desc: 'ให้ผู้เล่นเลือก', icon: GitBranch },
+        { type: StoryMapNodeType.RANDOM_BRANCH_NODE, name: '🎲 สุ่ม', desc: 'ผลลัพธ์แบบสุ่ม', icon: Shuffle }
       ]
     },
     logic: {
-      name: '⚡ Logic & Flow',
-      icon: Zap,
+      name: '⚙️ ตรรกะเรื่อง (Logic)',
+      icon: Settings,
       color: 'from-purple-500 to-purple-600',
       nodes: [
-        { type: StoryMapNodeType.BRANCH_NODE, name: '🌿 Branch', desc: 'Conditional branch', icon: GitBranch },
-        { type: StoryMapNodeType.MERGE_NODE, name: '🔗 Merge', desc: 'Merge paths', icon: Split },
-        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: '🎛️ Variable', desc: 'Modify variables', icon: Settings }
+        { type: StoryMapNodeType.BRANCH_NODE, name: '🌿 แยกทาง', desc: 'แยกทางตามเงื่อนไข', icon: GitBranch },
+        { type: StoryMapNodeType.MERGE_NODE, name: '🔗 รวมทาง', desc: 'รวมเส้นทางเข้าด้วยกัน', icon: Split },
+        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: '🎛️ ตัวแปร', desc: 'เปลี่ยนค่าตัวแปร', icon: Settings }
       ]
     },
-    special: {
-      name: '🚀 Special Nodes',
+    advanced: {
+      name: '🚀 ขั้นสูง (Advanced)',
       icon: Sparkles,
       color: 'from-amber-500 to-amber-600',
       nodes: [
-        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: '⚡ Event', desc: 'Trigger event', icon: Zap },
-        { type: StoryMapNodeType.DELAY_NODE, name: '⏰ Delay', desc: 'Time delay', icon: Clock },
-        { type: StoryMapNodeType.COMMENT_NODE, name: '💭 Comment', desc: 'Notes & comments', icon: MessageCircle }
+        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: '⚡ เหตุการณ์', desc: 'เรียกเหตุการณ์พิเศษ', icon: Zap },
+        { type: StoryMapNodeType.DELAY_NODE, name: '⏰ หน่วงเวลา', desc: 'หยุดรอเวลา', icon: Clock },
+        { type: StoryMapNodeType.COMMENT_NODE, name: '💭 บันทึก', desc: 'หมายเหตุและความคิดเห็น', icon: MessageCircle },
+        { type: StoryMapNodeType.CUSTOM_LOGIC_NODE, name: '🔧 ตรรกะกำหนดเอง', desc: 'โค้ดกำหนดเอง', icon: Code }
+      ]
+    },
+    organization: {
+      name: '📦 จัดระเบียบ (Organization)',
+      icon: Package,
+      color: 'from-teal-500 to-teal-600',
+      nodes: [
+        { type: StoryMapNodeType.GROUP_NODE, name: '📦 กลุ่ม', desc: 'จัดกลุ่มโหนด', icon: Package },
+        { type: StoryMapNodeType.PARALLEL_EXECUTION_NODE, name: '⚡ ขนาน', desc: 'ประมวลผลพร้อมกัน', icon: Zap },
+        { type: StoryMapNodeType.SUB_STORYMAP_NODE, name: '🗺️ แผนผังย่อย', desc: 'เชื่อมแผนผังย่อย', icon: Map }
       ]
     }
   };
