@@ -514,10 +514,10 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
       icon: BookOpen,
       color: 'from-blue-500 to-blue-600',
       nodes: [
-        { type: StoryMapNodeType.START_NODE, name: '✨ Start', desc: 'Story beginning', icon: Target, popular: true },
-        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 Scene', desc: 'Story scene', icon: Square, popular: true },
-        { type: StoryMapNodeType.CHOICE_NODE, name: '🔀 Choice', desc: 'Player choice', icon: GitBranch, popular: true },
-        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 Ending', desc: 'Story ending', icon: Flag, popular: false }
+        { type: StoryMapNodeType.START_NODE, name: '✨ Start', desc: 'Story beginning', icon: Target },
+        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 Scene', desc: 'Story scene', icon: Square },
+        { type: StoryMapNodeType.CHOICE_NODE, name: '🔀 Choice', desc: 'Player choice', icon: GitBranch },
+        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 Ending', desc: 'Story ending', icon: Flag }
       ]
     },
     logic: {
@@ -525,9 +525,9 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
       icon: Zap,
       color: 'from-purple-500 to-purple-600',
       nodes: [
-        { type: StoryMapNodeType.BRANCH_NODE, name: '🌿 Branch', desc: 'Conditional branch', icon: GitBranch, popular: false },
-        { type: StoryMapNodeType.MERGE_NODE, name: '🔗 Merge', desc: 'Merge paths', icon: Split, popular: false },
-        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: '🎛️ Variable', desc: 'Modify variables', icon: Settings, popular: false }
+        { type: StoryMapNodeType.BRANCH_NODE, name: '🌿 Branch', desc: 'Conditional branch', icon: GitBranch },
+        { type: StoryMapNodeType.MERGE_NODE, name: '🔗 Merge', desc: 'Merge paths', icon: Split },
+        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: '🎛️ Variable', desc: 'Modify variables', icon: Settings }
       ]
     },
     special: {
@@ -535,9 +535,9 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
       icon: Sparkles,
       color: 'from-amber-500 to-amber-600',
       nodes: [
-        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: '⚡ Event', desc: 'Trigger event', icon: Zap, popular: false },
-        { type: StoryMapNodeType.DELAY_NODE, name: '⏰ Delay', desc: 'Time delay', icon: Clock, popular: false },
-        { type: StoryMapNodeType.COMMENT_NODE, name: '💭 Comment', desc: 'Notes & comments', icon: MessageCircle, popular: false }
+        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: '⚡ Event', desc: 'Trigger event', icon: Zap },
+        { type: StoryMapNodeType.DELAY_NODE, name: '⏰ Delay', desc: 'Time delay', icon: Clock },
+        { type: StoryMapNodeType.COMMENT_NODE, name: '💭 Comment', desc: 'Notes & comments', icon: MessageCircle }
       ]
     }
   };
@@ -592,20 +592,13 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
                         variant="outline"
                         size="sm"
                         onClick={() => onAddNode(node.type)}
-                        className={`w-full justify-start text-xs p-3 h-auto hover:bg-gradient-to-r hover:${category.color} hover:text-white transition-all group relative ${
-                          node.popular ? 'border-orange-300 bg-orange-50 hover:border-orange-400' : ''
-                        }`}
+                        className="w-full justify-start text-xs p-3 h-auto hover:bg-gradient-to-r hover:from-blue-500 hover:to-blue-600 hover:text-white transition-all group"
                       >
                         <div className="flex items-center gap-3 w-full">
                           <node.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
                           <div className="text-left flex-1">
-                            <div className="font-medium flex items-center gap-1">
+                            <div className="font-medium">
                               {node.name}
-                              {node.popular && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-orange-100 text-orange-800 border">
-                                  Hot
-                                </span>
-                              )}
                             </div>
                             <div className="text-muted-foreground text-xs">{node.desc}</div>
                           </div>
@@ -2059,8 +2052,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   style={{ top: isMobile ? 56 : undefined, left: isMobile ? 0 : undefined }}
                 >
                   <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}`}>
-                    {/* Episode Selector - Desktop */}
-                    <div className="hidden lg:block">
+                    {/* Episode Selector - Desktop & Tablet (non-mobile) */}
+                    <div className="hidden md:block">
                       <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
                         <SelectTrigger className="w-48 h-8 text-xs bg-background/50">
                           <SelectValue placeholder="Select Episode" />
@@ -2078,8 +2071,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       </Select>
                     </div>
 
-                    {/* Enhanced Mobile Controls - Unified with Desktop */}
-                    <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex md:hidden items-center gap-1'}`}>
+                    {/* Enhanced Mobile Controls - Mobile Only */}
+                    <div className={`${isMobile ? 'flex flex-col gap-2' : 'hidden'}`}>
                       {/* Story Blueprint Toggle */}
                       <Button
                         variant="outline"
@@ -2090,19 +2083,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
-
-                      {/* Properties Toggle - Show only when node is selected */}
-                      {selectedNode && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsPropertiesOpen(true)}
-                          className="h-8 w-8 p-0 bg-background/80 hover:bg-background/90 border-2"
-                        title="Properties"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                      )}
                       
                       {/* Multi Select Toggle */}
                       <Button
@@ -2121,8 +2101,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       >
                         <MousePointer2 className="w-4 h-4" />
                       </Button>
-
-                      {null}
                     </div>
 
                     <Separator orientation={isMobile ? "horizontal" : "vertical"} className={isMobile ? "w-full" : "h-6"} />
@@ -2180,8 +2158,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </div>
                 </Panel>
 
-                {/* Episode Selector - Mobile */}
-                <Panel position="top-left" className="lg:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg" style={{ top: 8, left: 0 }}>
+                {/* Episode Selector - Mobile Only */}
+                <Panel position="top-left" className="md:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg" style={{ top: 8, left: 0 }}>
                   <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
                     <SelectTrigger className="w-32 h-8 text-xs bg-background/50">
                       <SelectValue placeholder="Select Episode" />
@@ -2201,12 +2179,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
 
 
-              {/* Selection Info Panel - Mobile: top-right, Desktop: below toolbar */}
+              {/* Selection Info Panel - Mobile: below episode selector, Desktop: below toolbar */}
               {(selectedNode || selectedEdge || (selection.selectedNodes.length > 1 && !selection.multiSelectMode)) && (
                 <Panel 
-                  position={isMobile ? "top-right" : "top-left"} 
+                  position={isMobile ? "top-left" : "top-left"} 
                   className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg max-w-80"
-                  style={isMobile ? { top: 8, right: -5 } : { top: 60 }}
+                  style={isMobile ? { top: 60, left: 56 } : { top: 60, left: 0 }}
                 >
                   {/* Multiple Selection Info Panel */}
                   {selection.selectedNodes.length > 1 && (
@@ -2284,6 +2262,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           <Edit className="w-3 h-3 mr-1" />
                           Edit
                         </Button>
+                        {isMobile && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setIsPropertiesOpen(true)}
+                          >
+                            <Settings className="w-3 h-3 mr-1" />
+                            Properties
+                          </Button>
+                        )}
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -2504,84 +2492,147 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           )}
         </AnimatePresence>
 
-      {/* Mobile Sidebar Sheet - Full Screen Modal */}
-      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-        <SheetContent side="left" className="w-full sm:w-80 p-0">
-          <div className="flex flex-col h-full bg-background">
-            <SheetHeader className="p-4 border-b border-border">
-              <div className="flex items-center justify-between">
-                <SheetTitle className="flex items-center gap-2">
-                  <Palette className="w-5 h-5" />
-                  Story Blueprint
-                </SheetTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setIsSidebarOpen(false)}
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </SheetHeader>
-            <div className="flex-1 overflow-hidden">
-              <Tabs defaultValue="palette" className="h-full flex flex-col">
-                <TabsList className="grid w-full grid-cols-2 mx-4 mt-2 rounded-lg">
-                  <TabsTrigger value="palette" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Nodes</TabsTrigger>
-                  <TabsTrigger value="validation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
+      {/* Mobile Story Blueprint Modal - Popup for Mobile, Sidebar for Desktop */}
+      {isMobile ? (
+        <Dialog open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+          <DialogContent className="w-[98vw] max-w-lg h-[85vh] overflow-hidden p-0 flex flex-col">
+            <DialogHeader className="p-6 pb-4 border-b border-border flex-shrink-0">
+              <DialogTitle className="flex items-center gap-3 text-lg font-semibold">
+                <Palette className="w-6 h-6" />
+                Story Blueprint
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden p-6 pt-4">
+              <Tabs defaultValue="palette" className="flex flex-col h-full">
+                <TabsList className="grid w-full grid-cols-2 rounded-lg mb-6 h-12 flex-shrink-0">
+                  <TabsTrigger value="palette" className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Nodes</TabsTrigger>
+                  <TabsTrigger value="validation" className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
                 </TabsList>
-                <TabsContent value="palette" className="flex-1 mt-2 overflow-hidden">
-                  <NodePalette onAddNode={onAddNode} />
+                <TabsContent value="palette" className="overflow-y-auto flex-1 h-full">
+                  <div className="pr-2">
+                    <NodePalette onAddNode={onAddNode} />
+                  </div>
                 </TabsContent>
-                <TabsContent value="validation" className="flex-1 mt-2 overflow-hidden">
-                  <ValidationPanel 
-                    nodes={nodes} 
-                    edges={edges} 
-                    storyVariables={storyMap?.storyVariables || []} 
-                  />
+                <TabsContent value="validation" className="overflow-y-auto flex-1 h-full">
+                  <div className="pr-2">
+                    <ValidationPanel 
+                      nodes={nodes} 
+                      edges={edges} 
+                      storyVariables={storyMap?.storyVariables || []} 
+                    />
+                  </div>
                 </TabsContent>
               </Tabs>
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Mobile Properties Sheet - Full Screen Modal */}
-      <Sheet open={isPropertiesOpen} onOpenChange={setIsPropertiesOpen}>
-        <SheetContent side="right" className="w-full sm:w-80 p-0">
-          <div className="flex flex-col h-full bg-background">
-            <SheetHeader className="p-4 border-b border-border">
-              <div className="flex items-center justify-between">
-                <SheetTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5" />
-                  Properties
-                </SheetTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setIsPropertiesOpen(false)}
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+          <SheetContent side="left" className="w-full sm:w-80 p-0">
+            <div className="flex flex-col h-full bg-background">
+              <SheetHeader className="p-4 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <SheetTitle className="flex items-center gap-2">
+                    <Palette className="w-5 h-5" />
+                    Story Blueprint
+                  </SheetTitle>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </SheetHeader>
+              <div className="flex-1 overflow-hidden">
+                <Tabs defaultValue="palette" className="h-full flex flex-col">
+                  <TabsList className="grid w-full grid-cols-2 mx-4 mt-2 rounded-lg">
+                    <TabsTrigger value="palette" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Nodes</TabsTrigger>
+                    <TabsTrigger value="validation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="palette" className="flex-1 mt-2 overflow-hidden">
+                    <NodePalette onAddNode={onAddNode} />
+                  </TabsContent>
+                  <TabsContent value="validation" className="flex-1 mt-2 overflow-hidden">
+                    <ValidationPanel 
+                      nodes={nodes} 
+                      edges={edges} 
+                      storyVariables={storyMap?.storyVariables || []} 
+                    />
+                  </TabsContent>
+                </Tabs>
               </div>
-            </SheetHeader>
-            <div className="flex-1 overflow-hidden">
-              <PropertiesPanel
-                selectedNode={selectedNode}
-                selectedEdge={selectedEdge}
-                onNodeUpdate={onNodeUpdate}
-                onEdgeUpdate={onEdgeUpdate}
-                storyVariables={storyMap?.storyVariables || []}
-                scenes={scenes}
-                characters={characters}
-                userMedia={userMedia}
-                officialMedia={officialMedia}
-              />
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* Mobile Properties Modal - Popup for Mobile, Sidebar for Desktop */}
+      {isMobile ? (
+        <Dialog open={isPropertiesOpen} onOpenChange={setIsPropertiesOpen}>
+          <DialogContent className="w-[98vw] max-w-lg h-[85vh] overflow-hidden p-0 flex flex-col">
+            <DialogHeader className="p-6 pb-4 border-b border-border flex-shrink-0">
+              <DialogTitle className="flex items-center gap-3 text-lg font-semibold">
+                <Settings className="w-6 h-6" />
+                Properties
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto p-6 pt-4">
+              <div className="pr-2">
+                <PropertiesPanel
+                  selectedNode={selectedNode}
+                  selectedEdge={selectedEdge}
+                  onNodeUpdate={onNodeUpdate}
+                  onEdgeUpdate={onEdgeUpdate}
+                  storyVariables={storyMap?.storyVariables || []}
+                  scenes={scenes}
+                  characters={characters}
+                  userMedia={userMedia}
+                  officialMedia={officialMedia}
+                />
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={isPropertiesOpen} onOpenChange={setIsPropertiesOpen}>
+          <SheetContent side="right" className="w-full sm:w-80 p-0">
+            <div className="flex flex-col h-full bg-background">
+              <SheetHeader className="p-4 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <SheetTitle className="flex items-center gap-2">
+                    <Settings className="w-5 h-5" />
+                    Properties
+                  </SheetTitle>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setIsPropertiesOpen(false)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </SheetHeader>
+              <div className="flex-1 overflow-hidden">
+                <PropertiesPanel
+                  selectedNode={selectedNode}
+                  selectedEdge={selectedEdge}
+                  onNodeUpdate={onNodeUpdate}
+                  onEdgeUpdate={onEdgeUpdate}
+                  storyVariables={storyMap?.storyVariables || []}
+                  scenes={scenes}
+                  characters={characters}
+                  userMedia={userMedia}
+                  officialMedia={officialMedia}
+                />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Trash History Modal */}
       <Dialog open={isTrashHistoryOpen} onOpenChange={setIsTrashHistoryOpen}>
