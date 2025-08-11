@@ -170,7 +170,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     
     try {
       setIsSaving(true)
-      let savePromises: Promise<any>[] = []
+      const savePromises: Promise<any>[] = []
       
       // Collect all save operations from active tabs
       if (activeTab === 'blueprint' && blueprintTabRef.current?.handleManualSave) {
