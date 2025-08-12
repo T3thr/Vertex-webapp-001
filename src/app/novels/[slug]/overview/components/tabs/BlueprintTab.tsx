@@ -2945,10 +2945,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }), [handleManualSave]);
 
   return (
-      <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
-        {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
-        <AnimatePresence mode="wait">
-          {!isSidebarCollapsed && (
+    <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
+      {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
+      <AnimatePresence mode="wait">
+        {!isSidebarCollapsed && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 320, opacity: 1 }}
