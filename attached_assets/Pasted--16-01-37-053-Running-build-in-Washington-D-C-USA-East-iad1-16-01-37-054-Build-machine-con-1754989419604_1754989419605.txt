@@ -1,0 +1,45 @@
+[16:01:37.053] Running build in Washington, D.C., USA (East) – iad1
+[16:01:37.054] Build machine configuration: 2 cores, 8 GB
+[16:01:37.116] Cloning github.com/T3thr/Vertex-webapp-001 (Branch: main, Commit: f016a77)
+[16:01:43.187] Cloning completed: 6.071s
+[16:01:43.329] Restored build cache from previous deployment (7hEkWfZZq6J3Eshdc5Gr569STZDo)
+[16:01:49.534] Running "vercel build"
+[16:01:50.243] Vercel CLI 44.7.3
+[16:01:50.693] Running "install" command: `bun install`...
+[16:01:50.737] bun install v1.2.19 (aad3abea)
+[16:01:50.837] 
+[16:01:50.837] Checked 679 installs across 729 packages (no changes) [122.00ms]
+[16:01:50.840] Detected Next.js version: 15.3.1
+[16:01:50.841] Running "bun run build"
+[16:01:50.847] $ next build
+[16:01:52.268]    ▲ Next.js 15.3.1
+[16:01:52.269]    - Experiments (use with caution):
+[16:01:52.270]      ✓ optimizeCss
+[16:01:52.270] 
+[16:01:52.314]    Creating an optimized production build ...
+[16:02:05.557] Failed to compile.
+[16:02:05.557] 
+[16:02:05.557] ./src/app/novels/[slug]/overview/components/tabs/BlueprintTab.tsx
+[16:02:05.557] Error:   [31mx[0m Unexpected token `div`. Expected jsx identifier
+[16:02:05.557]       ,-[[36;1;4m/vercel/path0/src/app/novels/[slug]/overview/components/tabs/BlueprintTab.tsx[0m:2948:1]
+[16:02:05.558]  [2m2945[0m |   }), [handleManualSave]);
+[16:02:05.558]  [2m2946[0m | 
+[16:02:05.558]  [2m2947[0m |   return (
+[16:02:05.558]  [2m2948[0m |     <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
+[16:02:05.558]       : [35;1m     ^^^[0m
+[16:02:05.558]  [2m2949[0m |       {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
+[16:02:05.558]  [2m2950[0m |       <AnimatePresence mode="wait">
+[16:02:05.559]  [2m2951[0m |         {!isSidebarCollapsed && (
+[16:02:05.559]       `----
+[16:02:05.559] 
+[16:02:05.559] Caused by:
+[16:02:05.559]     Syntax Error
+[16:02:05.559] 
+[16:02:05.559] Import trace for requested module:
+[16:02:05.559] ./src/app/novels/[slug]/overview/components/tabs/BlueprintTab.tsx
+[16:02:05.559] ./src/app/novels/[slug]/overview/components/NovelEditor.tsx
+[16:02:05.559] 
+[16:02:05.563] 
+[16:02:05.564] > Build failed because of webpack errors
+[16:02:05.610] error: script "build" exited with code 1
+[16:02:05.620] Error: Command "bun run build" exited with 1
