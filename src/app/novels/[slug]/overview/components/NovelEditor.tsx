@@ -611,6 +611,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
             <TabsContent value="director" className="h-full m-0 p-0">
               <DirectorTab
+                ref={directorTabRef}
                 novel={currentNovel}
                 scenes={currentScenes}
                 characters={characters}
@@ -622,6 +623,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
             <TabsContent value="summary" className="h-full m-0 p-0">
               <SummaryTab
+                ref={summaryTabRef}
                 novel={currentNovel}
                 episodes={currentEpisodes}
                 onNovelUpdate={handleNovelUpdate}
