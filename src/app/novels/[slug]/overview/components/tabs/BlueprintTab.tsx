@@ -5,11 +5,13 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ReactFlow,
+  Node,
   Edge,
   Controls,
   Background,
   useNodesState,
   useEdgesState,
+  addEdge,
   Connection,
   ReactFlowProvider,
   ReactFlowInstance,
@@ -151,6 +153,11 @@ interface BlueprintTabProps {
   showSceneThumbnails?: boolean;
   showNodeLabels?: boolean;
   showGrid?: boolean;
+}
+
+// Ref interface for BlueprintTab
+interface BlueprintTabRef {
+  handleManualSave: () => void;
 }
 
 // Command Pattern interfaces for proper undo/redo
@@ -1318,7 +1325,7 @@ const ValidationPanel = ({
 };
 
 // Main Blueprint Tab Component
-const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({ 
+const BlueprintTab = React.forwardRef<BlueprintTabRef, BlueprintTabProps>(({ 
   novel, 
   storyMap, 
   scenes = [], 
@@ -1335,6 +1342,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   showNodeLabels = true,
   showGrid = true
 }, ref) => {
+
+  // Debugging: Log props received by the component
+  console.log('BlueprintTab props:', {
+    showSceneThumbnails,
+    showNodeLabels,
+    showGrid,
+    scenesCount: scenes?.length,
+    episodesCount: episodes?.length,
+    storyMapExists: !!storyMap
+  });
+
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -1528,6 +1546,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Auto-save timer and debounce
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const saveDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+
+
+
+
+
 
   // Enhanced API functions for database sync with better error handling
   const saveStoryMapToDatabase = useCallback(async (currentNodes: Node[], currentEdges: Edge[], isManual = false) => {
@@ -2695,7 +2719,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // Update edge data
   const onEdgeUpdate = useCallback((edgeId: string, newData: any) => {
-    setEdges(eds =>eds.map(edge =>
+    setEdges(eds => eds.map(edge =>
       edge.id === edgeId ? { ...edge, data: newData } : edge
     ));
   }, [setEdges]);
@@ -2760,8 +2784,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         // เพิ่มข้อมูลสำหรับการอัปเดต Scene
         sceneConnection: sourceNode?.data.nodeType === StoryMapNodeType.SCENE_NODE && 
                         targetNode?.data.nodeType === StoryMapNodeType.SCENE_NODE,
-        sourceSceneId: (sourceNode?.data.sceneData as any)?._id || null,
-        targetSceneId: (targetNode?.data.sceneData as any)?._id || null,
+        sourceSceneId: (sourceNode?.data as any)?.sceneData?._id || null,
+        targetSceneId: (targetNode?.data as any)?.sceneData?._id || null,
         editorVisuals: {
           color: '#64748b',
           lineStyle: 'solid',
@@ -2826,15 +2850,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Keyboard event listeners
   useEffect(() => {
     document.addEventListener('keydown', handleKeyboardShortcuts);
-    return () => {
-      document.removeEventListener('keydown', handleKeyboardShortcuts);
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
-      }
-      if (saveDebounceTimer.current) {
-        clearTimeout(saveDebounceTimer.current);
-      }
-    };
+    return () => window.removeEventListener('keydown', handleKeyboardShortcuts);
   }, [handleKeyboardShortcuts]);
 
   // Custom node and edge types
@@ -3188,7 +3204,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 onPaneClick={handleCanvasClick}
                 connectionMode={ConnectionMode.Loose}
                 connectionLineComponent={CustomConnectionLine}
-                connectionLineType={ConnectionLineLineType.SmoothStep}
+                connectionLineType={ConnectionLineType.SmoothStep}
                 connectionLineStyle={{
                   stroke: '#3b82f6',
                   strokeWidth: 3,
@@ -3575,51 +3591,61 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </motion.div>
                 )}
               </AnimatePresence>
-      </div>
+            </div>
+          </ReactFlowProvider>
 
-        {/* Canva-style Selection Confirmation Bar */}
-        <AnimatePresence>
-          {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
-            >
-              <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
-                <span className="text-sm font-medium">
-                  {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
-                </span>
+            {/* Canva-style Selection Confirmation Bar */}
+            <AnimatePresence>
+              {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
+                <motion.div
+                  initial={{ y: 100, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 100, opacity: 0 }}
+                  className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
+                >
+                  <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
+                    <span className="text-sm font-medium">
+                      {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
+                    </span>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelection(prev => ({ 
-                      ...prev, 
-                      pendingSelection: [], 
-                      showSelectionBar: false 
-                    }))}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => {
-                      // Confirm selection and close multi-select mode
-                      setSelection(prev => ({ ...prev, multiSelectMode: false }));
-                      toast.success(`Confirmed selection of ${selection.selectedNodes.length} nodes`);
-                    }}
-                  >
-                    Confirm Selection
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelection(prev => ({ 
+                          ...prev, 
+                          pendingSelection: [], 
+                          showSelectionBar: false 
+                        }))}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          // Confirm selection and show Multiple Selection Info Panel
+                          setSelection(prev => ({
+                            ...prev,
+                            selectedNodes: prev.pendingSelection,
+                            pendingSelection: [],
+                            showSelectionBar: false,
+                            multiSelectMode: false
+                          }));
+
+                          // Clear single selection
+                          setSelectedNode(null);
+                          setSelectedEdge(null);
+                        }}
+                      >
+                        Confirm Selection
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+        </div>
 
         {/* Collapsed Properties Trigger */}
         {isPropertiesCollapsed && (
