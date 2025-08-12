@@ -155,6 +155,11 @@ interface BlueprintTabProps {
   showGrid?: boolean;
 }
 
+// Ref interface for BlueprintTab
+interface BlueprintTabRef {
+  handleManualSave: () => void;
+}
+
 // Command Pattern interfaces for proper undo/redo
 interface ICommand {
   id: string;
@@ -192,12 +197,6 @@ interface BatchCommand extends ICommand {
 }
 
 type AnyCommand = NodeCommand | EdgeCommand | BatchCommand;
-
-interface CommandHistory {
-  undoStack: AnyCommand[];
-  redoStack: AnyCommand[];
-  maxHistorySize: number;
-}
 
 interface SelectionState {
   selectedNodes: string[];
@@ -311,11 +310,11 @@ const CustomEdge = ({
   selected
 }: EdgeProps) => {
   const { deleteElements } = useReactFlow();
-  
+
   // Calculate path based on edge type
   const getEdgePath = () => {
     const edgeType = (data as any)?.edgeType || 'smoothstep';
-    
+
     switch (edgeType) {
       case 'straight':
         return getStraightPath({
@@ -344,9 +343,9 @@ const CustomEdge = ({
         });
     }
   };
-  
+
   const [edgePath, labelX, labelY] = getEdgePath();
-  
+
   // Edge styling based on data
   const edgeStyle = {
     ...style,
@@ -358,7 +357,7 @@ const CustomEdge = ({
   return (
     <>
       <BaseEdge path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
-      
+
       {/* Interactive Edge Label */}
       <EdgeLabelRenderer>
         <div
@@ -373,7 +372,7 @@ const CustomEdge = ({
               {(data as any).label}
             </div>
           )}
-          
+
           {/* Interactive Controls - Show on hover/selection */}
           {selected && (
             <div className="flex items-center gap-1 mt-1">
@@ -388,7 +387,7 @@ const CustomEdge = ({
               >
                 ×
               </button>
-              
+
               {/* Priority indicator for choice edges */}
               {(data as any)?.priority && (
                 <div className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
@@ -415,11 +414,11 @@ const CustomNode = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [localConnectionMode, setLocalConnectionMode] = useState<'none' | 'connecting'>('none');
-  
+
   // รับการตั้งค่าจาก parent component ผ่าน data
   const showThumbnails = data.showThumbnails ?? true;
   const showLabels = data.showLabels ?? true;
-  
+
   // ข้อมูลฉากสำหรับ thumbnail
   const sceneData = data.sceneData;
   const thumbnailUrl = sceneData?.thumbnailUrl || sceneData?.background?.value;
@@ -608,17 +607,17 @@ const CustomNode = ({
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600" />
                   )}
-                  
+
                   {/* Overlay สำหรับข้อมูลเพิ่มเติม */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
-                  
+
                   {/* ป้ายชื่อฉาก - แสดงตามการตั้งค่า showLabels */}
                   {showLabels && (
                     <div className="absolute top-1 left-1 px-2 py-1 bg-black/50 rounded text-xs text-white font-medium backdrop-blur-sm">
                       ฉาก #{data.sceneData.sceneOrder || '?'}
                     </div>
                   )}
-                  
+
                   {/* จำนวนตัวละครและไอเทม - แสดงตามการตั้งค่า showLabels */}
                   {showLabels && (
                     <div className="absolute bottom-1 right-1 flex gap-1">
@@ -638,7 +637,7 @@ const CustomNode = ({
                 )}
                 </div>
               )}
-              
+
               {/* Scene Stats - แสดงตามการตั้งค่า showLabels */}
               {showLabels && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -652,7 +651,7 @@ const CustomNode = ({
                 </div>
               </div>
               )}
-              
+
               {/* Scene Description Preview - แสดงตามการตั้งค่า showLabels */}
               {showLabels && data.sceneData.description && (
                 <div className="text-xs text-white/80 line-clamp-2">
@@ -914,7 +913,7 @@ const NodePalette = ({
         <div className="text-sm font-medium text-muted-foreground">
           ลากโหนดไปยังผืนผ้าใบ
         </div>
-        
+
         {Object.entries(nodeCategories).map(([key, category]) => (
           <div key={key} className="space-y-2">
             <Button
@@ -931,7 +930,7 @@ const NodePalette = ({
                 expandedCategories.includes(key) ? 'rotate-90' : ''
               }`} />
             </Button>
-            
+
             <AnimatePresence>
               {expandedCategories.includes(key) && (
                 <motion.div
@@ -1067,7 +1066,7 @@ const PropertiesPanel = ({
             {/* Basic Info */}
             <div className="space-y-3">
               <h3 className="font-semibold text-sm">Basic Information</h3>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="node-title" className="text-xs">Title</Label>
                 <Input
@@ -1095,7 +1094,7 @@ const PropertiesPanel = ({
             {selectedNode.data.nodeType === StoryMapNodeType.SCENE_NODE && (
               <div className="space-y-3">
                 <h3 className="font-semibold text-sm">Scene Settings</h3>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="scene-select" className="text-xs">Connected Scene</Label>
                   <Select value={sceneId} onValueChange={setSceneId}>
@@ -1133,7 +1132,7 @@ const PropertiesPanel = ({
             {/* Emotion Tags */}
             <div className="space-y-3">
               <h3 className="font-semibold text-sm">Emotion Tags</h3>
-              
+
               <div className="flex flex-wrap gap-1 mb-2">
                 {emotionTags.map(tag => (
                   <Badge
@@ -1326,7 +1325,7 @@ const ValidationPanel = ({
 };
 
 // Main Blueprint Tab Component
-const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({ 
+const BlueprintTab = React.forwardRef<BlueprintTabRef, BlueprintTabProps>(({ 
   novel, 
   storyMap, 
   scenes = [], 
@@ -1343,21 +1342,32 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   showNodeLabels = true,
   showGrid = true
 }, ref) => {
+
+  // Debugging: Log props received by the component
+  console.log('BlueprintTab props:', {
+    showSceneThumbnails,
+    showNodeLabels,
+    showGrid,
+    scenesCount: scenes?.length,
+    episodesCount: episodes?.length,
+    storyMapExists: !!storyMap
+  });
+
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  
+
   // Selection and UI state
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [selectedEpisode, setSelectedEpisode] = useState<string>(episodes[0]?._id || '');
-  
+
   // Mobile/Desktop UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
-  
+
   // Canvas state - ใช้ showGrid prop
   const [canvasState, setCanvasState] = useState<CanvasState>({
     isLocked: false,
@@ -1367,7 +1377,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     gridSize: 20,
     snapToGrid: false
   });
-  
+
   // อัปเดต canvas เมื่อ showGrid prop เปลี่ยน
   useEffect(() => {
     setCanvasState(prev => ({
@@ -1375,7 +1385,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       showGrid: showGrid ?? true
     }));
   }, [showGrid]);
-  
+
   // อัปเดต node data เมื่อ display settings เปลี่ยน - ใช้ props โดยตรง
   useEffect(() => {
     if (nodes.length > 0) {
@@ -1391,17 +1401,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       );
     }
   }, [showSceneThumbnails, showNodeLabels, setNodes, nodes.length]);
-  
+
   // Command Stack for undo/redo (replacing old HistoryState)
   const [undoStack, setUndoStack] = useState<AnyCommand[]>([]);
   const [redoStack, setRedoStack] = useState<AnyCommand[]>([]);
   const maxHistorySize = 50;
-  
+
   // Drag tracking for Command Pattern
   const dragStartPositions = useRef<Record<string, { x: number; y: number }>>({});
   const isDragging = useRef(false);
   const multiSelectDragStart = useRef<Record<string, { x: number; y: number }>>({});
-  
+
   // Connection mode for manual edge creation
   const [connectionMode, setConnectionMode] = useState<{
     isConnecting: boolean;
@@ -1420,7 +1430,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     showConnectionLines: true,
     autoLayout: false
   };
-  
+
   // ฟังก์ชั่นสำหรับอัปเดต Scene's defaultNextSceneId
   const updateSceneDefaultNext = useCallback(async (sourceSceneId: string, targetSceneId: string) => {
     try {
@@ -1433,12 +1443,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           defaultNextSceneId: targetSceneId
         }),
       });
-      
+
       if (!response.ok) {
         console.warn('Failed to update scene default next connection');
         return;
       }
-      
+
       console.log('Scene default next connection updated successfully');
     } catch (error) {
       console.error('Error updating scene default next connection:', error);
@@ -1457,12 +1467,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           defaultNextSceneId: null
         }),
       });
-      
+
       if (!response.ok) {
         console.warn('Failed to remove scene default next connection');
         return;
       }
-      
+
       console.log('Scene default next connection removed successfully');
     } catch (error) {
       console.error('Error removing scene default next connection:', error);
@@ -1481,7 +1491,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }))
     );
   }, [blueprintSettings, setNodes]);
-  
+
   // Selection state
   const [selection, setSelection] = useState<SelectionState>({
     selectedNodes: [],
@@ -1492,11 +1502,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     pendingSelection: [],
     showSelectionBar: false
   });
-  
+
   // Multi-select UI state
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false);
   const [multiSelectStartPosition, setMultiSelectStartPosition] = useState<{ x: number; y: number } | null>(null);
-  
+
   // Save state
   const [saveState, setSaveState] = useState<SaveState>({
     isSaving: false,
@@ -1509,7 +1519,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   });
   const isInitializingRef = useRef<boolean>(true);
   const isApplyingServerUpdateRef = useRef<boolean>(false);
-  
+
   // Trash/Delete history state  
   const [deletedItems, setDeletedItems] = useState<Array<{
     id: string;
@@ -1519,7 +1529,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     description: string;
   }>>([]);
   const [isTrashHistoryOpen, setIsTrashHistoryOpen] = useState(false);
-  
+
   // React Flow instance and refs
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -1546,10 +1556,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Enhanced API functions for database sync with better error handling
   const saveStoryMapToDatabase = useCallback(async (currentNodes: Node[], currentEdges: Edge[], isManual = false) => {
     if (!novel?.slug) return;
-    
+
     try {
       setSaveState(prev => ({ ...prev, isSaving: true, saveError: null }));
-      
+
       const storyMapData = {
         nodes: currentNodes.map(node => ({
           nodeId: node.id,
@@ -1595,7 +1605,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
       if (!response.ok) {
         const errorData = await response.json();
-        
+
         // Handle version conflicts (HTTP 409)
         if (response.status === 409) {
           setSaveState(prev => ({ 
@@ -1607,13 +1617,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           toast.error("ข้อมูลล้าสมัย โปรดรีเฟรชหน้าเพื่อดูเวอร์ชันล่าสุด");
           return;
         }
-        
+
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
       const now = new Date();
-      
+
       setSaveState(prev => ({ 
         ...prev, 
         lastSaved: now, 
@@ -1622,13 +1632,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         isConflicted: false,
         version: result.newVersion || prev.version + 1 // Update to new version
       }));
-      
+
       // Do not call onStoryMapUpdate here to avoid re-initialization feedback loops
-      
+
       if (isManual) {
         toast.success('บันทึกแผนผังเรื่องสำเร็จ');
       }
-      
+
       // Inform parent that data is now clean
       if (typeof onDirtyChange === 'function') {
         onDirtyChange(false);
@@ -1638,13 +1648,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     } catch (error) {
       console.error('Error saving story map:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to save story map';
-      
+
       setSaveState(prev => ({ 
         ...prev, 
         isSaving: false, 
         saveError: errorMessage 
       }));
-      
+
       if (isManual) {
         toast.error(errorMessage);
       }
@@ -1655,7 +1665,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Enhanced auto-save system like Premiere Pro - Only auto-save when changes are detected
   const scheduleAutoSave = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
     if (!isAutoSaveEnabled) return;
-    
+
     // Clear existing timers
     if (autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current);
@@ -1663,13 +1673,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     if (saveDebounceTimer.current) {
       clearTimeout(saveDebounceTimer.current);
     }
-    
+
     // Mark as having unsaved changes
     setSaveState(prev => ({ ...prev, hasUnsavedChanges: true }));
     if (typeof onDirtyChange === 'function') {
       onDirtyChange(true);
     }
-    
+
     // Set auto-save timer
     autoSaveTimer.current = setTimeout(async () => {
       try {
@@ -1684,7 +1694,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const executeCommand = useCallback((command: AnyCommand) => {
     try {
       command.execute();
-      
+
       // Add to undo stack
       setUndoStack(prev => {
         const newUndoStack = [...prev, command];
@@ -1693,10 +1703,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }
         return newUndoStack;
       });
-      
+
       // Clear redo stack when new command is executed
       setRedoStack([]);
-      
+
       // Mark as dirty
       setSaveState(prev => ({
         ...prev,
@@ -1704,12 +1714,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         hasUnsavedChanges: true,
         lastCommandId: command.id
       }));
-      
+
       // Notify parent of dirty state
       if (typeof onDirtyChange === 'function') {
         onDirtyChange(true);
       }
-      
+
       // Trigger auto-save if enabled
       if (isAutoSaveEnabled) {
         scheduleAutoSave(nodes, edges);
@@ -1729,7 +1739,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setUndoStack(prev => prev.slice(0, prev.length - 1));
         setRedoStack(prev => [commandToUndo, ...prev]);
         toast.info(`ยกเลิก: ${commandToUndo.description}`);
-        
+
         // Update dirty state
         const hasMoreCommands = undoStack.length > 1;
         setSaveState(prev => ({
@@ -1737,9 +1747,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           isDirty: hasMoreCommands,
           hasUnsavedChanges: hasMoreCommands
         }));
-        
+
         onDirtyChange?.(hasMoreCommands);
-        
+
         // Schedule auto-save if enabled
         if (isAutoSaveEnabled) {
           scheduleAutoSave(nodes, edges);
@@ -1764,16 +1774,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setRedoStack(prev => prev.slice(1));
         setUndoStack(prev => [...prev, commandToRedo]);
         toast.success(`ทำซ้ำ: ${commandToRedo.description}`);
-        
+
         // Update dirty state
         setSaveState(prev => ({
           ...prev,
           isDirty: true,
           hasUnsavedChanges: true
         }));
-        
+
         onDirtyChange?.(true);
-        
+
         // Schedule auto-save if enabled
         if (isAutoSaveEnabled) {
           scheduleAutoSave(nodes, edges);
@@ -1874,7 +1884,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }
       }
     };
-    
+
     return command;
   }, []);
 
@@ -1956,7 +1966,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }
       }
     };
-    
+
     return command;
   }, []);
 
@@ -1966,7 +1976,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     if (autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current);
     }
-    
+
     try {
       await saveStoryMapToDatabase(nodes, edges, true);
     } catch (error) {
@@ -1980,7 +1990,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       ...prev,
       isLocked: !prev.isLocked
     }));
-    
+
     if (!canvasState.isLocked) {
       toast.info('ล็อกผืนผ้าใบ - ไม่สามารถเลื่อนและซูมได้');
     } else {
@@ -1993,11 +2003,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Enhanced initialization with stable reference tracking
   const storyMapRef = useRef(storyMap);
   const lastProcessedVersionRef = useRef<number>(0);
-  
+
   useEffect(() => {
     // Initialize nodes and edges from storyMap prop or create defaults
     isInitializingRef.current = true;
-    
+
     if (storyMap && storyMap.nodes && storyMap.edges) {
       // Use existing storyMap data
       const currentVersion = storyMap.version || 0;
@@ -2005,13 +2015,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         isInitializingRef.current = false;
         return; // Skip if it's the same version
       }
-      
+
       storyMapRef.current = storyMap;
       lastProcessedVersionRef.current = currentVersion;
-      
+
       const flowNodes: Node[] = storyMap.nodes.map((node: IStoryMapNode) => {
         const nodeData = { ...node, hasError: false };
-        
+
         // Enrich scene nodes with actual scene data
         if (node.nodeType === StoryMapNodeType.SCENE_NODE && node.nodeSpecificData?.sceneId) {
           const scene = scenes.find(s => s._id === node.nodeSpecificData.sceneId);
@@ -2023,12 +2033,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             };
           }
         }
-        
+
         // Enrich choice nodes with choice data
         if (node.nodeType === StoryMapNodeType.CHOICE_NODE && node.nodeSpecificData?.choiceIds) {
           (nodeData as any).choiceCount = node.nodeSpecificData.choiceIds.length;
         }
-        
+
         return {
           id: node.nodeId,
           type: 'custom',
@@ -2068,28 +2078,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // Use stable update to prevent jitter
       setNodes(() => flowNodes);
       setEdges(() => flowEdges);
-      
+
       // Clear selection state on re-init
       setSelection(prev => ({
         ...prev,
         selectedNodes: [],
         selectedEdges: []
       }));
-      
+
       setTimeout(() => {
         isInitializingRef.current = false;
       }, 100); // Small delay to ensure React has processed the updates
-      
+
     } else {
       // Create default empty canvas when no storyMap exists
       console.log('[BlueprintTab] No storyMap found, creating empty canvas...');
-      
+
       const defaultNodes: Node[] = [];
       const defaultEdges: Edge[] = [];
-      
+
       setNodes(defaultNodes);
       setEdges(defaultEdges);
-      
+
       setTimeout(() => {
         isInitializingRef.current = false;
       }, 100);
@@ -2105,7 +2115,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
       }
-      
+
       // Undo: Ctrl+Z
       if (event.ctrlKey && event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
@@ -2143,28 +2153,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const deleteSelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
-    
+
     const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
-    
+
     if (nodesToDelete.length > 0) {
       const ok = window.confirm(`ลบโหนด ${nodesToDelete.length} รายการหรือไม่? (สามารถ Undo ได้)`);
       if (!ok) return;
     }
-    
+
     // Create batch command for multiple deletions
     const commands: ICommand[] = [];
-    
+
     // Add node deletion commands
     nodesToDelete.forEach(node => {
       commands.push(createNodeCommand('DELETE_NODE', node.id, node));
     });
-    
+
     // Add edge deletion commands
     edgesToDelete.forEach(edge => {
       commands.push(createEdgeCommand('DELETE_EDGE', edge.id, edge, edge.source, edge.target));
     });
-    
+
     // Create batch command if multiple items
     if (commands.length > 1) {
       const batchCommand: BatchCommand = {
@@ -2185,14 +2195,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     } else if (commands.length === 1) {
       executeCommand(commands[0] as AnyCommand);
     }
-    
+
     // Clear selection
     setSelection(prev => ({
       ...prev,
       selectedNodes: [],
       selectedEdges: []
     }));
-    
+
     toast.success(
       `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections. Use Ctrl+Z to undo.`
     );
@@ -2247,7 +2257,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       showSelectionBar: newMode && prev.selectedNodes.length > 0
     }));
     setIsMultiSelectActive(newMode);
-    
+
     if (newMode) {
       toast.info('Multi-select mode activated. Click nodes to select multiple items.');
     } else {
@@ -2284,7 +2294,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setIsMultiSelectActive(false);
       }
     };
-    
+
     executeCommand(command as AnyCommand);
     toast.success(`Selected ${selection.pendingSelection.length} nodes`);
   }, [selection.pendingSelection, executeCommand]);
@@ -2304,7 +2314,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Select all nodes
   const selectAllNodes = useCallback(() => {
     if (nodes.length === 0) return;
-    
+
     const command: ICommand = {
       id: `select-all-${Date.now()}`,
       type: 'SELECT_ALL',
@@ -2335,7 +2345,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setSelectedEdge(null);
       }
     };
-    
+
     executeCommand(command as AnyCommand);
     toast.success(`Selected all ${nodes.length} nodes`);
   }, [nodes, executeCommand]);
@@ -2345,11 +2355,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const target = event.target as HTMLElement;
     const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || 
                         target.contentEditable === 'true' || target.getAttribute('role') === 'textbox';
-    
+
     if (isInputField) return;
 
     const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-    
+
     if (isCtrlOrCmd) {
       switch (event.key.toLowerCase()) {
         case 's':
@@ -2357,7 +2367,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           handleManualSave();
           toast.success('Saved manually');
           return;
-          
+
         case 'z':
           event.preventDefault();
           if (event.shiftKey) { 
@@ -2366,19 +2376,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             undo(); 
           }
           return;
-          
+
         case 'y':
           event.preventDefault();
           redo();
           return;
-          
+
         case 'c':
           event.preventDefault();
           if (selection.selectedNodes.length > 0 || selection.selectedEdges.length > 0) {
             // Copy selected items
             const selectedNodeItems = nodes.filter(n => selection.selectedNodes.includes(n.id));
             const selectedEdgeItems = edges.filter(e => selection.selectedEdges.includes(e.id));
-            
+
             setSelection(prev => ({
               ...prev,
               clipboard: {
@@ -2386,18 +2396,18 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 edges: selectedEdgeItems
               }
             }));
-            
+
             toast.success(`Copied ${selectedNodeItems.length} nodes and ${selectedEdgeItems.length} edges`);
           }
           return;
-          
+
         case 'v':
           event.preventDefault();
           if (selection.clipboard.nodes.length > 0 || selection.clipboard.edges.length > 0) {
             // Paste items with offset
             const pasteOffset = { x: 50, y: 50 };
             const commands: ICommand[] = [];
-            
+
             // Paste nodes
             selection.clipboard.nodes.forEach(node => {
               const newNode: Node = {
@@ -2410,7 +2420,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               };
               commands.push(createNodeCommand('ADD_NODE', newNode.id, newNode));
             });
-            
+
             // Execute as batch command
             if (commands.length > 0) {
               const batchCommand: BatchCommand = {
@@ -2427,19 +2437,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             }
           }
           return;
-          
+
         case 'a':
           event.preventDefault();
           selectAllNodes();
           return;
-          
+
         case 'd':
           event.preventDefault();
           if (selection.selectedNodes.length > 0) {
             // Duplicate selected nodes
             const duplicateCommands: ICommand[] = [];
             const duplicateOffset = { x: 30, y: 30 };
-            
+
             selection.selectedNodes.forEach(nodeId => {
               const originalNode = nodes.find(n => n.id === nodeId);
               if (originalNode) {
@@ -2454,7 +2464,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 duplicateCommands.push(createNodeCommand('ADD_NODE', duplicatedNode.id, duplicatedNode));
               }
             });
-            
+
             if (duplicateCommands.length > 0) {
               const batchCommand: BatchCommand = {
                 id: `duplicate-${Date.now()}`,
@@ -2470,12 +2480,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             }
           }
           return;
-          
+
         case 'l':
           event.preventDefault();
           toggleCanvasLock();
           return;
-          
+
         case 'm':
           event.preventDefault();
           toggleMultiSelectMode();
@@ -2490,7 +2500,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             deleteSelected();
           }
           return;
-          
+
         case 'Escape':
           event.preventDefault();
           if (connectionMode.isConnecting) {
@@ -2518,7 +2528,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             }));
           }
           return;
-          
+
         case 'Enter':
           if (selection.multiSelectMode && selection.pendingSelection.length > 0) {
             event.preventDefault();
@@ -2537,17 +2547,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Handle drag from sidebar to canvas
   const onCanvasDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    
+
     const nodeType = event.dataTransfer.getData('application/node-type') as StoryMapNodeType;
     if (!nodeType || !reactFlowInstance) return;
-    
+
     // แปลงตำแหน่ง mouse เป็นตำแหน่งใน canvas
     const reactFlowBounds = (event.target as HTMLElement).getBoundingClientRect();
     const position = reactFlowInstance.screenToFlowPosition({
       x: event.clientX - reactFlowBounds.left,
       y: event.clientY - reactFlowBounds.top,
     });
-    
+
     // สร้าง node ใหม่ที่ตำแหน่งที่ drop
     const timestamp = Date.now();
     const newNode: Node = {
@@ -2565,19 +2575,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         zIndex: 1000
       }
     };
-    
+
     // สร้าง command และ execute
     const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
     executeCommand(command);
-    
+
     toast.success(`เพิ่ม ${getNodeDisplayName(nodeType)} ที่ตำแหน่งที่คลิก`);
   }, [reactFlowInstance, createNodeCommand, executeCommand]);
-  
+
   const onCanvasDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   }, []);
-  
+
   // Helper functions สำหรับ node creation
   const getDefaultNodeTitle = (nodeType: StoryMapNodeType): string => {
     const titles: Record<StoryMapNodeType, string> = {
@@ -2599,7 +2609,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     return titles[nodeType] || 'โหนดใหม่';
   };
-  
+
   const getDefaultNodeColor = (nodeType: StoryMapNodeType): string => {
     const colors: Record<StoryMapNodeType, string> = {
       [StoryMapNodeType.START_NODE]: '#10b981',
@@ -2620,7 +2630,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     return colors[nodeType] || '#6b7280';
   };
-  
+
   const getDefaultNodeData = (nodeType: StoryMapNodeType): any => {
     switch (nodeType) {
       case StoryMapNodeType.SCENE_NODE:
@@ -2639,7 +2649,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         return {};
     }
   };
-  
+
   const getNodeDisplayName = (nodeType: StoryMapNodeType): string => {
     return getDefaultNodeTitle(nodeType);
   };
@@ -2648,7 +2658,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const onAddNode = useCallback((nodeType: StoryMapNodeType) => {
     const timestamp = Date.now();
     const randomOffset = Math.floor(Math.random() * 50);
-    
+
     // Calculate center of current viewport if reactFlowInstance is available
     let centerPosition = { x: 100 + randomOffset, y: 100 + randomOffset };
     if (reactFlowInstance) {
@@ -2661,7 +2671,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         });
       }
     }
-    
+
     const newNode: Node = {
       id: `node-${timestamp}-${randomOffset}`,
       type: 'custom',
@@ -2683,10 +2693,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     // Create and execute command
     const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
     executeCommand(command);
-    
+
     setIsSidebarOpen(false); // Close sidebar on mobile
     toast.success(`เพิ่ม${getNodeDisplayName(nodeType)}ใหม่สำเร็จ`);
-    
+
     // Auto-select the new node after a brief delay
     setTimeout(() => {
       setSelectedNode(newNode);
@@ -2702,7 +2712,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const onNodeUpdate = useCallback((nodeId: string, newData: any) => {
     const oldNode = nodes.find(n => n.id === nodeId);
     if (!oldNode) return;
-    
+
     const command = createNodeCommand('UPDATE_NODE', nodeId, undefined, undefined, undefined, oldNode.data, newData);
     executeCommand(command);
   }, [nodes, createNodeCommand, executeCommand]);
@@ -2717,13 +2727,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Enhanced connections with database sync and validation
   const onConnect = useCallback((params: Connection) => {
     if (!params.source || !params.target) return;
-    
+
     // Prevent self-connections
     if (params.source === params.target) {
       toast.error('ไม่สามารถเชื่อมต่อโหนดกับตัวมันเองได้');
       return;
     }
-    
+
     // Check for duplicate connections
     const existingConnection = edges.find(edge => 
       edge.source === params.source && 
@@ -2731,7 +2741,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       edge.sourceHandle === params.sourceHandle &&
       edge.targetHandle === params.targetHandle
     );
-    
+
     if (existingConnection) {
       toast.warning('การเชื่อมต่อนี้มีอยู่แล้ว');
       return;
@@ -2740,7 +2750,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     // ค้นหาข้อมูล source และ target nodes
     const sourceNode = nodes.find(n => n.id === params.source);
     const targetNode = nodes.find(n => n.id === params.target);
-    
+
     // สร้าง label อัตโนมัติตามประเภทของ nodes
     let autoLabel = '';
     if (sourceNode && targetNode) {
@@ -2753,7 +2763,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         autoLabel = 'เงื่อนไข';
       }
     }
-    
+
     const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newEdge = {
       ...params,
@@ -2774,8 +2784,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         // เพิ่มข้อมูลสำหรับการอัปเดต Scene
         sceneConnection: sourceNode?.data.nodeType === StoryMapNodeType.SCENE_NODE && 
                         targetNode?.data.nodeType === StoryMapNodeType.SCENE_NODE,
-        sourceSceneId: (sourceNode?.data.sceneData as any)?._id || null,
-        targetSceneId: (targetNode?.data.sceneData as any)?._id || null,
+        sourceSceneId: (sourceNode?.data as any)?.sceneData?._id || null,
+        targetSceneId: (targetNode?.data as any)?.sceneData?._id || null,
         editorVisuals: {
           color: '#64748b',
           lineStyle: 'solid',
@@ -2794,11 +2804,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       },
       animated: false
     };
-    
+
     // Create and execute command
     const command = createEdgeCommand('ADD_EDGE', edgeId, newEdge, params.source, params.target);
     executeCommand(command);
-    
+
     // อัปเดตข้อมูลการเชื่อมต่อใน Scene model หากเป็นการเชื่อมต่อระหว่างฉาก
     if (newEdge.data.sceneConnection && newEdge.data.sourceSceneId && newEdge.data.targetSceneId) {
       try {
@@ -2809,7 +2819,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         console.error('Error updating scene connection:', error);
       }
     }
-    
+
     // แสดงข้อความแจ้งเตือนที่เหมาะสม
     if (newEdge.data.sceneConnection) {
       toast.success('เชื่อมต่อฉากสำเร็จ - สามารถไปยังฉากถัดไปได้');
@@ -2824,11 +2834,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
     // Don't interfere with multi-select mode
     if (selection.multiSelectMode) return;
-    
+
     // Set single selection states
     setSelectedNode(selectedNodes[0] || null);
     setSelectedEdge(selectedEdges[0] || null);
-    
+
     // Update multi-selection state
     setSelection(prev => ({
       ...prev,
@@ -2840,22 +2850,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Keyboard event listeners
   useEffect(() => {
     document.addEventListener('keydown', handleKeyboardShortcuts);
-    return () => {
-      document.removeEventListener('keydown', handleKeyboardShortcuts);
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
-      }
-      if (saveDebounceTimer.current) {
-        clearTimeout(saveDebounceTimer.current);
-      }
-    };
+    return () => window.removeEventListener('keydown', handleKeyboardShortcuts);
   }, [handleKeyboardShortcuts]);
 
   // Custom node and edge types
   const nodeTypes: NodeTypes = useMemo(() => ({
     custom: CustomNode
   }), []);
-  
+
   const edgeTypes: EdgeTypes = useMemo(() => ({
     custom: CustomEdge,
     smoothstep: CustomEdge,
@@ -2872,15 +2874,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         sourceNode: nodeId,
         sourceHandle: handleType
       });
-      
+
       // เปลี่ยน cursor ของ canvas
       if (reactFlowWrapper.current) {
         reactFlowWrapper.current.style.cursor = 'crosshair';
       }
-      
+
       toast.info('คลิกที่ node อื่นเพื่อสร้างการเชื่อมต่อ');
     };
-    
+
     const handleNodeClick = (nodeId: string) => {
       if (connectionMode.isConnecting && connectionMode.sourceNode && connectionMode.sourceNode !== nodeId) {
         // สร้างการเชื่อมต่อ
@@ -2890,24 +2892,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           sourceHandle: 'right',
           targetHandle: 'left'
         };
-        
+
         // ใช้ onConnect ที่มีอยู่แล้ว
         onConnect(params);
-        
+
         // รีเซ็ต connection mode
         setConnectionMode({
           isConnecting: false,
           sourceNode: null,
           sourceHandle: null
         });
-        
+
         // รีเซ็ต cursor
         if (reactFlowWrapper.current) {
           reactFlowWrapper.current.style.cursor = 'default';
         }
       }
     };
-    
+
     // รองรับการลบ edge ผ่านปุ่มบน EdgeLabelRenderer ให้สอดคล้อง Command Pattern + Trash
     const handleRequestDeleteEdge = (e: Event) => {
       const custom = e as CustomEvent<{ edgeId: string }>;
@@ -2915,12 +2917,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if (!edgeId) return;
       const edge = edges.find(ed => ed.id === edgeId);
       if (!edge) return;
-      
+
       // ถ้าเป็นการเชื่อมต่อระหว่าง Scene nodes ให้ลบ defaultNextSceneId
       if (edge.data?.sceneConnection && edge.data?.sourceSceneId) {
         removeSceneConnection(edge.data.sourceSceneId as string);
       }
-      
+
       const cmd = createEdgeCommand('DELETE_EDGE', edgeId, edge, edge.source, edge.target);
       executeCommand(cmd);
     };
@@ -2928,13 +2930,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     window.addEventListener('requestDeleteEdge', handleRequestDeleteEdge as EventListener);
     // Add event listeners
     document.addEventListener('startConnection', handleStartConnection as EventListener);
-    
+
     return () => {
       document.removeEventListener('startConnection', handleStartConnection as EventListener);
       window.removeEventListener('requestDeleteEdge', handleRequestDeleteEdge as EventListener);
     };
   }, [connectionMode, onConnect, edges, createEdgeCommand, executeCommand, removeSceneConnection]);
-  
+
   // Handle canvas click to cancel connection mode
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
     if (connectionMode.isConnecting) {
@@ -2944,11 +2946,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         sourceNode: null,
         sourceHandle: null
       });
-      
+
       if (reactFlowWrapper.current) {
         reactFlowWrapper.current.style.cursor = 'default';
       }
-      
+
       toast.info('ยกเลิกการเชื่อมต่อ');
     }
   }, [connectionMode]);
@@ -2990,7 +2992,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </div>
                 </div>
               </div>
-              
+
                 {/* Scrollable Content */}
               <div className="flex-1 overflow-hidden">
                   <Tabs defaultValue="palette" className="flex flex-col h-full">
@@ -3000,7 +3002,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     <TabsTrigger value="validation">ตรวจสอบ</TabsTrigger>
                   </TabsList>
                     </div>
-                    
+
                     <TabsContent value="palette" className="flex-1 overflow-hidden">
                       <ScrollArea className="h-full px-4 pb-4 custom-scrollbar">
                         <div className="space-y-4 pt-4">
@@ -3014,7 +3016,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       </div>
                     </ScrollArea>
                   </TabsContent>
-                    
+
                     <TabsContent value="validation" className="flex-1 overflow-hidden">
                       <ScrollArea className="h-full px-4 pb-4 custom-scrollbar">
                         <div className="space-y-4 pt-4">
@@ -3091,7 +3093,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }}
                 onNodeDragStart={(event, node) => {
                   isDragging.current = true;
-                  
+
                   // ถ้าเป็น multiple selection และ node ที่กำลังลากอยู่ในกลุ่มที่เลือก
                   if (selection.selectedNodes.includes(node.id) && selection.selectedNodes.length > 1) {
                     // เก็บตำแหน่งเริ่มต้นของทุก node ที่เลือก
@@ -3108,23 +3110,23 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }}
                 onNodeDragStop={(event, node) => {
                   isDragging.current = false;
-                  
+
                   if (!isInitializingRef.current) {
                     // ตรวจสอบว่าเป็น multiple selection หรือไม่
                     if (selection.selectedNodes.includes(node.id) && selection.selectedNodes.length > 1) {
                       // สร้าง batch command สำหรับ multiple nodes
                       const commands: ICommand[] = [];
                       let hasAnyMovement = false;
-                      
+
                       selection.selectedNodes.forEach(nodeId => {
                         const startPosition = multiSelectDragStart.current[nodeId];
                         const currentNode = nodes.find(n => n.id === nodeId);
-                        
+
                         if (startPosition && currentNode) {
                           const hasPositionChanged = 
                             Math.abs(startPosition.x - currentNode.position.x) > 1 || 
                             Math.abs(startPosition.y - currentNode.position.y) > 1;
-                          
+
                           if (hasPositionChanged) {
                             hasAnyMovement = true;
                             commands.push(createNodeCommand(
@@ -3137,7 +3139,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           }
                         }
                       });
-                      
+
                       // สร้าง batch command ถ้ามีการเคลื่อนที่จริง
                       if (hasAnyMovement && commands.length > 0) {
                         const batchCommand: BatchCommand = {
@@ -3155,7 +3157,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         };
                         executeCommand(batchCommand);
                       }
-                      
+
                       // เคลียร์ข้อมูล
                       multiSelectDragStart.current = {};
                     } else {
@@ -3165,7 +3167,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         const hasPositionChanged = 
                           Math.abs(startPosition.x - node.position.x) > 1 || 
                           Math.abs(startPosition.y - node.position.y) > 1;
-                        
+
                         if (hasPositionChanged) {
                           const moveCommand = createNodeCommand(
                             'MOVE_NODE',
@@ -3232,50 +3234,50 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       sourceHandle: 'right',
                       targetHandle: 'left'
                     };
-                    
+
                     onConnect(params);
-                    
+
                     // รีเซ็ต connection mode
                     setConnectionMode({
                       isConnecting: false,
                       sourceNode: null,
                       sourceHandle: null
                     });
-                    
+
                     if (reactFlowWrapper.current) {
                       reactFlowWrapper.current.style.cursor = 'default';
                     }
                     return; // Exit early to prevent other click handling
                   }
-                  
+
                   // Handle multi-select mode (Canva-style)
                   if (selection.multiSelectMode) {
                     const isAlreadySelected = selection.pendingSelection.includes(node.id);
-                    
+
                     const newPendingSelection = isAlreadySelected
                       ? selection.pendingSelection.filter(id => id !== node.id)
                       : [...selection.pendingSelection, node.id];
-                    
+
                     setSelection(prev => ({
                       ...prev,
                       pendingSelection: newPendingSelection,
                       showSelectionBar: newPendingSelection.length > 0
                     }));
-                    
+
                     // Visual feedback
                     if (isAlreadySelected) {
                       toast.info(`Removed ${node.data?.title || node.id} from selection`);
                   } else {
                       toast.info(`Added ${node.data?.title || node.id} to selection (${newPendingSelection.length})`);
                     }
-                    
+
                     return;
                   }
-                  
+
                   // Handle Ctrl+Click for quick multi-select (without entering multi-select mode)
                   if (event.ctrlKey || event.metaKey) {
                     const isAlreadySelected = selection.selectedNodes.includes(node.id);
-                    
+
                     if (isAlreadySelected) {
                       // Remove from selection
                       const newSelection = selection.selectedNodes.filter(id => id !== node.id);
@@ -3284,7 +3286,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         selectedNodes: newSelection,
                         selectedEdges: []
                       }));
-                      
+
                       if (newSelection.length === 0) {
                         setSelectedNode(null);
                       } else {
@@ -3302,10 +3304,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     setSelectedNode(node);
                     setSelectedEdge(null);
                   }
-                    
+
                     return;
                   }
-                  
+
                   // Regular single selection
                   setSelectedNode(node);
                   setSelectedEdge(null);
@@ -3342,7 +3344,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   size={canvasState.showGrid ? 1 : 2}
                   className="opacity-30"
                 />
-                
+
                 {/* Enhanced Zoom Controls */}
                 <Panel position="bottom-right" className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg">
                   <div className="flex flex-col gap-2">
@@ -3425,7 +3427,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     }
                   }}
                 />
-              
+
                 {/* Enhanced Floating Toolbar */}
                 <Panel
                   position="top-left"
@@ -3464,7 +3466,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
-                      
+
                       {/* Multi Select Toggle */}
                       <Button
                         variant={isMultiSelectActive ? "default" : "outline"}
@@ -3566,7 +3568,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       <div className="text-sm font-medium">
                         {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
@@ -3575,7 +3577,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         >
                           Cancel
                         </Button>
-                        
+
                         <Button
                           variant="default"
                           size="sm"
@@ -3589,181 +3591,32 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+          </ReactFlowProvider>
 
-              {/* Selection Info Panel - Mobile: below episode selector, Desktop: below toolbar */}
-              {(selectedNode || selectedEdge || (selection.selectedNodes.length > 1 && !selection.multiSelectMode)) && (
-                <Panel 
-                  position={isMobile ? "top-left" : "top-left"} 
-                  className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg max-w-80"
-                  style={isMobile ? { top: 60, left: 56 } : { top: 60, left: 0 }}
+            {/* Canva-style Selection Confirmation Bar */}
+            <AnimatePresence>
+              {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
+                <motion.div
+                  initial={{ y: 100, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 100, opacity: 0 }}
+                  className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
                 >
-                  {/* Multiple Selection Info Panel */}
-                  {selection.selectedNodes.length > 1 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                          Multiple Selection
-                        </Badge>
-                        <span className="font-medium text-sm">
-                          {selection.selectedNodes.length} nodes selected
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Selected: {selection.selectedNodes.map(id => {
-                          const node = nodes.find(n => n.id === id);
-                          return node?.data?.title || 'Untitled';
-                        }).join(', ')}
-                      </div>
-                      <div className="flex gap-1">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => copySelected()}
-                        >
-                          <Copy className="w-3 h-3 mr-1" />
-                          Copy
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => deleteSelected()}
-                        >
-                          <Trash2 className="w-3 h-3 mr-1" />
-                          Delete All
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [] }))}
-                        >
-                          <X className="w-3 h-3 mr-1" />
-                          Clear
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
+                    <span className="text-sm font-medium">
+                      {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
+                    </span>
 
-                  {/* Single Selection Info Panel */}
-                  {selection.selectedNodes.length <= 1 && selectedNode && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {(selectedNode.data as any).nodeType.replace(/_/g, ' ')}
-                        </Badge>
-                        <span className="font-medium text-sm truncate">{(selectedNode.data as any).title}</span>
-                      </div>
-                      {(selectedNode.data as any).notesForAuthor && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {(selectedNode.data as any).notesForAuthor}
-                        </p>
-                      )}
-                      <div className="flex gap-1">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => {
-                            // Navigate to Director tab with context
-                            if ((selectedNode?.data as any)?.nodeSpecificData?.sceneId && typeof onNavigateToDirector === 'function') {
-                              onNavigateToDirector((selectedNode.data as any).nodeSpecificData.sceneId);
-                            } else {
-                              setIsPropertiesOpen(true);
-                            }
-                          }}
-                        >
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
-                        </Button>
-                        {isMobile && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => setIsPropertiesOpen(true)}
-                          >
-                            <Settings className="w-3 h-3 mr-1" />
-                            Properties
-                          </Button>
-                        )}
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => deleteSelected()}
-                        >
-                          <Trash2 className="w-3 h-3 mr-1" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Edge Selection Info Panel */}
-                  {selection.selectedNodes.length <= 1 && selectedEdge && !selectedNode && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <GitBranch className="w-4 h-4" />
-                        <span className="font-medium text-sm">
-                          Connection: {selectedEdge.label || 'Unlabeled'}
-                        </span>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => {
-                            // Always navigate to Director Tab for edge editing
-                            if (typeof onNavigateToDirector === 'function') {
-                              // Try to get scene information from connected nodes
-                              const sourceNode = nodes.find(n => n.id === selectedEdge.source);
-                              const targetNode = nodes.find(n => n.id === selectedEdge.target);
-                              
-                              // If source node has scene data, pass its scene ID
-                              const sceneId = (sourceNode?.data as any)?.sceneData?._id || 
-                                            (targetNode?.data as any)?.sceneData?._id;
-                              
-                              onNavigateToDirector(sceneId);
-                            }
-                          }}
-                        >
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => {
-                            // ลบ edge ผ่าน Command Pattern เพื่อให้เก็บ Trash และรองรับ undo/redo
-                            const edge = edges.find(e => e.id === selectedEdge.id);
-                            if (edge) {
-                              const cmd = createEdgeCommand('DELETE_EDGE', edge.id, edge, edge.source, edge.target);
-                              executeCommand(cmd);
-                              setSelectedEdge(null);
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-3 h-3 mr-1" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </Panel>
-              )}
-
-              {/* Multiple Selection Bottom Notification (Mobile-friendly) - positioned below toolbar */}
-              {selection.multiSelectMode && selection.selectedNodes.length > 0 && (
-                <Panel position="bottom-center" className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 shadow-lg mb-20 lg:mb-4">
-                  <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                        {selection.selectedNodes.length} node{selection.selectedNodes.length > 1 ? 's' : ''} selected
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [], multiSelectMode: false }))}
-                        className="h-8"
+                        onClick={() => setSelection(prev => ({ 
+                          ...prev, 
+                          pendingSelection: [], 
+                          showSelectionBar: false 
+                        }))}
                       >
                         Cancel
                       </Button>
@@ -3771,74 +3624,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         variant="default"
                         size="sm"
                         onClick={() => {
-                          // Confirm selection and close multi-select mode
-                          setSelection(prev => ({ ...prev, multiSelectMode: false }));
-                          toast.success(`Confirmed selection of ${selection.selectedNodes.length} nodes`);
+                          // Confirm selection and show Multiple Selection Info Panel
+                          setSelection(prev => ({
+                            ...prev,
+                            selectedNodes: prev.pendingSelection,
+                            pendingSelection: [],
+                            showSelectionBar: false,
+                            multiSelectMode: false
+                          }));
+
+                          // Clear single selection
+                          setSelectedNode(null);
+                          setSelectedEdge(null);
                         }}
-                        className="h-8"
                       >
-                        Confirm
+                        Confirm Selection
                       </Button>
                     </div>
                   </div>
-                </Panel>
+                </motion.div>
               )}
-            </ReactFlow>
-          </div>
-        </ReactFlowProvider>
-          
-          {/* Canva-style Selection Confirmation Bar */}
-          <AnimatePresence>
-            {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
-              <motion.div
-                initial={{ y: 100, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 100, opacity: 0 }}
-                className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
-              >
-                <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
-                  <span className="text-sm font-medium">
-                    {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
-                  </span>
-                  
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelection(prev => ({ 
-                        ...prev, 
-                        pendingSelection: [], 
-                        showSelectionBar: false 
-                      }))}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        // Confirm selection and show Multiple Selection Info Panel
-                        setSelection(prev => ({
-                          ...prev,
-                          selectedNodes: prev.pendingSelection,
-                          pendingSelection: [],
-                          showSelectionBar: false,
-                          multiSelectMode: false
-                        }));
-                        
-                        // Clear single selection
-                        setSelectedNode(null);
-                        setSelectedEdge(null);
-                      }}
-                    >
-                      Confirm Selection
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-      </div>
+            </AnimatePresence>
+        </div>
 
         {/* Collapsed Properties Trigger */}
         {isPropertiesCollapsed && (
@@ -3883,7 +3690,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </Button>
                 </div>
               </div>
-              
+
                 {/* Scrollable Content */}
               <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full custom-scrollbar">
@@ -4058,7 +3865,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               Trash History ({deletedItems.length} items)
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="flex-1 overflow-hidden">
             {deletedItems.length === 0 ? (
               <div className="text-center py-8">
@@ -4135,7 +3942,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               </ScrollArea>
             )}
           </div>
-          
+
           <div className="flex gap-2 pt-4 border-t">
             <Button
               variant="outline"

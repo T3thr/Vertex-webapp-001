@@ -604,7 +604,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 showGrid={showGrid}
                 onNavigateToDirector={(sceneId?: string) => {
                   setActiveTab('director')
-                  // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus
                 }}
               />
             </TabsContent>
