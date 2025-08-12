@@ -1405,62 +1405,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     sourceHandle: null
   });
 
-  // การตั้งค่า Blueprint Editor - ใช้ props จาก header settings โดยตรง
-  const blueprintSettings: BlueprintSettings = {
-    showSceneThumbnails: showSceneThumbnails ?? true,
-    showNodeLabels: showNodeLabels ?? true,
-    showConnectionLines: true,
-    autoLayout: false
-  };
-
-  // ฟังก์ชั่นสำหรับอัปเดต Scene's defaultNextSceneId
-  const updateSceneDefaultNext = useCallback(async (sourceSceneId: string, targetSceneId: string) => {
-    try {
-      const response = await fetch(`/api/novels/${novel.slug}/scenes/${sourceSceneId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          defaultNextSceneId: targetSceneId
-        }),
-      });
-
-      if (!response.ok) {
-        console.warn('Failed to update scene default next connection');
-        return;
-      }
-
-      console.log('Scene default next connection updated successfully');
-    } catch (error) {
-      console.error('Error updating scene default next connection:', error);
-    }
-  }, [novel.slug]);
-
-  // ฟังก์ชั่นสำหรับลบการเชื่อมต่อ Scene  
-  const removeSceneConnection = useCallback(async (sourceSceneId: string) => {
-    try {
-      const response = await fetch(`/api/novels/${novel.slug}/scenes/${sourceSceneId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          defaultNextSceneId: null
-        }),
-      });
-
-      if (!response.ok) {
-        console.warn('Failed to remove scene default next connection');
-        return;
-      }
-
-      console.log('Scene default next connection removed successfully');
-    } catch (error) {
-      console.error('Error removing scene default next connection:', error);
-    }
-  }, [novel.slug]);
-
   // อัปเดต nodes เมื่อ blueprintSettings เปลี่ยน
   useEffect(() => {
     setNodes(prevNodes => 
@@ -1468,7 +1412,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         ...node,
         data: {
           ...node.data,
-          blueprintSettings
+          blueprintSettings // เพิ่มการตั้งค่า Blueprint
         }
       }))
     );
@@ -2110,9 +2054,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, handleManualSave]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleManualSave, undo, redo]);
 
   // Selection helpers
   const selectAll = useCallback(() => {
@@ -3565,8 +3511,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={confirmMultiSelection}
-                          className="bg-blue-500 hover:bg-blue-600"
+                          onClick={() => {
+                            // Confirm selection and close multi-select mode
+                            setSelection(prev => ({ ...prev, multiSelectMode: false }));
+                            toast.success(`Confirmed selection of ${selection.selectedNodes.length} nodes`);
+                          }}
                         >
                           Confirm Selection
                         </Button>
@@ -3575,7 +3524,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </motion.div>
                 )}
               </AnimatePresence>
-      </div>
+    </div>
 
         {/* Canva-style Selection Confirmation Bar */}
         <AnimatePresence>
