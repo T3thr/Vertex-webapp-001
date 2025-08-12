@@ -367,9 +367,9 @@ const CustomEdge = ({
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
           }}
         >
-          {/* Edge Label */}
-          {(data as any)?.label && (
-            <div className="bg-background border border-border rounded px-2 py-1 text-xs shadow-sm">
+          {/* Edge Label - แสดงเฉพาะเมื่อเปิดการตั้งค่า Choice Labels และมี label ที่ไม่ใช่ค่าว่าง */}
+          {(data as any)?.label && (data as any)?.label.trim() !== '' && (data as any)?.showLabels && (
+            <div className="bg-background border border-border rounded px-2 py-1 text-xs shadow-sm hover:bg-background/90 transition-colors">
               {(data as any).label}
             </div>
           )}
@@ -572,24 +572,20 @@ const CustomNode = ({
               {getNodeIcon(data.nodeType)}
             </div>
             <div className="flex-1 min-w-0">
-              {showLabels && (
-                <>
-                  <h3 className="font-semibold text-sm truncate">
-                    {data.title || 'Untitled'}
-                  </h3>
-                  <p className="text-xs text-white/70 truncate">
-                    {data.nodeType.replace(/_/g, ' ').toLowerCase()}
-                  </p>
-                </>
-              )}
+              <h3 className="font-semibold text-sm truncate">
+                {data.title || 'Untitled'}
+              </h3>
+              <p className="text-xs text-white/70 truncate">
+                {data.nodeType.replace(/_/g, ' ').toLowerCase()}
+              </p>
             </div>
           </div>
 
           {/* Node-specific Info with Enhanced Scene Preview */}
           {data.nodeType === StoryMapNodeType.SCENE_NODE && data.sceneData && (
             <div className="bg-white/10 rounded-lg p-2 space-y-2">
-              {/* Enhanced Scene Background Preview with Thumbnail Support - ใช้การตั้งค่าจาก props */}
-              {showThumbnails && data.sceneData.background && (
+              {/* Enhanced Scene Background Preview with Thumbnail Support */}
+              {showThumbnails && data.sceneData.background ? (
                 <div className="relative w-full h-16 rounded overflow-hidden group">
                   {data.sceneData.background.type === 'image' ? (
                     <img 
@@ -612,16 +608,13 @@ const CustomNode = ({
                   {/* Overlay สำหรับข้อมูลเพิ่มเติม */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
                   
-                  {/* ป้ายชื่อฉาก - แสดงตามการตั้งค่า showLabels */}
-                  {showLabels && (
-                    <div className="absolute top-1 left-1 px-2 py-1 bg-black/50 rounded text-xs text-white font-medium backdrop-blur-sm">
-                      ฉาก #{data.sceneData.sceneOrder || '?'}
-                    </div>
-                  )}
+                  {/* ป้ายชื่อฉาก */}
+                  <div className="absolute top-1 left-1 px-2 py-1 bg-black/50 rounded text-xs text-white font-medium backdrop-blur-sm">
+                    ฉาก #{data.sceneData.sceneOrder || '?'}
+                  </div>
                   
-                  {/* จำนวนตัวละครและไอเทม - แสดงตามการตั้งค่า showLabels */}
-                  {showLabels && (
-                    <div className="absolute bottom-1 right-1 flex gap-1">
+                  {/* จำนวนตัวละครและไอเทม */}
+                  <div className="absolute bottom-1 right-1 flex gap-1">
                     {data.sceneData.characters?.length > 0 && (
                       <div className="flex items-center gap-1 px-1 py-0.5 bg-blue-500/80 rounded text-xs text-white">
                         <User className="w-3 h-3" />
@@ -635,13 +628,24 @@ const CustomNode = ({
                       </div>
                     )}
                   </div>
-                )}
+                </div>
+              ) : (
+                /* แสดงข้อมูลฉากแบบย่อเมื่อปิด thumbnail */
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Square className="w-4 h-4" />
+                    <span className="font-medium">ฉาก #{data.sceneData.sceneOrder || '?'}</span>
+                  </div>
+                  {data.sceneData.description && (
+                    <div className="text-xs text-white/80 line-clamp-2">
+                      {data.sceneData.description}
+                    </div>
+                  )}
                 </div>
               )}
               
-              {/* Scene Stats - แสดงตามการตั้งค่า showLabels */}
-              {showLabels && (
-                <div className="grid grid-cols-2 gap-2 text-xs">
+              {/* Scene Stats - แสดงเสมอไม่ว่าจะเปิดหรือปิด thumbnail */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex items-center gap-1">
                 <User className="w-3 h-3" />
                   <span>{data.sceneData.characters?.length || 0}</span>
@@ -649,20 +653,12 @@ const CustomNode = ({
                 <div className="flex items-center gap-1">
                 <Image className="w-3 h-3" />
                   <span>{data.sceneData.images?.length || 0}</span>
-                </div>
               </div>
-              )}
-              
-              {/* Scene Description Preview - แสดงตามการตั้งค่า showLabels */}
-              {showLabels && data.sceneData.description && (
-                <div className="text-xs text-white/80 line-clamp-2">
-                  {data.sceneData.description}
-                </div>
-              )}
+              </div>
             </div>
           )}
 
-          {data.nodeType === StoryMapNodeType.CHOICE_NODE && showLabels && (
+          {data.nodeType === StoryMapNodeType.CHOICE_NODE && (
             <div className="bg-white/10 rounded-lg p-2">
               <div className="flex items-center gap-2 text-xs">
                 <GitBranch className="w-3 h-3" />
@@ -671,23 +667,21 @@ const CustomNode = ({
             </div>
           )}
 
-          {/* Status Indicators - แสดงตามการตั้งค่า showLabels */}
-          {showLabels && (
-                          <div className="flex items-center gap-1">
-                {data.hasError && (
-                  <div className="flex items-center gap-1 text-xs bg-red-500/20 text-red-200 px-2 py-1 rounded">
-                    <XCircle className="w-3 h-3" />
-                    Error
-                  </div>
-                )}
-                {data.isCompleted && (
-                  <div className="flex items-center gap-1 text-xs bg-green-500/20 text-green-200 px-2 py-1 rounded">
-                    <CheckCircle className="w-3 h-3" />
-                    Complete
-                  </div>
-                )}
+          {/* Status Indicators */}
+          <div className="flex items-center gap-1">
+            {data.hasError && (
+              <div className="flex items-center gap-1 text-xs bg-red-500/20 text-red-200 px-2 py-1 rounded">
+                <XCircle className="w-3 h-3" />
+                Error
               </div>
             )}
+            {data.isCompleted && (
+              <div className="flex items-center gap-1 text-xs bg-green-500/20 text-green-200 px-2 py-1 rounded">
+                <CheckCircle className="w-3 h-3" />
+                Complete
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Enhanced Connection Points with Better Visual Feedback */}
@@ -912,7 +906,7 @@ const NodePalette = ({
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
         <div className="text-sm font-medium text-muted-foreground">
-          ลากโหนดไปยังผืนผ้าใบ
+          ลากโหนดไปยังหน้าจอ
         </div>
         
         {Object.entries(nodeCategories).map(([key, category]) => (
@@ -1376,21 +1370,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }));
   }, [showGrid]);
   
-  // อัปเดต node data เมื่อ display settings เปลี่ยน - ใช้ props โดยตรง
+  // อัปเดต node data เมื่อ display settings เปลี่ยน
   useEffect(() => {
-    if (nodes.length > 0) {
-      setNodes(currentNodes => 
-        currentNodes.map(node => ({
-          ...node,
-          data: {
-            ...node.data,
-            showThumbnails: showSceneThumbnails,
-            showLabels: showNodeLabels
-          }
-        }))
-      );
-    }
-  }, [showSceneThumbnails, showNodeLabels, setNodes, nodes.length]);
+    setNodes(currentNodes => 
+      currentNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          showThumbnails: showSceneThumbnails,
+          showLabels: showNodeLabels
+        }
+      }))
+    );
+  }, [showSceneThumbnails, showNodeLabels, setNodes]);
   
   // Command Stack for undo/redo (replacing old HistoryState)
   const [undoStack, setUndoStack] = useState<AnyCommand[]>([]);
@@ -1413,13 +1405,22 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     sourceHandle: null
   });
 
-  // การตั้งค่า Blueprint Editor - ใช้ props จาก header settings โดยตรง
-  const blueprintSettings: BlueprintSettings = {
+  // การตั้งค่า Blueprint Editor - ใช้ props จาก header settings
+  const [blueprintSettings, setBlueprintSettings] = useState<BlueprintSettings>({
     showSceneThumbnails: showSceneThumbnails ?? true,
     showNodeLabels: showNodeLabels ?? true,
     showConnectionLines: true,
     autoLayout: false
-  };
+  });
+  
+  // อัปเดตการตั้งค่าเมื่อ props เปลี่ยน
+  useEffect(() => {
+    setBlueprintSettings(prev => ({
+      ...prev,
+      showSceneThumbnails: showSceneThumbnails ?? true,
+      showNodeLabels: showNodeLabels ?? true
+    }));
+  }, [showSceneThumbnails, showNodeLabels]);
   
   // ฟังก์ชั่นสำหรับอัปเดต Scene's defaultNextSceneId
   const updateSceneDefaultNext = useCallback(async (sourceSceneId: string, targetSceneId: string) => {
@@ -1982,9 +1983,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }));
     
     if (!canvasState.isLocked) {
-      toast.info('ล็อกผืนผ้าใบ - ไม่สามารถเลื่อนและซูมได้');
+      toast.info('ล็อกหน้าจอ - ไม่สามารถเลื่อนและซูมได้');
     } else {
-      toast.info('ปลดล็อกผืนผ้าใบ - สามารถเลื่อนและซูมได้');
+      toast.info('ปลดล็อกหน้าจอ - สามารถเลื่อนและซูมได้');
     }
   }, [canvasState.isLocked]);
 
@@ -2035,7 +2036,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           position: node.position,
           data: {
             ...nodeData,
-            blueprintSettings // เพิ่มการตั้งค่า Blueprint
+            showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+            showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
           },
           selected: false // Don't preserve selection on re-init
         };
@@ -2048,7 +2050,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         sourceHandle: edge.sourceHandleId,
         targetHandle: edge.targetHandleId,
         label: edge.label,
-        data: edge,
+        data: {
+          ...edge,
+          showLabels: showNodeLabels // ใช้การตั้งค่าจาก props สำหรับการแสดงผล choice labels
+        },
         type: 'smoothstep',
         markerEnd: {
           type: MarkerType.ArrowClosed,
@@ -2406,9 +2411,27 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 position: {
                   x: node.position.x + pasteOffset.x,
                   y: node.position.y + pasteOffset.y
+                },
+                data: {
+                  ...node.data,
+                  showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+                  showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
                 }
               };
               commands.push(createNodeCommand('ADD_NODE', newNode.id, newNode));
+            });
+            
+            // Paste edges
+            selection.clipboard.edges.forEach(edge => {
+              const newEdge: Edge = {
+                ...edge,
+                id: `edge_${Date.now()}_${Math.random()}`,
+                data: {
+                  ...edge.data,
+                  showLabels: showNodeLabels // ใช้การตั้งค่าจาก props สำหรับการแสดงผล choice labels
+                }
+              };
+              commands.push(createEdgeCommand('ADD_EDGE', newEdge.id, newEdge, newEdge.source, newEdge.target));
             });
             
             // Execute as batch command
@@ -2449,6 +2472,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   position: {
                     x: originalNode.position.x + duplicateOffset.x,
                     y: originalNode.position.y + duplicateOffset.y
+                  },
+                  data: {
+                    ...originalNode.data,
+                    showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+                    showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
                   }
                 };
                 duplicateCommands.push(createNodeCommand('ADD_NODE', duplicatedNode.id, duplicatedNode));
@@ -2562,7 +2590,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         authorDefinedEmotionTags: [],
         nodeSpecificData: getDefaultNodeData(nodeType),
         color: getDefaultNodeColor(nodeType),
-        zIndex: 1000
+        zIndex: 1000,
+        showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+        showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
       }
     };
     
@@ -2676,7 +2706,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         isCompleted: false,
         isFirstScene: nodeType === StoryMapNodeType.SCENE_NODE && 
           !nodes.some(n => n.data.nodeType === StoryMapNodeType.SCENE_NODE),
-        blueprintSettings // ส่งการตั้งค่าไปยัง node
+        showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+        showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
       }
     };
 
@@ -2771,6 +2802,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         targetHandleId: params.targetHandle,
         label: autoLabel,
         priority: 1,
+        showLabels: showNodeLabels, // ใช้การตั้งค่าจาก props สำหรับการแสดงผล choice labels
         // เพิ่มข้อมูลสำหรับการอัปเดต Scene
         sceneConnection: sourceNode?.data.nodeType === StoryMapNodeType.SCENE_NODE && 
                         targetNode?.data.nodeType === StoryMapNodeType.SCENE_NODE,
@@ -3337,9 +3369,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }}
               >
                 <Background 
-                  variant={canvasState.showGrid ? BackgroundVariant.Dots : BackgroundVariant.Cross} 
+                  variant={showGrid ? BackgroundVariant.Dots : BackgroundVariant.Cross} 
                   gap={canvasState.gridSize}
-                  size={canvasState.showGrid ? 1 : 2}
+                  size={showGrid ? 1 : 2}
                   className="opacity-30"
                 />
                 
@@ -3478,17 +3510,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     </div>
 
                     <Separator orientation={isMobile ? "horizontal" : "vertical"} className={isMobile ? "w-full" : "h-6"} />
-
-                    {/* Grid Toggle */}
-                    <Button
-                      variant={canvasState.showGrid ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCanvasState(prev => ({ ...prev, showGrid: !prev.showGrid }))}
-                      className="h-8 w-8 p-0"
-                      title="Toggle Grid"
-                    >
-                      <Grid3X3 className="w-4 h-4" />
-                    </Button>
 
                     {/* Undo/Redo */}
                     <Button
@@ -4100,11 +4121,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                               // กู้คืนผ่าน Command Pattern เพื่อผูกกับ undo/redo
                               if (item.type === 'node') {
                                 const nodeData = item.data as Node;
-                                const cmd = createNodeCommand('ADD_NODE', nodeData.id, nodeData);
+                                // อัปเดตการตั้งค่าก่อนกู้คืน
+                                const updatedNodeData = {
+                                  ...nodeData,
+                                  data: {
+                                    ...nodeData.data,
+                                    showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+                                    showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
+                                  }
+                                };
+                                const cmd = createNodeCommand('ADD_NODE', updatedNodeData.id, updatedNodeData);
                                 executeCommand(cmd);
                               } else {
                                 const edgeData = item.data as Edge;
-                                const cmd = createEdgeCommand('ADD_EDGE', edgeData.id, edgeData, edgeData.source, edgeData.target);
+                                // อัปเดตการตั้งค่าก่อนกู้คืน
+                                const updatedEdgeData = {
+                                  ...edgeData,
+                                  data: {
+                                    ...edgeData.data,
+                                    showLabels: showNodeLabels // ใช้การตั้งค่าจาก props สำหรับการแสดงผล choice labels
+                                  }
+                                };
+                                const cmd = createEdgeCommand('ADD_EDGE', updatedEdgeData.id, updatedEdgeData, updatedEdgeData.source, updatedEdgeData.target);
                                 executeCommand(cmd);
                               }
                               // Remove from deleted items
@@ -4164,10 +4202,27 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     deletedItems.forEach(item => {
                       if (item.type === 'node') {
                         const nodeData = item.data as Node;
-                        cmds.push(createNodeCommand('ADD_NODE', nodeData.id, nodeData));
+                        // อัปเดตการตั้งค่าก่อนกู้คืน
+                        const updatedNodeData = {
+                          ...nodeData,
+                          data: {
+                            ...nodeData.data,
+                            showThumbnails: showSceneThumbnails, // ใช้การตั้งค่าจาก props
+                            showLabels: showNodeLabels // ใช้การตั้งค่าจาก props
+                          }
+                        };
+                        cmds.push(createNodeCommand('ADD_NODE', updatedNodeData.id, updatedNodeData));
                       } else {
                         const edgeData = item.data as Edge;
-                        cmds.push(createEdgeCommand('ADD_EDGE', edgeData.id, edgeData, edgeData.source, edgeData.target));
+                        // อัปเดตการตั้งค่าก่อนกู้คืน
+                        const updatedEdgeData = {
+                          ...edgeData,
+                          data: {
+                            ...edgeData.data,
+                            showLabels: showNodeLabels // ใช้การตั้งค่าจาก props สำหรับการแสดงผล choice labels
+                          }
+                        };
+                        cmds.push(createEdgeCommand('ADD_EDGE', updatedEdgeData.id, updatedEdgeData, updatedEdgeData.source, updatedEdgeData.target));
                       }
                     });
                     if (cmds.length > 0) {

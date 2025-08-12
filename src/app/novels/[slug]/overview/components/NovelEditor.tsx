@@ -346,6 +346,22 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                           </div>
                         </motion.div>
                       )}
+                      
+                      {/* Auto-save Status */}
+                      <div className="pt-2 border-t border-border">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>สถานะ:</span>
+                          <span className={isAutoSaveEnabled ? "text-green-600" : "text-gray-600"}>
+                            {isAutoSaveEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                          </span>
+                        </div>
+                        {lastSaved && (
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                            <span>บันทึกล่าสุด:</span>
+                            <span>{lastSaved.toLocaleTimeString('th-TH')}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     
                     {/* Blueprint Visualization Settings */}
@@ -377,15 +393,15 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                       {/* Node Labels Toggle */}
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <Label htmlFor="node-labels" className="text-sm font-medium">
-                            ป้ายชื่อ Node
+                          <Label htmlFor="choice-labels" className="text-sm font-medium">
+                            ป้ายชื่อ Choice
                           </Label>
                           <p className="text-xs text-muted-foreground">
-                            แสดงชื่อของ node บนแผนผังเรื่อง
+                            แสดงข้อความตัวเลือกบนเส้นเชื่อมระหว่างโหนด
                           </p>
                         </div>
                         <Switch
-                          id="node-labels"
+                          id="choice-labels"
                           checked={showNodeLabels}
                           onCheckedChange={setShowNodeLabels}
                         />
@@ -398,7 +414,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                             ตารางพื้นหลัง
                           </Label>
                           <p className="text-xs text-muted-foreground">
-                            แสดงตารางช่วยจัดแนวบนผืนผ้าใบ
+                            แสดงตารางช่วยจัดแนวบนหน้าจอ
                           </p>
                         </div>
                         <Switch
@@ -407,22 +423,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                           onCheckedChange={setShowGrid}
                         />
                       </div>
-                    </div>
-                    
-                    {/* Status Info */}
-                    <div className="pt-2 border-t border-border">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>สถานะ:</span>
-                        <span className={isAutoSaveEnabled ? "text-green-600" : "text-gray-600"}>
-                          {isAutoSaveEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
-                        </span>
-                      </div>
-                      {lastSaved && (
-                        <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
-                          <span>บันทึกล่าสุด:</span>
-                          <span>{lastSaved.toLocaleTimeString('th-TH')}</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </Card>
@@ -573,6 +573,30 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                       </Button>
                     </div>
                     
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Choice Labels</span>
+                      <Button
+                        variant={showNodeLabels ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowNodeLabels(!showNodeLabels)}
+                        className="text-xs"
+                      >
+                        {showNodeLabels ? 'เปิด' : 'ปิด'}
+                      </Button>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Grid</span>
+                      <Button
+                        variant={showGrid ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowGrid(!showGrid)}
+                        className="text-xs"
+                      >
+                        {showGrid ? 'เปิด' : 'ปิด'}
+                      </Button>
+                    </div>
+                    
                     <div className="text-xs text-muted-foreground">
                       {lastSaved && !isSaving && `บันทึกล่าสุด ${lastSaved.toLocaleTimeString('th-TH')}`}
                       {isSaving && 'กำลังบันทึก...'}
@@ -604,6 +628,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 showGrid={showGrid}
                 onNavigateToDirector={(sceneId?: string) => {
                   setActiveTab('director')
+                  // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus
                 }}
               />
             </TabsContent>
