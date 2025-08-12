@@ -2,7 +2,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { Flag, Crown, Heart, Skull, Eye, Sparkles, Laugh, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -25,20 +25,22 @@ interface EndingNodeData {
 }
 
 /**
- * Ending Node Component สำหรับ ReactFlow
- * แสดงข้อมูลจุดจบของเรื่องใน Visual Novel
+ * คอมโพเนนต์โหนดจุดจบ สำหรับ ReactFlow
+ * แสดงข้อมูลจุดจบของเรื่องในนิยายแบบภาพ (Visual Novel)
+ * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const EndingNode: React.FC<NodeProps<EndingNodeData>> = ({ 
+const EndingNode: React.FC<NodeProps> = ({ 
   data, 
   selected, 
   dragging 
 }) => {
-  const nodeColor = data.editorVisuals?.color || '#ef4444';
-  const endingType = data.nodeSpecificData?.endingType || 'NORMAL';
-  const endingTitle = data.nodeSpecificData?.endingTitle || data.title;
-  const hasCondition = !!data.nodeSpecificData?.unlockCondition;
-  const hasNotes = data.notesForAuthor && data.notesForAuthor.length > 0;
-  const outcomeDescription = data.nodeSpecificData?.outcomeDescription;
+  const nodeData = data as unknown as EndingNodeData;
+  const nodeColor = nodeData.editorVisuals?.color || '#ef4444';
+  const endingType = nodeData.nodeSpecificData?.endingType || 'NORMAL';
+  const endingTitle = nodeData.nodeSpecificData?.endingTitle || nodeData.title;
+  const hasCondition = !!nodeData.nodeSpecificData?.unlockCondition;
+  const hasNotes = nodeData.notesForAuthor && nodeData.notesForAuthor.length > 0;
+  const outcomeDescription = nodeData.nodeSpecificData?.outcomeDescription;
 
   // ไอคอนและสีสำหรับแต่ละประเภท ending
   const getEndingConfig = (type: string) => {
@@ -48,56 +50,56 @@ const EndingNode: React.FC<NodeProps<EndingNodeData>> = ({
           icon: Crown, 
           color: '#ffd700', 
           bgColor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-          label: 'True End' 
+          label: 'จบจริง' 
         };
       case 'GOOD':
         return { 
           icon: Heart, 
           color: '#10b981', 
           bgColor: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-          label: 'Good End' 
+          label: 'จบดี' 
         };
       case 'NORMAL':
         return { 
           icon: Flag, 
           color: '#6b7280', 
           bgColor: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
-          label: 'Normal End' 
+          label: 'จบปกติ' 
         };
       case 'BAD':
         return { 
           icon: Skull, 
           color: '#ef4444', 
           bgColor: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
-          label: 'Bad End' 
+          label: 'จบเลว' 
         };
       case 'SECRET':
         return { 
           icon: Eye, 
           color: '#8b5cf6', 
           bgColor: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
-          label: 'Secret End' 
+          label: 'จบลับ' 
         };
       case 'ALTERNATE':
         return { 
           icon: Sparkles, 
           color: '#06b6d4', 
           bgColor: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-400',
-          label: 'Alternate End' 
+          label: 'จบทางเลือก' 
         };
       case 'JOKE':
         return { 
           icon: Laugh, 
           color: '#f97316', 
           bgColor: 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400',
-          label: 'Joke End' 
+          label: 'จบตลก' 
         };
       default:
         return { 
           icon: Flag, 
           color: '#6b7280', 
           bgColor: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
-          label: 'Ending' 
+          label: 'จุดจบ' 
         };
     }
   };
@@ -163,7 +165,7 @@ const EndingNode: React.FC<NodeProps<EndingNodeData>> = ({
         {/* Outcome Description */}
         {outcomeDescription && (
           <div className="bg-muted/50 rounded p-2 text-sm">
-            <div className="font-medium text-muted-foreground mb-1 text-xs">Outcome:</div>
+            <div className="font-medium text-muted-foreground mb-1 text-xs">ผลลัพธ์:</div>
             <p className="text-foreground leading-relaxed line-clamp-3">
               {outcomeDescription}
             </p>
@@ -175,21 +177,21 @@ const EndingNode: React.FC<NodeProps<EndingNodeData>> = ({
           <div className="bg-muted/30 rounded p-2 text-xs">
             <div className="flex items-center space-x-1 mb-1">
               <AlertCircle className="h-3 w-3 text-muted-foreground" />
-              <span className="font-medium text-muted-foreground">Unlock Condition:</span>
+              <span className="font-medium text-muted-foreground">เงื่อนไขปลดล็อก:</span>
             </div>
             <code className="text-xs font-mono text-muted-foreground line-clamp-2">
-              {data.nodeSpecificData?.unlockCondition}
+              {nodeData.nodeSpecificData?.unlockCondition}
             </code>
           </div>
         )}
 
         {/* Scene Reference */}
-        {data.nodeSpecificData?.endingSceneId && (
+        {nodeData.nodeSpecificData?.endingSceneId && (
           <div className="text-xs text-muted-foreground">
             <div className="flex items-center space-x-1">
-              <span className="font-medium">Scene ID:</span>
+              <span className="font-medium">รหัสฉาก:</span>
               <span className="font-mono bg-muted px-1 rounded">
-                {data.nodeSpecificData.endingSceneId.slice(-8)}
+                {nodeData.nodeSpecificData.endingSceneId.slice(-8)}
               </span>
             </div>
           </div>
@@ -200,10 +202,10 @@ const EndingNode: React.FC<NodeProps<EndingNodeData>> = ({
           <div className="bg-muted/50 rounded p-2 text-xs text-muted-foreground">
             <div className="flex items-center space-x-1 mb-1">
               <AlertCircle className="h-3 w-3" />
-              <span className="font-medium">Notes:</span>
+              <span className="font-medium">หมายเหตุ:</span>
             </div>
             <p className="line-clamp-2">
-              {data.notesForAuthor}
+              {nodeData.notesForAuthor}
             </p>
           </div>
         )}

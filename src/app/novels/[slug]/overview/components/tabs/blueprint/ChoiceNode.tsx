@@ -2,7 +2,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { Square, Users, Coins, Timer, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -27,22 +27,24 @@ interface ChoiceNodeData {
 }
 
 /**
- * Choice Node Component สำหรับ ReactFlow
- * แสดงข้อมูล Choice/ตัวเลือกใน Visual Novel
+ * คอมโพเนนต์โหนดตัวเลือก สำหรับ ReactFlow  
+ * แสดงข้อมูลตัวเลือกในนิยายแบบภาพ (Visual Novel)
+ * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const ChoiceNode: React.FC<NodeProps<ChoiceNodeData>> = ({ 
+const ChoiceNode: React.FC<NodeProps> = ({ 
   data, 
   selected, 
   dragging 
 }) => {
-  const nodeColor = data.editorVisuals?.color || '#10b981';
-  const choiceCount = data.nodeSpecificData?.choiceIds?.length || 0;
-  const isMajor = data.nodeSpecificData?.isMajorChoice || false;
-  const isTimed = data.nodeSpecificData?.isTimedChoice || false;
-  const costCoins = data.nodeSpecificData?.costCoins || 0;
-  const timeLimit = data.nodeSpecificData?.timeLimitSeconds || 0;
-  const layout = data.nodeSpecificData?.layout || 'vertical';
-  const hasNotes = data.notesForAuthor && data.notesForAuthor.length > 0;
+  const nodeData = data as unknown as ChoiceNodeData;
+  const nodeColor = nodeData.editorVisuals?.color || '#10b981';
+  const choiceCount = nodeData.nodeSpecificData?.choiceIds?.length || 0;
+  const isMajor = nodeData.nodeSpecificData?.isMajorChoice || false;
+  const isTimed = nodeData.nodeSpecificData?.isTimedChoice || false;
+  const costCoins = nodeData.nodeSpecificData?.costCoins || 0;
+  const timeLimit = nodeData.nodeSpecificData?.timeLimitSeconds || 0;
+  const layout = nodeData.nodeSpecificData?.layout || 'vertical';
+  const hasNotes = nodeData.notesForAuthor && nodeData.notesForAuthor.length > 0;
 
   // ไอคอนสำหรับ layout
   const getLayoutIcon = () => {
@@ -75,12 +77,13 @@ const ChoiceNode: React.FC<NodeProps<ChoiceNodeData>> = ({
         boxShadow: selected ? `0 0 20px ${nodeColor}20` : undefined 
       }}
     >
-      {/* Input Handle */}
+      {/* จุดเชื่อมต่อสำหรับรับข้อมูล (Input Handle) */}
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 bg-background border-2 border-muted-foreground"
+        className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
         style={{ borderColor: nodeColor }}
+        title="ลากเส้นเชื่อมต่อมาที่นี่"
       />
 
       {/* Header */}
@@ -91,7 +94,7 @@ const ChoiceNode: React.FC<NodeProps<ChoiceNodeData>> = ({
         <div className="flex items-center space-x-2">
           <Square className="h-4 w-4 flex-shrink-0" />
           <h3 className="font-medium text-sm truncate flex-1">
-            {data.title}
+            {nodeData.title}
           </h3>
           {isMajor && (
             <div className="w-2 h-2 bg-yellow-400 rounded-full flex-shrink-0" />
@@ -101,27 +104,27 @@ const ChoiceNode: React.FC<NodeProps<ChoiceNodeData>> = ({
 
       {/* Content */}
       <div className="p-3 space-y-2">
-        {/* Choice Count & Layout */}
+        {/* จำนวนตัวเลือกและรูปแบบการแสดงผล */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1">
             <Users className="h-3 w-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">
-              {choiceCount} choices
+              {choiceCount} ตัวเลือก
             </span>
           </div>
           
           <Badge variant="secondary" className="text-xs">
-            {getLayoutIcon()} {layout}
+            {getLayoutIcon()} {layout === 'vertical' ? 'แนวตั้ง' : layout === 'horizontal' ? 'แนวนอน' : 'ตาราง'}
           </Badge>
         </div>
 
-        {/* Special Properties */}
+        {/* คุณสมบัติพิเศษ */}
         <div className="space-y-1">
           {isTimed && (
             <div className="flex items-center space-x-1 text-xs">
               <Timer className="h-3 w-3 text-orange-500" />
               <span className="text-muted-foreground">
-                Timed ({timeLimit}s)
+                จำกัดเวลา ({timeLimit} วินาที)
               </span>
             </div>
           )}
@@ -130,54 +133,55 @@ const ChoiceNode: React.FC<NodeProps<ChoiceNodeData>> = ({
             <div className="flex items-center space-x-1 text-xs">
               <Coins className="h-3 w-3 text-yellow-500" />
               <span className="text-muted-foreground">
-                Cost: {costCoins} coins
+                ค่าใช้จ่าย: {costCoins} เหรียญ
               </span>
             </div>
           )}
           
           {isMajor && (
             <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-600">
-              Major Choice
+              ตัวเลือกสำคัญ
             </Badge>
           )}
         </div>
 
-        {/* Prompt Text Preview */}
-        {data.nodeSpecificData?.promptText && (
+        {/* ตัวอย่างข้อความแจ้ง */}
+        {nodeData.nodeSpecificData?.promptText && (
           <div className="bg-muted/50 rounded p-2 text-xs">
-            <div className="font-medium text-muted-foreground mb-1">Prompt:</div>
+            <div className="font-medium text-muted-foreground mb-1">ข้อความแจ้ง:</div>
             <p className="line-clamp-2 text-muted-foreground">
-              &quot;{data.nodeSpecificData.promptText}&quot;
+              &quot;{nodeData.nodeSpecificData.promptText}&quot;
             </p>
           </div>
         )}
 
-        {/* Author Notes Preview */}
+        {/* ตัวอย่างหมายเหตุผู้แต่ง */}
         {hasNotes && (
           <div className="bg-muted/50 rounded p-2 text-xs text-muted-foreground">
             <div className="flex items-center space-x-1 mb-1">
               <AlertCircle className="h-3 w-3" />
-              <span className="font-medium">Notes:</span>
+              <span className="font-medium">หมายเหตุ:</span>
             </div>
             <p className="line-clamp-2">
-              {data.notesForAuthor}
+              {nodeData.notesForAuthor}
             </p>
           </div>
         )}
       </div>
 
-      {/* Multiple Output Handles for different choices */}
+      {/* จุดเชื่อมต่อสำหรับตัวเลือกต่างๆ (Multiple Output Handles) */}
       {Array.from({ length: Math.max(choiceCount, 2) }).map((_, index) => (
         <Handle
           key={index}
           type="source"
           position={Position.Bottom}
           id={`choice-${index}`}
-          className="w-3 h-3 bg-background border-2 border-muted-foreground"
+          className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
           style={{ 
             borderColor: nodeColor,
             left: `${20 + (index * (60 / Math.max(choiceCount, 1)))}%`
           }}
+          title={`ลากจากจุดนี้เพื่อเชื่อมต่อตัวเลือกที่ ${index + 1}`}
         />
       ))}
 

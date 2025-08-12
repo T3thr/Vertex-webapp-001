@@ -2,7 +2,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { GitBranch, Code, Route, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -27,18 +27,20 @@ interface BranchNodeData {
 }
 
 /**
- * Branch Node Component สำหรับ ReactFlow
- * แสดงข้อมูล Branch/แยกเส้นทางตามเงื่อนไขใน Visual Novel
+ * คอมโพเนนต์โหนดแยกเส้นทาง สำหรับ ReactFlow
+ * แสดงข้อมูลตรรกะแบบมีเงื่อนไขในนิยายแบบภาพ (Visual Novel)
+ * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const BranchNode: React.FC<NodeProps<BranchNodeData>> = ({ 
+const BranchNode: React.FC<NodeProps> = ({ 
   data, 
   selected, 
   dragging 
 }) => {
-  const nodeColor = data.editorVisuals?.color || '#f59e0b';
-  const conditions = data.nodeSpecificData?.conditions || [];
-  const hasDefault = !!data.nodeSpecificData?.defaultTargetNodeId;
-  const hasNotes = data.notesForAuthor && data.notesForAuthor.length > 0;
+  const nodeData = data as unknown as BranchNodeData;
+  const nodeColor = nodeData.editorVisuals?.color || '#f59e0b';
+  const conditions = nodeData.nodeSpecificData?.conditions || [];
+  const hasDefault = !!nodeData.nodeSpecificData?.defaultTargetNodeId;
+  const hasNotes = nodeData.notesForAuthor && nodeData.notesForAuthor.length > 0;
   const totalOutputs = conditions.length + (hasDefault ? 1 : 0);
 
   // สีสำหรับแต่ละเงื่อนไข
@@ -81,10 +83,10 @@ const BranchNode: React.FC<NodeProps<BranchNodeData>> = ({
         <div className="flex items-center space-x-2">
           <GitBranch className="h-4 w-4 flex-shrink-0" />
           <h3 className="font-medium text-sm truncate flex-1">
-            {data.title}
+            {nodeData.title}
           </h3>
           <Badge variant="secondary" className="bg-white/20 text-white text-xs">
-            {totalOutputs} paths
+            {totalOutputs} เส้นทาง
           </Badge>
         </div>
       </div>
@@ -96,11 +98,11 @@ const BranchNode: React.FC<NodeProps<BranchNodeData>> = ({
           <div className="space-y-2">
             <div className="flex items-center space-x-1 text-xs text-muted-foreground">
               <Code className="h-3 w-3" />
-              <span className="font-medium">Conditions:</span>
+              <span className="font-medium">เงื่อนไข:</span>
             </div>
             
             <div className="space-y-1 max-h-20 overflow-y-auto">
-              {conditions.slice(0, 3).map((condition, index) => (
+              {conditions.slice(0, 3).map((condition: any, index: number) => (
                 <div 
                   key={condition.conditionId}
                   className="bg-muted/50 rounded p-2 text-xs"
@@ -122,51 +124,51 @@ const BranchNode: React.FC<NodeProps<BranchNodeData>> = ({
               
               {conditions.length > 3 && (
                 <div className="text-xs text-muted-foreground text-center py-1">
-                  +{conditions.length - 3} more conditions
+                  +{conditions.length - 3} เงื่อนไขเพิ่มเติม
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Default Path */}
+        {/* เส้นทางเริ่มต้น */}
         {hasDefault && (
           <div className="bg-muted/30 rounded p-2 text-xs">
             <div className="flex items-center space-x-1 mb-1">
               <Route className="h-3 w-3 text-muted-foreground" />
-              <span className="font-medium text-muted-foreground">Default Path:</span>
+              <span className="font-medium text-muted-foreground">เส้นทางเริ่มต้น:</span>
             </div>
             <div className="font-mono text-muted-foreground">
-              {data.nodeSpecificData?.defaultTargetNodeId?.slice(-8) || 'Not set'}
+              {nodeData.nodeSpecificData?.defaultTargetNodeId?.slice(-8) || 'ไม่ได้ตั้งค่า'}
             </div>
           </div>
         )}
 
-        {/* Warning for no conditions */}
+        {/* คำเตือนสำหรับไม่มีเงื่อนไข */}
         {conditions.length === 0 && !hasDefault && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded p-2 text-xs">
             <div className="flex items-center space-x-1 text-yellow-600 dark:text-yellow-400">
               <AlertTriangle className="h-3 w-3" />
-              <span className="font-medium">No conditions set</span>
+              <span className="font-medium">ยังไม่ได้ตั้งค่าเงื่อนไข</span>
             </div>
           </div>
         )}
 
-        {/* Author Notes Preview */}
+        {/* ตัวอย่างหมายเหตุผู้แต่ง */}
         {hasNotes && (
           <div className="bg-muted/50 rounded p-2 text-xs text-muted-foreground">
             <div className="flex items-center space-x-1 mb-1">
               <AlertTriangle className="h-3 w-3" />
-              <span className="font-medium">Notes:</span>
+              <span className="font-medium">หมายเหตุ:</span>
             </div>
             <p className="line-clamp-2">
-              {data.notesForAuthor}
+              {nodeData.notesForAuthor}
             </p>
           </div>
         )}
       </div>
 
-      {/* Multiple Output Handles for different conditions */}
+      {/* จุดเชื่อมต่อสำหรับเงื่อนไขต่างๆ (Multiple Output Handles) */}
       {Array.from({ length: Math.max(totalOutputs, 2) }).map((_, index) => {
         const isDefault = index === conditions.length;
         const condition = conditions[index];
@@ -177,11 +179,12 @@ const BranchNode: React.FC<NodeProps<BranchNodeData>> = ({
             type="source"
             position={Position.Bottom}
             id={isDefault ? 'default' : `condition-${condition?.conditionId || index}`}
-            className="w-3 h-3 bg-background border-2 border-muted-foreground"
+            className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
             style={{ 
               borderColor: isDefault ? '#6b7280' : getConditionColor(index),
               left: `${15 + (index * (70 / Math.max(totalOutputs, 1)))}%`
             }}
+            title={isDefault ? 'ลากจากจุดนี้เพื่อเชื่อมต่อเส้นทางเริ่มต้น' : `ลากจากจุดนี้เพื่อเชื่อมต่อเงื่อนไขที่ ${index + 1}`}
           />
         );
       })}

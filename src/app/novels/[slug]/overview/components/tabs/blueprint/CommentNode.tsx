@@ -2,7 +2,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { MessageCircle, User, Calendar, Pin } from 'lucide-react';
 
@@ -24,19 +24,21 @@ interface CommentNodeData {
 }
 
 /**
- * Comment Node Component สำหรับ ReactFlow
- * แสดงข้อมูล Comment/หมายเหตุใน Visual Novel Story Map
+ * คอมโพเนนต์โหนดโน้ต สำหรับ ReactFlow
+ * แสดงข้อมูลความคิดเห็นและหมายเหตุในนิยายแบบภาพ (Visual Novel)
+ * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const CommentNode: React.FC<NodeProps<CommentNodeData>> = ({ 
+const CommentNode: React.FC<NodeProps> = ({ 
   data, 
   selected, 
   dragging 
 }) => {
-  const nodeColor = data.editorVisuals?.color || '#6b7280';
-  const commentText = data.nodeSpecificData?.commentText || '';
-  const isPinned = data.nodeSpecificData?.isPinned || false;
-  const tags = data.nodeSpecificData?.tags || [];
-  const createdAt = data.nodeSpecificData?.createdAt;
+  const nodeData = data as unknown as CommentNodeData;
+  const nodeColor = nodeData.editorVisuals?.color || '#6b7280';
+  const commentText = nodeData.nodeSpecificData?.commentText || '';
+  const isPinned = nodeData.nodeSpecificData?.isPinned || false;
+  const tags = nodeData.nodeSpecificData?.tags || [];
+  const createdAt = nodeData.nodeSpecificData?.createdAt;
 
   // Format date
   const formatDate = (dateString?: string) => {
@@ -85,7 +87,7 @@ const CommentNode: React.FC<NodeProps<CommentNodeData>> = ({
         <div className="flex items-center space-x-2">
           <MessageCircle className="h-4 w-4 flex-shrink-0" />
           <h3 className="font-medium text-sm truncate flex-1">
-            {data.title}
+            {nodeData.title}
           </h3>
           {isPinned && (
             <Pin className="h-3 w-3 flex-shrink-0" />
@@ -107,7 +109,7 @@ const CommentNode: React.FC<NodeProps<CommentNodeData>> = ({
         {/* Tags */}
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {tags.slice(0, 3).map((tag, index) => (
+            {tags.slice(0, 3).map((tag: any, index: number) => (
               <span 
                 key={index}
                 className="inline-block bg-muted text-muted-foreground text-xs px-2 py-1 rounded-full"
@@ -129,7 +131,7 @@ const CommentNode: React.FC<NodeProps<CommentNodeData>> = ({
           <div className="flex items-center space-x-1">
             <User className="h-3 w-3" />
             <span>
-              {data.nodeSpecificData?.authorId?.slice(-8) || 'Unknown'}
+              {nodeData.nodeSpecificData?.authorId?.slice(-8) || 'Unknown'}
             </span>
           </div>
 
@@ -143,11 +145,11 @@ const CommentNode: React.FC<NodeProps<CommentNodeData>> = ({
         </div>
 
         {/* Additional Notes */}
-        {data.notesForAuthor && (
+        {nodeData.notesForAuthor && (
           <div className="border-t border-border pt-2 text-xs text-muted-foreground">
-            <div className="font-medium mb-1">Internal Notes:</div>
+            <div className="font-medium mb-1">หมายเหตุภายใน:</div>
             <p className="line-clamp-2">
-              {data.notesForAuthor}
+              {nodeData.notesForAuthor}
             </p>
           </div>
         )}

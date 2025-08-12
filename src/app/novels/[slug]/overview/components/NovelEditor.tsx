@@ -1,10 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-
+import { Card } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   Layers3, 
   Film, 
@@ -14,7 +17,7 @@ import {
   Menu,
   X,
   RefreshCw,
-  Check
+  Image
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -62,9 +65,15 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // State สำหรับ auto-save
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
-  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(true)
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(false)
   const [autoSaveIntervalSec, setAutoSaveIntervalSec] = useState<15 | 30>(15)
   const [isDirty, setIsDirty] = useState(false)
+  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false)
+  
+  // State สำหรับ Blueprint settings
+  const [showSceneThumbnails, setShowSceneThumbnails] = useState(true)
+  const [showNodeLabels, setShowNodeLabels] = useState(true)
+  const [showGrid, setShowGrid] = useState(true)
 
   // Handlers for data updates
   const handleStoryMapUpdate = (updatedStoryMap: any) => {
@@ -161,53 +170,57 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     }
   }
 
-  // Enhanced manual save function with comprehensive state management
+  // Manual save function - triggers save for currently active tab
   const handleManualSave = async () => {
     if (!isDirty) {
-      toast.info('ไม่มีการเปลี่ยนแปลงที่จะบันทึก')
+      toast.info('No changes to save')
       return
     }
     
     try {
       setIsSaving(true)
-      const savePromises: Promise<any>[] = []
-      
-      // Collect all save operations from active tabs
+      // Trigger manual save from the active tab
       if (activeTab === 'blueprint' && blueprintTabRef.current?.handleManualSave) {
-        savePromises.push(blueprintTabRef.current.handleManualSave())
+        await blueprintTabRef.current.handleManualSave()
       } else if (activeTab === 'director' && directorTabRef.current?.handleManualSave) {
-        savePromises.push(directorTabRef.current.handleManualSave())
+        await directorTabRef.current.handleManualSave()
       } else if (activeTab === 'summary' && summaryTabRef.current?.handleManualSave) {
-        savePromises.push(summaryTabRef.current.handleManualSave())
+        await summaryTabRef.current.handleManualSave()
       }
-      
-      // Execute all saves concurrently
-      await Promise.all(savePromises)
       
       setLastSaved(new Date())
       setIsDirty(false)
-      toast.success('บันทึกการเปลี่ยนแปลงทั้งหมดเรียบร้อยแล้ว')
+      toast.success('All changes saved successfully')
     } catch (error) {
       console.error('Error saving:', error)
-      toast.error('ไม่สามารถบันทึกการเปลี่ยนแปลงได้')
+      toast.error('Failed to save changes')
     } finally {
       setIsSaving(false)
     }
   }
 
-  // Enhanced dirty state change handler
-  const handleDirtyChange = useCallback((dirty: boolean) => {
-    setIsDirty(dirty)
-    if (dirty && !lastSaved) {
-      // First time marking as dirty - set initial timestamp
-      setLastSaved(new Date())
-    }
-  }, [lastSaved])
-
   // Refs for tab components to trigger their save methods
   const blueprintTabRef = React.useRef<any>(null)
   const directorTabRef = React.useRef<any>(null)
   const summaryTabRef = React.useRef<any>(null)
+  const settingsDropdownRef = React.useRef<HTMLDivElement>(null)
+
+  // Handle click outside to close settings dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (settingsDropdownRef.current && !settingsDropdownRef.current.contains(event.target as Node)) {
+        setShowSettingsDropdown(false)
+      }
+    }
+
+    if (showSettingsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showSettingsDropdown])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -258,27 +271,163 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             <span>{isDirty ? 'บันทึก' : 'บันทึกแล้ว'}</span>
           </Button>
 
-          {/* Auto-save Toggle */}
-          <Button
-            variant={isAutoSaveEnabled ? "default" : "outline"}
-            size="sm"
-            onClick={() => setIsAutoSaveEnabled(!isAutoSaveEnabled)}
-            className="text-xs"
-          >
-            Auto-save {isAutoSaveEnabled ? 'เปิด' : 'ปิด'}
-          </Button>
-
-          {/* Settings */}
-          <div className="flex items-center gap-2">
-            <select
-              className="text-xs bg-background border border-border rounded px-2 py-1"
-              value={autoSaveIntervalSec}
-              onChange={(e) => setAutoSaveIntervalSec(Number(e.target.value) as 15 | 30)}
-              title="Auto-save interval"
+          {/* Settings Dropdown */}
+          <div className="relative" ref={settingsDropdownRef}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex items-center gap-2"
+              onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
             >
-              <option value={15}>15s</option>
-              <option value={30}>30s</option>
-            </select>
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </Button>
+            
+            {showSettingsDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute right-0 top-full mt-2 z-50"
+              >
+                <Card className="w-80 p-4 shadow-lg border bg-card">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Editor Settings</h4>
+                      <p className="text-xs text-muted-foreground">
+                        จัดการการตั้งค่าการบันทึกอัตโนมัติ
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {/* Auto-save Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label htmlFor="auto-save" className="text-sm font-medium">
+                            Auto-save
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            บันทึกการเปลี่ยนแปลงอัตโนมัติ
+                          </p>
+                        </div>
+                        <Switch
+                          id="auto-save"
+                          checked={isAutoSaveEnabled}
+                          onCheckedChange={setIsAutoSaveEnabled}
+                        />
+                      </div>
+                      
+                      {/* Auto-save Interval */}
+                      {isAutoSaveEnabled && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-2"
+                        >
+                          <Label className="text-sm font-medium">ความถี่ในการบันทึก</Label>
+                          <div className="flex gap-2">
+                            <Button
+                              variant={autoSaveIntervalSec === 15 ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setAutoSaveIntervalSec(15)}
+                              className="flex-1"
+                            >
+                              15 วินาที
+                            </Button>
+                            <Button
+                              variant={autoSaveIntervalSec === 30 ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setAutoSaveIntervalSec(30)}
+                              className="flex-1"
+                            >
+                              30 วินาที
+                            </Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                    
+                    {/* Blueprint Visualization Settings */}
+                    <div className="space-y-4 pt-2 border-t border-border">
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">การแสดงผล Blueprint</h4>
+                        <p className="text-xs text-muted-foreground">
+                          การตั้งค่าการแสดงผลในหน้า Blueprint
+                        </p>
+                      </div>
+                      
+                      {/* Scene Thumbnail Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label htmlFor="scene-thumbnails" className="text-sm font-medium">
+                            ภาพพื้นหลังฉาก
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            แสดงภาพพื้นหลังของฉากบน node แทนที่จะเป็นไอคอน
+                          </p>
+                        </div>
+                        <Switch
+                          id="scene-thumbnails"
+                          checked={showSceneThumbnails}
+                          onCheckedChange={setShowSceneThumbnails}
+                        />
+                      </div>
+                      
+                      {/* Node Labels Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label htmlFor="node-labels" className="text-sm font-medium">
+                            ป้ายชื่อ Node
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            แสดงชื่อของ node บนแผนผังเรื่อง
+                          </p>
+                        </div>
+                        <Switch
+                          id="node-labels"
+                          checked={showNodeLabels}
+                          onCheckedChange={setShowNodeLabels}
+                        />
+                      </div>
+                      
+                      {/* Grid Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label htmlFor="show-grid" className="text-sm font-medium">
+                            ตารางพื้นหลัง
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            แสดงตารางช่วยจัดแนวบนผืนผ้าใบ
+                          </p>
+                        </div>
+                        <Switch
+                          id="show-grid"
+                          checked={showGrid}
+                          onCheckedChange={setShowGrid}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Status Info */}
+                    <div className="pt-2 border-t border-border">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>สถานะ:</span>
+                        <span className={isAutoSaveEnabled ? "text-green-600" : "text-gray-600"}>
+                          {isAutoSaveEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                        </span>
+                      </div>
+                      {lastSaved && (
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                          <span>บันทึกล่าสุด:</span>
+                          <span>{lastSaved.toLocaleTimeString('th-TH')}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
@@ -411,6 +560,19 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                         {isAutoSaveEnabled ? 'เปิด' : 'ปิด'}
                       </Button>
                     </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Scene Thumbnails</span>
+                      <Button
+                        variant={showSceneThumbnails ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setShowSceneThumbnails(!showSceneThumbnails)}
+                        className="text-xs"
+                      >
+                        {showSceneThumbnails ? 'เปิด' : 'ปิด'}
+                      </Button>
+                    </div>
+                    
                     <div className="text-xs text-muted-foreground">
                       {lastSaved && !isSaving && `บันทึกล่าสุด ${lastSaved.toLocaleTimeString('th-TH')}`}
                       {isSaving && 'กำลังบันทึก...'}
@@ -436,7 +598,10 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 onStoryMapUpdate={handleStoryMapUpdate}
                 isAutoSaveEnabled={isAutoSaveEnabled}
                 autoSaveIntervalSec={autoSaveIntervalSec}
-                onDirtyChange={handleDirtyChange}
+                onDirtyChange={setIsDirty}
+                showSceneThumbnails={showSceneThumbnails}
+                showNodeLabels={showNodeLabels}
+                showGrid={showGrid}
                 onNavigateToDirector={(sceneId?: string) => {
                   setActiveTab('director')
                   // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus

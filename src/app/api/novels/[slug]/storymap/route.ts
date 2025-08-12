@@ -148,7 +148,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { nodes, edges, storyVariables, episodeFilter } = body;
+    const { nodes, edges, storyVariables, episodeFilter, version: clientVersion } = body;
 
     await dbConnect();
 
@@ -180,6 +180,15 @@ export async function PUT(
     });
 
     if (storyMap) {
+      // Check for version conflicts
+      if (clientVersion && clientVersion < storyMap.version) {
+        return NextResponse.json({ 
+          error: 'Conflict: A newer version of the story map exists.',
+          latestVersion: storyMap.version,
+          currentVersion: clientVersion
+        }, { status: 409 });
+      }
+      
       // Update existing story map
       storyMap.nodes = nodes;
       storyMap.edges = edges;
@@ -245,7 +254,8 @@ export async function PUT(
 
     return NextResponse.json({
       storyMap: JSON.parse(JSON.stringify(storyMap)),
-      validation
+      validation,
+      newVersion: storyMap.version
     });
 
   } catch (error) {

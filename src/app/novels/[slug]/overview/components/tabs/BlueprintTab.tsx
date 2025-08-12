@@ -3,7 +3,8 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ReactFlow, {
+import {
+  ReactFlow,
   Node,
   Edge,
   Controls,
@@ -26,14 +27,28 @@ import ReactFlow, {
   Position,
   useStore,
   getSmoothStepPath,
+  getStraightPath,
+  getBezierPath,
   SelectionMode,
   OnSelectionChangeFunc,
   BackgroundVariant,
-  ConnectionMode
-} from 'reactflow';
+  ConnectionMode,
+  ConnectionLineType,
+  BaseEdge,
+  EdgeLabelRenderer,
+  EdgeProps,
+  type Node as ReactFlowNode,
+  type Edge as ReactFlowEdge,
+  useHandleConnections,
+  OnConnectStart,
+  OnConnectEnd,
+  useUpdateNodeInternals,
+  ConnectionLineComponent,
+  ConnectionLineComponentProps
+} from '@xyflow/react';
 import { toast } from 'sonner';
 
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 
 // Components
 import { Button } from '@/components/ui/button';
@@ -73,6 +88,7 @@ import {
   ShieldAlert,
   LayoutGrid,
   Trash2,
+  Archive,
   Copy,
   Edit,
   AlertTriangle,
@@ -107,9 +123,7 @@ import {
   Target,
   Palette,
   ArrowRight,
-  RotateCcw,
-  Camera,
-  Package
+  RotateCcw
 } from 'lucide-react';
 
 // Types from backend models
@@ -136,14 +150,53 @@ interface BlueprintTabProps {
   autoSaveIntervalSec?: 15 | 30;
   onDirtyChange?: (dirty: boolean) => void;
   onNavigateToDirector?: (sceneId?: string) => void;
+  showSceneThumbnails?: boolean;
+  showNodeLabels?: boolean;
+  showGrid?: boolean;
 }
 
-// Enhanced history and selection interfaces
-interface HistoryState {
-  nodes: Node[];
-  edges: Edge[];
+// Command Pattern interfaces for proper undo/redo
+interface ICommand {
+  id: string;
+  type: string;
+  description: string;
   timestamp: number;
-  description?: string;
+  execute(): void;
+  undo(): void;
+  redo?(): void;
+}
+
+interface NodeCommand extends ICommand {
+  type: 'ADD_NODE' | 'DELETE_NODE' | 'UPDATE_NODE' | 'MOVE_NODE';
+  nodeId: string;
+  nodeData?: Node;
+  oldPosition?: { x: number; y: number };
+  newPosition?: { x: number; y: number };
+  oldData?: any;
+  newData?: any;
+}
+
+interface EdgeCommand extends ICommand {
+  type: 'ADD_EDGE' | 'DELETE_EDGE' | 'UPDATE_EDGE';
+  edgeId: string;
+  edgeData?: Edge;
+  sourceNodeId?: string;
+  targetNodeId?: string;
+  oldData?: any;
+  newData?: any;
+}
+
+interface BatchCommand extends ICommand {
+  type: 'BATCH';
+  commands: ICommand[];
+}
+
+type AnyCommand = NodeCommand | EdgeCommand | BatchCommand;
+
+interface CommandHistory {
+  undoStack: AnyCommand[];
+  redoStack: AnyCommand[];
+  maxHistorySize: number;
 }
 
 interface SelectionState {
@@ -169,18 +222,207 @@ interface CanvasState {
   snapToGrid: boolean;
 }
 
-// Save system state
+// Enhanced save system state with versioning
 interface SaveState {
   isSaving: boolean;
   lastSaved: Date | null;
   hasUnsavedChanges: boolean;
   saveError: string | null;
+  version: number;
+  isDirty: boolean;
+  lastCommandId?: string;
+  isConflicted?: boolean; // For handling version conflicts
 }
 
-// Enhanced Custom Node with improved connection system
-const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: string }) => {
+// การตั้งค่าการแสดงผล Blueprint Editor
+interface BlueprintSettings {
+  showSceneThumbnails: boolean;
+  showNodeLabels: boolean;
+  showConnectionLines: boolean;
+  autoLayout: boolean;
+}
+
+// Custom Connection Line Component สำหรับการลากเส้นเชื่อมต่อแบบ Interactive
+const CustomConnectionLine: ConnectionLineComponent = ({ 
+  fromX, 
+  fromY, 
+  toX, 
+  toY, 
+  connectionLineStyle,
+  connectionLineType
+}: ConnectionLineComponentProps) => {
+  const [edgePath] = getSmoothStepPath({
+    sourceX: fromX,
+    sourceY: fromY,
+    sourcePosition: Position.Bottom,
+    targetX: toX,
+    targetY: toY,
+    targetPosition: Position.Top,
+  });
+
+  return (
+    <g>
+      <path
+        fill="none"
+        stroke="#3b82f6"
+        strokeWidth={3}
+        strokeDasharray="10,5"
+        d={edgePath}
+        className="animate-pulse"
+        style={connectionLineStyle}
+      />
+      {/* จุดปลายทางของการลาก */}
+      <circle
+        cx={toX}
+        cy={toY}
+        fill="#3b82f6"
+        r={4}
+        stroke="#fff"
+        strokeWidth={2}
+        className="animate-ping"
+      />
+      {/* ข้อความแนะนำ */}
+      <text
+        x={toX}
+        y={toY - 20}
+        fill="#3b82f6"
+        fontSize="12"
+        textAnchor="middle"
+        className="font-medium"
+      >
+        ปล่อยเพื่อเชื่อมต่อ
+      </text>
+    </g>
+  );
+};
+
+// Enhanced Custom Edge with interactive controls
+const CustomEdge = ({ 
+  id, 
+  sourceX, 
+  sourceY, 
+  targetX, 
+  targetY, 
+  sourcePosition, 
+  targetPosition,
+  style = {},
+  data,
+  markerEnd,
+  selected
+}: EdgeProps) => {
+  const { deleteElements } = useReactFlow();
+  
+  // Calculate path based on edge type
+  const getEdgePath = () => {
+    const edgeType = (data as any)?.edgeType || 'smoothstep';
+    
+    switch (edgeType) {
+      case 'straight':
+        return getStraightPath({
+          sourceX,
+          sourceY,
+          targetX,
+          targetY
+        });
+      case 'bezier':
+        return getBezierPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition
+        });
+      default:
+        return getSmoothStepPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition
+        });
+    }
+  };
+  
+  const [edgePath, labelX, labelY] = getEdgePath();
+  
+  // Edge styling based on data
+  const edgeStyle = {
+    ...style,
+    stroke: (data as any)?.color || (selected ? '#3b82f6' : '#64748b'),
+    strokeWidth: selected ? 3 : 2,
+    strokeDasharray: (data as any)?.dashed ? '5,5' : undefined,
+  };
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
+      
+      {/* Interactive Edge Label */}
+      <EdgeLabelRenderer>
+        <div
+          className="nodrag nopan absolute text-xs pointer-events-auto"
+          style={{
+            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+          }}
+        >
+          {/* Edge Label */}
+          {(data as any)?.label && (
+            <div className="bg-background border border-border rounded px-2 py-1 text-xs shadow-sm">
+              {(data as any).label}
+            </div>
+          )}
+          
+          {/* Interactive Controls - Show on hover/selection */}
+          {selected && (
+            <div className="flex items-center gap-1 mt-1">
+              <button
+                className="bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  // ใช้อีเวนต์กลางเพื่อให้การลบ edge ผ่าน Command Pattern และเก็บลง Trash History
+                  window.dispatchEvent(new CustomEvent('requestDeleteEdge', { detail: { edgeId: id } }));
+                }}
+                title="ลบเส้นเชื่อมต่อ"
+              >
+                ×
+              </button>
+              
+              {/* Priority indicator for choice edges */}
+              {(data as any)?.priority && (
+                <div className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                  {(data as any).priority}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+};
+
+// Enhanced Custom Node with improved connection system and scene thumbnails
+const CustomNode = ({ 
+  data, 
+  selected, 
+  id 
+}: { 
+  data: any; 
+  selected: boolean; 
+  id: string;
+}) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [connectionMode, setConnectionMode] = useState<'none' | 'connecting'>('none');
+  const [localConnectionMode, setLocalConnectionMode] = useState<'none' | 'connecting'>('none');
+  
+  // รับการตั้งค่าจาก parent component ผ่าน data
+  const showThumbnails = data.showThumbnails ?? true;
+  const showLabels = data.showLabels ?? true;
+  
+  // ข้อมูลฉากสำหรับ thumbnail
+  const sceneData = data.sceneData;
+  const thumbnailUrl = sceneData?.thumbnailUrl || sceneData?.background?.value;
   const getNodeIcon = (type: StoryMapNodeType) => {
     switch (type) {
       case StoryMapNodeType.START_NODE: return <Play className="w-5 h-5" />;
@@ -330,59 +572,97 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
               {getNodeIcon(data.nodeType)}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-sm truncate">
-                {data.title || 'Untitled'}
-              </h3>
-              <p className="text-xs text-white/70 truncate">
-                {data.nodeType.replace(/_/g, ' ').toLowerCase()}
-              </p>
+              {showLabels && (
+                <>
+                  <h3 className="font-semibold text-sm truncate">
+                    {data.title || 'Untitled'}
+                  </h3>
+                  <p className="text-xs text-white/70 truncate">
+                    {data.nodeType.replace(/_/g, ' ').toLowerCase()}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Node-specific Info */}
+          {/* Node-specific Info with Enhanced Scene Preview */}
           {data.nodeType === StoryMapNodeType.SCENE_NODE && data.sceneData && (
             <div className="bg-white/10 rounded-lg p-2 space-y-2">
-              {/* Scene Preview Image */}
-              {data.sceneData.background?.value && (
-                <div className="relative w-full h-16 rounded-md overflow-hidden bg-black/20">
-                  <img 
-                    src={data.sceneData.background.value} 
-                    alt="Scene preview"
-                    className="w-full h-full object-cover opacity-80"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                  <div className="absolute bottom-1 left-1 text-xs text-white/90">
-                    Background
+              {/* Enhanced Scene Background Preview with Thumbnail Support - ใช้การตั้งค่าจาก props */}
+              {showThumbnails && data.sceneData.background && (
+                <div className="relative w-full h-16 rounded overflow-hidden group">
+                  {data.sceneData.background.type === 'image' ? (
+                    <img 
+                      src={data.sceneData.background.value} 
+                      alt="ภาพพื้นหลังฉาก"
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : data.sceneData.background.type === 'color' ? (
+                    <div 
+                      className="w-full h-full transition-all duration-200"
+                      style={{ backgroundColor: data.sceneData.background.value }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600" />
+                  )}
+                  
+                  {/* Overlay สำหรับข้อมูลเพิ่มเติม */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+                  
+                  {/* ป้ายชื่อฉาก - แสดงตามการตั้งค่า showLabels */}
+                  {showLabels && (
+                    <div className="absolute top-1 left-1 px-2 py-1 bg-black/50 rounded text-xs text-white font-medium backdrop-blur-sm">
+                      ฉาก #{data.sceneData.sceneOrder || '?'}
+                    </div>
+                  )}
+                  
+                  {/* จำนวนตัวละครและไอเทม - แสดงตามการตั้งค่า showLabels */}
+                  {showLabels && (
+                    <div className="absolute bottom-1 right-1 flex gap-1">
+                    {data.sceneData.characters?.length > 0 && (
+                      <div className="flex items-center gap-1 px-1 py-0.5 bg-blue-500/80 rounded text-xs text-white">
+                        <User className="w-3 h-3" />
+                        <span>{data.sceneData.characters.length}</span>
+                      </div>
+                    )}
+                    {data.sceneData.images?.length > 0 && (
+                      <div className="flex items-center gap-1 px-1 py-0.5 bg-green-500/80 rounded text-xs text-white">
+                        <Image className="w-3 h-3" />
+                        <span>{data.sceneData.images.length}</span>
+                      </div>
+                    )}
                   </div>
+                )}
                 </div>
               )}
               
-              {/* Scene Stats */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              {/* Scene Stats - แสดงตามการตั้งค่า showLabels */}
+              {showLabels && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex items-center gap-1">
-                  <User className="w-3 h-3" />
+                <User className="w-3 h-3" />
                   <span>{data.sceneData.characters?.length || 0}</span>
-                </div>
+              </div>
                 <div className="flex items-center gap-1">
-                  <Image className="w-3 h-3" />
+                <Image className="w-3 h-3" />
                   <span>{data.sceneData.images?.length || 0}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <MessageCircle className="w-3 h-3" />
-                  <span>{data.sceneData.textContents?.length || 0}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  <span>{Math.ceil((data.sceneData.estimatedTimelineDurationMs || 0) / 60000)}m</span>
-                </div>
               </div>
+              )}
+              
+              {/* Scene Description Preview - แสดงตามการตั้งค่า showLabels */}
+              {showLabels && data.sceneData.description && (
+                <div className="text-xs text-white/80 line-clamp-2">
+                  {data.sceneData.description}
+                </div>
+              )}
             </div>
           )}
 
-          {data.nodeType === StoryMapNodeType.CHOICE_NODE && (
+          {data.nodeType === StoryMapNodeType.CHOICE_NODE && showLabels && (
             <div className="bg-white/10 rounded-lg p-2">
               <div className="flex items-center gap-2 text-xs">
                 <GitBranch className="w-3 h-3" />
@@ -391,21 +671,23 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
             </div>
           )}
 
-          {/* Status Indicators */}
-          <div className="flex items-center gap-1">
-            {data.hasError && (
-              <div className="flex items-center gap-1 text-xs bg-red-500/20 text-red-200 px-2 py-1 rounded">
-                <XCircle className="w-3 h-3" />
-                Error
+          {/* Status Indicators - แสดงตามการตั้งค่า showLabels */}
+          {showLabels && (
+                          <div className="flex items-center gap-1">
+                {data.hasError && (
+                  <div className="flex items-center gap-1 text-xs bg-red-500/20 text-red-200 px-2 py-1 rounded">
+                    <XCircle className="w-3 h-3" />
+                    Error
+                  </div>
+                )}
+                {data.isCompleted && (
+                  <div className="flex items-center gap-1 text-xs bg-green-500/20 text-green-200 px-2 py-1 rounded">
+                    <CheckCircle className="w-3 h-3" />
+                    Complete
+                  </div>
+                )}
               </div>
             )}
-            {data.isCompleted && (
-              <div className="flex items-center gap-1 text-xs bg-green-500/20 text-green-200 px-2 py-1 rounded">
-                <CheckCircle className="w-3 h-3" />
-                Complete
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Enhanced Connection Points with Better Visual Feedback */}
@@ -414,19 +696,27 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
             type="target"
             position={Position.Top}
             className={`
-              w-4 h-4 border-3 rounded-full z-20
-              transition-all duration-300 ease-out
+              w-5 h-5 border-2 rounded-full z-20
+              transition-all duration-200 ease-out
               ${isConnectable 
-                ? 'bg-blue-200 border-blue-400 hover:bg-blue-300 hover:border-blue-500 cursor-crosshair hover:scale-150' 
+                ? 'bg-blue-100 border-blue-400 hover:bg-blue-200 hover:border-blue-500 cursor-crosshair' 
                 : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
               }
-              ${isHovered || selected ? 'opacity-100 scale-125 shadow-lg' : 'opacity-75'}
+              ${isHovered || selected ? 'opacity-100 scale-150 shadow-xl' : 'opacity-80 scale-100'}
             `}
             style={{ 
-              top: -8,
-              boxShadow: (isHovered || selected) ? '0 0 15px rgba(59, 130, 246, 0.6)' : 'none'
+              top: -10,
+              boxShadow: (isHovered || selected) ? '0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4)' : 'none'
             }}
             isConnectable={isConnectable}
+            onMouseDown={() => {
+              // เพิ่ม visual feedback เมื่อเริ่มการเชื่อมต่อ
+              setLocalConnectionMode('connecting');
+              // สร้าง custom event เพื่อแจ้งให้ parent component รู้
+              window.dispatchEvent(new CustomEvent('nodeConnectionStart', { 
+                detail: { nodeId: id, handleType: 'target', position: Position.Top } 
+              }));
+            }}
           />
         )}
 
@@ -435,19 +725,27 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
             type="source"
             position={Position.Bottom}
             className={`
-              w-4 h-4 border-3 rounded-full z-20
-              transition-all duration-300 ease-out
+              w-5 h-5 border-2 rounded-full z-20
+              transition-all duration-200 ease-out
               ${isConnectable 
-                ? 'bg-green-200 border-green-400 hover:bg-green-300 hover:border-green-500 cursor-crosshair hover:scale-150' 
+                ? 'bg-green-100 border-green-400 hover:bg-green-200 hover:border-green-500 cursor-crosshair' 
                 : 'bg-gray-300 border-gray-400 opacity-50 cursor-not-allowed'
               }
-              ${isHovered || selected ? 'opacity-100 scale-125 shadow-lg' : 'opacity-75'}
+              ${isHovered || selected ? 'opacity-100 scale-150 shadow-xl' : 'opacity-80 scale-100'}
             `}
             style={{ 
-              bottom: -8,
-              boxShadow: (isHovered || selected) ? '0 0 15px rgba(34, 197, 94, 0.6)' : 'none'
+              bottom: -10,
+              boxShadow: (isHovered || selected) ? '0 0 20px rgba(34, 197, 94, 0.8), 0 0 40px rgba(34, 197, 94, 0.4)' : 'none'
             }}
             isConnectable={isConnectable}
+            onMouseDown={() => {
+              // เพิ่ม visual feedback เมื่อเริ่มการเชื่อมต่อ
+              setLocalConnectionMode('connecting');
+              // สร้าง custom event เพื่อแจ้งให้ parent component รู้
+              window.dispatchEvent(new CustomEvent('nodeConnectionStart', { 
+                detail: { nodeId: id, handleType: 'source', position: Position.Bottom } 
+              }));
+            }}
           />
         )}
 
@@ -490,6 +788,20 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
               boxShadow: (isHovered || selected) ? '0 0 15px rgba(34, 197, 94, 0.6)' : 'none'
             }}
             isConnectable={isConnectable}
+            onMouseDown={(e) => {
+              if (isConnectable) {
+                e.stopPropagation();
+                // เริ่มโหมดการเชื่อมต่อแบบ manual
+                const event = new CustomEvent('startConnection', {
+                  detail: { 
+                    nodeId: id, 
+                    handleType: 'source',
+                    position: Position.Right 
+                  }
+                });
+                document.dispatchEvent(event);
+              }
+            }}
           />
         )}
 
@@ -536,58 +848,54 @@ const CustomNode = ({ data, selected, id }: { data: any; selected: boolean; id: 
 };
 
 // Node Palette Component
-const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) => void }) => {
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['story', 'interactive', 'logic']);
+const NodePalette = ({ 
+  onAddNode, 
+  onDragStart 
+}: { 
+  onAddNode: (nodeType: StoryMapNodeType) => void;
+  onDragStart?: (nodeType: StoryMapNodeType, event: React.DragEvent) => void;
+}) => {
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['story', 'interaction']);
 
   const nodeCategories = {
     story: {
-      name: '📖 เนื้อเรื่อง (Story)',
+      name: '📚 เนื้อเรื่อง',
       icon: BookOpen,
       color: 'from-blue-500 to-blue-600',
       nodes: [
-        { type: StoryMapNodeType.START_NODE, name: '🚀 เริ่มต้น', desc: 'จุดเริ่มต้นของเรื่อง', icon: Play },
-        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 ฉาก', desc: 'ฉากในนิยาย', icon: Camera },
-        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 จบเรื่อง', desc: 'ตอนจบของเรื่อง', icon: Flag }
+        { type: StoryMapNodeType.START_NODE, name: 'จุดเริ่มต้น', desc: 'เริ่มต้นเรื่อง', icon: Target },
+        { type: StoryMapNodeType.SCENE_NODE, name: 'ฉาก', desc: 'ฉากในเรื่อง', icon: Square },
+        { type: StoryMapNodeType.ENDING_NODE, name: 'จบเรื่อง', desc: 'จุดจบของเรื่อง', icon: Flag }
       ]
     },
-    interactive: {
-      name: '🎯 ตัวเลือกผู้เล่น (Choices)',
-      icon: MousePointer2,
+    interaction: {
+      name: '🎮 ปฏิสัมพันธ์',
+      icon: GitBranch,
       color: 'from-green-500 to-green-600',
       nodes: [
-        { type: StoryMapNodeType.CHOICE_NODE, name: '🔀 ตัวเลือก', desc: 'ให้ผู้เล่นเลือก', icon: GitBranch },
-        { type: StoryMapNodeType.RANDOM_BRANCH_NODE, name: '🎲 สุ่ม', desc: 'ผลลัพธ์แบบสุ่ม', icon: Shuffle }
+        { type: StoryMapNodeType.CHOICE_NODE, name: 'ตัวเลือก', desc: 'ให้ผู้เล่นเลือก', icon: GitBranch },
+        { type: StoryMapNodeType.BRANCH_NODE, name: 'แยกเส้นทาง', desc: 'แยกตามเงื่อนไข', icon: Split },
+        { type: StoryMapNodeType.MERGE_NODE, name: 'รวมเส้นทาง', desc: 'รวมเส้นทางเข้าด้วยกัน', icon: ArrowRight }
       ]
     },
-    logic: {
-      name: '⚙️ ตรรกะเรื่อง (Logic)',
+    system: {
+      name: '⚙️ ระบบ',
       icon: Settings,
       color: 'from-purple-500 to-purple-600',
       nodes: [
-        { type: StoryMapNodeType.BRANCH_NODE, name: '🌿 แยกทาง', desc: 'แยกทางตามเงื่อนไข', icon: GitBranch },
-        { type: StoryMapNodeType.MERGE_NODE, name: '🔗 รวมทาง', desc: 'รวมเส้นทางเข้าด้วยกัน', icon: Split },
-        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: '🎛️ ตัวแปร', desc: 'เปลี่ยนค่าตัวแปร', icon: Settings }
+        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: 'ตัวแปร', desc: 'เปลี่ยนค่าตัวแปร', icon: Settings },
+        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: 'เหตุการณ์', desc: 'เรียกเหตุการณ์', icon: Zap },
+        { type: StoryMapNodeType.DELAY_NODE, name: 'หน่วงเวลา', desc: 'รอเวลา', icon: Clock }
       ]
     },
-    advanced: {
-      name: '🚀 ขั้นสูง (Advanced)',
-      icon: Sparkles,
+    tools: {
+      name: '🛠️ เครื่องมือ',
+      icon: Layers,
       color: 'from-amber-500 to-amber-600',
       nodes: [
-        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: '⚡ เหตุการณ์', desc: 'เรียกเหตุการณ์พิเศษ', icon: Zap },
-        { type: StoryMapNodeType.DELAY_NODE, name: '⏰ หน่วงเวลา', desc: 'หยุดรอเวลา', icon: Clock },
-        { type: StoryMapNodeType.COMMENT_NODE, name: '💭 บันทึก', desc: 'หมายเหตุและความคิดเห็น', icon: MessageCircle },
-        { type: StoryMapNodeType.CUSTOM_LOGIC_NODE, name: '🔧 ตรรกะกำหนดเอง', desc: 'โค้ดกำหนดเอง', icon: Code }
-      ]
-    },
-    organization: {
-      name: '📦 จัดระเบียบ (Organization)',
-      icon: Package,
-      color: 'from-teal-500 to-teal-600',
-      nodes: [
-        { type: StoryMapNodeType.GROUP_NODE, name: '📦 กลุ่ม', desc: 'จัดกลุ่มโหนด', icon: Package },
-        { type: StoryMapNodeType.PARALLEL_EXECUTION_NODE, name: '⚡ ขนาน', desc: 'ประมวลผลพร้อมกัน', icon: Zap },
-        { type: StoryMapNodeType.SUB_STORYMAP_NODE, name: '🗺️ แผนผังย่อย', desc: 'เชื่อมแผนผังย่อย', icon: Map }
+        { type: StoryMapNodeType.COMMENT_NODE, name: 'โน้ต', desc: 'บันทึกความคิด', icon: MessageCircle },
+        { type: StoryMapNodeType.GROUP_NODE, name: 'กลุ่ม', desc: 'จัดกลุ่มโหนด', icon: Layers },
+        { type: StoryMapNodeType.RANDOM_BRANCH_NODE, name: 'สุ่ม', desc: 'เลือกแบบสุ่ม', icon: Shuffle }
       ]
     }
   };
@@ -604,7 +912,7 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
         <div className="text-sm font-medium text-muted-foreground">
-          Drag nodes to canvas
+          ลากโหนดไปยังผืนผ้าใบ
         </div>
         
         {Object.entries(nodeCategories).map(([key, category]) => (
@@ -642,7 +950,16 @@ const NodePalette = ({ onAddNode }: { onAddNode: (nodeType: StoryMapNodeType) =>
                         variant="outline"
                         size="sm"
                         onClick={() => onAddNode(node.type)}
-                        className="w-full justify-start text-xs p-3 h-auto hover:bg-gradient-to-r hover:from-blue-500 hover:to-blue-600 hover:text-white transition-all group"
+                        className="w-full justify-start text-xs p-3 h-auto hover:bg-gradient-to-r hover:from-blue-500 hover:to-blue-600 hover:text-white transition-all group cursor-grab active:cursor-grabbing"
+                        draggable={true}
+                        onDragStart={(e) => {
+                          // เก็บข้อมูล node type ใน dataTransfer
+                          e.dataTransfer.setData('application/node-type', node.type);
+                          e.dataTransfer.effectAllowed = 'copy';
+                          onDragStart?.(node.type, e);
+                          // ป้องกันไม่ให้ onClick trigger
+                          e.stopPropagation();
+                        }}
                       >
                         <div className="flex items-center gap-3 w-full">
                           <node.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -697,10 +1014,11 @@ const PropertiesPanel = ({
 
   useEffect(() => {
     if (selectedNode) {
-      setTitle(selectedNode.data.title || '');
-      setDescription(selectedNode.data.notesForAuthor || '');
-      setSceneId(selectedNode.data.nodeSpecificData?.sceneId || '');
-      setEmotionTags(selectedNode.data.authorDefinedEmotionTags || []);
+      const nodeData = selectedNode.data as any;
+      setTitle(nodeData.title || '');
+      setDescription(nodeData.notesForAuthor || '');
+      setSceneId(nodeData.nodeSpecificData?.sceneId || '');
+      setEmotionTags(nodeData.authorDefinedEmotionTags || []);
     }
   }, [selectedNode]);
 
@@ -724,11 +1042,11 @@ const PropertiesPanel = ({
         notesForAuthor: description,
         authorDefinedEmotionTags: emotionTags,
         nodeSpecificData: {
-          ...selectedNode.data.nodeSpecificData,
-          ...(selectedNode.data.nodeType === StoryMapNodeType.SCENE_NODE && { sceneId })
+          ...(selectedNode.data as any).nodeSpecificData,
+          ...((selectedNode.data as any).nodeType === StoryMapNodeType.SCENE_NODE && { sceneId })
         }
       });
-      toast.success('Node updated successfully');
+      toast.success('อัปเดตโหนดสำเร็จ');
     }
   };
 
@@ -913,7 +1231,7 @@ const ValidationPanel = ({
       if (!connectedNodes.has(node.id) && node.data.nodeType !== StoryMapNodeType.START_NODE) {
         issues.push({
           type: 'warning',
-          message: `Node "${node.data.title || 'Untitled'}" is not connected`,
+          message: `โหนด "${node.data.title || 'ไม่มีชื่อ'}" ไม่ได้เชื่อมต่อ`,
           nodeId: node.id
         });
       }
@@ -924,7 +1242,7 @@ const ValidationPanel = ({
     if (!hasStartNode) {
       issues.push({
         type: 'error',
-        message: 'Story map must have a start node'
+        message: 'แผนผังเรื่องต้องมีโหนดเริ่มต้น'
       });
     }
 
@@ -960,7 +1278,7 @@ const ValidationPanel = ({
     if (detectCycles()) {
       issues.push({
         type: 'error',
-        message: 'Story map contains cycles which may cause infinite loops'
+        message: 'แผนผังเรื่องมีการวนซ้ำซึ่งอาจทำให้เกิดลูปไม่สิ้นสุด'
       });
     }
 
@@ -972,14 +1290,14 @@ const ValidationPanel = ({
       <div className="p-4 space-y-4">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-4 h-4" />
-          <span className="font-semibold text-sm">Validation Results</span>
+          <span className="font-semibold text-sm">ผลการตรวจสอบ</span>
         </div>
 
         {validationResults.length === 0 ? (
           <div className="text-center py-6">
             <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
             <p className="text-sm text-muted-foreground">
-              No issues found! Your story map looks good.
+              ไม่พบปัญหาใดๆ! แผนผังเรื่องของคุณดูดี
             </p>
           </div>
         ) : (
@@ -1020,11 +1338,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   isAutoSaveEnabled,
   autoSaveIntervalSec = 15,
   onDirtyChange,
-  onNavigateToDirector
+  onNavigateToDirector,
+  showSceneThumbnails = true,
+  showNodeLabels = true,
+  showGrid = true
 }, ref) => {
   // Core ReactFlow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   
   // Selection and UI state
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -1037,19 +1358,131 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
   
-  // Canvas state
+  // Canvas state - ใช้ showGrid prop
   const [canvasState, setCanvasState] = useState<CanvasState>({
     isLocked: false,
     zoomLevel: 1,
     position: { x: 0, y: 0 },
-    showGrid: true,
+    showGrid: showGrid ?? true,
     gridSize: 20,
     snapToGrid: false
   });
   
-  // History and selection state
-  const [history, setHistory] = useState<HistoryState[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  // อัปเดต canvas เมื่อ showGrid prop เปลี่ยน
+  useEffect(() => {
+    setCanvasState(prev => ({
+      ...prev,
+      showGrid: showGrid ?? true
+    }));
+  }, [showGrid]);
+  
+  // อัปเดต node data เมื่อ display settings เปลี่ยน - ใช้ props โดยตรง
+  useEffect(() => {
+    if (nodes.length > 0) {
+      setNodes(currentNodes => 
+        currentNodes.map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            showThumbnails: showSceneThumbnails,
+            showLabels: showNodeLabels
+          }
+        }))
+      );
+    }
+  }, [showSceneThumbnails, showNodeLabels, setNodes, nodes.length]);
+  
+  // Command Stack for undo/redo (replacing old HistoryState)
+  const [undoStack, setUndoStack] = useState<AnyCommand[]>([]);
+  const [redoStack, setRedoStack] = useState<AnyCommand[]>([]);
+  const maxHistorySize = 50;
+  
+  // Drag tracking for Command Pattern
+  const dragStartPositions = useRef<Record<string, { x: number; y: number }>>({});
+  const isDragging = useRef(false);
+  const multiSelectDragStart = useRef<Record<string, { x: number; y: number }>>({});
+  
+  // Connection mode for manual edge creation
+  const [connectionMode, setConnectionMode] = useState<{
+    isConnecting: boolean;
+    sourceNode: string | null;
+    sourceHandle: string | null;
+  }>({
+    isConnecting: false,
+    sourceNode: null,
+    sourceHandle: null
+  });
+
+  // การตั้งค่า Blueprint Editor - ใช้ props จาก header settings โดยตรง
+  const blueprintSettings: BlueprintSettings = {
+    showSceneThumbnails: showSceneThumbnails ?? true,
+    showNodeLabels: showNodeLabels ?? true,
+    showConnectionLines: true,
+    autoLayout: false
+  };
+  
+  // ฟังก์ชั่นสำหรับอัปเดต Scene's defaultNextSceneId
+  const updateSceneDefaultNext = useCallback(async (sourceSceneId: string, targetSceneId: string) => {
+    try {
+      const response = await fetch(`/api/novels/${novel.slug}/scenes/${sourceSceneId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          defaultNextSceneId: targetSceneId
+        }),
+      });
+      
+      if (!response.ok) {
+        console.warn('Failed to update scene default next connection');
+        return;
+      }
+      
+      console.log('Scene default next connection updated successfully');
+    } catch (error) {
+      console.error('Error updating scene default next connection:', error);
+    }
+  }, [novel.slug]);
+
+  // ฟังก์ชั่นสำหรับลบการเชื่อมต่อ Scene  
+  const removeSceneConnection = useCallback(async (sourceSceneId: string) => {
+    try {
+      const response = await fetch(`/api/novels/${novel.slug}/scenes/${sourceSceneId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          defaultNextSceneId: null
+        }),
+      });
+      
+      if (!response.ok) {
+        console.warn('Failed to remove scene default next connection');
+        return;
+      }
+      
+      console.log('Scene default next connection removed successfully');
+    } catch (error) {
+      console.error('Error removing scene default next connection:', error);
+    }
+  }, [novel.slug]);
+
+  // อัปเดต nodes เมื่อ blueprintSettings เปลี่ยน
+  useEffect(() => {
+    setNodes(prevNodes => 
+      prevNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          blueprintSettings
+        }
+      }))
+    );
+  }, [blueprintSettings, setNodes]);
+  
+  // Selection state
   const [selection, setSelection] = useState<SelectionState>({
     selectedNodes: [],
     selectedEdges: [],
@@ -1060,12 +1493,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     showSelectionBar: false
   });
   
+  // Multi-select UI state
+  const [isMultiSelectActive, setIsMultiSelectActive] = useState(false);
+  const [multiSelectStartPosition, setMultiSelectStartPosition] = useState<{ x: number; y: number } | null>(null);
+  
   // Save state
   const [saveState, setSaveState] = useState<SaveState>({
     isSaving: false,
     lastSaved: null,
     hasUnsavedChanges: false,
-    saveError: null
+    saveError: null,
+    version: 1,
+    isDirty: false,
+    lastCommandId: undefined
   });
   const isInitializingRef = useRef<boolean>(true);
   const isApplyingServerUpdateRef = useRef<boolean>(false);
@@ -1097,6 +1537,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const saveDebounceTimer = useRef<NodeJS.Timeout | null>(null);
 
+
+
+
+
+
+
   // Enhanced API functions for database sync with better error handling
   const saveStoryMapToDatabase = useCallback(async (currentNodes: Node[], currentEdges: Edge[], isManual = false) => {
     if (!novel?.slug) return;
@@ -1107,16 +1553,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const storyMapData = {
         nodes: currentNodes.map(node => ({
           nodeId: node.id,
-          nodeType: node.data.nodeType,
-          title: node.data.title,
+          nodeType: (node.data as any).nodeType,
+          title: (node.data as any).title,
           position: node.position,
           dimensions: node.width && node.height ? { width: node.width, height: node.height } : undefined,
-          nodeSpecificData: node.data.nodeSpecificData || {},
-          notesForAuthor: node.data.notesForAuthor,
-          authorDefinedEmotionTags: node.data.authorDefinedEmotionTags || [],
+          nodeSpecificData: (node.data as any).nodeSpecificData || {},
+          notesForAuthor: (node.data as any).notesForAuthor,
+          authorDefinedEmotionTags: (node.data as any).authorDefinedEmotionTags || [],
           editorVisuals: {
-            color: node.data.color,
-            zIndex: node.data.zIndex || 0
+            color: (node.data as any).color,
+            zIndex: (node.data as any).zIndex || 0
           }
         })),
         edges: currentEdges.map(edge => ({
@@ -1126,16 +1572,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           sourceHandleId: edge.sourceHandle,
           targetHandleId: edge.targetHandle,
           label: edge.label,
-          condition: edge.data?.condition,
-          priority: edge.data?.priority || 0,
+          condition: (edge.data as any)?.condition,
+          priority: (edge.data as any)?.priority || 0,
           editorVisuals: {
             animated: edge.animated || false,
-            color: edge.style?.stroke,
-            lineStyle: edge.data?.lineStyle || 'solid'
+            color: (edge.style as any)?.stroke,
+            lineStyle: (edge.data as any)?.lineStyle || 'solid'
           }
         })),
         storyVariables: storyMap?.storyVariables || [],
-        episodeFilter: selectedEpisode
+        episodeFilter: selectedEpisode,
+        version: saveState.version // Send current version for conflict detection
       };
 
       const response = await fetch(`/api/novels/${encodeURIComponent(novel.slug)}/storymap`, {
@@ -1148,6 +1595,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle version conflicts (HTTP 409)
+        if (response.status === 409) {
+          setSaveState(prev => ({ 
+            ...prev, 
+            isSaving: false,
+            isConflicted: true,
+            saveError: 'Data is outdated. Please refresh the page to get the latest version.'
+          }));
+          toast.error("ข้อมูลล้าสมัย โปรดรีเฟรชหน้าเพื่อดูเวอร์ชันล่าสุด");
+          return;
+        }
+        
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
@@ -1158,13 +1618,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         ...prev, 
         lastSaved: now, 
         hasUnsavedChanges: false,
-        isSaving: false 
+        isSaving: false,
+        isConflicted: false,
+        version: result.newVersion || prev.version + 1 // Update to new version
       }));
       
       // Do not call onStoryMapUpdate here to avoid re-initialization feedback loops
       
       if (isManual) {
-        toast.success('Story map saved successfully');
+        toast.success('บันทึกแผนผังเรื่องสำเร็จ');
       }
       
       // Inform parent that data is now clean
@@ -1208,15 +1670,295 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       onDirtyChange(true);
     }
     
-    // Schedule auto-save after specified seconds of inactivity (like Premiere Pro)
-    const delayMs = (autoSaveIntervalSec ?? 15) * 1000;
-    autoSaveTimer.current = setTimeout(() => {
-      // Only save if there are actually unsaved changes
-      if (saveState.hasUnsavedChanges) {
-        saveStoryMapToDatabase(currentNodes, currentEdges, false);
+    // Set auto-save timer
+    autoSaveTimer.current = setTimeout(async () => {
+      try {
+        await saveStoryMapToDatabase(currentNodes, currentEdges, false);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
       }
-    }, delayMs);
-  }, [saveStoryMapToDatabase, isAutoSaveEnabled, autoSaveIntervalSec, onDirtyChange, saveState.hasUnsavedChanges]);
+    }, autoSaveIntervalSec * 1000);
+  }, [isAutoSaveEnabled, autoSaveIntervalSec, saveStoryMapToDatabase, onDirtyChange]);
+
+  // Command Pattern functions
+  const executeCommand = useCallback((command: AnyCommand) => {
+    try {
+      command.execute();
+      
+      // Add to undo stack
+      setUndoStack(prev => {
+        const newUndoStack = [...prev, command];
+        if (newUndoStack.length > maxHistorySize) {
+          newUndoStack.shift(); // Remove oldest command
+        }
+        return newUndoStack;
+      });
+      
+      // Clear redo stack when new command is executed
+      setRedoStack([]);
+      
+      // Mark as dirty
+      setSaveState(prev => ({
+        ...prev,
+        isDirty: true,
+        hasUnsavedChanges: true,
+        lastCommandId: command.id
+      }));
+      
+      // Notify parent of dirty state
+      if (typeof onDirtyChange === 'function') {
+        onDirtyChange(true);
+      }
+      
+      // Trigger auto-save if enabled
+      if (isAutoSaveEnabled) {
+        scheduleAutoSave(nodes, edges);
+      }
+    } catch (error) {
+      console.error('Error executing command:', error);
+      toast.error('Failed to execute command');
+    }
+  }, [onDirtyChange, isAutoSaveEnabled, scheduleAutoSave, nodes, edges]);
+
+  // Undo function with toast notifications
+  const undo = useCallback(() => {
+    const commandToUndo = undoStack[undoStack.length - 1];
+    if (commandToUndo) {
+      try {
+        commandToUndo.undo();
+        setUndoStack(prev => prev.slice(0, prev.length - 1));
+        setRedoStack(prev => [commandToUndo, ...prev]);
+        toast.info(`ยกเลิก: ${commandToUndo.description}`);
+        
+        // Update dirty state
+        const hasMoreCommands = undoStack.length > 1;
+        setSaveState(prev => ({
+          ...prev,
+          isDirty: hasMoreCommands,
+          hasUnsavedChanges: hasMoreCommands
+        }));
+        
+        onDirtyChange?.(hasMoreCommands);
+        
+        // Schedule auto-save if enabled
+        if (isAutoSaveEnabled) {
+          scheduleAutoSave(nodes, edges);
+        }
+      } catch (error) {
+        console.error('Error undoing command:', error);
+        toast.error(`Failed to undo: ${commandToUndo.description}`);
+      }
+    }
+  }, [undoStack, isAutoSaveEnabled, scheduleAutoSave, nodes, edges, onDirtyChange]);
+
+  // Redo function with toast notifications
+  const redo = useCallback(() => {
+    const commandToRedo = redoStack[0];
+    if (commandToRedo) {
+      try {
+        if (commandToRedo.redo) {
+          commandToRedo.redo();
+        } else {
+          commandToRedo.execute();
+        }
+        setRedoStack(prev => prev.slice(1));
+        setUndoStack(prev => [...prev, commandToRedo]);
+        toast.success(`ทำซ้ำ: ${commandToRedo.description}`);
+        
+        // Update dirty state
+        setSaveState(prev => ({
+          ...prev,
+          isDirty: true,
+          hasUnsavedChanges: true
+        }));
+        
+        onDirtyChange?.(true);
+        
+        // Schedule auto-save if enabled
+        if (isAutoSaveEnabled) {
+          scheduleAutoSave(nodes, edges);
+        }
+      } catch (error) {
+        console.error('Error redoing command:', error);
+        toast.error(`Failed to redo: ${commandToRedo.description}`);
+      }
+    }
+  }, [redoStack, isAutoSaveEnabled, scheduleAutoSave, nodes, edges, onDirtyChange]);
+
+  // Command factory functions
+  const createNodeCommand = useCallback((
+    type: NodeCommand['type'],
+    nodeId: string,
+    nodeData?: Node,
+    oldPosition?: { x: number; y: number },
+    newPosition?: { x: number; y: number },
+    oldData?: any,
+    newData?: any
+  ): NodeCommand => {
+    const command: NodeCommand = {
+      id: `${type}_${nodeId}_${Date.now()}`,
+      type,
+      nodeId,
+      nodeData,
+      oldPosition,
+      newPosition,
+      oldData,
+      newData,
+      description: `${type.replace(/_/g, ' ').toLowerCase()} node ${(nodeData as any)?.title || nodeId}`,
+      timestamp: Date.now(),
+      execute: () => {
+        switch (type) {
+          case 'ADD_NODE':
+            if (nodeData) {
+              setNodes(prev => [...prev, nodeData]);
+            }
+            break;
+          case 'DELETE_NODE':
+            // เก็บลง Trash History ก่อนลบ เพื่อความเป็นมิตรต่อผู้ใช้ และรองรับ undo/redo
+            if (nodeData) {
+              setDeletedItems(prev => [
+                ...prev,
+                {
+                  id: nodeId,
+                  type: 'node' as const,
+                  data: nodeData,
+                  deletedAt: new Date(),
+                  description: `Node: ${nodeData?.data?.title || nodeId}`
+                }
+              ]);
+            }
+            setNodes(prev => prev.filter(n => n.id !== nodeId));
+            break;
+          case 'UPDATE_NODE':
+            if (newData) {
+              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n));
+            }
+            break;
+          case 'MOVE_NODE':
+            if (newPosition) {
+              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, position: newPosition } : n));
+            }
+            break;
+        }
+      },
+      undo: () => {
+        switch (type) {
+          case 'ADD_NODE':
+            setNodes(prev => prev.filter(n => n.id !== nodeId));
+            break;
+          case 'DELETE_NODE':
+            if (nodeData) {
+              setNodes(prev => [...prev, nodeData]);
+              // เมื่อ undo การลบ ให้เอาออกจาก Trash History อัตโนมัติ (รายการล่าสุดที่ตรง id/type)
+              setDeletedItems(prev => {
+                const idx = prev.findIndex(it => it.id === nodeId && it.type === 'node');
+                if (idx >= 0) {
+                  const next = prev.slice();
+                  next.splice(idx, 1);
+                  return next;
+                }
+                return prev;
+              });
+            }
+            break;
+          case 'UPDATE_NODE':
+            if (oldData) {
+              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...oldData } } : n));
+            }
+            break;
+          case 'MOVE_NODE':
+            if (oldPosition) {
+              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, position: oldPosition } : n));
+            }
+            break;
+        }
+      }
+    };
+    
+    return command;
+  }, []);
+
+  const createEdgeCommand = useCallback((
+    type: EdgeCommand['type'],
+    edgeId: string,
+    edgeData?: Edge,
+    sourceNodeId?: string,
+    targetNodeId?: string,
+    oldData?: any,
+    newData?: any
+  ): EdgeCommand => {
+    const command: EdgeCommand = {
+      id: `${type}_${edgeId}_${Date.now()}`,
+      type,
+      edgeId,
+      edgeData,
+      sourceNodeId,
+      targetNodeId,
+      oldData,
+      newData,
+      description: `${type.replace(/_/g, ' ').toLowerCase()} edge ${edgeId}`,
+      timestamp: Date.now(),
+      execute: () => {
+        switch (type) {
+          case 'ADD_EDGE':
+            if (edgeData) {
+              setEdges(prev => [...prev, edgeData]);
+            }
+            break;
+          case 'DELETE_EDGE':
+            // เก็บลง Trash History ก่อนลบ
+            if (edgeData) {
+              setDeletedItems(prev => [
+                ...prev,
+                {
+                  id: edgeId,
+                  type: 'edge' as const,
+                  data: edgeData,
+                  deletedAt: new Date(),
+                  description: `Edge: ${edgeId}`
+                }
+              ]);
+            }
+            setEdges(prev => prev.filter(e => e.id !== edgeId));
+            break;
+          case 'UPDATE_EDGE':
+            if (newData) {
+              setEdges(prev => prev.map(e => e.id === edgeId ? { ...e, ...newData } : e));
+            }
+            break;
+        }
+      },
+      undo: () => {
+        switch (type) {
+          case 'ADD_EDGE':
+            setEdges(prev => prev.filter(e => e.id !== edgeId));
+            break;
+          case 'DELETE_EDGE':
+            if (edgeData) {
+              setEdges(prev => [...prev, edgeData]);
+              // เอาออกจาก Trash เมื่อกู้คืนผ่าน undo
+              setDeletedItems(prev => {
+                const idx = prev.findIndex(it => it.id === edgeId && it.type === 'edge');
+                if (idx >= 0) {
+                  const next = prev.slice();
+                  next.splice(idx, 1);
+                  return next;
+                }
+                return prev;
+              });
+            }
+            break;
+          case 'UPDATE_EDGE':
+            if (oldData) {
+              setEdges(prev => prev.map(e => e.id === edgeId ? { ...e, ...oldData } : e));
+            }
+            break;
+        }
+      }
+    };
+    
+    return command;
+  }, []);
 
   // Manual save (always works regardless of auto-save setting)
   const handleManualSave = useCallback(async () => {
@@ -1240,9 +1982,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }));
     
     if (!canvasState.isLocked) {
-      toast.info('Canvas locked - scroll and pan disabled');
+      toast.info('ล็อกผืนผ้าใบ - ไม่สามารถเลื่อนและซูมได้');
     } else {
-      toast.info('Canvas unlocked - scroll and pan enabled');
+      toast.info('ปลดล็อกผืนผ้าใบ - สามารถเลื่อนและซูมได้');
     }
   }, [canvasState.isLocked]);
 
@@ -1291,7 +2033,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           id: node.nodeId,
           type: 'custom',
           position: node.position,
-          data: nodeData,
+          data: {
+            ...nodeData,
+            blueprintSettings // เพิ่มการตั้งค่า Blueprint
+          },
           selected: false // Don't preserve selection on re-init
         };
       });
@@ -1351,112 +2096,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [storyMap, scenes, setNodes, setEdges]);
 
-  // Enhanced history management with auto-save and description
-  const saveToHistory = useCallback((currentNodes: Node[], currentEdges: Edge[], description?: string) => {
-    if (isInitializingRef.current || isApplyingServerUpdateRef.current) {
-      return;
-    }
-    
-    // Don't save if nothing has actually changed
-    if (history.length > 0) {
-      const lastState = history[historyIndex];
-      if (lastState && 
-          JSON.stringify(lastState.nodes) === JSON.stringify(currentNodes) &&
-          JSON.stringify(lastState.edges) === JSON.stringify(currentEdges)) {
-        return;
-      }
-    }
-    
-    const newState: HistoryState = {
-      nodes: JSON.parse(JSON.stringify(currentNodes)),
-      edges: JSON.parse(JSON.stringify(currentEdges)),
-      timestamp: Date.now(),
-      description: description || 'Canvas change'
-    };
-    
-    setHistory(prev => {
-      // Remove any future history if we're not at the end
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push(newState);
-      // Keep only last 50 states for performance
-      return newHistory.slice(-50);
-    });
-    setHistoryIndex(prev => prev + 1);
-    
-    // Trigger auto-save only if we have meaningful changes
-    if (description !== 'Initial state') {
-      scheduleAutoSave(currentNodes, currentEdges);
-    }
-  }, [history, historyIndex, scheduleAutoSave]);
 
-  // Enhanced Undo/Redo functionality with proper state restoration
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      isApplyingServerUpdateRef.current = true;
-      const prevState = history[historyIndex - 1];
-      
-      // Deep clone to prevent reference issues
-      const prevNodes = JSON.parse(JSON.stringify(prevState.nodes));
-      const prevEdges = JSON.parse(JSON.stringify(prevState.edges));
-      
-      setNodes(prevNodes);
-      setEdges(prevEdges);
-      setHistoryIndex(prev => prev - 1);
-      
-      // Clear selection state on undo
-      setSelectedNode(null);
-      setSelectedEdge(null);
-      setSelection(prev => ({
-        ...prev,
-        selectedNodes: [],
-        selectedEdges: []
-      }));
-      
-      toast.success(`Undid: ${prevState.description || 'action'}`);
-      
-      setTimeout(() => {
-        isApplyingServerUpdateRef.current = false;
-      }, 100);
-    } else {
-      toast.info('Nothing to undo');
-    }
-  }, [history, historyIndex, setNodes, setEdges]);
 
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      isApplyingServerUpdateRef.current = true;
-      const nextState = history[historyIndex + 1];
-      
-      // Deep clone to prevent reference issues
-      const nextNodes = JSON.parse(JSON.stringify(nextState.nodes));
-      const nextEdges = JSON.parse(JSON.stringify(nextState.edges));
-      
-      setNodes(nextNodes);
-      setEdges(nextEdges);
-      setHistoryIndex(prev => prev + 1);
-      
-      // Clear selection state on redo
-      setSelectedNode(null);
-      setSelectedEdge(null);
-      setSelection(prev => ({
-        ...prev,
-        selectedNodes: [],
-        selectedEdges: []
-      }));
-      
-      toast.success(`Redid: ${nextState.description || 'action'}`);
-      
-      setTimeout(() => {
-        isApplyingServerUpdateRef.current = false;
-      }, 100);
-    } else {
-      toast.info('Nothing to redo');
-    }
-  }, [history, historyIndex, setNodes, setEdges]);
-
-  // Keyboard shortcuts for undo/redo (Photoshop-style)
+  // Keyboard shortcuts for undo/redo with Command Pattern
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Prevent shortcuts when typing in inputs
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
       // Undo: Ctrl+Z
       if (event.ctrlKey && event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
@@ -1471,7 +2120,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // Save: Ctrl+S
       else if (event.ctrlKey && event.key === 's') {
         event.preventDefault();
-        // Trigger manual save through the parent component
         handleManualSave();
       }
     };
@@ -1496,54 +2144,59 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const { selectedNodes, selectedEdges } = selection;
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
     
-    const nodesWithData = nodes.filter(n => selectedNodes.includes(n.id) && (n.data?.title || n.data?.notesForAuthor));
-    const edgesWithData = edges.filter(e => selectedEdges.includes(e.id));
+    const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
+    const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
     
-    if (nodesWithData.length > 0) {
-      const ok = window.confirm(`ลบโหนด ${nodesWithData.length} รายการหรือไม่? (สามารถกู้คืนได้จากถังขยะ)`);
+    if (nodesToDelete.length > 0) {
+      const ok = window.confirm(`ลบโหนด ${nodesToDelete.length} รายการหรือไม่? (สามารถ Undo ได้)`);
       if (!ok) return;
     }
     
-    // Store deleted items in trash history
-    const deletedNodeItems = nodesWithData.map(node => ({
-      id: node.id,
-      type: 'node' as const,
-      data: node,
-      deletedAt: new Date(),
-      description: `Node: ${node.data?.title || 'Untitled'}`
-    }));
+    // Create batch command for multiple deletions
+    const commands: ICommand[] = [];
     
-    const deletedEdgeItems = edgesWithData.map(edge => ({
-      id: edge.id,
-      type: 'edge' as const,
-      data: edge,
-      deletedAt: new Date(),
-      description: `Connection: ${edge.label || 'Unlabeled'}`
-    }));
+    // Add node deletion commands
+    nodesToDelete.forEach(node => {
+      commands.push(createNodeCommand('DELETE_NODE', node.id, node));
+    });
     
-    setDeletedItems(prev => [...prev, ...deletedNodeItems, ...deletedEdgeItems]);
+    // Add edge deletion commands
+    edgesToDelete.forEach(edge => {
+      commands.push(createEdgeCommand('DELETE_EDGE', edge.id, edge, edge.source, edge.target));
+    });
     
-    const newNodes = nodes.filter(n => !selectedNodes.includes(n.id));
-    const newEdges = edges.filter(e => !selectedEdges.includes(e.id));
+    // Create batch command if multiple items
+    if (commands.length > 1) {
+      const batchCommand: BatchCommand = {
+        id: `batch-delete-${Date.now()}`,
+        type: 'BATCH',
+        description: `Deleted ${nodesToDelete.length} nodes and ${edgesToDelete.length} connections`,
+        timestamp: Date.now(),
+        commands,
+        execute: () => {
+          commands.forEach(cmd => cmd.execute());
+        },
+        undo: () => {
+          // Undo in reverse order
+          commands.slice().reverse().forEach(cmd => cmd.undo());
+        }
+      };
+      executeCommand(batchCommand);
+    } else if (commands.length === 1) {
+      executeCommand(commands[0] as AnyCommand);
+    }
     
-    setNodes(newNodes);
-    setEdges(newEdges);
+    // Clear selection
     setSelection(prev => ({
       ...prev,
       selectedNodes: [],
       selectedEdges: []
     }));
     
-    saveToHistory(
-      newNodes,
-      newEdges,
-      `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections`
-    );
-    
     toast.success(
-      `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections. Check trash to recover.`
+      `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections. Use Ctrl+Z to undo.`
     );
-  }, [selection, nodes, edges, setNodes, setEdges, saveToHistory]);
+  }, [selection, nodes, edges, createNodeCommand, createEdgeCommand, executeCommand]);
 
   const copySelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
@@ -1577,69 +2230,424 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }));
     setNodes(nds => [...nds, ...newNodes]);
     setEdges(eds => [...eds, ...newEdges]);
-    saveToHistory([...nodes, ...newNodes], [...edges, ...newEdges], `Pasted ${newNodes.length} nodes and ${newEdges.length} connections`);
+    // Changes are tracked via Command Pattern
     toast.success(`Pasted ${newNodes.length} nodes and ${newEdges.length} connections`);
-  }, [selection, nodes, edges, setNodes, setEdges, saveToHistory]);
+  }, [selection, nodes, edges, setNodes, setEdges]);
 
   // (removed older keyboard handler in favor of a single consolidated one below)
 
   // Keyboard shortcuts
+  // Toggle multi-select mode
+  const toggleMultiSelectMode = useCallback(() => {
+    const newMode = !selection.multiSelectMode;
+    setSelection(prev => ({
+      ...prev,
+      multiSelectMode: newMode,
+      pendingSelection: newMode ? prev.selectedNodes : [],
+      showSelectionBar: newMode && prev.selectedNodes.length > 0
+    }));
+    setIsMultiSelectActive(newMode);
+    
+    if (newMode) {
+      toast.info('Multi-select mode activated. Click nodes to select multiple items.');
+    } else {
+      toast.info('Multi-select mode deactivated.');
+    }
+  }, [selection.multiSelectMode]);
+
+  // Confirm multi-selection (Canva-style)
+  const confirmMultiSelection = useCallback(() => {
+    const command: ICommand = {
+      id: `multi-select-${Date.now()}`,
+      type: 'MULTI_SELECT',
+      description: `เลือก ${selection.pendingSelection.length} nodes`,
+      timestamp: Date.now(),
+      execute: () => {
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: prev.pendingSelection,
+          pendingSelection: [],
+          showSelectionBar: false,
+          multiSelectMode: false
+        }));
+        setIsMultiSelectActive(false);
+      },
+      undo: () => {
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: [],
+          selectedEdges: [],
+          multiSelectMode: false,
+          pendingSelection: [],
+          showSelectionBar: false
+        }));
+        setIsMultiSelectActive(false);
+      }
+    };
+    
+    executeCommand(command as AnyCommand);
+    toast.success(`Selected ${selection.pendingSelection.length} nodes`);
+  }, [selection.pendingSelection, executeCommand]);
+
+  // Cancel multi-selection
+  const cancelMultiSelection = useCallback(() => {
+    setSelection(prev => ({
+      ...prev,
+      pendingSelection: [],
+      showSelectionBar: false,
+      multiSelectMode: false
+    }));
+    setIsMultiSelectActive(false);
+    toast.info('Multi-selection cancelled');
+  }, []);
+
+  // Select all nodes
+  const selectAllNodes = useCallback(() => {
+    if (nodes.length === 0) return;
+    
+    const command: ICommand = {
+      id: `select-all-${Date.now()}`,
+      type: 'SELECT_ALL',
+      description: `เลือกทุก nodes (${nodes.length} รายการ)`,
+      timestamp: Date.now(),
+      execute: () => {
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: nodes.map(n => n.id),
+          selectedEdges: [],
+          multiSelectMode: false,
+          pendingSelection: [],
+          showSelectionBar: false
+        }));
+        setSelectedNode(null);
+        setSelectedEdge(null);
+      },
+      undo: () => {
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: [],
+          selectedEdges: [],
+          multiSelectMode: false,
+          pendingSelection: [],
+          showSelectionBar: false
+        }));
+        setSelectedNode(null);
+        setSelectedEdge(null);
+      }
+    };
+    
+    executeCommand(command as AnyCommand);
+    toast.success(`Selected all ${nodes.length} nodes`);
+  }, [nodes, executeCommand]);
+
   const handleKeyboardShortcuts = useCallback((event: KeyboardEvent) => {
+    // ป้องกันการทำงานเมื่อพิมพ์ใน input field
+    const target = event.target as HTMLElement;
+    const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || 
+                        target.contentEditable === 'true' || target.getAttribute('role') === 'textbox';
+    
+    if (isInputField) return;
+
     const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+    
     if (isCtrlOrCmd) {
       switch (event.key.toLowerCase()) {
         case 's':
           event.preventDefault();
           handleManualSave();
+          toast.success('Saved manually');
           return;
+          
         case 'z':
           event.preventDefault();
-          if (event.shiftKey) { redo(); } else { undo(); }
+          if (event.shiftKey) { 
+            redo(); 
+          } else { 
+            undo(); 
+          }
           return;
+          
         case 'y':
           event.preventDefault();
           redo();
           return;
+          
         case 'c':
           event.preventDefault();
-          // copy uses existing handler
+          if (selection.selectedNodes.length > 0 || selection.selectedEdges.length > 0) {
+            // Copy selected items
+            const selectedNodeItems = nodes.filter(n => selection.selectedNodes.includes(n.id));
+            const selectedEdgeItems = edges.filter(e => selection.selectedEdges.includes(e.id));
+            
+            setSelection(prev => ({
+              ...prev,
+              clipboard: {
+                nodes: selectedNodeItems,
+                edges: selectedEdgeItems
+              }
+            }));
+            
+            toast.success(`Copied ${selectedNodeItems.length} nodes and ${selectedEdgeItems.length} edges`);
+          }
           return;
+          
         case 'v':
           event.preventDefault();
-          // paste uses existing handler
+          if (selection.clipboard.nodes.length > 0 || selection.clipboard.edges.length > 0) {
+            // Paste items with offset
+            const pasteOffset = { x: 50, y: 50 };
+            const commands: ICommand[] = [];
+            
+            // Paste nodes
+            selection.clipboard.nodes.forEach(node => {
+              const newNode: Node = {
+                ...node,
+                id: `node_${Date.now()}_${Math.random()}`,
+                position: {
+                  x: node.position.x + pasteOffset.x,
+                  y: node.position.y + pasteOffset.y
+                }
+              };
+              commands.push(createNodeCommand('ADD_NODE', newNode.id, newNode));
+            });
+            
+            // Execute as batch command
+            if (commands.length > 0) {
+              const batchCommand: BatchCommand = {
+                id: `paste-${Date.now()}`,
+                type: 'BATCH',
+                description: `Paste ${commands.length} items`,
+                timestamp: Date.now(),
+                commands,
+                execute: () => commands.forEach(cmd => cmd.execute()),
+                undo: () => commands.slice().reverse().forEach(cmd => cmd.undo())
+              };
+              executeCommand(batchCommand);
+              toast.success(`Pasted ${commands.length} items`);
+            }
+          }
           return;
+          
         case 'a':
           event.preventDefault();
-          // select all uses existing handler
+          selectAllNodes();
           return;
+          
+        case 'd':
+          event.preventDefault();
+          if (selection.selectedNodes.length > 0) {
+            // Duplicate selected nodes
+            const duplicateCommands: ICommand[] = [];
+            const duplicateOffset = { x: 30, y: 30 };
+            
+            selection.selectedNodes.forEach(nodeId => {
+              const originalNode = nodes.find(n => n.id === nodeId);
+              if (originalNode) {
+                const duplicatedNode: Node = {
+                  ...originalNode,
+                  id: `node_${Date.now()}_${Math.random()}`,
+                  position: {
+                    x: originalNode.position.x + duplicateOffset.x,
+                    y: originalNode.position.y + duplicateOffset.y
+                  }
+                };
+                duplicateCommands.push(createNodeCommand('ADD_NODE', duplicatedNode.id, duplicatedNode));
+              }
+            });
+            
+            if (duplicateCommands.length > 0) {
+              const batchCommand: BatchCommand = {
+                id: `duplicate-${Date.now()}`,
+                type: 'BATCH',
+                description: `Duplicate ${duplicateCommands.length} nodes`,
+                timestamp: Date.now(),
+                commands: duplicateCommands,
+                execute: () => duplicateCommands.forEach(cmd => cmd.execute()),
+                undo: () => duplicateCommands.slice().reverse().forEach(cmd => cmd.undo())
+              };
+              executeCommand(batchCommand);
+              toast.success(`Duplicated ${duplicateCommands.length} nodes`);
+            }
+          }
+          return;
+          
         case 'l':
           event.preventDefault();
           toggleCanvasLock();
+          return;
+          
+        case 'm':
+          event.preventDefault();
+          toggleMultiSelectMode();
           return;
       }
     } else {
       switch (event.key) {
         case 'Delete':
         case 'Backspace':
-          if (selectedNode || selectedEdge) {
             event.preventDefault();
-            // delete uses existing handler
+          if (selection.selectedNodes.length > 0 || selection.selectedEdges.length > 0) {
+            deleteSelected();
           }
           return;
+          
         case 'Escape':
-          if (selectedNode || selectedEdge) {
+          event.preventDefault();
+          if (connectionMode.isConnecting) {
+            // Cancel connection mode
+            setConnectionMode({
+              isConnecting: false,
+              sourceNode: null,
+              sourceHandle: null
+            });
+            if (reactFlowWrapper.current) {
+              reactFlowWrapper.current.style.cursor = 'default';
+            }
+            toast.info('Connection cancelled');
+          } else if (selection.multiSelectMode) {
+            // Cancel multi-select mode
+            cancelMultiSelection();
+          } else {
+            // Clear selection
             setSelectedNode(null);
             setSelectedEdge(null);
+            setSelection(prev => ({
+              ...prev,
+              selectedNodes: [],
+              selectedEdges: []
+            }));
+          }
+          return;
+          
+        case 'Enter':
+          if (selection.multiSelectMode && selection.pendingSelection.length > 0) {
+            event.preventDefault();
+            confirmMultiSelection();
           }
           return;
       }
     }
-  }, [handleManualSave, toggleCanvasLock, selectedNode, selectedEdge, undo, redo]);
+  }, [
+    handleManualSave, toggleCanvasLock, selectedNode, selectedEdge, undo, redo, 
+    selection, nodes, edges, createNodeCommand, executeCommand, deleteSelected,
+    connectionMode, toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection,
+    selectAllNodes
+  ]);
 
-  // Add new node with stable positioning and viewport center calculation
+  // Handle drag from sidebar to canvas
+  const onCanvasDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    
+    const nodeType = event.dataTransfer.getData('application/node-type') as StoryMapNodeType;
+    if (!nodeType || !reactFlowInstance) return;
+    
+    // แปลงตำแหน่ง mouse เป็นตำแหน่งใน canvas
+    const reactFlowBounds = (event.target as HTMLElement).getBoundingClientRect();
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX - reactFlowBounds.left,
+      y: event.clientY - reactFlowBounds.top,
+    });
+    
+    // สร้าง node ใหม่ที่ตำแหน่งที่ drop
+    const timestamp = Date.now();
+    const newNode: Node = {
+      id: `node_${timestamp}`,
+      type: 'custom',
+      position,
+      data: {
+        nodeType,
+        title: getDefaultNodeTitle(nodeType),
+        description: '',
+        notesForAuthor: '',
+        authorDefinedEmotionTags: [],
+        nodeSpecificData: getDefaultNodeData(nodeType),
+        color: getDefaultNodeColor(nodeType),
+        zIndex: 1000
+      }
+    };
+    
+    // สร้าง command และ execute
+    const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
+    executeCommand(command);
+    
+    toast.success(`เพิ่ม ${getNodeDisplayName(nodeType)} ที่ตำแหน่งที่คลิก`);
+  }, [reactFlowInstance, createNodeCommand, executeCommand]);
+  
+  const onCanvasDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+  
+  // Helper functions สำหรับ node creation
+  const getDefaultNodeTitle = (nodeType: StoryMapNodeType): string => {
+    const titles: Record<StoryMapNodeType, string> = {
+      [StoryMapNodeType.START_NODE]: 'จุดเริ่มต้น',
+      [StoryMapNodeType.SCENE_NODE]: 'ฉากใหม่',
+      [StoryMapNodeType.CHOICE_NODE]: 'ตัวเลือก',
+      [StoryMapNodeType.ENDING_NODE]: 'จุดจบ',
+      [StoryMapNodeType.BRANCH_NODE]: 'แยกเงื่อนไข',
+      [StoryMapNodeType.MERGE_NODE]: 'รวมเส้นทาง',
+      [StoryMapNodeType.VARIABLE_MODIFIER_NODE]: 'ตัวแปร',
+      [StoryMapNodeType.EVENT_TRIGGER_NODE]: 'เหตุการณ์',
+      [StoryMapNodeType.DELAY_NODE]: 'หน่วงเวลา',
+      [StoryMapNodeType.COMMENT_NODE]: 'โน้ต',
+      [StoryMapNodeType.GROUP_NODE]: 'กลุ่ม',
+      [StoryMapNodeType.RANDOM_BRANCH_NODE]: 'สุ่ม',
+      [StoryMapNodeType.CUSTOM_LOGIC_NODE]: 'ตรรกะพิเศษ',
+      [StoryMapNodeType.PARALLEL_EXECUTION_NODE]: 'ทำงานขนาน',
+      [StoryMapNodeType.SUB_STORYMAP_NODE]: 'แผนผังย่อย'
+    };
+    return titles[nodeType] || 'โหนดใหม่';
+  };
+  
+  const getDefaultNodeColor = (nodeType: StoryMapNodeType): string => {
+    const colors: Record<StoryMapNodeType, string> = {
+      [StoryMapNodeType.START_NODE]: '#10b981',
+      [StoryMapNodeType.SCENE_NODE]: '#3b82f6',
+      [StoryMapNodeType.CHOICE_NODE]: '#f59e0b',
+      [StoryMapNodeType.ENDING_NODE]: '#ef4444',
+      [StoryMapNodeType.BRANCH_NODE]: '#8b5cf6',
+      [StoryMapNodeType.MERGE_NODE]: '#06b6d4',
+      [StoryMapNodeType.VARIABLE_MODIFIER_NODE]: '#06b6d4',
+      [StoryMapNodeType.EVENT_TRIGGER_NODE]: '#ec4899',
+      [StoryMapNodeType.DELAY_NODE]: '#6b7280',
+      [StoryMapNodeType.COMMENT_NODE]: '#fbbf24',
+      [StoryMapNodeType.GROUP_NODE]: '#64748b',
+      [StoryMapNodeType.RANDOM_BRANCH_NODE]: '#84cc16',
+      [StoryMapNodeType.CUSTOM_LOGIC_NODE]: '#a855f7',
+      [StoryMapNodeType.PARALLEL_EXECUTION_NODE]: '#0ea5e9',
+      [StoryMapNodeType.SUB_STORYMAP_NODE]: '#64748b'
+    };
+    return colors[nodeType] || '#6b7280';
+  };
+  
+  const getDefaultNodeData = (nodeType: StoryMapNodeType): any => {
+    switch (nodeType) {
+      case StoryMapNodeType.SCENE_NODE:
+        return { sceneId: null };
+      case StoryMapNodeType.CHOICE_NODE:
+        return { choices: [] };
+      case StoryMapNodeType.VARIABLE_MODIFIER_NODE:
+        return { variableName: '', operation: 'set', value: '' };
+      case StoryMapNodeType.BRANCH_NODE:
+        return { condition: '', branches: [] };
+      case StoryMapNodeType.EVENT_TRIGGER_NODE:
+        return { eventType: '', parameters: {} };
+      case StoryMapNodeType.COMMENT_NODE:
+        return { note: '', color: '#fbbf24' };
+      default:
+        return {};
+    }
+  };
+  
+  const getNodeDisplayName = (nodeType: StoryMapNodeType): string => {
+    return getDefaultNodeTitle(nodeType);
+  };
+
+  // Add new node with Command Pattern
   const onAddNode = useCallback((nodeType: StoryMapNodeType) => {
     const timestamp = Date.now();
-    const randomOffset = Math.floor(Math.random() * 50); // Add small random offset to prevent overlap
+    const randomOffset = Math.floor(Math.random() * 50);
     
     // Calculate center of current viewport if reactFlowInstance is available
     let centerPosition = { x: 100 + randomOffset, y: 100 + randomOffset };
@@ -1647,7 +2655,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const viewport = reactFlowInstance.getViewport();
       const bounds = reactFlowWrapper.current?.getBoundingClientRect();
       if (bounds) {
-        centerPosition = reactFlowInstance.project({
+        centerPosition = reactFlowInstance.screenToFlowPosition({
           x: bounds.width / 2,
           y: bounds.height / 2,
         });
@@ -1661,27 +2669,23 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       data: {
         nodeId: `node-${timestamp}-${randomOffset}`,
         nodeType,
-        title: `New ${nodeType.replace(/_/g, ' ')}`,
+        title: getDefaultNodeTitle(nodeType),
         notesForAuthor: '',
         authorDefinedEmotionTags: [],
         hasError: false,
         isCompleted: false,
-        // Set as first scene if this is a scene node and no other scene nodes exist
         isFirstScene: nodeType === StoryMapNodeType.SCENE_NODE && 
-          !nodes.some(n => n.data.nodeType === StoryMapNodeType.SCENE_NODE)
+          !nodes.some(n => n.data.nodeType === StoryMapNodeType.SCENE_NODE),
+        blueprintSettings // ส่งการตั้งค่าไปยัง node
       }
     };
 
-    // Add node using functional update to prevent stale state issues
-    setNodes(currentNodes => {
-      const newNodes = [...currentNodes, newNode];
-      // Schedule history save after state update
-      setTimeout(() => saveToHistory(newNodes, edges, `Added ${nodeType.replace(/_/g, ' ').toLowerCase()}`), 50);
-      return newNodes;
-    });
+    // Create and execute command
+    const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
+    executeCommand(command);
     
     setIsSidebarOpen(false); // Close sidebar on mobile
-    toast.success(`Added new ${nodeType.replace(/_/g, ' ').toLowerCase()}`);
+    toast.success(`เพิ่ม${getNodeDisplayName(nodeType)}ใหม่สำเร็จ`);
     
     // Auto-select the new node after a brief delay
     setTimeout(() => {
@@ -1692,18 +2696,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         selectedEdges: []
       }));
     }, 100);
-  }, [nodes, edges, setNodes, saveToHistory, reactFlowInstance]);
+  }, [nodes, reactFlowInstance, createNodeCommand, executeCommand]);
 
   // Update node data
   const onNodeUpdate = useCallback((nodeId: string, newData: any) => {
-    setNodes(nds => nds.map(node =>
-      node.id === nodeId ? { ...node, data: newData } : node
-    ));
-    saveToHistory(
-      nodes.map(node => node.id === nodeId ? { ...node, data: newData } : node),
-      edges
-    );
-  }, [nodes, edges, setNodes, saveToHistory]);
+    const oldNode = nodes.find(n => n.id === nodeId);
+    if (!oldNode) return;
+    
+    const command = createNodeCommand('UPDATE_NODE', nodeId, undefined, undefined, undefined, oldNode.data, newData);
+    executeCommand(command);
+  }, [nodes, createNodeCommand, executeCommand]);
 
   // Update edge data
   const onEdgeUpdate = useCallback((edgeId: string, newData: any) => {
@@ -1718,7 +2720,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     // Prevent self-connections
     if (params.source === params.target) {
-      toast.error('Cannot connect a node to itself');
+      toast.error('ไม่สามารถเชื่อมต่อโหนดกับตัวมันเองได้');
       return;
     }
     
@@ -1731,8 +2733,25 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     );
     
     if (existingConnection) {
-      toast.warning('Connection already exists');
+      toast.warning('การเชื่อมต่อนี้มีอยู่แล้ว');
       return;
+    }
+
+    // ค้นหาข้อมูล source และ target nodes
+    const sourceNode = nodes.find(n => n.id === params.source);
+    const targetNode = nodes.find(n => n.id === params.target);
+    
+    // สร้าง label อัตโนมัติตามประเภทของ nodes
+    let autoLabel = '';
+    if (sourceNode && targetNode) {
+      if (sourceNode.data.nodeType === StoryMapNodeType.SCENE_NODE && 
+          targetNode.data.nodeType === StoryMapNodeType.SCENE_NODE) {
+        autoLabel = 'ไปยังฉากถัดไป';
+      } else if (sourceNode.data.nodeType === StoryMapNodeType.CHOICE_NODE) {
+        autoLabel = 'ตัวเลือก';
+      } else if (sourceNode.data.nodeType === StoryMapNodeType.BRANCH_NODE) {
+        autoLabel = 'เงื่อนไข';
+      }
     }
     
     const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -1750,8 +2769,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         targetNodeId: params.target,
         sourceHandleId: params.sourceHandle,
         targetHandleId: params.targetHandle,
-        label: '',
+        label: autoLabel,
         priority: 1,
+        // เพิ่มข้อมูลสำหรับการอัปเดต Scene
+        sceneConnection: sourceNode?.data.nodeType === StoryMapNodeType.SCENE_NODE && 
+                        targetNode?.data.nodeType === StoryMapNodeType.SCENE_NODE,
+        sourceSceneId: (sourceNode?.data.sceneData as any)?._id || null,
+        targetSceneId: (targetNode?.data.sceneData as any)?._id || null,
         editorVisuals: {
           color: '#64748b',
           lineStyle: 'solid',
@@ -1771,18 +2795,36 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       animated: false
     };
     
-    setEdges(eds => addEdge(newEdge, eds));
-    saveToHistory(nodes, [...edges, newEdge], 'Connected nodes');
-    toast.success('Connected nodes');
+    // Create and execute command
+    const command = createEdgeCommand('ADD_EDGE', edgeId, newEdge, params.source, params.target);
+    executeCommand(command);
     
-    // Auto-save the connection to database
-    if (isAutoSaveEnabled) {
-      scheduleAutoSave(nodes, [...edges, newEdge]);
+    // อัปเดตข้อมูลการเชื่อมต่อใน Scene model หากเป็นการเชื่อมต่อระหว่างฉาก
+    if (newEdge.data.sceneConnection && newEdge.data.sourceSceneId && newEdge.data.targetSceneId) {
+      try {
+        // อัปเดต defaultNextSceneId ใน source scene
+        // ซึ่งจะทำให้การอ่านนิยายสามารถไปยังฉากถัดไปได้อัตโนมัติ
+        updateSceneDefaultNext(newEdge.data.sourceSceneId, newEdge.data.targetSceneId);
+      } catch (error) {
+        console.error('Error updating scene connection:', error);
+      }
     }
-  }, [nodes, edges, setEdges, saveToHistory, isAutoSaveEnabled, scheduleAutoSave]);
+    
+    // แสดงข้อความแจ้งเตือนที่เหมาะสม
+    if (newEdge.data.sceneConnection) {
+      toast.success('เชื่อมต่อฉากสำเร็จ - สามารถไปยังฉากถัดไปได้');
+    } else {
+      toast.success('เชื่อมต่อโหนดสำเร็จ');
+    }
+  }, [edges, nodes, createEdgeCommand, executeCommand]);
+
+
 
   // Enhanced Selection handler with multi-selection support
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
+    // Don't interfere with multi-select mode
+    if (selection.multiSelectMode) return;
+    
     // Set single selection states
     setSelectedNode(selectedNodes[0] || null);
     setSelectedEdge(selectedEdges[0] || null);
@@ -1793,17 +2835,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       selectedNodes: selectedNodes.map(n => n.id),
       selectedEdges: selectedEdges.map(e => e.id)
     }));
-    
-    // If multi-selection mode is active and we have multiple selections, keep the mode active
-    if (selection.multiSelectMode && selectedNodes.length > 1) {
-      // Keep multi-select mode active
-    } else if (selectedNodes.length <= 1) {
-      // Auto-disable multi-select mode when single selection
-      setSelection(prev => ({
-        ...prev,
-        multiSelectMode: false
-      }));
-    }
   }, [selection.multiSelectMode]);
 
   // Keyboard event listeners
@@ -1820,10 +2851,107 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [handleKeyboardShortcuts]);
 
-  // Custom node types
+  // Custom node and edge types
   const nodeTypes: NodeTypes = useMemo(() => ({
     custom: CustomNode
   }), []);
+  
+  const edgeTypes: EdgeTypes = useMemo(() => ({
+    custom: CustomEdge,
+    smoothstep: CustomEdge,
+    straight: CustomEdge,
+    bezier: CustomEdge
+  }), []);
+
+  // Handle manual connection mode
+  useEffect(() => {
+    const handleStartConnection = (event: CustomEvent) => {
+      const { nodeId, handleType, position } = event.detail;
+      setConnectionMode({
+        isConnecting: true,
+        sourceNode: nodeId,
+        sourceHandle: handleType
+      });
+      
+      // เปลี่ยน cursor ของ canvas
+      if (reactFlowWrapper.current) {
+        reactFlowWrapper.current.style.cursor = 'crosshair';
+      }
+      
+      toast.info('คลิกที่ node อื่นเพื่อสร้างการเชื่อมต่อ');
+    };
+    
+    const handleNodeClick = (nodeId: string) => {
+      if (connectionMode.isConnecting && connectionMode.sourceNode && connectionMode.sourceNode !== nodeId) {
+        // สร้างการเชื่อมต่อ
+        const params = {
+          source: connectionMode.sourceNode,
+          target: nodeId,
+          sourceHandle: 'right',
+          targetHandle: 'left'
+        };
+        
+        // ใช้ onConnect ที่มีอยู่แล้ว
+        onConnect(params);
+        
+        // รีเซ็ต connection mode
+        setConnectionMode({
+          isConnecting: false,
+          sourceNode: null,
+          sourceHandle: null
+        });
+        
+        // รีเซ็ต cursor
+        if (reactFlowWrapper.current) {
+          reactFlowWrapper.current.style.cursor = 'default';
+        }
+      }
+    };
+    
+    // รองรับการลบ edge ผ่านปุ่มบน EdgeLabelRenderer ให้สอดคล้อง Command Pattern + Trash
+    const handleRequestDeleteEdge = (e: Event) => {
+      const custom = e as CustomEvent<{ edgeId: string }>;
+      const edgeId = custom.detail?.edgeId;
+      if (!edgeId) return;
+      const edge = edges.find(ed => ed.id === edgeId);
+      if (!edge) return;
+      
+      // ถ้าเป็นการเชื่อมต่อระหว่าง Scene nodes ให้ลบ defaultNextSceneId
+      if (edge.data?.sceneConnection && edge.data?.sourceSceneId) {
+        removeSceneConnection(edge.data.sourceSceneId as string);
+      }
+      
+      const cmd = createEdgeCommand('DELETE_EDGE', edgeId, edge, edge.source, edge.target);
+      executeCommand(cmd);
+    };
+
+    window.addEventListener('requestDeleteEdge', handleRequestDeleteEdge as EventListener);
+    // Add event listeners
+    document.addEventListener('startConnection', handleStartConnection as EventListener);
+    
+    return () => {
+      document.removeEventListener('startConnection', handleStartConnection as EventListener);
+      window.removeEventListener('requestDeleteEdge', handleRequestDeleteEdge as EventListener);
+    };
+  }, [connectionMode, onConnect, edges, createEdgeCommand, executeCommand, removeSceneConnection]);
+  
+  // Handle canvas click to cancel connection mode
+  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
+    if (connectionMode.isConnecting) {
+      // Cancel connection mode
+      setConnectionMode({
+        isConnecting: false,
+        sourceNode: null,
+        sourceHandle: null
+      });
+      
+      if (reactFlowWrapper.current) {
+        reactFlowWrapper.current.style.cursor = 'default';
+      }
+      
+      toast.info('ยกเลิกการเชื่อมต่อ');
+    }
+  }, [connectionMode]);
 
   // Expose methods to parent via ref
   React.useImperativeHandle(ref, () => ({
@@ -1848,16 +2976,18 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Palette className="w-5 h-5" />
-                    Story Blueprint
+                    แผนผังเรื่อง
                   </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsSidebarCollapsed(true)}
-                    title="Collapse sidebar"
-                  >
-                    <ChevronsLeft className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsSidebarCollapsed(true)}
+                      title="ย่อแถบด้านข้าง"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
               
@@ -1866,15 +2996,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   <Tabs defaultValue="palette" className="flex flex-col h-full">
                     <div className="px-4 pt-4">
                       <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="palette">Nodes</TabsTrigger>
-                    <TabsTrigger value="validation">Validation</TabsTrigger>
+                    <TabsTrigger value="palette">โหนด</TabsTrigger>
+                    <TabsTrigger value="validation">ตรวจสอบ</TabsTrigger>
                   </TabsList>
                     </div>
                     
                     <TabsContent value="palette" className="flex-1 overflow-hidden">
                       <ScrollArea className="h-full px-4 pb-4 custom-scrollbar">
                         <div className="space-y-4 pt-4">
-                        <NodePalette onAddNode={onAddNode} />
+                        <NodePalette 
+                          onAddNode={onAddNode}
+                          onDragStart={(nodeType, event) => {
+                            // Optional: เพิ่ม visual feedback หรือ logging
+                            console.log(`กำลังลาก ${nodeType} ไปยัง canvas`);
+                          }}
+                        />
                       </div>
                     </ScrollArea>
                   </TabsContent>
@@ -1905,7 +3041,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               size="sm"
               onClick={() => setIsSidebarCollapsed(false)}
               className="mb-2"
-              title="Expand sidebar"
+              title="ขยายแถบด้านข้าง"
             >
               <ChevronsRight className="w-4 h-4" />
             </Button>
@@ -1919,6 +3055,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onDrop={onCanvasDrop}
+                onDragOver={onCanvasDragOver}
                 onNodesChange={(changes: NodeChange[]) => {
                   // Prevent runtime error by safely handling changes
                   try {
@@ -1937,15 +3077,109 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           clearTimeout(saveDebounceTimer.current);
                         }
                         saveDebounceTimer.current = setTimeout(() => {
-                          saveToHistory(nodes, edges);
+                          // Auto-save scheduled changes
+                          scheduleAutoSave(nodes, edges);
                         }, 500);
                       } else {
-                        // Immediate save for add/remove operations
-                        saveToHistory(nodes, edges);
+                        // Immediate auto-save for add/remove operations
+                        scheduleAutoSave(nodes, edges);
                       }
                     }
                   } catch (error) {
                     console.error('Error handling node changes:', error);
+                  }
+                }}
+                onNodeDragStart={(event, node) => {
+                  isDragging.current = true;
+                  
+                  // ถ้าเป็น multiple selection และ node ที่กำลังลากอยู่ในกลุ่มที่เลือก
+                  if (selection.selectedNodes.includes(node.id) && selection.selectedNodes.length > 1) {
+                    // เก็บตำแหน่งเริ่มต้นของทุก node ที่เลือก
+                    selection.selectedNodes.forEach(nodeId => {
+                      const selectedNode = nodes.find(n => n.id === nodeId);
+                      if (selectedNode) {
+                        multiSelectDragStart.current[nodeId] = { ...selectedNode.position };
+                      }
+                    });
+                  } else {
+                    // Single node drag - เก็บตำแหน่งเริ่มต้นของ node เดียว
+                    dragStartPositions.current[node.id] = { ...node.position };
+                  }
+                }}
+                onNodeDragStop={(event, node) => {
+                  isDragging.current = false;
+                  
+                  if (!isInitializingRef.current) {
+                    // ตรวจสอบว่าเป็น multiple selection หรือไม่
+                    if (selection.selectedNodes.includes(node.id) && selection.selectedNodes.length > 1) {
+                      // สร้าง batch command สำหรับ multiple nodes
+                      const commands: ICommand[] = [];
+                      let hasAnyMovement = false;
+                      
+                      selection.selectedNodes.forEach(nodeId => {
+                        const startPosition = multiSelectDragStart.current[nodeId];
+                        const currentNode = nodes.find(n => n.id === nodeId);
+                        
+                        if (startPosition && currentNode) {
+                          const hasPositionChanged = 
+                            Math.abs(startPosition.x - currentNode.position.x) > 1 || 
+                            Math.abs(startPosition.y - currentNode.position.y) > 1;
+                          
+                          if (hasPositionChanged) {
+                            hasAnyMovement = true;
+                            commands.push(createNodeCommand(
+                              'MOVE_NODE',
+                              nodeId,
+                              undefined,
+                              startPosition,
+                              currentNode.position
+                            ));
+                          }
+                        }
+                      });
+                      
+                      // สร้าง batch command ถ้ามีการเคลื่อนที่จริง
+                      if (hasAnyMovement && commands.length > 0) {
+                        const batchCommand: BatchCommand = {
+                          id: `batch-move-${Date.now()}`,
+                          type: 'BATCH',
+                          description: `ย้าย ${commands.length} nodes`,
+                          timestamp: Date.now(),
+                          commands,
+                          execute: () => {
+                            commands.forEach(cmd => cmd.execute());
+                          },
+                          undo: () => {
+                            commands.slice().reverse().forEach(cmd => cmd.undo());
+                          }
+                        };
+                        executeCommand(batchCommand);
+                      }
+                      
+                      // เคลียร์ข้อมูล
+                      multiSelectDragStart.current = {};
+                    } else {
+                      // Single node drag
+                      const startPosition = dragStartPositions.current[node.id];
+                      if (startPosition) {
+                        const hasPositionChanged = 
+                          Math.abs(startPosition.x - node.position.x) > 1 || 
+                          Math.abs(startPosition.y - node.position.y) > 1;
+                        
+                        if (hasPositionChanged) {
+                          const moveCommand = createNodeCommand(
+                            'MOVE_NODE',
+                            node.id,
+                            undefined,
+                            startPosition,
+                            node.position
+                          );
+                          executeCommand(moveCommand);
+                        }
+                      }
+                      // เคลียร์ข้อมูล
+                      delete dragStartPositions.current[node.id];
+                    }
                   }
                 }}
                 onEdgesChange={(changes: EdgeChange[]) => {
@@ -1957,7 +3191,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       change.type === 'remove'
                     );
                     if (!isInitializingRef.current && meaningfulChanges.length > 0) {
-                      saveToHistory(nodes, edges);
+                      scheduleAutoSave(nodes, edges);
                     }
                   } catch (error) {
                     console.error('Error handling edge changes:', error);
@@ -1965,33 +3199,130 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }}
                 onConnect={onConnect}
                 onSelectionChange={onSelectionChange}
+                onPaneClick={handleCanvasClick}
+                connectionMode={ConnectionMode.Loose}
+                connectionLineComponent={CustomConnectionLine}
+                connectionLineType={ConnectionLineType.SmoothStep}
+                connectionLineStyle={{
+                  stroke: '#3b82f6',
+                  strokeWidth: 3,
+                  strokeDasharray: '5,5',
+                }}
+                defaultEdgeOptions={{
+                  type: 'smoothstep',
+                  markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 20,
+                    height: 20,
+                    color: '#64748b'
+                  },
+                  style: {
+                    strokeWidth: 2,
+                    stroke: '#64748b'
+                  },
+                  animated: false
+                }}
                 onNodeClick={(event, node) => {
-                  // Enhanced multi-select mode handling (Canva-style)
+                  // Handle connection mode first
+                  if (connectionMode.isConnecting && connectionMode.sourceNode && connectionMode.sourceNode !== node.id) {
+                    // สร้างการเชื่อมต่อ
+                    const params = {
+                      source: connectionMode.sourceNode,
+                      target: node.id,
+                      sourceHandle: 'right',
+                      targetHandle: 'left'
+                    };
+                    
+                    onConnect(params);
+                    
+                    // รีเซ็ต connection mode
+                    setConnectionMode({
+                      isConnecting: false,
+                      sourceNode: null,
+                      sourceHandle: null
+                    });
+                    
+                    if (reactFlowWrapper.current) {
+                      reactFlowWrapper.current.style.cursor = 'default';
+                    }
+                    return; // Exit early to prevent other click handling
+                  }
+                  
+                  // Handle multi-select mode (Canva-style)
                   if (selection.multiSelectMode) {
                     const isAlreadySelected = selection.pendingSelection.includes(node.id);
                     
+                    const newPendingSelection = isAlreadySelected
+                      ? selection.pendingSelection.filter(id => id !== node.id)
+                      : [...selection.pendingSelection, node.id];
+                    
                     setSelection(prev => ({
                       ...prev,
-                      pendingSelection: isAlreadySelected
-                        ? prev.pendingSelection.filter(id => id !== node.id)
-                        : [...prev.pendingSelection, node.id],
-                      showSelectionBar: true
+                      pendingSelection: newPendingSelection,
+                      showSelectionBar: newPendingSelection.length > 0
                     }));
+                    
+                    // Visual feedback
+                    if (isAlreadySelected) {
+                      toast.info(`Removed ${node.data?.title || node.id} from selection`);
                   } else {
-                    // Regular single selection
+                      toast.info(`Added ${node.data?.title || node.id} to selection (${newPendingSelection.length})`);
+                    }
+                    
+                    return;
+                  }
+                  
+                  // Handle Ctrl+Click for quick multi-select (without entering multi-select mode)
+                  if (event.ctrlKey || event.metaKey) {
+                    const isAlreadySelected = selection.selectedNodes.includes(node.id);
+                    
+                    if (isAlreadySelected) {
+                      // Remove from selection
+                      const newSelection = selection.selectedNodes.filter(id => id !== node.id);
+                      setSelection(prev => ({
+                        ...prev,
+                        selectedNodes: newSelection,
+                        selectedEdges: []
+                      }));
+                      
+                      if (newSelection.length === 0) {
+                        setSelectedNode(null);
+                      } else {
+                        const firstSelected = nodes.find(n => n.id === newSelection[0]);
+                        setSelectedNode(firstSelected || null);
+                      }
+                      setSelectedEdge(null);
+                    } else {
+                      // Add to selection
+                      setSelection(prev => ({
+                        ...prev,
+                        selectedNodes: [...prev.selectedNodes, node.id],
+                        selectedEdges: []
+                      }));
                     setSelectedNode(node);
                     setSelectedEdge(null);
                   }
+                    
+                    return;
+                  }
+                  
+                  // Regular single selection
+                  setSelectedNode(node);
+                  setSelectedEdge(null);
+                  setSelection(prev => ({
+                    ...prev,
+                    selectedNodes: [node.id],
+                    selectedEdges: []
+                  }));
                 }}
                 onInit={setReactFlowInstance}
-                nodeTypes={nodeTypes}
-                connectionMode={ConnectionMode.Loose}
                 fitView
                 attributionPosition="bottom-left"
                 className="bg-background"
                 selectionMode={selection.multiSelectMode ? SelectionMode.Full : SelectionMode.Partial}
                 multiSelectionKeyCode={selection.multiSelectMode ? null : ["Meta", "Control", "Shift"]}
-                deleteKeyCode={["Backspace", "Delete"]}
+                // ปิดการลบผ่านระบบของ React Flow เพื่อให้ Command Pattern จัดการเอง (พร้อม Trash History)
+                deleteKeyCode={[]}
                 panOnDrag={!canvasState.isLocked && !selection.isSelectionMode}
                 zoomOnScroll={!canvasState.isLocked}
                 zoomOnPinch={!canvasState.isLocked}
@@ -2023,7 +3354,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       className="w-10 h-10 p-0 relative"
                       title={`Trash History (${deletedItems.length} items)`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Archive className="w-4 h-4" />
                       {deletedItems.length > 0 && (
                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                           {deletedItems.length > 9 ? '9+' : deletedItems.length}
@@ -2136,16 +3467,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       
                       {/* Multi Select Toggle */}
                       <Button
-                        variant={selection.multiSelectMode ? "default" : "outline"}
+                        variant={isMultiSelectActive ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setSelection(prev => ({ 
-                            ...prev, 
-                          multiSelectMode: !prev.multiSelectMode,
-                          selectedNodes: [],
-                          selectedEdges: [],
-                          pendingSelection: [],
-                          showSelectionBar: false
-                        }))}
+                        onClick={toggleMultiSelectMode}
                         className="h-8 w-8 p-0 bg-background/80 hover:bg-background/90 border-2"
                         title="Multi Select Mode"
                       >
@@ -2171,9 +3495,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       variant="outline"
                       size="sm"
                       onClick={undo}
-                      disabled={historyIndex <= 0}
+                      disabled={undoStack.length === 0}
                       className="h-8 w-8 p-0"
-                      title="Undo (Ctrl+Z)"
+                      title={`Undo (Ctrl+Z)${undoStack.length > 0 ? ` - ${undoStack[undoStack.length - 1].description}` : ''}`}
                     >
                       <Undo2 className="w-4 h-4" />
                     </Button>
@@ -2182,9 +3506,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       variant="outline"
                       size="sm"
                       onClick={redo}
-                      disabled={historyIndex >= history.length - 1}
+                      disabled={redoStack.length === 0}
                       className="h-8 w-8 p-0"
-                      title="Redo (Ctrl+Y)"
+                      title={`Redo (Ctrl+Shift+Z)${redoStack.length > 0 ? ` - ${redoStack[redoStack.length - 1].description}` : ''}`}
                     >
                       <Redo2 className="w-4 h-4" />
                     </Button>
@@ -2193,11 +3517,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
                     {!isMobile && (
                       <Button
-                        variant={selection.multiSelectMode ? 'default' : 'outline'}
+                        variant={isMultiSelectActive ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => setSelection(prev => ({ ...prev, multiSelectMode: !prev.multiSelectMode }))}
+                        onClick={toggleMultiSelectMode}
                         className="h-8 px-2"
-                        title="Multiple select mode (Click to toggle multi-select)"
+                        title="Multiple select mode (Ctrl+M or click to toggle)"
                       >
                         <div className="flex items-center gap-1">
                           <MousePointer2 className="w-3 h-3" />
@@ -2228,6 +3552,43 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </Panel>
 
 
+
+              {/* Multi-select confirmation bar (Canva-style) */}
+              <AnimatePresence>
+                {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
+                  <motion.div
+                    initial={{ y: 100, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 100, opacity: 0 }}
+                    className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
+                  >
+                    <div className="bg-card border border-border rounded-lg shadow-lg p-4 flex items-center gap-3">
+                      <div className="text-sm font-medium">
+                        {selection.pendingSelection.length} item{selection.pendingSelection.length > 1 ? 's' : ''} selected
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={cancelMultiSelection}
+                        >
+                          Cancel
+                        </Button>
+                        
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={confirmMultiSelection}
+                          className="bg-blue-500 hover:bg-blue-600"
+                        >
+                          Confirm Selection
+                        </Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Selection Info Panel - Mobile: below episode selector, Desktop: below toolbar */}
               {(selectedNode || selectedEdge || (selection.selectedNodes.length > 1 && !selection.multiSelectMode)) && (
@@ -2287,13 +3648,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
-                          {selectedNode.data.nodeType.replace(/_/g, ' ')}
+                          {(selectedNode.data as any).nodeType.replace(/_/g, ' ')}
                         </Badge>
-                        <span className="font-medium text-sm truncate">{selectedNode.data.title}</span>
+                        <span className="font-medium text-sm truncate">{(selectedNode.data as any).title}</span>
                       </div>
-                      {selectedNode.data.notesForAuthor && (
+                      {(selectedNode.data as any).notesForAuthor && (
                         <p className="text-xs text-muted-foreground line-clamp-2">
-                          {selectedNode.data.notesForAuthor}
+                          {(selectedNode.data as any).notesForAuthor}
                         </p>
                       )}
                       <div className="flex gap-1">
@@ -2302,8 +3663,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           size="sm"
                           onClick={() => {
                             // Navigate to Director tab with context
-                            if (selectedNode?.data?.nodeSpecificData?.sceneId && typeof onNavigateToDirector === 'function') {
-                              onNavigateToDirector(selectedNode.data.nodeSpecificData.sceneId);
+                            if ((selectedNode?.data as any)?.nodeSpecificData?.sceneId && typeof onNavigateToDirector === 'function') {
+                              onNavigateToDirector((selectedNode.data as any).nodeSpecificData.sceneId);
                             } else {
                               setIsPropertiesOpen(true);
                             }
@@ -2355,8 +3716,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                               const targetNode = nodes.find(n => n.id === selectedEdge.target);
                               
                               // If source node has scene data, pass its scene ID
-                              const sceneId = sourceNode?.data?.sceneData?._id || 
-                                            targetNode?.data?.sceneData?._id;
+                              const sceneId = (sourceNode?.data as any)?.sceneData?._id || 
+                                            (targetNode?.data as any)?.sceneData?._id;
                               
                               onNavigateToDirector(sceneId);
                             }
@@ -2369,9 +3730,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           variant="outline" 
                           size="sm"
                           onClick={() => {
-                            setEdges(edges => edges.filter(e => e.id !== selectedEdge.id));
-                            setSelectedEdge(null);
-                            saveToHistory(nodes, edges.filter(e => e.id !== selectedEdge.id), 'Deleted connection');
+                            // ลบ edge ผ่าน Command Pattern เพื่อให้เก็บ Trash และรองรับ undo/redo
+                            const edge = edges.find(e => e.id === selectedEdge.id);
+                            if (edge) {
+                              const cmd = createEdgeCommand('DELETE_EDGE', edge.id, edge, edge.source, edge.target);
+                              executeCommand(cmd);
+                              setSelectedEdge(null);
+                            }
                           }}
                         >
                           <Trash2 className="w-3 h-3 mr-1" />
@@ -2721,9 +4086,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           <p className="text-xs text-muted-foreground">
                             Deleted at {item.deletedAt.toLocaleString()}
                           </p>
-                          {item.type === 'node' && (item.data as Node).data?.notesForAuthor && (
+                          {item.type === 'node' && ((item.data as Node).data as any)?.notesForAuthor && (
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              Notes: {(item.data as Node).data.notesForAuthor}
+                              Notes: {((item.data as Node).data as any).notesForAuthor}
                             </p>
                           )}
                         </div>
@@ -2732,17 +4097,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              // Restore item
+                              // กู้คืนผ่าน Command Pattern เพื่อผูกกับ undo/redo
                               if (item.type === 'node') {
                                 const nodeData = item.data as Node;
-                                setNodes(prev => [...prev, nodeData]);
-                                saveToHistory([...nodes, nodeData], edges, `Restored node: ${nodeData.data?.title || 'Untitled'}`);
+                                const cmd = createNodeCommand('ADD_NODE', nodeData.id, nodeData);
+                                executeCommand(cmd);
                               } else {
                                 const edgeData = item.data as Edge;
-                                setEdges(prev => [...prev, edgeData]);
-                                saveToHistory(nodes, [...edges, edgeData], `Restored connection: ${edgeData.label || 'Unlabeled'}`);
+                                const cmd = createEdgeCommand('ADD_EDGE', edgeData.id, edgeData, edgeData.source, edgeData.target);
+                                executeCommand(cmd);
                               }
-                              
                               // Remove from deleted items
                               setDeletedItems(prev => prev.filter((_, i) => i !== index));
                               toast.success(`Restored ${item.description}`);
@@ -2792,17 +4156,32 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             <Button
               variant="outline"
               onClick={() => {
-                // Restore all items
+                // Restore all items ผ่าน Command Pattern (Batch)
                 if (deletedItems.length > 0) {
                   const ok = window.confirm(`Restore all ${deletedItems.length} items from trash?`);
                   if (ok) {
-                    const nodesToRestore = deletedItems.filter(item => item.type === 'node').map(item => item.data as Node);
-                    const edgesToRestore = deletedItems.filter(item => item.type === 'edge').map(item => item.data as Edge);
-                    
-                    setNodes(prev => [...prev, ...nodesToRestore]);
-                    setEdges(prev => [...prev, ...edgesToRestore]);
-                    saveToHistory([...nodes, ...nodesToRestore], [...edges, ...edgesToRestore], 'Restored all items from trash');
-                    
+                    const cmds: ICommand[] = [];
+                    deletedItems.forEach(item => {
+                      if (item.type === 'node') {
+                        const nodeData = item.data as Node;
+                        cmds.push(createNodeCommand('ADD_NODE', nodeData.id, nodeData));
+                      } else {
+                        const edgeData = item.data as Edge;
+                        cmds.push(createEdgeCommand('ADD_EDGE', edgeData.id, edgeData, edgeData.source, edgeData.target));
+                      }
+                    });
+                    if (cmds.length > 0) {
+                      const batch: BatchCommand = {
+                        id: `restore-all-${Date.now()}`,
+                        type: 'BATCH',
+                        description: `Restore ${cmds.length} items from trash`,
+                        timestamp: Date.now(),
+                        commands: cmds,
+                        execute: () => cmds.forEach(c => c.execute()),
+                        undo: () => cmds.slice().reverse().forEach(c => c.undo())
+                      };
+                      executeCommand(batch);
+                    }
                     setDeletedItems([]);
                     toast.success('All items restored');
                   }
