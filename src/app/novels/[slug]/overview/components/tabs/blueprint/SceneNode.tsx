@@ -94,8 +94,18 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
         <Handle
           type="target"
           position={Position.Top}
-          className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
-          style={{ borderColor: nodeColor }}
+          id="input"
+          className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
+          style={{
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            border: '2px solid',
+            borderColor: '#3b82f6',
+            background: '#dbeafe',
+            cursor: 'crosshair',
+            top: '-6px'
+          }}
           title="ลากเส้นเชื่อมต่อมาที่นี่"
         />
 
@@ -138,8 +148,18 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
         <Handle
           type="source"
           position={Position.Bottom}
-          className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
-          style={{ borderColor: nodeColor }}
+          id="output"
+          className="!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"
+          style={{
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            border: '2px solid',
+            borderColor: '#10b981',
+            background: '#d1fae5',
+            cursor: 'crosshair',
+            bottom: '-6px'
+          }}
           title="ลากจากจุดนี้เพื่อเชื่อมต่อไปยังโหนดอื่น"
         />
 
@@ -179,8 +199,18 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
       <Handle
         type="target"
         position={Position.Top}
-        className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
-        style={{ borderColor: nodeColor }}
+        id="input"
+        className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
+        style={{
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          border: '2px solid',
+          borderColor: '#3b82f6',
+          background: '#dbeafe',
+          cursor: 'crosshair',
+          top: '-8px'
+        }}
         title="ลากเส้นเชื่อมต่อมาที่นี่"
       />
 
@@ -259,8 +289,18 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
-        style={{ borderColor: nodeColor }}
+        id="output"
+        className="!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"
+        style={{
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          border: '2px solid',
+          borderColor: '#10b981',
+          background: '#d1fae5',
+          cursor: 'crosshair',
+          bottom: '-8px'
+        }}
         title="ลากจากจุดนี้เพื่อเชื่อมต่อไปยังโหนดอื่น"
       />
 

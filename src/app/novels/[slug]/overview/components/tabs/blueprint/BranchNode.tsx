@@ -71,8 +71,19 @@ const BranchNode: React.FC<NodeProps> = ({
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 bg-background border-2 border-muted-foreground"
-        style={{ borderColor: nodeColor }}
+        id="input"
+        className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
+        style={{
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          border: '2px solid',
+          borderColor: '#3b82f6',
+          background: '#dbeafe',
+          cursor: 'crosshair',
+          top: '-8px'
+        }}
+        title="ลากเส้นเชื่อมต่อมาที่นี่"
       />
 
       {/* Header */}
@@ -179,10 +190,17 @@ const BranchNode: React.FC<NodeProps> = ({
             type="source"
             position={Position.Bottom}
             id={isDefault ? 'default' : `condition-${condition?.conditionId || index}`}
-            className="w-4 h-4 bg-background border-2 border-muted-foreground rounded-full hover:scale-125 transition-all duration-200 cursor-crosshair"
+            className={isDefault ? "!bg-gray-100 !border-gray-500 dark:!bg-gray-900 dark:!border-gray-400" : "!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"}
             style={{ 
-              borderColor: isDefault ? '#6b7280' : getConditionColor(index),
-              left: `${15 + (index * (70 / Math.max(totalOutputs, 1)))}%`
+              width: '14px',
+              height: '14px',
+              borderRadius: '50%',
+              border: '2px solid',
+              borderColor: isDefault ? '#6b7280' : '#10b981',
+              background: isDefault ? '#f3f4f6' : '#d1fae5',
+              cursor: 'crosshair',
+              left: `${15 + (index * (70 / Math.max(totalOutputs, 1)))}%`,
+              bottom: '-7px'
             }}
             title={isDefault ? 'ลากจากจุดนี้เพื่อเชื่อมต่อเส้นทางเริ่มต้น' : `ลากจากจุดนี้เพื่อเชื่อมต่อเงื่อนไขที่ ${index + 1}`}
           />

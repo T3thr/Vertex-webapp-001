@@ -48,6 +48,15 @@ import {
 } from '@xyflow/react';
 import { toast } from 'sonner';
 
+// Blueprint Node Components
+import { 
+  SceneNode, 
+  ChoiceNode, 
+  BranchNode, 
+  CommentNode, 
+  EndingNode 
+} from './blueprint';
+
 import '@xyflow/react/dist/style.css';
 
 // Components
@@ -1394,7 +1403,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const isDragging = useRef(false);
   const multiSelectDragStart = useRef<Record<string, { x: number; y: number }>>({});
   
-  // Connection mode for manual edge creation
+  // Connection mode for manual edge creation (deprecated - using React Flow handles instead)
   const [connectionMode, setConnectionMode] = useState<{
     isConnecting: boolean;
     sourceNode: string | null;
@@ -2032,7 +2041,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         
         return {
           id: node.nodeId,
-          type: 'custom',
+          type: getReactFlowNodeType(node.nodeType),
           position: node.position,
           data: {
             ...nodeData,
@@ -2521,18 +2530,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
         case 'Escape':
           event.preventDefault();
-          if (connectionMode.isConnecting) {
-            // Cancel connection mode
-            setConnectionMode({
-              isConnecting: false,
-              sourceNode: null,
-              sourceHandle: null
-            });
-            if (reactFlowWrapper.current) {
-              reactFlowWrapper.current.style.cursor = 'default';
-            }
-            toast.info('Connection cancelled');
-          } else if (selection.multiSelectMode) {
+          // Legacy connection mode disabled - React Flow handles this automatically
+          if (selection.multiSelectMode) {
             // Cancel multi-select mode
             cancelMultiSelection();
           } else {
@@ -2558,7 +2557,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [
     handleManualSave, toggleCanvasLock, selectedNode, selectedEdge, undo, redo, 
     selection, nodes, edges, createNodeCommand, executeCommand, deleteSelected,
-    connectionMode, toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection,
+    toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection,
     selectAllNodes
   ]);
 
@@ -2580,7 +2579,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const timestamp = Date.now();
     const newNode: Node = {
       id: `node_${timestamp}`,
-      type: 'custom',
+      type: getReactFlowNodeType(nodeType),
       position,
       data: {
         nodeType,
@@ -2694,7 +2693,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     const newNode: Node = {
       id: `node-${timestamp}-${randomOffset}`,
-      type: 'custom',
+      type: getReactFlowNodeType(nodeType),
       position: centerPosition,
       data: {
         nodeId: `node-${timestamp}-${randomOffset}`,
@@ -2747,7 +2746,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // Enhanced connections with database sync and validation
   const onConnect = useCallback((params: Connection) => {
-    if (!params.source || !params.target) return;
+    if (!params.source || !params.target) {
+      toast.error('ไม่สามารถสร้างการเชื่อมต่อได้: ข้อมูลไม่ครบถ้วน');
+      return;
+    }
     
     // Prevent self-connections
     if (params.source === params.target) {
@@ -2771,6 +2773,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     // ค้นหาข้อมูล source และ target nodes
     const sourceNode = nodes.find(n => n.id === params.source);
     const targetNode = nodes.find(n => n.id === params.target);
+    
+    if (!sourceNode || !targetNode) {
+      toast.error('ไม่พบโหนดต้นทางหรือปลายทาง');
+      return;
+    }
+
+    // Validate connection logic
+    const sourceType = sourceNode.data.nodeType;
+    const targetType = targetNode.data.nodeType;
+    
+    // EndingNode should not have outputs
+    if (sourceType === StoryMapNodeType.ENDING_NODE) {
+      toast.error('โหนดจุดจบไม่สามารถเชื่อมต่อไปยังโหนดอื่นได้');
+      return;
+    }
     
     // สร้าง label อัตโนมัติตามประเภทของ nodes
     let autoLabel = '';
@@ -2846,8 +2863,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     if (newEdge.data.sceneConnection) {
       toast.success('เชื่อมต่อฉากสำเร็จ - สามารถไปยังฉากถัดไปได้');
     } else {
-      toast.success('เชื่อมต่อโหนดสำเร็จ');
+      const sourceHandleText = params.sourceHandle ? ` (${params.sourceHandle})` : '';
+      const targetHandleText = params.targetHandle ? ` (${params.targetHandle})` : '';
+      toast.success(`เชื่อมต่อ "${sourceNode.data.title}"${sourceHandleText} → "${targetNode.data.title}"${targetHandleText} สำเร็จ`);
     }
+    
+    // Log for debugging
+    console.log('✅ Edge created successfully:', {
+      id: edgeId,
+      source: params.source,
+      target: params.target,
+      sourceHandle: params.sourceHandle,
+      targetHandle: params.targetHandle,
+      sourceNode: sourceNode.data.title,
+      targetNode: targetNode.data.title
+    });
   }, [edges, nodes, createEdgeCommand, executeCommand]);
 
 
@@ -2883,8 +2913,44 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [handleKeyboardShortcuts]);
 
+  // Helper function to map StoryMapNodeType to React Flow node type
+  const getReactFlowNodeType = (storyMapNodeType: string): string => {
+    switch (storyMapNodeType) {
+      case 'scene_node':
+        return 'scene_node';
+      case 'choice_node':
+        return 'choice_node';
+      case 'branch_node':
+        return 'branch_node';
+      case 'comment_node':
+        return 'comment_node';
+      case 'ending_node':
+        return 'ending_node';
+      case 'start_node':
+        return 'scene_node'; // Start nodes are essentially scene nodes
+      case 'merge_node':
+        return 'branch_node'; // Merge nodes can use branch node UI
+      case 'variable_modifier_node':
+      case 'event_trigger_node':
+      case 'custom_logic_node':
+      case 'delay_node':
+      case 'random_branch_node':
+      case 'parallel_execution_node':
+      case 'sub_storymap_node':
+      case 'group_node':
+      default:
+        return 'custom'; // Use custom component for unsupported types
+    }
+  };
+
   // Custom node and edge types
   const nodeTypes: NodeTypes = useMemo(() => ({
+    scene_node: SceneNode,
+    choice_node: ChoiceNode,
+    branch_node: BranchNode,
+    comment_node: CommentNode,
+    ending_node: EndingNode,
+    // Keep custom as fallback
     custom: CustomNode
   }), []);
   
@@ -2895,49 +2961,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     bezier: CustomEdge
   }), []);
 
-  // Handle manual connection mode
+  // Handle manual connection mode (deprecated - using React Flow handles)
   useEffect(() => {
+    // Legacy connection handlers - disabled in favor of React Flow handles
     const handleStartConnection = (event: CustomEvent) => {
-      const { nodeId, handleType, position } = event.detail;
-      setConnectionMode({
-        isConnecting: true,
-        sourceNode: nodeId,
-        sourceHandle: handleType
-      });
-      
-      // เปลี่ยน cursor ของ canvas
-      if (reactFlowWrapper.current) {
-        reactFlowWrapper.current.style.cursor = 'crosshair';
-      }
-      
-      toast.info('คลิกที่ node อื่นเพื่อสร้างการเชื่อมต่อ');
+      // Disabled - using React Flow handles for better UX
+      console.log('Legacy connection handler called - should use React Flow handles instead');
     };
     
     const handleNodeClick = (nodeId: string) => {
-      if (connectionMode.isConnecting && connectionMode.sourceNode && connectionMode.sourceNode !== nodeId) {
-        // สร้างการเชื่อมต่อ
-        const params = {
-          source: connectionMode.sourceNode,
-          target: nodeId,
-          sourceHandle: 'right',
-          targetHandle: 'left'
-        };
-        
-        // ใช้ onConnect ที่มีอยู่แล้ว
-        onConnect(params);
-        
-        // รีเซ็ต connection mode
-        setConnectionMode({
-          isConnecting: false,
-          sourceNode: null,
-          sourceHandle: null
-        });
-        
-        // รีเซ็ต cursor
-        if (reactFlowWrapper.current) {
-          reactFlowWrapper.current.style.cursor = 'default';
-        }
-      }
+      // Disabled - React Flow handles this automatically
     };
     
     // รองรับการลบ edge ผ่านปุ่มบน EdgeLabelRenderer ให้สอดคล้อง Command Pattern + Trash
@@ -2965,25 +2998,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       document.removeEventListener('startConnection', handleStartConnection as EventListener);
       window.removeEventListener('requestDeleteEdge', handleRequestDeleteEdge as EventListener);
     };
-  }, [connectionMode, onConnect, edges, createEdgeCommand, executeCommand, removeSceneConnection]);
+  }, [onConnect, edges, createEdgeCommand, executeCommand, removeSceneConnection]);
   
-  // Handle canvas click to cancel connection mode
+  // Handle canvas click (legacy connection mode disabled)
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
-    if (connectionMode.isConnecting) {
-      // Cancel connection mode
-      setConnectionMode({
-        isConnecting: false,
-        sourceNode: null,
-        sourceHandle: null
-      });
-      
-      if (reactFlowWrapper.current) {
-        reactFlowWrapper.current.style.cursor = 'default';
-      }
-      
-      toast.info('ยกเลิกการเชื่อมต่อ');
-    }
-  }, [connectionMode]);
+    // Legacy connection mode disabled - React Flow handles connections automatically
+    // No special handling needed for connections
+  }, []);
 
   // Expose methods to parent via ref
   React.useImperativeHandle(ref, () => ({
@@ -3255,30 +3276,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   animated: false
                 }}
                 onNodeClick={(event, node) => {
-                  // Handle connection mode first
-                  if (connectionMode.isConnecting && connectionMode.sourceNode && connectionMode.sourceNode !== node.id) {
-                    // สร้างการเชื่อมต่อ
-                    const params = {
-                      source: connectionMode.sourceNode,
-                      target: node.id,
-                      sourceHandle: 'right',
-                      targetHandle: 'left'
-                    };
-                    
-                    onConnect(params);
-                    
-                    // รีเซ็ต connection mode
-                    setConnectionMode({
-                      isConnecting: false,
-                      sourceNode: null,
-                      sourceHandle: null
-                    });
-                    
-                    if (reactFlowWrapper.current) {
-                      reactFlowWrapper.current.style.cursor = 'default';
-                    }
-                    return; // Exit early to prevent other click handling
-                  }
+                  // Legacy connection mode disabled - using React Flow handles instead
+                  // Connection handling is now done via React Flow handles automatically
                   
                   // Handle multi-select mode (Canva-style)
                   if (selection.multiSelectMode) {

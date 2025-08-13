@@ -130,8 +130,19 @@ const EndingNode: React.FC<NodeProps> = ({
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 bg-background border-2 border-muted-foreground"
-        style={{ borderColor: endingConfig.color }}
+        id="input"
+        className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
+        style={{
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          border: '2px solid',
+          borderColor: '#3b82f6',
+          background: '#dbeafe',
+          cursor: 'crosshair',
+          top: '-8px'
+        }}
+        title="ลากเส้นเชื่อมต่อมาที่นี่"
       />
 
       {/* Header */}
