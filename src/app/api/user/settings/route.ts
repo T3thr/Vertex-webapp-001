@@ -185,6 +185,32 @@ const vnRouteManagementPreferencesSchema = z.object({
   secretHints: z.boolean().optional(),
 }).optional();
 
+// visualNovelGameplay.blueprintEditor - เพิ่มสำหรับ Blueprint Tab
+const vnBlueprintEditorPreferencesSchema = z.object({
+  autoSaveEnabled: z.boolean().optional(),
+  autoSaveIntervalSec: z.union([z.literal(15), z.literal(30)]).optional(),
+  showSceneThumbnails: z.boolean().optional(),
+  showNodeLabels: z.boolean().optional(),
+  showConnectionLines: z.boolean().optional(),
+  showGrid: z.boolean().optional(),
+  autoLayout: z.boolean().optional(),
+  enableAnimations: z.boolean().optional(),
+  snapToGrid: z.boolean().optional(),
+  gridSize: z.number().min(10).max(50).optional(),
+  zoomLevel: z.number().min(0.1).max(3).optional(),
+  viewOffset: z.object({
+    x: z.number(),
+    y: z.number()
+  }).optional(),
+  nodeDefaultColor: z.string().optional(),
+  edgeDefaultColor: z.string().optional(),
+  connectionLineStyle: z.enum(["solid", "dashed", "dotted"]).optional(),
+  collaborationEnabled: z.boolean().optional(),
+  showOtherCursors: z.boolean().optional(),
+  performanceMode: z.boolean().optional(),
+  conflictResolutionStrategy: z.enum(['last_write_wins', 'merge', 'manual']).optional(),
+}).optional();
+
 // รวม visualNovelGameplay preferences ทั้งหมด
 const visualNovelGameplayPreferencesSchema = z.object({
   textSpeed: z.enum(["slow", "normal", "fast", "instant"]).optional(),
@@ -218,6 +244,7 @@ const visualNovelGameplayPreferencesSchema = z.object({
   saveLoad: vnSaveLoadPreferencesSchema,
   decisions: vnDecisionWarningPreferencesSchema,
   routeManagement: vnRouteManagementPreferencesSchema,
+  blueprintEditor: vnBlueprintEditorPreferencesSchema, // เพิ่มการรองรับ Blueprint Editor
 }).optional();
 
 // Schema หลักสำหรับการอัปเดต preferences
@@ -402,9 +429,19 @@ export async function PATCH(request: NextRequest) {
     await dbConnect();
     const body = await request.json();
 
-    // The body should be the IReaderSettings object: { display: {...}, gameplay: {...} }
-    if (!body || (Object.keys(body.display).length === 0 && Object.keys(body.gameplay).length === 0)) {
+    // The body should contain settings data
+    if (!body || typeof body !== 'object') {
         return NextResponse.json({ error: 'No settings data provided' }, { status: 400 });
+    }
+
+    // ตรวจสอบว่ามี data ที่จะอัปเดต (รองรับ blueprintEditor settings) - แก้ไข null/undefined check
+    const hasDisplayData = body.display && typeof body.display === 'object' && Object.keys(body.display).length > 0;
+    const hasGameplayData = body.gameplay && typeof body.gameplay === 'object' && Object.keys(body.gameplay).length > 0;
+    const hasVisualNovelGameplayData = body.visualNovelGameplay && typeof body.visualNovelGameplay === 'object' && Object.keys(body.visualNovelGameplay).length > 0;
+    const hasPreferencesData = body.preferences && typeof body.preferences === 'object' && Object.keys(body.preferences).length > 0;
+    
+    if (!hasDisplayData && !hasGameplayData && !hasVisualNovelGameplayData && !hasPreferencesData) {
+        return NextResponse.json({ error: 'No valid settings data provided' }, { status: 400 });
     }
     
     // Flatten the nested object for MongoDB's $set operator
@@ -429,6 +466,15 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.display) {
       buildUpdateFields(body.display, 'display');
+    }
+    // รองรับการอัปเดต visualNovelGameplay โดยตรง (สำหรับ blueprintEditor settings)
+    if (body.visualNovelGameplay) {
+      buildUpdateFields(body.visualNovelGameplay, 'visualNovelGameplay');
+    }
+    
+    // รองรับ structure ใหม่จาก NovelEditor (preferences.visualNovelGameplay)
+    if (body.preferences?.visualNovelGameplay) {
+      buildUpdateFields(body.preferences.visualNovelGameplay, 'visualNovelGameplay');
     }
 
     if (Object.keys(updateFields).length === 0) {

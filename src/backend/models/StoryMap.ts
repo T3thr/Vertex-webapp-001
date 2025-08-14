@@ -522,11 +522,31 @@ export interface IStoryMap extends Document {
     viewOffsetY?: number;
     gridSize?: number;
     showGrid?: boolean;
+    showSceneThumbnails?: boolean; // Blueprint Tab setting
+    showNodeLabels?: boolean; // Blueprint Tab setting
     autoLayoutAlgorithm?: "dagre" | "elk" | "custom"; // สำหรับ auto-layout
     layoutEngineSettings?: any; // การตั้งค่าเฉพาะของ layout engine
     uiPreferences?: { // การตั้งค่า UI ของ editor
         nodeDefaultColor?: string;
         edgeDefaultColor?: string;
+        connectionLineStyle?: "solid" | "dashed" | "dotted";
+        showConnectionLines?: boolean;
+        autoSaveEnabled?: boolean;
+        autoSaveIntervalSec?: 15 | 30;
+        snapToGrid?: boolean;
+        enableAnimations?: boolean; // Professional mode toggle
+    };
+    collaborationSettings?: { // Real-time collaboration features
+        allowMultipleEditors?: boolean;
+        showCursors?: boolean;
+        showUserAvatars?: boolean;
+        lockTimeout?: number; // seconds before releasing lock
+    };
+    performanceSettings?: { // Performance optimization
+        virtualizeNodes?: boolean; // For large graphs
+        maxVisibleNodes?: number;
+        chunkSize?: number; // For pagination
+        enableCaching?: boolean;
     };
     [key: string]: any; // For other editor-specific settings
   };
@@ -541,6 +561,32 @@ export interface IStoryMap extends Document {
       // ... more analytics data
   };
   globalTheme?: string;
+  
+  // Real-time collaboration และ auto-save optimization
+  currentEditors?: Array<{
+    userId: Types.ObjectId;
+    sessionId: string;
+    lastActiveAt: Date;
+    cursorPosition?: { x: number; y: number };
+    isEditing?: boolean;
+    lockedNodes?: string[]; // Node IDs currently being edited
+  }>;
+  
+  // Command-based saves for better performance  
+  pendingCommands?: Array<{
+    commandId: string;
+    userId: Types.ObjectId;
+    type: 'node_add' | 'node_update' | 'node_delete' | 'edge_add' | 'edge_update' | 'edge_delete' | 'batch';
+    timestamp: Date;
+    data: any;
+    applied?: boolean;
+  }>;
+  
+  // Version control และ conflict resolution
+  etag?: string; // For optimistic concurrency control
+  lastSyncedAt?: Date;
+  conflictResolutionStrategy?: 'last_write_wins' | 'merge' | 'manual';
+  
   createdAt: Date;
   updatedAt: Date;
 }

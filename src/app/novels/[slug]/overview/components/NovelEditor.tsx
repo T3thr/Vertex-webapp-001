@@ -26,6 +26,10 @@ import BlueprintTab from './tabs/BlueprintTab'
 import DirectorTab from './tabs/DirectorTab'
 import SummaryTab from './tabs/SummaryTab'
 
+// Import ระบบ Save ใหม่
+import { UnifiedSaveManager, createSaveManager } from './tabs/SaveManager'
+import SaveStatusIndicator from './tabs/SaveStatusIndicator'
+
 // Import types
 import type { NovelData, EpisodeData, StoryMapData } from '../page'
 
@@ -37,6 +41,7 @@ interface NovelEditorProps {
   scenes: any[]
   userMedia: any[]
   officialMedia: any[]
+  userSettings?: any // UserSettings object
 }
 
 /**
@@ -50,7 +55,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   characters,
   scenes,
   userMedia,
-  officialMedia
+  officialMedia,
+  userSettings
 }) => {
   // State สำหรับแท็บที่เลือก
   const [activeTab, setActiveTab] = useState<'blueprint' | 'director' | 'summary'>('blueprint')
@@ -62,29 +68,118 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // State สำหรับ mobile menu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   
-  // State สำหรับ auto-save
-  const [isSaving, setIsSaving] = useState(false)
-  const [lastSaved, setLastSaved] = useState<Date | null>(null)
-  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(false)
-  const [autoSaveIntervalSec, setAutoSaveIntervalSec] = useState<15 | 30>(15)
-  const [isDirty, setIsDirty] = useState(false)
+  // State สำหรับ auto-save (โหลดจาก UserSettings หรือ localStorage) - แก้ไข hydration
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(false) // เริ่มต้นด้วยค่าคงที่เพื่อป้องกัน hydration mismatch
+  
+  const [autoSaveIntervalSec, setAutoSaveIntervalSec] = useState<15 | 30>(30) // เริ่มต้นด้วยค่าคงที่
+  
+  // ใช้ Unified Save Manager แทน state แยกๆ
+  const [saveManager] = useState(() => createSaveManager({
+    novelSlug: novel.slug,
+    autoSaveEnabled: isAutoSaveEnabled,
+    autoSaveIntervalMs: autoSaveIntervalSec * 1000,
+    onDirtyChange: (isDirty) => {
+      // Callback เมื่อสถานะ dirty เปลี่ยน
+    }
+  }))
+  
+  const [saveState, setSaveState] = useState(saveManager.getState())
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false)
   
-  // State สำหรับ Blueprint settings
-  const [showSceneThumbnails, setShowSceneThumbnails] = useState(true)
-  const [showNodeLabels, setShowNodeLabels] = useState(true)
-  const [showGrid, setShowGrid] = useState(true)
+  // State สำหรับ Blueprint settings (โหลดจาก UserSettings หรือ localStorage) - แก้ไข hydration
+  const [showSceneThumbnails, setShowSceneThumbnails] = useState(true) // เริ่มต้นด้วยค่าคงที่
+  
+  const [showNodeLabels, setShowNodeLabels] = useState(true) // เริ่มต้นด้วยค่าคงที่
+  const [showGrid, setShowGrid] = useState(true) // เริ่มต้นด้วยค่าคงที่
+  const [snapToGrid, setSnapToGrid] = useState(false) // เริ่มต้นด้วยค่าคงที่
+  const [enableAnimations, setEnableAnimations] = useState(true) // เริ่มต้นด้วยค่าคงที่
+  const [conflictResolutionStrategy, setConflictResolutionStrategy] = useState<'last_write_wins' | 'merge' | 'manual'>('merge') // เริ่มต้นด้วยค่าคงที่
+
+  // ฟังก์ชั่นบันทึกการตั้งค่าไปยัง UserSettings
+  const saveUserSettings = async (settings: any) => {
+    try {
+      console.log('Saving user settings:', settings);
+      
+      const response = await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          preferences: {
+            visualNovelGameplay: {
+              blueprintEditor: settings
+            }
+          }
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Settings save failed:', errorData);
+        throw new Error(errorData.error || 'Failed to save user settings')
+      }
+
+      const result = await response.json();
+      console.log('Settings saved successfully:', result);
+      
+      // อัปเดต local state ด้วยค่าที่บันทึกแล้ว
+      if (result.settings?.visualNovelGameplay?.blueprintEditor) {
+        const savedSettings = result.settings.visualNovelGameplay.blueprintEditor;
+        
+        // Sync กับ local state
+        if (savedSettings.autoSaveEnabled !== undefined) {
+          setIsAutoSaveEnabled(savedSettings.autoSaveEnabled);
+        }
+        if (savedSettings.autoSaveIntervalSec !== undefined) {
+          setAutoSaveIntervalSec(savedSettings.autoSaveIntervalSec);
+        }
+        if (savedSettings.showSceneThumbnails !== undefined) {
+          setShowSceneThumbnails(savedSettings.showSceneThumbnails);
+        }
+        if (savedSettings.showNodeLabels !== undefined) {
+          setShowNodeLabels(savedSettings.showNodeLabels);
+        }
+        if (savedSettings.showGrid !== undefined) {
+          setShowGrid(savedSettings.showGrid);
+        }
+        if (savedSettings.snapToGrid !== undefined) {
+          setSnapToGrid(savedSettings.snapToGrid);
+        }
+        if (savedSettings.enableAnimations !== undefined) {
+          setEnableAnimations(savedSettings.enableAnimations);
+        }
+        if (savedSettings.conflictResolutionStrategy !== undefined) {
+          setConflictResolutionStrategy(savedSettings.conflictResolutionStrategy);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error saving user settings:', error)
+      toast.error('Failed to save settings: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    }
+  }
+
+  // Debounced save settings function
+  const debouncedSaveSettings = React.useMemo(
+    () => {
+      let timeoutId: NodeJS.Timeout
+      return (settings: any) => {
+        clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => saveUserSettings(settings), 1000)
+      }
+    },
+    []
+  )
 
   // Handlers for data updates
   const handleStoryMapUpdate = (updatedStoryMap: any) => {
     setCurrentStoryMap(updatedStoryMap)
-    setLastSaved(new Date())
     toast.success('StoryMap updated successfully')
   }
 
   const handleSceneUpdate = async (sceneId: string, sceneData: any) => {
     try {
-      setIsSaving(true)
       const response = await fetch(`/api/novels/${novel.slug}/scenes/${sceneId}`, {
         method: 'PUT',
         headers: {
@@ -101,20 +196,16 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       setCurrentScenes(prev => prev.map(scene => 
         scene._id === sceneId ? updatedScene.scene : scene
       ))
-      setLastSaved(new Date())
       toast.success('Scene updated successfully')
     } catch (error) {
       console.error('Error updating scene:', error)
       toast.error('Failed to update scene')
       throw error
-    } finally {
-      setIsSaving(false)
     }
   }
 
   const handleEpisodeUpdate = async (episodeId: string, episodeData: any) => {
     try {
-      setIsSaving(true)
       const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}`, {
         method: 'PUT',
         headers: {
@@ -131,20 +222,16 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       setCurrentEpisodes(prev => prev.map(episode => 
         episode._id === episodeId ? updatedEpisode.episode : episode
       ))
-      setLastSaved(new Date())
       toast.success('Episode updated successfully')
     } catch (error) {
       console.error('Error updating episode:', error)
       toast.error('Failed to update episode')
       throw error
-    } finally {
-      setIsSaving(false)
     }
   }
 
   const handleNovelUpdate = async (novelData: any) => {
     try {
-      setIsSaving(true)
       const response = await fetch(`/api/novels/${novel.slug}`, {
         method: 'PUT',
         headers: {
@@ -159,43 +246,41 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
       const updatedNovel = await response.json()
       setCurrentNovel(updatedNovel.novel)
-      setLastSaved(new Date())
       toast.success('Novel updated successfully')
     } catch (error) {
       console.error('Error updating novel:', error)
       toast.error('Failed to update novel')
       throw error
-    } finally {
-      setIsSaving(false)
     }
   }
 
-  // Manual save function - triggers save for currently active tab
+  // Manual save function - ใช้ Unified Save Manager
   const handleManualSave = async () => {
-    if (!isDirty) {
-      toast.info('No changes to save')
+    if (!saveState.hasUnsavedChanges) {
+      toast.info('ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก')
       return
     }
     
     try {
-      setIsSaving(true)
-      // Trigger manual save from the active tab
-      if (activeTab === 'blueprint' && blueprintTabRef.current?.handleManualSave) {
-        await blueprintTabRef.current.handleManualSave()
-      } else if (activeTab === 'director' && directorTabRef.current?.handleManualSave) {
-        await directorTabRef.current.handleManualSave()
-      } else if (activeTab === 'summary' && summaryTabRef.current?.handleManualSave) {
-        await summaryTabRef.current.handleManualSave()
+      // รวบรวมข้อมูลจากแท็บที่เปิดอยู่
+      let dataToSave = null
+      
+      if (activeTab === 'blueprint' && blueprintTabRef.current?.getCurrentData) {
+        dataToSave = await blueprintTabRef.current.getCurrentData()
+      } else if (activeTab === 'director' && directorTabRef.current?.getCurrentData) {
+        dataToSave = await directorTabRef.current.getCurrentData()
+      } else if (activeTab === 'summary' && summaryTabRef.current?.getCurrentData) {
+        dataToSave = await summaryTabRef.current.getCurrentData()
       }
       
-      setLastSaved(new Date())
-      setIsDirty(false)
-      toast.success('All changes saved successfully')
+      if (dataToSave) {
+        await saveManager.saveManual(dataToSave)
+      } else {
+        toast.warning('ไม่พบข้อมูลที่ต้องบันทึก')
+      }
     } catch (error) {
-      console.error('Error saving:', error)
-      toast.error('Failed to save changes')
-    } finally {
-      setIsSaving(false)
+      console.error('Error in manual save:', error)
+      // Error handling จะถูกจัดการโดย SaveManager
     }
   }
 
@@ -204,6 +289,186 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   const directorTabRef = React.useRef<any>(null)
   const summaryTabRef = React.useRef<any>(null)
   const settingsDropdownRef = React.useRef<HTMLDivElement>(null)
+
+  // โหลดการตั้งค่าจริงหลังจาก component mount เพื่อป้องกัน hydration mismatch
+  useEffect(() => {
+    // โหลดค่าจาก UserSettings หรือ localStorage หลังจาก mount แล้ว
+    const loadAutoSaveEnabled = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveEnabled !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.autoSaveEnabled;
+      }
+      const saved = localStorage.getItem('blueprint-auto-save-enabled');
+      if (saved !== null) {
+        return JSON.parse(saved);
+      }
+      return false; // Default
+    };
+
+    const loadAutoSaveInterval = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveIntervalSec !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.autoSaveIntervalSec;
+      }
+      const saved = localStorage.getItem('blueprint-auto-save-interval');
+      if (saved !== null) {
+        const interval = parseInt(saved);
+        return (interval === 15 || interval === 30) ? interval : 30;
+      }
+      return 30;
+    };
+
+    const loadShowSceneThumbnails = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.showSceneThumbnails !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.showSceneThumbnails;
+      }
+      const saved = localStorage.getItem('blueprint-show-scene-thumbnails');
+      if (saved !== null) return JSON.parse(saved);
+      return true;
+    };
+
+    const loadShowNodeLabels = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.showNodeLabels !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.showNodeLabels;
+      }
+      const saved = localStorage.getItem('blueprint-show-node-labels');
+      if (saved !== null) return JSON.parse(saved);
+      return true;
+    };
+
+    const loadShowGrid = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.showGrid !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.showGrid;
+      }
+      const saved = localStorage.getItem('blueprint-show-grid');
+      if (saved !== null) return JSON.parse(saved);
+      return true;
+    };
+
+    const loadSnapToGrid = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.snapToGrid !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.snapToGrid;
+      }
+      const saved = localStorage.getItem('blueprint-snap-to-grid');
+      if (saved !== null) return JSON.parse(saved);
+      return false;
+    };
+
+    const loadEnableAnimations = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.enableAnimations !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.enableAnimations;
+      }
+      const saved = localStorage.getItem('blueprint-enable-animations');
+      if (saved !== null) return JSON.parse(saved);
+      return true;
+    };
+
+    const loadConflictStrategy = () => {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.conflictResolutionStrategy !== undefined) {
+        return userSettings.visualNovelGameplay.blueprintEditor.conflictResolutionStrategy;
+      }
+      const saved = localStorage.getItem('blueprint-conflict-resolution-strategy');
+      if (saved !== null) {
+        const strategy = saved.replace(/"/g, '');
+        if (['last_write_wins', 'merge', 'manual'].includes(strategy)) {
+          return strategy as 'last_write_wins' | 'merge' | 'manual';
+        }
+      }
+      return 'merge';
+    };
+
+    // อัปเดตค่าทั้งหมดหลังจาก mount
+    setIsAutoSaveEnabled(loadAutoSaveEnabled());
+    setAutoSaveIntervalSec(loadAutoSaveInterval());
+    setShowSceneThumbnails(loadShowSceneThumbnails());
+    setShowNodeLabels(loadShowNodeLabels());
+    setShowGrid(loadShowGrid());
+    setSnapToGrid(loadSnapToGrid());
+    setEnableAnimations(loadEnableAnimations());
+    setConflictResolutionStrategy(loadConflictStrategy());
+  }, [userSettings]);
+
+  // Sync saveState กับ saveManager
+  useEffect(() => {
+    const updateSaveState = (newState: any) => setSaveState(newState)
+    saveManager.updateConfig({ onStateChange: updateSaveState })
+    
+    return () => {
+      saveManager.destroy()
+    }
+  }, [saveManager])
+
+  // อัปเดต saveManager เมื่อการตั้งค่า auto-save เปลี่ยน
+  useEffect(() => {
+    saveManager.updateConfig({
+      autoSaveEnabled: isAutoSaveEnabled,
+      autoSaveIntervalMs: autoSaveIntervalSec * 1000
+    })
+  }, [saveManager, isAutoSaveEnabled, autoSaveIntervalSec])
+
+  // บันทึก settings ลง localStorage เมื่อเปลี่ยนแปลง (fallback สำหรับกรณีที่ไม่มีใน UserSettings)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // บันทึกเฉพาะเมื่อไม่มีใน UserSettings
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveEnabled === undefined) {
+        localStorage.setItem('blueprint-auto-save-enabled', JSON.stringify(isAutoSaveEnabled));
+      }
+    }
+  }, [isAutoSaveEnabled, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveIntervalSec === undefined) {
+        localStorage.setItem('blueprint-auto-save-interval', autoSaveIntervalSec.toString());
+      }
+    }
+  }, [autoSaveIntervalSec, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.showSceneThumbnails === undefined) {
+        localStorage.setItem('blueprint-show-scene-thumbnails', JSON.stringify(showSceneThumbnails));
+      }
+    }
+  }, [showSceneThumbnails, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.showNodeLabels === undefined) {
+        localStorage.setItem('blueprint-show-node-labels', JSON.stringify(showNodeLabels));
+      }
+    }
+  }, [showNodeLabels, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.showGrid === undefined) {
+        localStorage.setItem('blueprint-show-grid', JSON.stringify(showGrid));
+      }
+    }
+  }, [showGrid, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.snapToGrid === undefined) {
+        localStorage.setItem('blueprint-snap-to-grid', JSON.stringify(snapToGrid));
+      }
+    }
+  }, [snapToGrid, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.enableAnimations === undefined) {
+        localStorage.setItem('blueprint-enable-animations', JSON.stringify(enableAnimations));
+      }
+    }
+  }, [enableAnimations, userSettings])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (userSettings?.visualNovelGameplay?.blueprintEditor?.conflictResolutionStrategy === undefined) {
+        localStorage.setItem('blueprint-conflict-resolution-strategy', JSON.stringify(conflictResolutionStrategy));
+      }
+    }
+  }, [conflictResolutionStrategy, userSettings])
 
   // Handle click outside to close settings dropdown
   useEffect(() => {
@@ -245,30 +510,26 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* Save Status */}
-          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-            {isSaving && (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            )}
-            <span>
-              {lastSaved && !isSaving && `บันทึกล่าสุด ${lastSaved.toLocaleTimeString('th-TH')}`}
-              {isSaving && 'กำลังบันทึก...'}
-            </span>
-          </div>
+          {/* Save Status - ใช้ SaveStatusIndicator ใหม่ */}
+          <SaveStatusIndicator 
+            saveState={saveState} 
+            size="md"
+            showDetails={false}
+          />
 
           {/* Manual Save */}
           <Button
             onClick={handleManualSave}
-            disabled={isSaving || !isDirty}
+            disabled={saveState.isSaving || !saveState.hasUnsavedChanges}
             size="sm"
             className={`flex items-center space-x-2 ${
-              isDirty 
+              saveState.hasUnsavedChanges 
                 ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                 : 'bg-muted text-muted-foreground'
             }`}
           >
             <Save className="h-4 w-4" />
-            <span>{isDirty ? 'บันทึก' : 'บันทึกแล้ว'}</span>
+            <span>{saveState.hasUnsavedChanges ? 'บันทึก' : 'บันทึกแล้ว'}</span>
           </Button>
 
           {/* Settings Dropdown */}
@@ -307,13 +568,19 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                             Auto-save
                           </Label>
                           <p className="text-xs text-muted-foreground">
-                            บันทึกการเปลี่ยนแปลงอัตโนมัติ
+                            บันทึกการเปลี่ยนแปลงอัตโนมัติ (ค่าเริ่มต้น: ปิด)
                           </p>
                         </div>
                         <Switch
                           id="auto-save"
                           checked={isAutoSaveEnabled}
-                          onCheckedChange={setIsAutoSaveEnabled}
+                          onCheckedChange={(checked) => {
+                            setIsAutoSaveEnabled(checked)
+                            debouncedSaveSettings({ 
+                              ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                              autoSaveEnabled: checked 
+                            })
+                          }}
                         />
                       </div>
                       
@@ -330,7 +597,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                             <Button
                               variant={autoSaveIntervalSec === 15 ? "default" : "outline"}
                               size="sm"
-                              onClick={() => setAutoSaveIntervalSec(15)}
+                              onClick={() => {
+                                setAutoSaveIntervalSec(15)
+                                debouncedSaveSettings({ 
+                                  ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                                  autoSaveIntervalSec: 15 
+                                })
+                              }}
                               className="flex-1"
                             >
                               15 วินาที
@@ -338,7 +611,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                             <Button
                               variant={autoSaveIntervalSec === 30 ? "default" : "outline"}
                               size="sm"
-                              onClick={() => setAutoSaveIntervalSec(30)}
+                              onClick={() => {
+                                setAutoSaveIntervalSec(30)
+                                debouncedSaveSettings({ 
+                                  ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                                  autoSaveIntervalSec: 30 
+                                })
+                              }}
                               className="flex-1"
                             >
                               30 วินาที
@@ -355,10 +634,10 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                             {isAutoSaveEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
                           </span>
                         </div>
-                        {lastSaved && (
+                        {saveState.lastSaved && (
                           <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
                             <span>บันทึกล่าสุด:</span>
-                            <span>{lastSaved.toLocaleTimeString('th-TH')}</span>
+                            <span>{saveState.lastSaved.toLocaleTimeString('th-TH')}</span>
                           </div>
                         )}
                       </div>
@@ -386,7 +665,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                         <Switch
                           id="scene-thumbnails"
                           checked={showSceneThumbnails}
-                          onCheckedChange={setShowSceneThumbnails}
+                          onCheckedChange={(checked) => {
+                            setShowSceneThumbnails(checked)
+                            debouncedSaveSettings({ 
+                              ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                              showSceneThumbnails: checked 
+                            })
+                          }}
                         />
                       </div>
                       
@@ -403,7 +688,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                         <Switch
                           id="choice-labels"
                           checked={showNodeLabels}
-                          onCheckedChange={setShowNodeLabels}
+                          onCheckedChange={(checked) => {
+                            setShowNodeLabels(checked)
+                            debouncedSaveSettings({ 
+                              ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                              showNodeLabels: checked 
+                            })
+                          }}
                         />
                       </div>
                       
@@ -420,8 +711,97 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                         <Switch
                           id="show-grid"
                           checked={showGrid}
-                          onCheckedChange={setShowGrid}
+                          onCheckedChange={(checked) => {
+                            setShowGrid(checked)
+                            debouncedSaveSettings({ 
+                              ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                              showGrid: checked 
+                            })
+                          }}
                         />
+                      </div>
+
+                      {/* Advanced Blueprint Settings */}
+                      <div className="space-y-4 pt-2 border-t border-border">
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">การตั้งค่าขั้นสูง</h4>
+                          <p className="text-xs text-muted-foreground">
+                            การตั้งค่าสำหรับผู้ใช้ขั้นสูง
+                          </p>
+                        </div>
+
+                        {/* Snap to Grid Toggle */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <Label htmlFor="snap-to-grid" className="text-sm font-medium">
+                              จัดแนวตารางอัตโนมัติ
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              จัดแนว node ให้เข้ากับตารางเมื่อลาก
+                            </p>
+                          </div>
+                          <Switch
+                            id="snap-to-grid"
+                            checked={snapToGrid}
+                            onCheckedChange={(checked) => {
+                              setSnapToGrid(checked)
+                              debouncedSaveSettings({ 
+                                ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                                snapToGrid: checked 
+                              })
+                            }}
+                          />
+                        </div>
+
+                        {/* Animations Toggle */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <Label htmlFor="enable-animations" className="text-sm font-medium">
+                              เอฟเฟกต์แอนิเมชัน
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              แอนิเมชันการเคลื่อนไหวและการเปลี่ยนแปลง
+                            </p>
+                          </div>
+                          <Switch
+                            id="enable-animations"
+                            checked={enableAnimations}
+                            onCheckedChange={(checked) => {
+                              setEnableAnimations(checked)
+                              debouncedSaveSettings({ 
+                                ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                                enableAnimations: checked 
+                              })
+                            }}
+                          />
+                        </div>
+
+                        {/* Conflict Resolution Strategy */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">การแก้ไขข้อขัดแย้ง</Label>
+                          <Select
+                            value={conflictResolutionStrategy}
+                            onValueChange={(value: 'last_write_wins' | 'merge' | 'manual') => {
+                              setConflictResolutionStrategy(value)
+                              debouncedSaveSettings({ 
+                                ...userSettings?.visualNovelGameplay?.blueprintEditor,
+                                conflictResolutionStrategy: value 
+                              })
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="merge">รวมอัตโนมัติ (แนะนำ)</SelectItem>
+                              <SelectItem value="last_write_wins">ใช้การเปลี่ยนแปลงล่าสุด</SelectItem>
+                              <SelectItem value="manual">ให้ผู้ใช้เลือกเอง</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            วิธีการแก้ไขเมื่อมีการแก้ไขพร้อมกัน
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -449,10 +829,10 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
         <Button
           onClick={handleManualSave}
-          disabled={isSaving}
+          disabled={saveState.isSaving}
           size="sm"
         >
-          {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saveState.isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </Button>
       </div>
 
@@ -598,8 +978,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                     </div>
                     
                     <div className="text-xs text-muted-foreground">
-                      {lastSaved && !isSaving && `บันทึกล่าสุด ${lastSaved.toLocaleTimeString('th-TH')}`}
-                      {isSaving && 'กำลังบันทึก...'}
+                      {saveState.lastSaved && !saveState.isSaving && `บันทึกล่าสุด ${saveState.lastSaved.toLocaleTimeString('th-TH')}`}
+                      {saveState.isSaving && 'กำลังบันทึก...'}
                     </div>
                   </div>
                 </motion.div>
@@ -620,12 +1000,9 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 officialMedia={officialMedia}
                 episodes={currentEpisodes}
                 onStoryMapUpdate={handleStoryMapUpdate}
-                isAutoSaveEnabled={isAutoSaveEnabled}
-                autoSaveIntervalSec={autoSaveIntervalSec}
-                onDirtyChange={setIsDirty}
-                showSceneThumbnails={showSceneThumbnails}
-                showNodeLabels={showNodeLabels}
-                showGrid={showGrid}
+                onManualSave={handleManualSave}
+                onDirtyChange={() => {}} // ไม่ใช้แล้วเพราะมี SaveManager จัดการ
+                userSettings={userSettings}
                 onNavigateToDirector={(sceneId?: string) => {
                   setActiveTab('director')
                   // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus

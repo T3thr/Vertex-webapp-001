@@ -76,10 +76,10 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
   if (showThumbnail && thumbnailUrl) {
     return (
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
+        whileHover={{ scale: 1.005 }}
+        transition={{ duration: 0.1, ease: "easeOut" }}
         className={`
           relative w-32 h-20 bg-card border-2 rounded-lg shadow-lg transition-all duration-200 overflow-hidden
           ${selected ? 'border-primary shadow-primary/20' : 'border-border'}
@@ -179,10 +179,10 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
   // Standard node rendering
   return (
     <motion.div
-      initial={{ scale: 0.8, opacity: 0 }}
+      initial={{ scale: 0.95, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ scale: 1.005 }}
+      transition={{ duration: 0.1, ease: "easeOut" }}
       className={`
         relative min-w-[200px] max-w-[280px] 
         bg-card border-2 rounded-lg shadow-lg 

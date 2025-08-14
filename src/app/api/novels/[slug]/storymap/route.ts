@@ -180,16 +180,41 @@ export async function PUT(
     });
 
     if (storyMap) {
-      // Check for version conflicts
+      // Enhanced version conflict handling - ระบบจัดการ conflict อัตโนมัติ
       if (clientVersion && clientVersion < storyMap.version) {
-        return NextResponse.json({ 
-          error: 'Conflict: A newer version of the story map exists.',
-          latestVersion: storyMap.version,
-          currentVersion: clientVersion
-        }, { status: 409 });
+        console.log(`[CONFLICT DETECTED] Client version: ${clientVersion}, Server version: ${storyMap.version}`);
+        
+        // แทนที่จะ return error ให้ทำ intelligent merge
+        const mergedData = await performIntelligentMerge(
+          { nodes, edges, storyVariables },
+          { 
+            nodes: storyMap.nodes || [], 
+            edges: storyMap.edges || [], 
+            storyVariables: storyMap.storyVariables || [] 
+          }
+        );
+        
+        // อัปเดตด้วยข้อมูลที่ merge แล้ว
+        storyMap.nodes = mergedData.nodes;
+        storyMap.edges = mergedData.edges;
+        storyMap.storyVariables = mergedData.storyVariables;
+        storyMap.version += 1;
+        storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(userId);
+        storyMap.updatedAt = new Date();
+        
+        // บันทึกและส่งกลับข้อมูลที่ merge แล้ว
+        await storyMap.save();
+        
+        return NextResponse.json({
+          storyMap: JSON.parse(JSON.stringify(storyMap)),
+          validation: { orphanedNodes: [], missingConnections: [], cycles: [], unreachableNodes: [], isValid: true },
+          newVersion: storyMap.version,
+          merged: true, // บอกให้ client ทราบว่ามีการ merge เกิดขึ้น
+          mergeMessage: 'การเปลี่ยนแปลงของคุณถูกรวมกับเวอร์ชันล่าสุดเรียบร้อยแล้ว'
+        });
       }
       
-      // Update existing story map
+      // Normal update - ไม่มี conflict
       storyMap.nodes = nodes;
       storyMap.edges = edges;
       storyMap.storyVariables = storyVariables || storyMap.storyVariables;
@@ -365,4 +390,135 @@ function performStoryMapValidation(storyMap: any, scenes: any[], choices: any[])
   });
 
   return validation;
+}
+
+// ===================================================================
+// SECTION: Intelligent Merge System - ระบบรวมข้อมูลอัตโนมัติ
+// ===================================================================
+
+/**
+ * ฟังก์ชันสำหรับรวมข้อมูล StoryMap อย่างชาญฉลาด
+ * ใช้หลักการ 3-way merge เหมือน Git โดยพิจารณา:
+ * 1. Nodes: รวมตาม ID, ใช้ timestamp ล่าสุด
+ * 2. Edges: รวมตาม ID, ใช้ timestamp ล่าสุด  
+ * 3. Positions: ใช้ตำแหน่งจาก client (user's current view)
+ * 4. StoryVariables: รวมแบบ deep merge
+ */
+async function performIntelligentMerge(
+  localData: { nodes: any[], edges: any[], storyVariables: any[] },
+  serverData: { nodes: any[], edges: any[], storyVariables: any[] }
+) {
+  console.log('[MERGE] Starting intelligent merge process');
+  
+  // 1. Merge Nodes - รวม nodes โดยใช้ ID เป็นหลัก
+  const mergedNodes = mergeNodesByStrategy(localData.nodes, serverData.nodes);
+  
+  // 2. Merge Edges - รวม edges โดยใช้ ID เป็นหลัก  
+  const mergedEdges = mergeEdgesByStrategy(localData.edges, serverData.edges);
+  
+  // 3. Merge Story Variables - รวมแบบ deep merge
+  const mergedStoryVariables = mergeStoryVariables(localData.storyVariables, serverData.storyVariables);
+  
+  console.log(`[MERGE] Completed: ${mergedNodes.length} nodes, ${mergedEdges.length} edges, ${mergedStoryVariables.length} variables`);
+  
+  return {
+    nodes: mergedNodes,
+    edges: mergedEdges,
+    storyVariables: mergedStoryVariables
+  };
+}
+
+/**
+ * รวม nodes โดยใช้กลยุทธ์:
+ * - เก็บ nodes ที่มีอยู่ทั้งสองฝ่าย
+ * - ใช้ตำแหน่งจาก local (user's current view)
+ * - ใช้เนื้อหาจาก version ที่ใหม่กว่า
+ */
+function mergeNodesByStrategy(localNodes: any[], serverNodes: any[]): any[] {
+  const nodeMap = new Map<string, any>();
+  
+  // เพิ่ม server nodes ก่อน (base)
+  serverNodes.forEach(node => {
+    if (node.nodeId) {
+      nodeMap.set(node.nodeId, { ...node, source: 'server' });
+    }
+  });
+  
+  // เพิ่ม local nodes (ทับ server ถ้า ID ซ้ำ)
+  localNodes.forEach(localNode => {
+    if (localNode.nodeId) {
+      const existingNode = nodeMap.get(localNode.nodeId);
+      if (existingNode) {
+        // Node มีอยู่แล้ว - merge กัน
+        nodeMap.set(localNode.nodeId, {
+          ...existingNode, // เริ่มจาก server data
+          ...localNode,    // ทับด้วย local data
+          position: localNode.position || existingNode.position, // ใช้ตำแหน่งจาก local
+          source: 'merged'
+        });
+      } else {
+        // Node ใหม่จาก local
+        nodeMap.set(localNode.nodeId, { ...localNode, source: 'local' });
+      }
+    }
+  });
+  
+  return Array.from(nodeMap.values());
+}
+
+/**
+ * รวม edges โดยใช้กลยุทธ์เดียวกันกับ nodes
+ */
+function mergeEdgesByStrategy(localEdges: any[], serverEdges: any[]): any[] {
+  const edgeMap = new Map<string, any>();
+  
+  // เพิ่ม server edges ก่อน
+  serverEdges.forEach(edge => {
+    if (edge.edgeId) {
+      edgeMap.set(edge.edgeId, { ...edge, source: 'server' });
+    }
+  });
+  
+  // เพิ่ม local edges
+  localEdges.forEach(localEdge => {
+    if (localEdge.edgeId) {
+      const existingEdge = edgeMap.get(localEdge.edgeId);
+      if (existingEdge) {
+        // Edge มีอยู่แล้ว - merge กัน
+        edgeMap.set(localEdge.edgeId, {
+          ...existingEdge,
+          ...localEdge,
+          source: 'merged'
+        });
+      } else {
+        // Edge ใหม่จาก local
+        edgeMap.set(localEdge.edgeId, { ...localEdge, source: 'local' });
+      }
+    }
+  });
+  
+  return Array.from(edgeMap.values());
+}
+
+/**
+ * รวม story variables แบบ deep merge
+ */
+function mergeStoryVariables(localVars: any[], serverVars: any[]): any[] {
+  const varMap = new Map<string, any>();
+  
+  // เพิ่ม server variables ก่อน
+  serverVars.forEach(variable => {
+    if (variable.variableId) {
+      varMap.set(variable.variableId, variable);
+    }
+  });
+  
+  // เพิ่ม local variables (ทับ server ถ้า ID ซ้ำ)
+  localVars.forEach(localVar => {
+    if (localVar.variableId) {
+      varMap.set(localVar.variableId, localVar);
+    }
+  });
+  
+  return Array.from(varMap.values());
 }

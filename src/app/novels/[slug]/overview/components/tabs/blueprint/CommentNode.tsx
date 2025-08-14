@@ -54,10 +54,10 @@ const CommentNode: React.FC<NodeProps> = ({
 
   return (
     <motion.div
-      initial={{ scale: 0.8, opacity: 0 }}
+      initial={{ scale: 0.95, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ scale: 1.005 }}
+      transition={{ duration: 0.1, ease: "easeOut" }}
       className={`
         relative min-w-[200px] max-w-[280px] 
         bg-card border-2 rounded-lg shadow-lg 
