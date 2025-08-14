@@ -1,121 +1,313 @@
+// API Route: /api/novels/[slug]/episodes/[episodeId]
+// GET: Fetch Episode data
+// PUT: Update existing Episode
+// DELETE: Delete Episode
+
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
-import EpisodeModel from '@/backend/models/Episode';
+import EpisodeModel, { IEpisode } from '@/backend/models/Episode';
 import SceneModel from '@/backend/models/Scene';
 import CharacterModel from '@/backend/models/Character';
 import ChoiceModel from '@/backend/models/Choice';
 import StoryMapModel from '@/backend/models/StoryMap';
+import { validateNovelAccess } from '../../storymap/auth-helper';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; episodeId: string }> }
 ) {
   try {
-    await dbConnect();
     const { slug, episodeId } = await params;
 
-    const novel = await NovelModel.findOne({ slug, isDeleted: { $ne: true } }).select('_id endingType isCompleted totalEpisodesCount').lean();
+    await dbConnect();
+
+    // 1) Find public novel by slug
+    const novel = await NovelModel.findOne({
+      slug,
+      isDeleted: { $ne: true },
+      status: { $in: ['published', 'completed'] }
+    })
+      .select('_id title status')
+      .lean();
+
     if (!novel) {
       return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
     }
 
-    const episode = await EpisodeModel.findOne({ _id: episodeId, novelId: novel._id }).lean();
+    // 2) Find public episode in this novel
+    const episode = await EpisodeModel.findOne({
+      _id: episodeId,
+      novelId: novel._id,
+      status: 'published'
+    })
+      .select(
+        '_id novelId authorId title slug episodeOrder accessType priceCoins originalPriceCoins teaserText stats firstSceneId nextEpisodeId previousEpisodeId'
+      )
+      .lean();
+
     if (!episode) {
-      return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
+      return NextResponse.json({ error: 'ไม่พบตอนที่ระบุ' }, { status: 404 });
     }
 
-    const [scenes, characters, choices, storyMap] = await Promise.all([
-      SceneModel.find({ episodeId: episode._id }).sort({ sceneOrder: 1 }).lean(),
-      CharacterModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
-      ChoiceModel.find({ novelId: novel._id, isArchived: { $ne: true } }).lean(),
-      StoryMapModel.findOne({ novelId: novel._id, isActive: true }).lean()
-    ]);
+    // 3) Preload characters of this novel for lookup
+    const characters = await CharacterModel.find({
+      novelId: novel._id,
+      isArchived: { $ne: true }
+    })
+      .select('_id name profileImageMediaId profileImageSourceType expressions')
+      .lean();
+    const characterMap = new Map(characters.map((c: any) => [c._id.toString(), c]));
 
-    const characterLookup = characters.reduce((acc, char) => {
-      acc[char._id.toString()] = char;
-      return acc;
-    }, {} as Record<string, any>);
+    // 4) Load scenes of this episode (ordered)
+    const rawScenes = await SceneModel.find({
+      novelId: novel._id,
+      episodeId: episode._id,
+    })
+      .sort({ sceneOrder: 1 })
+      .lean();
 
-    const choiceLookup = choices.reduce((acc, choice) => {
-        acc[choice._id.toString()] = choice;
-        return acc;
-    }, {} as Record<string, any>);
+    // 5) For each scene, attach characters, text contents, and choices
+    const sceneIds = rawScenes.map((s: any) => s._id);
+    // Prefer explicit choiceIds if present; otherwise skip
+    const allChoiceIds = rawScenes.flatMap((s: any) => (Array.isArray(s.choiceIds) ? s.choiceIds : []));
+    const choicesById = new Map<string, any>();
+    if (allChoiceIds.length > 0) {
+      const foundChoices = await ChoiceModel.find({ _id: { $in: allChoiceIds } })
+        .select('_id text hoverText actions isTimedChoice timeLimitSeconds isArchived')
+        .lean();
+      for (const ch of foundChoices) {
+        choicesById.set(ch._id.toString(), ch);
+      }
+    }
 
-    const processedScenes = scenes.map((scene: any) => {
-      const sceneCharacters = (scene.characters || []).map((char: any) => ({
+    const scenes = rawScenes.map((scene: any) => {
+      // characters with embedded characterData
+      const charactersInScene = (scene.characters || []).map((char: any) => ({
         instanceId: char.instanceId,
-        characterId: char.characterId.toString(),
-        characterData: characterLookup[char.characterId.toString()],
+        characterId: char.characterId?.toString(),
+        characterData: char.characterId ? characterMap.get(char.characterId.toString()) : undefined,
         expressionId: char.expressionId,
         transform: char.transform,
         isVisible: char.isVisible !== false,
+        enterAnimation: char.enterAnimation,
+        exitAnimation: char.exitAnimation,
+        layerId: char.layerId,
+        currentStatusEffects: char.currentStatusEffects || [],
       }));
-      
-      const textContents = (scene.textContents || []).map((tc: any) => ({
-        instanceId: tc.instanceId,
-        type: tc.type,
-        characterId: tc.characterId?.toString(),
-        speakerDisplayName: tc.speakerDisplayName,
-        content: tc.content,
+
+      // text contents with stringified ids
+      const textContents = (scene.textContents || []).map((t: any) => ({
+        ...t,
+        characterId: t.characterId ? t.characterId.toString() : undefined,
+        voiceOverMediaId: t.voiceOverMediaId ? t.voiceOverMediaId.toString() : undefined,
       }));
-      
-      const sceneChoices = (scene.choiceIds || []).map((choiceId: any) => {
-          const choiceData = choiceLookup[choiceId.toString()];
-          return choiceData ? {
-              _id: choiceData._id.toString(),
-              text: choiceData.text,
-              hoverText: choiceData.hoverText,
-              actions: choiceData.actions,
-          } : null;
-      }).filter(Boolean);
+
+      // choices
+      const sceneChoices: any[] = Array.isArray(scene.choiceIds)
+        ? scene.choiceIds
+            .map((id: any) => choicesById.get(id.toString()))
+            .filter((c: any) => c && c.isArchived !== true)
+            .map((c: any) => ({
+              _id: c._id.toString(),
+              text: c.text,
+              hoverText: c.hoverText,
+              actions: c.actions,
+              isTimedChoice: c.isTimedChoice,
+              timeLimitSeconds: c.timeLimitSeconds,
+            }))
+        : [];
 
       return {
         _id: scene._id.toString(),
+        novelId: scene.novelId.toString(),
+        episodeId: scene.episodeId.toString(),
         nodeId: scene.nodeId,
-        sceneOrder: scene.sceneOrder,
         title: scene.title,
         background: scene.background,
-        sceneTransitionOut: scene.sceneTransitionOut, // Add transition data for performance optimization
-        characters: sceneCharacters,
+        version: scene.version,
+        layers: scene.layers,
+        characters: charactersInScene,
         textContents,
+        images: scene.images,
+        videos: scene.videos,
+        audios: (scene.audios || []).map((a: any) => ({
+          ...a,
+          mediaId: a.mediaId?.toString(),
+        })),
         choices: sceneChoices,
-        defaultNextSceneId: scene.defaultNextSceneId?.toString(),
-        ending: scene.ending, // เพิ่มการส่ง ending data
-        audioElements: scene.audios || [],
+        interactiveHotspots: scene.interactiveHotspots,
+        statusUIElements: scene.statusUIElements,
+        activeSceneEffects: scene.activeSceneEffects,
+        timelineTracks: scene.timelineTracks,
+        camera: scene.camera,
+        defaultNextSceneId: scene.defaultNextSceneId ? scene.defaultNextSceneId.toString() : undefined,
+        previousSceneId: scene.previousSceneId ? scene.previousSceneId.toString() : undefined,
+        sceneTransitionOut: scene.sceneTransitionOut,
+        autoAdvanceDelayMs: scene.autoAdvanceDelayMs,
+        sceneVariables: scene.sceneVariables,
+        onLoadScriptContent: scene.onLoadScriptContent,
+        onExitScriptContent: scene.onExitScriptContent,
+        editorNotes: scene.editorNotes,
+        thumbnailUrl: scene.thumbnailUrl,
+        authorDefinedEmotionTags: scene.authorDefinedEmotionTags,
+        sceneTags: scene.sceneTags,
+        entryConditions: scene.entryConditions,
+        estimatedComplexity: scene.estimatedComplexity,
+        criticalAssets: scene.criticalAssets,
+        ending: scene.ending || undefined,
       };
     });
 
-    const response = {
-      ...episode,
-      _id: episode._id.toString(),
-      firstSceneId: episode.firstSceneId?.toString(),
-      scenes: processedScenes,
-      storyMap: storyMap ? {
-        _id: storyMap._id.toString(),
-        nodes: storyMap.nodes,
-        edges: storyMap.edges,
-        storyVariables: storyMap.storyVariables,
-        startNodeId: storyMap.startNodeId
-      } : null,
-      // Add novel metadata for ending logic
-      novelMeta: {
-        endingType: novel.endingType,
-        isCompleted: novel.isCompleted,
-        totalEpisodesCount: novel.totalEpisodesCount
-      }
-    };
-    
-    // The top-level choices property is removed as choices are now embedded in scenes
-    delete (response as any).choices;
+    // 6) Optional: include story map for client-side branch resolution
+    const storyMap = await StoryMapModel.findOne({ novelId: novel._id, isActive: true })
+      .select('_id nodes edges storyVariables startNodeId')
+      .lean();
 
-    return NextResponse.json(response);
+    // 7) Construct response object to match client expectations
+    const detailedEpisode = {
+      _id: episode._id.toString(),
+      novelId: episode.novelId.toString(),
+      authorId: episode.authorId?.toString?.() || '',
+      title: episode.title,
+      slug: episode.slug,
+      episodeOrder: episode.episodeOrder,
+      accessType: episode.accessType,
+      priceCoins: episode.priceCoins || 0,
+      originalPriceCoins: episode.originalPriceCoins || 0,
+      teaserText: episode.teaserText || '',
+      stats: episode.stats || undefined,
+      firstSceneId: episode.firstSceneId ? episode.firstSceneId.toString() : undefined,
+      nextEpisodeId: episode.nextEpisodeId ? episode.nextEpisodeId.toString() : undefined,
+      previousEpisodeId: episode.previousEpisodeId ? episode.previousEpisodeId.toString() : undefined,
+      scenes,
+      storyMap: storyMap
+        ? {
+            _id: storyMap._id.toString(),
+            nodes: storyMap.nodes,
+            edges: storyMap.edges,
+            storyVariables: storyMap.storyVariables,
+            startNodeId: storyMap.startNodeId,
+          }
+        : null,
+    };
+
+    return NextResponse.json(detailedEpisode);
+  } catch (error) {
+    console.error('[Episode GET] Error:', error);
+    return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการดึงข้อมูลตอน' }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; episodeId: string }> }
+) {
+  try {
+    const { slug, episodeId } = await params;
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // Validate access
+    const { error, novel } = await validateNovelAccess(slug, session.user.id);
+    if (error) return error;
+
+    const body = await request.json();
+
+    // Find existing episode
+    const existingEpisode = await EpisodeModel.findOne({
+      _id: episodeId,
+      novelId: novel!._id
+    });
+
+    if (!existingEpisode) {
+      return NextResponse.json({ 
+        error: 'ไม่พบตอนที่ระบุ' 
+      }, { status: 404 });
+    }
+
+    // Update episode
+    const updateData: Partial<IEpisode> = {
+      ...body,
+      updatedAt: new Date()
+    };
+
+    // Remove _id from updateData to prevent conflicts
+    delete (updateData as any)._id;
+
+    // Handle status changes
+    if (updateData.status === 'published' && existingEpisode.status !== 'published') {
+      updateData.publishedAt = new Date();
+    }
+
+    const updatedEpisode = await EpisodeModel.findByIdAndUpdate(
+      episodeId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    return NextResponse.json({ 
+      episode: JSON.parse(JSON.stringify(updatedEpisode!.toObject())),
+      success: true,
+      message: 'อัพเดตตอนสำเร็จ'
+    });
 
   } catch (error) {
-    console.error('Error fetching episode:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch episode data' },
-      { status: 500 }
-    );
+    console.error('[Episode PUT] Error:', error);
+    return NextResponse.json({ 
+      error: 'เกิดข้อผิดพลาดในการอัพเดตตอน' 
+    }, { status: 500 });
   }
-} 
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string; episodeId: string }> }
+) {
+  try {
+    const { slug, episodeId } = await params;
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'ไม่ได้รับอนุญาต' }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    // Validate access
+    const { error, novel } = await validateNovelAccess(slug, session.user.id);
+    if (error) return error;
+
+    // Find and delete episode
+    const episode = await EpisodeModel.findOne({
+      _id: episodeId,
+      novelId: novel!._id
+    });
+
+    if (!episode) {
+      return NextResponse.json({ 
+        error: 'ไม่พบตอนที่ระบุ' 
+      }, { status: 404 });
+    }
+
+    await EpisodeModel.findByIdAndDelete(episodeId);
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'ลบตอนสำเร็จ'
+    });
+
+  } catch (error) {
+    console.error('[Episode DELETE] Error:', error);
+    return NextResponse.json({ 
+      error: 'เกิดข้อผิดพลาดในการลบตอน' 
+    }, { status: 500 });
+  }
+}

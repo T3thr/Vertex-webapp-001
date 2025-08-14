@@ -331,6 +331,42 @@ export interface IVisualNovelGameplayPreferences {
   saveLoad: IVNSaveLoadPreferences;
   decisions: IVNDecisionWarningPreferences;
   routeManagement: IVNRouteManagementPreferences;
+  
+  // Blueprint Editor preferences สำหรับ professional storytelling tools
+  blueprintEditor?: {
+    // Auto-save configuration
+    autoSaveEnabled?: boolean; // Default: false (ไม่บังคับผู้ใช้)
+    autoSaveIntervalSec?: 15 | 30; // Default: 30
+    
+    // Visual preferences
+    showSceneThumbnails?: boolean; // Default: true
+    showNodeLabels?: boolean; // Default: true
+    showConnectionLines?: boolean; // Default: true
+    showGrid?: boolean; // Default: true
+    
+    // Layout and behavior
+    autoLayout?: boolean; // Default: false
+    enableAnimations?: boolean; // Default: true (Professional mode = minimal animations)
+    snapToGrid?: boolean; // Default: false
+    gridSize?: number; // Default: 20
+    
+    // Canvas state
+    zoomLevel?: number; // Default: 1.0
+    viewOffset?: { x: number; y: number }; // Default: { x: 0, y: 0 }
+    
+    // Styling
+    nodeDefaultColor?: string; // Default: "#3b82f6"
+    edgeDefaultColor?: string; // Default: "#64748b"
+    connectionLineStyle?: "solid" | "dashed" | "dotted"; // Default: "solid"
+    
+    // Advanced features
+    collaborationEnabled?: boolean; // Default: false
+    showOtherCursors?: boolean; // Default: true
+    performanceMode?: boolean; // Default: false (For large story maps)
+    
+    // Version control
+    conflictResolutionStrategy?: 'last_write_wins' | 'merge' | 'manual'; // Default: 'merge'
+  };
 }
 
 // ==================================================================================================

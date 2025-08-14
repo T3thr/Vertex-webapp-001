@@ -497,7 +497,17 @@ CharacterSchema.post<mongoose.Query<ICharacter, ICharacter>>("findOneAndDelete",
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-const CharacterModel = (models.Character as mongoose.Model<ICharacter>) || model<ICharacter>("Character", CharacterSchema);
+
+// Guard against client-side execution
+let CharacterModel: mongoose.Model<ICharacter>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  CharacterModel = (models.Character as mongoose.Model<ICharacter>) || model<ICharacter>("Character", CharacterSchema);
+} else {
+  // Client-side - throw error if accessed
+  CharacterModel = {} as mongoose.Model<ICharacter>;
+}
 
 export default CharacterModel;
 

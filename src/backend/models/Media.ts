@@ -564,7 +564,16 @@ MediaSchema.pre<IMedia>("save", async function (next) {
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-const MediaModel = (models.Media as mongoose.Model<IMedia>) || model<IMedia>("Media", MediaSchema);
+// Guard against client-side execution
+let MediaModel: mongoose.Model<IMedia>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  MediaModel = (models.Media as mongoose.Model<IMedia>) || model<IMedia>("Media", MediaSchema);
+} else {
+  // Client-side - throw error if accessed
+  MediaModel = {} as mongoose.Model<IMedia>;
+}
 
 export default MediaModel;
 

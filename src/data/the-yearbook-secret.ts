@@ -541,10 +541,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep4_choice_A_music_club',
+                    actionId: 'action_go_to_scene_ep4_choice_A_music_club',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep4_choice_A_music_club'
+                        targetNodeId: 'scene_ep4_choice_A_music_club'
                     }
                 }
             ],
@@ -574,10 +574,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep4_choice_B_art_club',
+                    actionId: 'action_go_to_scene_ep4_choice_B_art_club',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep4_choice_B_art_club'
+                        targetNodeId: 'scene_ep4_choice_B_art_club'
                     }
                 }
             ],
@@ -616,10 +616,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep4_choice_C_explore_art',
+                    actionId: 'action_go_to_scene_ep4_choice_C_explore_art',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep4_choice_C_explore_art'
+                        targetNodeId: 'scene_ep4_choice_C_explore_art'
                     }
                 }
             ],
@@ -650,10 +650,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep9_path_fahsai',
+                    actionId: 'action_go_to_scene_ep9_path_fahsai',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep9_path_fahsai'
+                        targetNodeId: 'scene_ep9_path_fahsai'
                     }
                 }
             ],
@@ -683,10 +683,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep9_path_din',
+                    actionId: 'action_go_to_scene_ep9_path_din',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep9_path_din'
+                        targetNodeId: 'scene_ep9_path_din'
                     }
                 }
             ],
@@ -716,10 +716,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep9_path_neutral',
+                    actionId: 'action_go_to_scene_ep9_path_neutral',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep9_path_neutral'
+                        targetNodeId: 'scene_ep9_path_neutral'
                     }
                 }
             ],
@@ -759,10 +759,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep12_path_din',
+                    actionId: 'action_go_to_scene_ep12_path_din',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep12_path_din'
+                        targetNodeId: 'scene_ep12_path_din'
                     }
                 }
             ],
@@ -801,10 +801,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep12_path_fahsai',
+                    actionId: 'action_go_to_scene_ep12_path_fahsai',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep12_path_fahsai'
+                        targetNodeId: 'scene_ep12_path_fahsai'
                     }
                 }
             ],
@@ -843,10 +843,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep12_path_neutral',
+                    actionId: 'action_go_to_scene_ep12_path_neutral',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep12_path_neutral'
+                        targetNodeId: 'scene_ep12_path_neutral'
                     }
                 }
             ],
@@ -885,10 +885,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep13_path_fahsai_couple',
+                    actionId: 'action_go_to_scene_ep13_path_fahsai_couple',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep13_path_fahsai_couple'
+                        targetNodeId: 'scene_ep13_path_fahsai_couple'
                     }
                 }
             ],
@@ -926,10 +926,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep13_path_din_couple',
+                    actionId: 'action_go_to_scene_ep13_path_din_couple',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep13_path_din_couple'
+                        targetNodeId: 'scene_ep13_path_din_couple'
                     }
                 }
             ],
@@ -958,10 +958,10 @@ const createtheyearbooksecretchoices = async (novelId: mongoose.Types.ObjectId, 
                     }
                 },
                 {
-                    actionId: 'action_go_to_node_ep13_path_friendship_only',
+                    actionId: 'action_go_to_scene_ep13_path_friendship_only',
                     type: ChoiceActionType.GO_TO_NODE,
                     parameters: {
-                        targetNodeId: 'node_ep13_path_friendship_only'
+                        targetNodeId: 'scene_ep13_path_friendship_only'
                     }
                 }
             ],
@@ -2769,7 +2769,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 28, // แก้ไข sceneOrder ให้ต่อเนื่องจากตอนที่ 3
-            nodeId: 'node_ep4_choice_A_music_club',
+            nodeId: 'scene_ep4_choice_A_music_club',
             title: 'ชมรมดนตรี: เสียงแห่งมิตรภาพ',
             background: {
                 type: 'image',
@@ -2886,7 +2886,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 29, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep4_choice_B_art_club',
+            nodeId: 'scene_ep4_choice_B_art_club',
             title: 'ชมรมศิลปะ: ภาพสะท้อนของใครบางคน',
             background: {
                 type: 'image',
@@ -3049,7 +3049,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 30, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep4_choice_C_explore_art',
+            nodeId: 'scene_ep4_choice_C_explore_art',
             title: 'ชมรมศิลปะ: สำรวจด้วยตัวเอง',
             background: {
                 type: 'image',
@@ -4308,7 +4308,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 2, // ลำดับสำหรับเส้นทางดิน
-            nodeId: 'node_ep9_path_din',
+            nodeId: 'scene_ep9_path_din',
             title: 'บทสนทนาที่จริงใจ: ดิน',
             background: {
                 type: 'image',
@@ -4484,7 +4484,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 46, // แก้ไข sceneOrder ให้ต่อเนื่องจากตอนที่ 8
-            nodeId: 'node_ep9_path_fahsai',
+            nodeId: 'scene_ep9_path_fahsai',
             title: 'บทสนทนาที่จริงใจ: ฟ้าใส',
             background: {
                 type: 'image',
@@ -4615,7 +4615,7 @@ const createtheyearbooksecretscenes = async (
                     autoplayOnLoad: true
                 }
             ],
-            defaultNextSceneId: 'node_ep10_path_fahsai_feelings', // แก้ไขตรงนี้ให้เชื่อมไปตอนที่ 10
+            defaultNextSceneId: 'scene_ep10_path_fahsai_feelings', // แก้ไขตรงนี้ให้เชื่อมไปตอนที่ 10
             timelineTracks: []
         },
 
@@ -4625,7 +4625,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 47, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep9_path_din',
+            nodeId: 'scene_ep9_path_din',
             title: 'บทสนทนาที่จริงใจ: ดิน',
             background: {
                 type: 'image',
@@ -4792,7 +4792,7 @@ const createtheyearbooksecretscenes = async (
                     autoplayOnLoad: true
                 }
             ],
-            defaultNextSceneId: 'node_ep10_path_din_feelings', // แก้ไขตรงนี้ให้เชื่อมไปตอนที่ 10
+            defaultNextSceneId: 'scene_ep10_path_din_feelings', // แก้ไขตรงนี้ให้เชื่อมไปตอนที่ 10
             timelineTracks: []
         },
         // --- START Episode 11: การแข่งขันเพื่อความรัก (หรือมิตรภาพ) ---
@@ -5256,7 +5256,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 53, // แก้ไข sceneOrder ให้ต่อเนื่องจากตอนที่ 11
-            nodeId: 'node_ep12_path_fahsai_confrontation',
+            nodeId: 'scene_ep12_path_fahsai_confrontation',
             title: 'เผชิญหน้าความจริง: ฟ้าใส',
             background: {
                 type: 'image',
@@ -5397,7 +5397,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 54, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep12_path_din_confrontation',
+            nodeId: 'scene_ep12_path_din_confrontation',
             title: 'เผชิญหน้าความจริง: ดิน',
             background: {
                 type: 'image',
@@ -5644,7 +5644,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 57, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_fahsai_couple',
+            nodeId: 'scene_ep13_path_fahsai_couple',
             title: 'เส้นทาง: ลิสากับฟ้าใส',
             background: {
                 type: 'image',
@@ -5813,7 +5813,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 59, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_din_couple',
+            nodeId: 'scene_ep13_path_din_couple',
             title: 'เส้นทาง: ลิสากับดิน',
             background: {
                 type: 'image',
@@ -5982,7 +5982,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 61, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_friendship_only',
+            nodeId: 'scene_ep13_path_friendship_only',
             title: 'เส้นทาง: มิตรภาพอันล้ำค่า',
             background: {
                 type: 'image',
@@ -6187,7 +6187,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 57, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_fahsai_couple',
+            nodeId: 'scene_ep13_path_fahsai_couple',
             title: 'เส้นทาง: ลิสากับฟ้าใส',
             background: {
                 type: 'image',
@@ -6356,7 +6356,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 59, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_din_couple',
+            nodeId: 'scene_ep13_path_din_couple',
             title: 'เส้นทาง: ลิสากับดิน',
             background: {
                 type: 'image',
@@ -6620,7 +6620,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 57, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_fahsai_couple',
+            nodeId: 'scene_ep13_path_fahsai_couple',
             title: 'เส้นทาง: ลิสากับฟ้าใส',
             background: {
                 type: 'image',
@@ -6789,7 +6789,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 59, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_din_couple',
+            nodeId: 'scene_ep13_path_din_couple',
             title: 'เส้นทาง: ลิสากับดิน',
             background: {
                 type: 'image',
@@ -6958,7 +6958,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 61, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep13_path_friendship_only',
+            nodeId: 'scene_ep13_path_friendship_only',
             title: 'เส้นทาง: มิตรภาพอันล้ำค่า',
             background: {
                 type: 'image',
@@ -7098,7 +7098,7 @@ const createtheyearbooksecretscenes = async (
                 }
             ],
             audios: [], // ใช้ bgm จากฉากก่อนหน้า
-            defaultNextSceneId: 'node_ep14_path_fahsai_unchosen', // หรือ 'node_ep14_path_din_unchosen' ตามเส้นทาง
+            defaultNextSceneId: 'scene_ep14_path_fahsai_unchosen', // หรือ 'scene_ep14_path_din_unchosen' ตามเส้นทาง
             timelineTracks: []
         },
 
@@ -7107,7 +7107,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 63, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep14_path_fahsai_unchosen',
+            nodeId: 'scene_ep14_path_fahsai_unchosen',
             title: 'บอกลา: ฟ้าใส',
             background: {
                 type: 'image',
@@ -7260,7 +7260,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 64, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep14_path_din_unchosen',
+            nodeId: 'scene_ep14_path_din_unchosen',
             title: 'บอกลา: ดิน',
             background: {
                 type: 'image',
@@ -7475,7 +7475,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 66, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep15_path_fahsai_call',
+            nodeId: 'scene_ep15_path_fahsai_call',
             title: 'โทรศัพท์จากฟ้าใส',
             background: {
                 type: 'image',
@@ -7595,7 +7595,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 67, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep15_path_din_message',
+            nodeId: 'scene_ep15_path_din_message',
             title: 'ข้อความจากดิน',
             background: {
                 type: 'image',
@@ -7735,7 +7735,7 @@ const createtheyearbooksecretscenes = async (
             novelId,
             episodeId,
             sceneOrder: 68, // แก้ไข sceneOrder ให้ต่อเนื่อง
-            nodeId: 'node_ep15_path_friendship_chat',
+            nodeId: 'scene_ep15_path_friendship_chat',
             title: 'ข้อความจากเพื่อนซี้',
             background: {
                 type: 'image',
@@ -7957,9 +7957,11 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
         author: authorId,
         synopsis: 'เมื่อนักเรียนใหม่ต้องเข้ามาพัวพันกับความสัมพันธ์ที่ซับซ้อนของเพื่อนร่วมชั้น เรื่องราวความรัก มิตรภาพ และความลับที่ซ่อนอยู่ในสมุดรุ่นจึงเริ่มต้นขึ้น',
         longDescription: 'นิยาย Visual Novel แนว School Romance ที่จะพาคุณย้อนกลับไปในวัยเรียนอีกครั้ง เมื่อคุณ (ลิสา) นักเรียนใหม่ได้พบกับเพื่อนใหม่สองคนที่มีเบื้องหลังที่แตกต่างกันโดยสิ้นเชิง การเลือกของคุณจะนำพาเรื่องราวความรัก มิตรภาพ และความลับที่ซ่อนอยู่ใน "สมุดรุ่น" ไปสู่บทสรุปแบบไหน? ร่วมเดินทางไปกับการตัดสินใจที่จะเปลี่ยนโชคชะตาของพวกเขาและของคุณเอง',
-        coverImageUrl: '/images/covers/the-yearbook-secret_cover.png',
-        bannerImageUrl: '/images/banners/the-yearbook-secret_banner.png',
+        coverImageUrl: '/images/romance/novel1.jpg',
+        bannerImageUrl: '/images/background/school rooftop.png',
         themeAssignment: {
+            moodAndTone: [await findOrCreateCategory('Heartwarming', CategoryType.MOOD_AND_TONE, 'heartwarming'), await findOrCreateCategory('Dramatic', CategoryType.MOOD_AND_TONE, 'dramatic')],
+            contentWarnings: [],
             mainTheme: {
                 categoryId: themeCatId,
                 customName: 'School Romance'
@@ -7974,7 +7976,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
                     customName: 'Drama'
                 }
             ],
-            customTags: ['วัยเรียน', 'ความรัก', 'มิตรภาพ', 'การตัดสินใจ', 'ปมในอดีต', 'รักสามเส้า']
+            customTags: ['วัยเรียน', 'ความรัก', 'มิตรภาพ', 'การตัดสินใจ', 'ปมในอดีต', 'รักสามเส้า', 'ยอดนิยม', 'แนะนำ', 'วิชวลโนเวล']
         },
         narrativeFocus: {
             narrativePerspective: narrativePerspectiveCatId,
@@ -7996,34 +7998,34 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
         },
         language: langCatId,
         totalEpisodesCount: 15,
-        publishedEpisodesCount: 3,
+        publishedEpisodesCount: 15, // สมมติว่าเผยแพร่ครบแล้ว
         stats: {
-            totalRevenueCoins: 0,
-            viewsCount: 0,
-            uniqueViewersCount: 0,
-            likesCount: 0,
-            commentsCount: 0,
-            discussionThreadCount: 0,
-            ratingsCount: 0,
-            averageRating: 0,
-            followersCount: 0,
-            sharesCount: 0,
-            bookmarksCount: 0,
-            totalWords: 0,
-            estimatedReadingTimeMinutes: 0,
-            completionRate: 0,
-            purchasesCount: 0,
+            totalRevenueCoins: 5000,
+            viewsCount: 789123,
+            uniqueViewersCount: 45678,
+            likesCount: 12345,
+            commentsCount: 987,
+            discussionThreadCount: 110,
+            ratingsCount: 950,
+            averageRating: 4.75,
+            followersCount: 1100,
+            sharesCount: 450,
+            bookmarksCount: 2100,
+            totalWords: 180000,
+            estimatedReadingTimeMinutes: 900,
+            completionRate: 0.65,
+            purchasesCount: 50,
             lastPublishedEpisodeAt: new Date('2024-07-31'),
-            currentReaders: 0,
-            peakConcurrentReaders: 0,
+            currentReaders: 150,
+            peakConcurrentReaders: 500,
             trendingStats: {
-                viewsLast24h: 0,
-                viewsLast48h: 0,
-                likesLast24h: 0,
-                likesLast3Days: 0,
-                commentsLast24h: 0,
-                newFollowersLastWeek: 0,
-                trendingScore: 0,
+                viewsLast24h: 12000,
+                viewsLast48h: 18500,
+                likesLast24h: 900,
+                likesLast3Days: 2500,
+                commentsLast24h: 120,
+                newFollowersLastWeek: 350,
+                trendingScore: 9500,
                 lastTrendingScoreUpdate: new Date()
             }
         },
@@ -8033,7 +8035,13 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             allowDonations: true,
             isAdSupported: false,
             isPremiumExclusive: false,
-            activePromotion: null
+            activePromotion: {
+                isActive: true,
+                promotionalPriceCoins: 15,
+                promotionStartDate: new Date('2024-07-31'),
+                promotionEndDate: new Date(new Date('2024-07-31').setDate(new Date('2024-07-31').getDate() + 14)),
+                promotionDescription: "โปรโมชั่นพิเศษ! ลด 50% สำหรับนิยายยอดนิยม",
+            }
         },
         psychologicalAnalysisConfig: {
             allowsPsychologicalAnalysis: true,
@@ -8226,8 +8234,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             slug: 'episode-10',
             episodeOrder: 10,
             status: EpisodeStatus.PUBLISHED,
-            accessType: EpisodeAccessType.PAID_UNLOCK,
-            priceCoins: 30,
+            accessType: EpisodeAccessType.FREE,
             teaserText: 'ท่ามกลางบรรยากาศที่ผ่อนคลายในสวนสาธารณะ คุณเริ่มรู้สึกถึงความผูกพันที่พิเศษกับใครบางคน',
             publishedAt: new Date('2024-07-31'),
             stats: {},
@@ -8244,8 +8251,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             slug: 'episode-11',
             episodeOrder: 11,
             status: EpisodeStatus.PUBLISHED,
-            accessType: EpisodeAccessType.PAID_UNLOCK,
-            priceCoins: 30,
+            accessType: EpisodeAccessType.FREE,
             teaserText: 'เมื่อทั้งสองคนเริ่มแสดงออกอย่างชัดเจน คุณจะต้องตัดสินใจว่าจะเลือกใครกันแน่?',
             publishedAt: new Date('2024-07-31'),
             stats: {},
@@ -8262,8 +8268,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             slug: 'episode-12',
             episodeOrder: 12,
             status: EpisodeStatus.PUBLISHED,
-            accessType: EpisodeAccessType.PAID_UNLOCK,
-            priceCoins: 30,
+            accessType: EpisodeAccessType.FREE,
             teaserText: 'ถึงเวลาที่ต้องเปิดเผย "ความลับในสมุดรุ่น" และความรู้สึกที่ซ่อนอยู่ทั้งหมด',
             publishedAt: new Date('2024-07-31'),
             stats: {},
@@ -8280,8 +8285,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             slug: 'episode-13',
             episodeOrder: 13,
             status: EpisodeStatus.PUBLISHED,
-            accessType: EpisodeAccessType.PAID_UNLOCK,
-            priceCoins: 30,
+            accessType: EpisodeAccessType.FREE,
             teaserText: 'วันจบการศึกษาที่เต็มไปด้วยความรู้สึก คุณจะต้องเลือกเส้นทางความรักของตัวเอง',
             publishedAt: new Date('2024-07-31'),
             stats: {},
@@ -8298,8 +8302,7 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             slug: 'episode-14',
             episodeOrder: 14,
             status: EpisodeStatus.PUBLISHED,
-            accessType: EpisodeAccessType.PAID_UNLOCK,
-            priceCoins: 30,
+            accessType: EpisodeAccessType.FREE,
             teaserText: 'บทสนทนาสุดท้ายกับคนที่ไม่ถูกเลือก...เพื่อบอกลาและให้กำลังใจกันและกันก่อนเริ่มต้นชีวิตใหม่',
             publishedAt: new Date('2024-07-31'),
             stats: {},
@@ -8338,6 +8341,18 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
     const episode1Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep1_'));
     const episode2Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep2_'));
     const episode3Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep3_'));
+    const episode4Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep4_'));
+    const episode5Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep5_'));
+    const episode6Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep6_'));
+    const episode7Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep7_'));
+    const episode8Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep8_'));
+    const episode9Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep9_'));
+    const episode10Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep10_'));
+    const episode11Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep11_'));
+    const episode12Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep12_'));
+    const episode13Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep13_'));
+    const episode14Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep14_'));
+    const episode15Scenes = allScenes.filter(s => s.nodeId?.startsWith('scene_ep15_'));
     // TODO: ทำเช่นเดียวกันสำหรับตอนที่เหลือจนถึง 15
 
     // อัปเดต episodeId สำหรับฉากที่ไม่ใช่ของ episode 1
@@ -8363,6 +8378,128 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
                 });
             }
         }
+        
+            // อัปเดต episodeId สำหรับฉากของ episode 4
+            if (episodes.length > 3) {
+                for (const scene of episode4Scenes) {
+                    await SceneModel.findByIdAndUpdate(scene._id, {
+                        episodeId: episodes[3]._id,
+                        // Reset sceneOrder to avoid duplicates
+                        sceneOrder: episode4Scenes.indexOf(scene)
+                    });
+                }
+            }
+        // อัปเดต episodeId สำหรับฉากของ episode 4
+        if (episodes.length > 3) {
+            for (const scene of episode5Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[4]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode5Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 6
+        if (episodes.length > 5) {
+            for (const scene of episode6Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[5]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode6Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 7
+        if (episodes.length > 6) {
+            for (const scene of episode7Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[6]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode7Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 8
+        if (episodes.length > 7) {
+            for (const scene of episode8Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[7]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode8Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 9
+        if (episodes.length > 8) {
+            for (const scene of episode9Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[8]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode9Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 10
+        if (episodes.length > 9) {
+            for (const scene of episode10Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[9]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode10Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 11
+        if (episodes.length > 10) {
+            for (const scene of episode11Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[10]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode11Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 12
+        if (episodes.length > 11) {
+            for (const scene of episode12Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[11]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode12Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 3
+        if (episodes.length > 12) {
+            for (const scene of episode13Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[12]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode13Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 14
+        if (episodes.length > 13) {
+            for (const scene of episode14Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[13]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode14Scenes.indexOf(scene)
+                });
+            }
+        }
+        // อัปเดต episodeId สำหรับฉากของ episode 15
+        if (episodes.length > 14) {
+            for (const scene of episode15Scenes) {
+                await SceneModel.findByIdAndUpdate(scene._id, {
+                    episodeId: episodes[14]._id,
+                    // Reset sceneOrder to avoid duplicates
+                    sceneOrder: episode15Scenes.indexOf(scene)
+                });
+            }
+        }
+
     }
     // TODO: ทำเช่นเดียวกันสำหรับตอนที่เหลือ
 
@@ -8386,7 +8523,78 @@ export const createTheYearbookSecretNovel = async (authorId: mongoose.Types.Obje
             sceneIds: episode3Scenes.map(s => s._id)
         });
     }
-    // TODO: ทำเช่นเดียวกันสำหรับตอนที่เหลือ
+    if (episodes.length > 3 && episode4Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[3]._id, {
+            firstSceneId: episode4Scenes[0]?._id,
+            sceneIds: episode4Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 4 && episode5Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[4]._id, {
+            firstSceneId: episode5Scenes[0]?._id,
+            sceneIds: episode5Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 5 && episode6Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[5]._id, {
+            firstSceneId: episode6Scenes[0]?._id,
+            sceneIds: episode6Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 6 && episode7Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[6]._id, {
+            firstSceneId: episode7Scenes[0]?._id,
+            sceneIds: episode7Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 7 && episode8Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[7]._id, {
+            firstSceneId: episode8Scenes[0]?._id,
+            sceneIds: episode8Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 8 && episode9Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[8]._id, {
+            firstSceneId: episode9Scenes[0]?._id,
+            sceneIds: episode9Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 9 && episode10Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[9]._id, {
+            firstSceneId: episode10Scenes[0]?._id,
+            sceneIds: episode10Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 10 && episode11Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[10]._id, {
+            firstSceneId: episode11Scenes[0]?._id,
+            sceneIds: episode11Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 11 && episode12Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[11]._id, {
+            firstSceneId: episode12Scenes[0]?._id,
+            sceneIds: episode12Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 12 && episode13Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[12]._id, {
+            firstSceneId: episode13Scenes[0]?._id,
+            sceneIds: episode13Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 13 && episode14Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[13]._id, {
+            firstSceneId: episode14Scenes[0]?._id,
+            sceneIds: episode14Scenes.map(s => s._id)
+        });
+    }
+    if (episodes.length > 14 && episode15Scenes.length > 0) {
+        await EpisodeModel.findByIdAndUpdate(episodes[14]._id, {
+            firstSceneId: episode15Scenes[0]?._id,
+            sceneIds: episode15Scenes.map(s => s._id)
+        });
+    }
 
     // สร้างตัวเลือก
     // หมายเหตุ: เราสร้าง choices ไว้ก่อนหน้านี้แล้ว แต่ส่วนนี้จะเชื่อมโยง choices กับ scenes
