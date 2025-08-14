@@ -72,7 +72,7 @@ export async function PATCH(
       }
     }
 
-    let updateData: any = {
+    const updateData: any = {
       version: currentStoryMap.version + 1,
       lastModifiedByUserId: session.user.id,
       lastSyncedAt: new Date(lastSyncedAt || Date.now()),
