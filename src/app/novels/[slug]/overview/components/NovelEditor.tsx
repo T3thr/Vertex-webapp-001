@@ -314,28 +314,64 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     setNodeOrientation(loadFromStorage('node-orientation', 'vertical', 'visualNovelGameplay.blueprintEditor.nodeOrientation'));
   }, [userSettings]);
 
-  // Sync saveState กับ saveManager และ onDirtyChange callback
+  // ===============================
+  // PROFESSIONAL REAL-TIME SYNC
+  // ===============================
+  
   useEffect(() => {
-    const updateSaveState = (newState: any) => setSaveState(newState)
+    // Professional state synchronization
+    const updateSaveState = (newState: any) => {
+      setSaveState(newState);
+      
+      // Real-time localStorage sync สำหรับ refresh protection
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('divwy-has-unsaved-changes', newState.hasUnsavedChanges.toString());
+        localStorage.setItem('divwy-save-state', JSON.stringify({
+          isDirty: newState.isDirty,
+          hasUnsavedChanges: newState.hasUnsavedChanges,
+          lastSaved: newState.lastSaved,
+          timestamp: Date.now()
+        }));
+      }
+    };
+    
     const handleDirtyChange = (isDirty: boolean) => {
-      // อัปเดต dirty state จาก save manager เฉพาะเมื่อต่างกัน
+      // Professional dirty state management
       setSaveState(prev => {
         if (prev.isDirty !== isDirty || prev.hasUnsavedChanges !== isDirty) {
-          return { ...prev, isDirty, hasUnsavedChanges: isDirty }
+          const newState = { ...prev, isDirty, hasUnsavedChanges: isDirty };
+          
+          // Real-time localStorage update
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('divwy-has-unsaved-changes', isDirty.toString());
+          }
+          
+          return newState;
         }
-        return prev
-      })
-    }
+        return prev;
+      });
+      
+      // Enterprise logging สำหรับ debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[NovelEditor] Real-time dirty state change:', {
+          isDirty,
+          activeTab,
+          timestamp: new Date().toISOString()
+        });
+      }
+    };
     
+    // Professional SaveManager configuration
     saveManager.updateConfig({ 
       onStateChange: updateSaveState,
       onDirtyChange: handleDirtyChange
-    })
+    });
     
+    // Enterprise cleanup
     return () => {
-      saveManager.destroy()
-    }
-  }, [saveManager])
+      saveManager.destroy();
+    };
+  }, [saveManager, activeTab])
 
   // อัปเดต saveManager เมื่อการตั้งค่า auto-save เปลี่ยน
   useEffect(() => {
@@ -345,26 +381,54 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     })
   }, [saveManager, isAutoSaveEnabled, autoSaveIntervalSec])
 
-  // จัดการ stable dirty state เพื่อป้องกัน flicker ของปุ่ม Save
+  // ===============================
+  // PROFESSIONAL SAVE STATE MANAGEMENT
+  // ===============================
+  
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let stabilizationTimer: NodeJS.Timeout;
     
-    if (hasUnsavedChanges) {
-      // เปิดใช้งานปุ่ม Save ทันทีเมื่อมีการเปลี่ยนแปลง
-      setStableHasUnsavedChanges(true);
-    } else {
-      // รอสักครู่ก่อนปิดใช้งานปุ่ม Save เพื่อป้องกัน flicker
-      timeoutId = setTimeout(() => {
-        setStableHasUnsavedChanges(false);
-      }, 100);
-    }
-
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+    // Professional-grade change detection เทียบเท่า Adobe/Canva
+    const performAccurateChangeCheck = async () => {
+      if (activeTab === 'blueprint' && blueprintTabRef.current?.getCurrentData) {
+        try {
+          const currentData = blueprintTabRef.current.getCurrentData();
+          const hasActualChanges = saveManager.checkIfDataChanged(currentData);
+          
+          // อัปเดต state เฉพาะเมื่อมีการเปลี่ยนแปลงจริง
+          setStableHasUnsavedChanges(hasActualChanges);
+          
+          // Enterprise logging สำหรับ debugging
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[NovelEditor] Professional change detection:', {
+              hasActualChanges,
+              activeTab,
+              timestamp: new Date().toISOString()
+            });
+          }
+          
+        } catch (error) {
+          console.error('[NovelEditor] Error in change detection:', error);
+          // Fallback: ใช้ state ปัจจุบัน
+          setStableHasUnsavedChanges(hasUnsavedChanges);
+        }
+      } else {
+        // สำหรับ tabs อื่นๆ ให้ใช้ basic state
+        setStableHasUnsavedChanges(hasUnsavedChanges);
       }
     };
-  }, [hasUnsavedChanges])
+
+    // Stabilization technique เพื่อป้องกัน UI flickering
+    stabilizationTimer = setTimeout(() => {
+      performAccurateChangeCheck();
+    }, 150); // Optimal delay สำหรับ professional UX
+
+    return () => {
+      if (stabilizationTimer) {
+        clearTimeout(stabilizationTimer);
+      }
+    };
+  }, [hasUnsavedChanges, activeTab, saveManager])
 
   // บันทึก settings ลง UserSettings และ localStorage เมื่อเปลี่ยนแปลง
   useEffect(() => {
@@ -394,6 +458,72 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   useEffect(() => {
     saveBlueprintSettings('node-orientation', nodeOrientation);
   }, [nodeOrientation, saveBlueprintSettings])
+
+  // ===============================
+  // PROFESSIONAL REFRESH PROTECTION
+  // ===============================
+  
+  useEffect(() => {
+    // Professional-grade beforeunload handler เทียบเท่า Adobe/Canva
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (stableHasUnsavedChanges) {
+        // Professional warning message
+        const message = '🚨 คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\n' +
+                       'หากออกจากหน้านี้ การเปลี่ยนแปลงทั้งหมดจะสูญหาย\n\n' +
+                       '💡 แนะนำให้กดปุ่ม "บันทึก" ก่อนออกจากหน้า';
+        event.preventDefault();
+        event.returnValue = message;
+        return message;
+      }
+    };
+
+    // Enterprise-grade visibility change handler
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // เก็บ timestamp และ unsaved state เมื่อหน้าถูกซ่อน
+        localStorage.setItem('divwy-last-hidden', Date.now().toString());
+        localStorage.setItem('divwy-has-unsaved-changes', stableHasUnsavedChanges.toString());
+      } else if (document.visibilityState === 'visible') {
+        // ตรวจสอบเมื่อกลับมาที่หน้า
+        const lastHidden = localStorage.getItem('divwy-last-hidden');
+        if (lastHidden) {
+          const hiddenDuration = Date.now() - parseInt(lastHidden);
+          // หากซ่อนไปนานกว่า 5 นาที และมีการเปลี่ยนแปลง ให้แจ้งเตือน
+          if (hiddenDuration > 5 * 60 * 1000 && stableHasUnsavedChanges) {
+            toast.warning(
+              '⚠️ คุณออกจากหน้านี้ไปนานกว่า 5 นาที\n' +
+              'หากมีการเปลี่ยนแปลงอื่น อาจมีความเสี่ยงในการสูญเสียข้อมูล\n' +
+              'แนะนำให้บันทึกงานทันที'
+            );
+          }
+        }
+      }
+    };
+
+    // Professional keyboard shortcut สำหรับ Ctrl+S
+    const handleKeyboardSave = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === 's') {
+        event.preventDefault();
+        if (stableHasUnsavedChanges) {
+          handleManualSave();
+        } else {
+          toast.info('ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก');
+        }
+      }
+    };
+
+    // Professional event registration
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('keydown', handleKeyboardSave);
+
+    // Enterprise cleanup
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('keydown', handleKeyboardSave);
+    };
+  }, [stableHasUnsavedChanges, handleManualSave]);
 
   // Handle click outside to close settings dropdown
   useEffect(() => {
