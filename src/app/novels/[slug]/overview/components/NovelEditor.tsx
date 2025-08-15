@@ -231,7 +231,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   }
 
   // Manual save function - เรียก tab-specific save methods
-  const handleManualSave = async () => {
+  const handleManualSave = React.useCallback(async () => {
     try {
       // เรียก save method ของแท็บที่เปิดอยู่
       if (activeTab === 'blueprint' && blueprintTabRef.current?.handleManualSave) {
@@ -275,7 +275,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       console.error('Error in manual save:', error)
       toast.error('เกิดข้อผิดพลาดในการบันทึก')
     }
-  }
+  }, [
+    activeTab, 
+    saveManager, 
+    currentStoryMap?.nodes, 
+    currentStoryMap?.edges, 
+    currentStoryMap?.storyVariables
+  ])
 
   // Refs for tab components to trigger their save methods
   const blueprintTabRef = React.useRef<any>(null)
@@ -386,8 +392,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // ===============================
   
   useEffect(() => {
-    let stabilizationTimer: NodeJS.Timeout;
-    
     // Professional-grade change detection เทียบเท่า Adobe/Canva
     const performAccurateChangeCheck = async () => {
       if (activeTab === 'blueprint' && blueprintTabRef.current?.getCurrentData) {
@@ -419,7 +423,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     };
 
     // Stabilization technique เพื่อป้องกัน UI flickering
-    stabilizationTimer = setTimeout(() => {
+    const stabilizationTimer = setTimeout(() => {
       performAccurateChangeCheck();
     }, 150); // Optimal delay สำหรับ professional UX
 
@@ -690,6 +694,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                     {/* ส่วนการแสดงผล Blueprint */}
                     <div className="space-y-4 pt-2 border-t border-border">
                       <div className="flex items-center gap-2 mb-3">
+                        {/* eslint-disable-next-line jsx-a11y/alt-text */}
                         <Image className="h-4 w-4 text-green-600" />
                         <h4 className="font-medium text-sm">การแสดงผล Blueprint</h4>
                       </div>
