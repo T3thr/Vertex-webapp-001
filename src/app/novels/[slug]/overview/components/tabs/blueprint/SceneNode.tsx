@@ -28,12 +28,13 @@ interface SceneNodeData {
  * แสดงข้อมูลฉากในนิยายแบบภาพ (Visual Novel)
  * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: boolean }> = ({ 
+const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: boolean; nodeOrientation?: 'horizontal' | 'vertical' }> = ({ 
   data, 
   selected, 
   dragging,
   showThumbnail = false,
-  showLabels = true
+  showLabels = true,
+  nodeOrientation = 'vertical'
 }) => {
   const nodeData = data as unknown as SceneNodeData;
   const nodeColor = nodeData.editorVisuals?.color || '#3b82f6';
@@ -93,7 +94,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
         {/* จุดเชื่อมต่อสำหรับรับข้อมูล (Input Handle) */}
         <Handle
           type="target"
-          position={Position.Top}
+          position={nodeOrientation === 'vertical' ? Position.Top : Position.Left}
           id="input"
           className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
           style={{
@@ -104,7 +105,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
             borderColor: '#3b82f6',
             background: '#dbeafe',
             cursor: 'crosshair',
-            top: '-6px'
+            ...(nodeOrientation === 'vertical' ? { top: '-6px' } : { left: '-6px' })
           }}
           title="ลากเส้นเชื่อมต่อมาที่นี่"
         />
@@ -147,7 +148,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
         {/* จุดเชื่อมต่อสำหรับส่งข้อมูล (Output Handle) */}
         <Handle
           type="source"
-          position={Position.Bottom}
+          position={nodeOrientation === 'vertical' ? Position.Bottom : Position.Right}
           id="output"
           className="!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"
           style={{
@@ -158,7 +159,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
             borderColor: '#10b981',
             background: '#d1fae5',
             cursor: 'crosshair',
-            bottom: '-6px'
+            ...(nodeOrientation === 'vertical' ? { bottom: '-6px' } : { right: '-6px' })
           }}
           title="ลากจากจุดนี้เพื่อเชื่อมต่อไปยังโหนดอื่น"
         />
@@ -198,7 +199,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
       {/* จุดเชื่อมต่อสำหรับรับข้อมูล (Input Handle) */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={nodeOrientation === 'vertical' ? Position.Top : Position.Left}
         id="input"
         className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
         style={{
@@ -209,7 +210,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
           borderColor: '#3b82f6',
           background: '#dbeafe',
           cursor: 'crosshair',
-          top: '-8px'
+          ...(nodeOrientation === 'vertical' ? { top: '-8px' } : { left: '-8px' })
         }}
         title="ลากเส้นเชื่อมต่อมาที่นี่"
       />
@@ -288,7 +289,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
       {/* จุดเชื่อมต่อสำหรับส่งข้อมูล (Output Handle) */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={nodeOrientation === 'vertical' ? Position.Bottom : Position.Right}
         id="output"
         className="!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"
         style={{
@@ -299,7 +300,7 @@ const SceneNode: React.FC<NodeProps & { showThumbnail?: boolean; showLabels?: bo
           borderColor: '#10b981',
           background: '#d1fae5',
           cursor: 'crosshair',
-          bottom: '-8px'
+          ...(nodeOrientation === 'vertical' ? { bottom: '-8px' } : { right: '-8px' })
         }}
         title="ลากจากจุดนี้เพื่อเชื่อมต่อไปยังโหนดอื่น"
       />

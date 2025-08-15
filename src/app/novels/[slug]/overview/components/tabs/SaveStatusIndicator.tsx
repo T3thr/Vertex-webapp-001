@@ -8,7 +8,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Check, 
@@ -24,6 +24,43 @@ import { UnifiedSaveState } from './SaveManager';
 // ===================================================================
 // SECTION: Type Definitions & Props
 // ===================================================================
+
+// ConnectionStatus Component เพื่อป้องกัน hydration mismatch
+const ConnectionStatus = ({ size }: { size: string }) => {
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    // ตั้งค่าเริ่มต้นหลังจาก component mount
+    setIsOnline(navigator.onLine);
+    
+    // ฟังการเปลี่ยนแปลงสถานะการเชื่อมต่อ
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  // ไม่แสดงอะไรจนกว่าจะโหลดเสร็จ เพื่อป้องกัน hydration mismatch
+  if (isOnline === null) {
+    return null;
+  }
+  
+  return (
+    <div className={`${size} flex-shrink-0 opacity-60`}>
+      {isOnline ? (
+        <Wifi className="text-green-500" />
+      ) : (
+        <WifiOff className="text-red-500" />
+      )}
+    </div>
+  );
+};
 
 interface SaveStatusIndicatorProps {
   saveState: UnifiedSaveState;
@@ -73,9 +110,7 @@ export default function SaveStatusIndicator({
             color: 'text-green-600',
             bgColor: 'bg-green-50 dark:bg-green-900/20',
             text: 'บันทึกแล้ว',
-            description: typeof window !== 'undefined' 
-              ? `บันทึกล่าสุด ${formatRelativeTime(lastSaved)}`
-              : 'บันทึกล่าสุดเมื่อสักครู่'
+            description: `บันทึกล่าสุด ${formatRelativeTime(lastSaved)}`
           };
         } else {
           return {
@@ -176,16 +211,8 @@ export default function SaveStatusIndicator({
         )}
       </AnimatePresence>
 
-      {/* Connection Status */}
-      {navigator.onLine !== undefined && (
-        <div className={`${sizeClasses.icon} flex-shrink-0 opacity-60`}>
-          {navigator.onLine ? (
-            <Wifi className="text-green-500" />
-          ) : (
-            <WifiOff className="text-red-500" />
-          )}
-        </div>
-      )}
+      {/* Connection Status - ใช้ useEffect เพื่อป้องกัน hydration error */}
+      <ConnectionStatus size={sizeClasses.icon} />
     </motion.div>
   );
 }
@@ -359,32 +386,42 @@ function getStatusConfig(saveState: UnifiedSaveState): StatusConfig {
 }
 
 function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
+  try {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
 
-  if (diffSecs < 60) {
-    return `${diffSecs} วินาทีที่แล้ว`;
-  } else if (diffMins < 60) {
-    return `${diffMins} นาทีที่แล้ว`;
-  } else if (diffHours < 24) {
-    return `${diffHours} ชั่วโมงที่แล้ว`;
-  } else {
-    return date.toLocaleDateString('th-TH');
+    if (diffSecs < 60) {
+      return `${diffSecs} วินาทีที่แล้ว`;
+    } else if (diffMins < 60) {
+      return `${diffMins} นาทีที่แล้ว`;
+    } else if (diffHours < 24) {
+      return `${diffHours} ชั่วโมงที่แล้ว`;
+    } else {
+      return date.toLocaleDateString('th-TH');
+    }
+  } catch (error) {
+    // Fallback สำหรับกรณี hydration mismatch
+    return 'เมื่อสักครู่';
   }
 }
 
 function formatAbsoluteTime(date: Date): string {
-  return date.toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+  try {
+    return date.toLocaleString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch (error) {
+    // Fallback สำหรับกรณี hydration mismatch
+    return date.toString();
+  }
 }
 
 function getOperationDisplayName(type: string): string {

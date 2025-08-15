@@ -172,8 +172,14 @@ interface BlueprintTabProps {
   onManualSave?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onNavigateToDirector?: (sceneId?: string) => void;
-  // Auto-save และ visual preferences จะถูกโหลดจาก UserSettings
-  userSettings?: any; // UserSettings object
+  // การตั้งค่าการแสดงผลจาก localStorage
+  blueprintSettings?: {
+    showSceneThumbnails: boolean;
+    showNodeLabels: boolean;
+    showGrid: boolean;
+    snapToGrid: boolean;
+    nodeOrientation: 'horizontal' | 'vertical';
+  };
 }
 
 // Command Pattern interfaces for proper undo/redo
@@ -277,12 +283,12 @@ interface BlueprintSettings {
   showConnectionLines: boolean;
   showGrid: boolean;
   autoLayout: boolean;
-  enableAnimations?: boolean; // Professional mode toggle
   snapToGrid?: boolean;
   gridSize?: number;
   nodeDefaultColor?: string;
   edgeDefaultColor?: string;
   connectionLineStyle?: "solid" | "dashed" | "dotted";
+  nodeOrientation?: 'horizontal' | 'vertical';
 }
 
 // แยก Auto-save settings ออกมาต่างหาก
@@ -1619,7 +1625,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   onManualSave,
   onDirtyChange,
   onNavigateToDirector,
-  userSettings
+  blueprintSettings
 }, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -1639,11 +1645,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Node Palette collapse state
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
   
-  // Auto-save settings โหลดจาก UserSettings (default: ปิด เพื่อไม่บังคับผู้ใช้)
+  // Auto-save settings จะถูกจัดการโดย NovelEditor ผ่าน localStorage โดยตรง
   const [autoSaveSettings, setAutoSaveSettings] = useState<AutoSaveSettings>({
-    enabled: userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveEnabled ?? false, // Default: false ไม่บังคับผู้ใช้
-    intervalSec: userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveIntervalSec ?? 30,
-    conflictResolutionStrategy: userSettings?.visualNovelGameplay?.blueprintEditor?.conflictResolutionStrategy ?? 'merge'
+    enabled: false, // Default: false ไม่บังคับผู้ใช้ (จัดการโดย NovelEditor)
+    intervalSec: 30, // จัดการโดย NovelEditor
+    conflictResolutionStrategy: 'merge' // จัดการโดย SaveManager
   });
 
   // Enhanced save state with versioning - ใช้ SaveManager แทน
@@ -1667,8 +1673,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const { createSaveManager } = require('./SaveManager');
       return createSaveManager({
         novelSlug: novel.slug,
-        autoSaveEnabled: userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveEnabled ?? false,
-        autoSaveIntervalMs: (userSettings?.visualNovelGameplay?.blueprintEditor?.autoSaveIntervalSec ?? 30) * 1000,
+        autoSaveEnabled: false, // จัดการโดย NovelEditor
+        autoSaveIntervalMs: 30 * 1000, // จัดการโดย NovelEditor
         onStateChange: (newState: any) => {
           // Sync กับ local saveState สำหรับ backward compatibility
           setSaveState(prev => ({
@@ -1688,15 +1694,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     return null;
   });
   
-  // Canvas state - โหลดจาก UserSettings
+  // Canvas state - ใช้ค่าเริ่มต้น
   const [canvasState, setCanvasState] = useState<CanvasState>({
     isLocked: false,
-    zoomLevel: userSettings?.visualNovelGameplay?.blueprintEditor?.zoomLevel ?? 1,
-    position: userSettings?.visualNovelGameplay?.blueprintEditor?.viewOffset ?? { x: 0, y: 0 },
-    showGrid: userSettings?.visualNovelGameplay?.blueprintEditor?.showGrid ?? true,
-    gridSize: userSettings?.visualNovelGameplay?.blueprintEditor?.gridSize ?? 20,
-    snapToGrid: userSettings?.visualNovelGameplay?.blueprintEditor?.snapToGrid ?? false
+    zoomLevel: 1,
+    position: { x: 0, y: 0 },
+    showGrid: true,
+    gridSize: 20,
+    snapToGrid: false
   });
+
+
   
   // Command Stack for undo/redo (replacing old HistoryState)
   const [undoStack, setUndoStack] = useState<AnyCommand[]>([]);
@@ -1719,20 +1727,30 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     sourceHandle: null
   });
 
-  // การตั้งค่า Blueprint Editor - โหลดจาก UserSettings
-  const [blueprintSettings, setBlueprintSettings] = useState<BlueprintSettings>({
-    showSceneThumbnails: userSettings?.visualNovelGameplay?.blueprintEditor?.showSceneThumbnails ?? true,
-    showNodeLabels: userSettings?.visualNovelGameplay?.blueprintEditor?.showNodeLabels ?? true,
-    showConnectionLines: userSettings?.visualNovelGameplay?.blueprintEditor?.showConnectionLines ?? true,
-    showGrid: userSettings?.visualNovelGameplay?.blueprintEditor?.showGrid ?? true,
-    autoLayout: userSettings?.visualNovelGameplay?.blueprintEditor?.autoLayout ?? false,
-    enableAnimations: userSettings?.visualNovelGameplay?.blueprintEditor?.enableAnimations ?? true,
-    snapToGrid: userSettings?.visualNovelGameplay?.blueprintEditor?.snapToGrid ?? false,
-    gridSize: userSettings?.visualNovelGameplay?.blueprintEditor?.gridSize ?? 20,
-    nodeDefaultColor: userSettings?.visualNovelGameplay?.blueprintEditor?.nodeDefaultColor ?? '#3b82f6',
-    edgeDefaultColor: userSettings?.visualNovelGameplay?.blueprintEditor?.edgeDefaultColor ?? '#64748b',
-    connectionLineStyle: userSettings?.visualNovelGameplay?.blueprintEditor?.connectionLineStyle ?? 'solid'
-  });
+  // การตั้งค่า Blueprint Editor - ใช้ค่าจาก props หรือค่าเริ่มต้น
+  const currentBlueprintSettings = React.useMemo(() => ({
+    showSceneThumbnails: blueprintSettings?.showSceneThumbnails ?? true,
+    showNodeLabels: blueprintSettings?.showNodeLabels ?? true,
+    showConnectionLines: true, // ค่าคงที่
+    showGrid: blueprintSettings?.showGrid ?? true,
+    autoLayout: false, // ค่าคงที่
+    snapToGrid: blueprintSettings?.snapToGrid ?? false,
+    gridSize: 20, // ค่าคงที่
+    nodeDefaultColor: '#3b82f6', // ค่าคงที่
+    edgeDefaultColor: '#64748b', // ค่าคงที่
+    connectionLineStyle: 'solid' as const, // ค่าคงที่
+    nodeOrientation: blueprintSettings?.nodeOrientation ?? 'vertical' // การตั้งค่าใหม่
+  }), [blueprintSettings]);
+
+  // อัปเดต Canvas state เมื่อ Blueprint settings เปลี่ยน
+  useEffect(() => {
+    setCanvasState(prev => ({
+      ...prev,
+      showGrid: currentBlueprintSettings.showGrid,
+      gridSize: currentBlueprintSettings.gridSize || 20,
+      snapToGrid: currentBlueprintSettings.snapToGrid || false
+    }));
+  }, [currentBlueprintSettings.showGrid, currentBlueprintSettings.gridSize, currentBlueprintSettings.snapToGrid]);
 
   // ===============================
   // ENTERPRISE-GRADE SAVE SYSTEM
@@ -2100,132 +2118,92 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   };
 
   // Local storage preference management สำหรับ instant UX
-  useEffect(() => {
-    const loadPreferences = async () => {
-      // 1. โหลดจาก localStorage เฉพาะค่าที่ไม่มีใน UserSettings
-      const localPrefs = localStorage.getItem('blueprint-preferences');
-      if (localPrefs) {
-        try {
-          const parsed = JSON.parse(localPrefs);
-          
-          // อัปเดตเฉพาะค่าที่ไม่มีใน UserSettings
-          setBlueprintSettings(prev => {
-            const updated = { ...prev };
-            
-            // ใช้ค่าจาก localStorage เฉพาะเมื่อ UserSettings ไม่มีค่า
-            if (!userSettings?.visualNovelGameplay?.blueprintEditor?.showSceneThumbnails && parsed.showSceneThumbnails !== undefined) {
-              updated.showSceneThumbnails = parsed.showSceneThumbnails;
-            }
-            if (!userSettings?.visualNovelGameplay?.blueprintEditor?.showNodeLabels && parsed.showNodeLabels !== undefined) {
-              updated.showNodeLabels = parsed.showNodeLabels;
-            }
-            
-            return updated;
-          });
-      } catch (error) {
-          console.warn('Failed to parse local blueprint preferences:', error);
-        }
-      }
-    };
-
-    loadPreferences();
-  }, [userSettings]);
+  // การตั้งค่าทั้งหมดถูกจัดการโดย NovelEditor และส่งผ่าน props
 
   // บันทึก UI state ลง localStorage เมื่อเปลี่ยน (Desktop experience)
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isInitialLoad) {
       localStorage.setItem('blueprint-sidebar-open', JSON.stringify(isSidebarOpen));
     }
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen, isInitialLoad]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isInitialLoad) {
       localStorage.setItem('blueprint-properties-open', JSON.stringify(isPropertiesOpen));
     }
-  }, [isPropertiesOpen]);
+  }, [isPropertiesOpen, isInitialLoad]);
 
-  // Load UI states from localStorage after mount
+  // Load UI states from localStorage after mount (ทำครั้งเดียวเพื่อป้องกัน infinite loops)
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      let hasChanges = false;
+      
       // Load sidebar open state
       const sidebarOpen = localStorage.getItem('blueprint-sidebar-open');
-      if (sidebarOpen) {
+      if (sidebarOpen && JSON.parse(sidebarOpen) !== isSidebarOpen) {
         setIsSidebarOpen(JSON.parse(sidebarOpen));
+        hasChanges = true;
       }
       
       // Load properties open state
       const propertiesOpen = localStorage.getItem('blueprint-properties-open');
-      if (propertiesOpen) {
+      if (propertiesOpen && JSON.parse(propertiesOpen) !== isPropertiesOpen) {
         setIsPropertiesOpen(JSON.parse(propertiesOpen));
+        hasChanges = true;
       }
       
       // Load sidebar collapsed state
       const sidebarCollapsed = localStorage.getItem('blueprint-sidebar-collapsed');
-      if (sidebarCollapsed) {
+      if (sidebarCollapsed && JSON.parse(sidebarCollapsed) !== isSidebarCollapsed) {
         setIsSidebarCollapsed(JSON.parse(sidebarCollapsed));
+        hasChanges = true;
       }
       
       // Load properties collapsed state
       const propertiesCollapsed = localStorage.getItem('blueprint-properties-collapsed');
-      if (propertiesCollapsed) {
+      if (propertiesCollapsed && JSON.parse(propertiesCollapsed) !== isPropertiesCollapsed) {
         setIsPropertiesCollapsed(JSON.parse(propertiesCollapsed));
+        hasChanges = true;
       }
       
       // Load node palette collapsed state
       const nodePaletteCollapsed = localStorage.getItem('blueprint-node-palette-collapsed');
-      if (nodePaletteCollapsed) {
+      if (nodePaletteCollapsed && JSON.parse(nodePaletteCollapsed) !== isNodePaletteCollapsed) {
         setIsNodePaletteCollapsed(JSON.parse(nodePaletteCollapsed));
+        hasChanges = true;
       }
+      
+      // Log เฉพาะเมื่อมีการเปลี่ยนแปลง
+      if (hasChanges) {
+        console.log('[BlueprintTab] Loaded UI states from localStorage');
+      }
+      
+      // ตั้งค่าให้พร้อมบันทึก localStorage ในครั้งต่อไป
+      setIsInitialLoad(false);
     }
-  }, []);
+  }, []); // ทำครั้งเดียวเท่านั้น
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isInitialLoad) {
       localStorage.setItem('blueprint-sidebar-collapsed', JSON.stringify(isSidebarCollapsed));
     }
-  }, [isSidebarCollapsed]);
+  }, [isSidebarCollapsed, isInitialLoad]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isInitialLoad) {
       localStorage.setItem('blueprint-properties-collapsed', JSON.stringify(isPropertiesCollapsed));
     }
-  }, [isPropertiesCollapsed]);
+  }, [isPropertiesCollapsed, isInitialLoad]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isInitialLoad) {
       localStorage.setItem('blueprint-node-palette-collapsed', JSON.stringify(isNodePaletteCollapsed));
     }
-  }, [isNodePaletteCollapsed]);
+  }, [isNodePaletteCollapsed, isInitialLoad]);
 
-  // Update preferences with instant local feedback
-  const updatePreferences = useCallback((newPrefs: Partial<BlueprintSettings>) => {
-    setBlueprintSettings(prev => {
-      const updated = { ...prev, ...newPrefs };
-      
-      // บันทึกเฉพาะค่าที่ไม่มีใน UserSettings ไปยัง localStorage
-      const prefsToSave: any = {};
-      if (!userSettings?.visualNovelGameplay?.blueprintEditor?.showSceneThumbnails && newPrefs.showSceneThumbnails !== undefined) {
-        prefsToSave.showSceneThumbnails = newPrefs.showSceneThumbnails;
-      }
-      if (!userSettings?.visualNovelGameplay?.blueprintEditor?.showNodeLabels && newPrefs.showNodeLabels !== undefined) {
-        prefsToSave.showNodeLabels = newPrefs.showNodeLabels;
-      }
-      
-      if (Object.keys(prefsToSave).length > 0) {
-        localStorage.setItem('blueprint-preferences', JSON.stringify(prefsToSave));
-      }
-      
-      return updated;
-    });
-  }, [userSettings]);
-  
-  // อัปเดต canvas เมื่อ showGrid เปลี่ยน
-  useEffect(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      showGrid: blueprintSettings.showGrid
-    }));
-  }, [blueprintSettings.showGrid]);
+  // การตั้งค่าถูกจัดการโดย NovelEditor ผ่าน localStorage โดยตรง
   
   // อัปเดต node data เมื่อ display settings เปลี่ยน
   useEffect(() => {
@@ -2234,19 +2212,35 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         ...node,
         data: {
           ...node.data,
-          showThumbnails: blueprintSettings.showSceneThumbnails,
-          showLabels: blueprintSettings.showNodeLabels
+          showThumbnails: currentBlueprintSettings.showSceneThumbnails,
+          showLabels: currentBlueprintSettings.showNodeLabels
         }
       }))
     );
-  }, [blueprintSettings.showSceneThumbnails, blueprintSettings.showNodeLabels, setNodes]);
+  }, [currentBlueprintSettings.showSceneThumbnails, currentBlueprintSettings.showNodeLabels, setNodes]);
   
-  // อัปเดต dirty state เมื่อ nodes/edges เปลี่ยน
+  // อัปเดต dirty state เมื่อ nodes/edges เปลี่ยน - ปรับปรุงให้เสถียรมากขึ้น
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
     if (onDirtyChange) {
-      onDirtyChange(saveState.isDirty);
+      // ถ้ามี changes ให้ส่งทันที
+      if (saveState.isDirty || saveState.hasUnsavedChanges) {
+        onDirtyChange(true);
+      } else {
+        // ถ้าไม่มี changes ให้รอสักครู่ก่อนส่ง false เพื่อป้องกัน flicker
+        timeoutId = setTimeout(() => {
+          onDirtyChange(false);
+        }, 150);
+      }
     }
-  }, [saveState.isDirty, onDirtyChange]);
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [saveState.isDirty, saveState.hasUnsavedChanges, onDirtyChange]);
 
   // Trigger auto-save เมื่อมีการเปลี่ยนแปลง nodes/edges
   useEffect(() => {
@@ -2708,14 +2702,27 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setRedoStack(prev => [commandToUndo, ...prev]);
         toast.info(`ยกเลิก: ${commandToUndo.description}`);
         
-        // Update dirty state through SaveManager หรือ fallback
+        // Update dirty state และ schedule save โดยไม่ส่งข้อมูลผิดไปยัง SaveManager
         const hasMoreCommands = undoStack.length > 1;
+        
+        // อัปเดต dirty state โดยตรง
         if (saveManager) {
-          // SaveManager จะจัดการ dirty state เอง
-          if (hasMoreCommands) {
+          // อัปเดต dirty state ผ่าน SaveManager โดยไม่ trigger save operation ที่ผิด
+          const currentData = {
+            nodes: nodes,
+            edges: edges,
+            storyVariables: storyMap?.storyVariables || []
+          };
+          
+          // ตรวจสอบว่ามีการเปลี่ยนแปลงจริงๆ หรือไม่
+          const hasChanges = saveManager.checkIfDataChanged(currentData);
+          saveManager.updateDirtyStateOnly(hasChanges);
+          
+          // Schedule debounced save เฉพาะเมื่อมีการเปลี่ยนแปลงจริง
+          if (hasChanges && autoSaveSettings.enabled) {
             saveManager.saveOperation({
-              type: 'UPDATE_NODE',
-              data: { undoOperation: true },
+              type: 'BATCH_UPDATE',
+              data: currentData,
               strategy: 'debounced'
             }).catch(console.error);
           }
@@ -2725,20 +2732,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             isDirty: hasMoreCommands,
             hasUnsavedChanges: hasMoreCommands
           }));
-        }
-        
-        onDirtyChange?.(hasMoreCommands);
-        
-        // Schedule auto-save if enabled
-        if (autoSaveSettings.enabled) {
-          scheduleAutoSave(nodes, edges);
+          onDirtyChange?.(hasMoreCommands);
+          
+          // Schedule auto-save if enabled
+          if (autoSaveSettings.enabled) {
+            scheduleAutoSave(nodes, edges);
+          }
         }
       } catch (error) {
         console.error('Error undoing command:', error);
         toast.error(`Failed to undo: ${commandToUndo.description}`);
       }
     }
-  }, [undoStack, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, onDirtyChange]);
+  }, [undoStack, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, onDirtyChange, saveManager, storyMap]);
 
   // Redo function with toast notifications
   const redo = useCallback(() => {
@@ -2754,33 +2760,46 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setUndoStack(prev => [...prev, commandToRedo]);
         toast.success(`ทำซ้ำ: ${commandToRedo.description}`);
         
-        // Update dirty state through SaveManager หรือ fallback
+        // Update dirty state และ schedule save โดยไม่ส่งข้อมูลผิดไปยัง SaveManager
         if (saveManager) {
-          saveManager.saveOperation({
-            type: 'UPDATE_NODE',
-            data: { redoOperation: true },
-            strategy: 'debounced'
-          }).catch(console.error);
+          // อัปเดต dirty state ผ่าน SaveManager โดยไม่ trigger save operation ที่ผิด
+          const currentData = {
+            nodes: nodes,
+            edges: edges,
+            storyVariables: storyMap?.storyVariables || []
+          };
+          
+          // ตรวจสอบว่ามีการเปลี่ยนแปลงจริงๆ หรือไม่
+          const hasChanges = saveManager.checkIfDataChanged(currentData);
+          saveManager.updateDirtyStateOnly(hasChanges);
+          
+          // Schedule debounced save เฉพาะเมื่อมีการเปลี่ยนแปลงจริง
+          if (hasChanges && autoSaveSettings.enabled) {
+            saveManager.saveOperation({
+              type: 'BATCH_UPDATE',
+              data: currentData,
+              strategy: 'debounced'
+            }).catch(console.error);
+          }
         } else {
           setSaveState(prev => ({
             ...prev,
             isDirty: true,
             hasUnsavedChanges: true
           }));
-        }
-        
-        onDirtyChange?.(true);
-        
-        // Schedule auto-save if enabled
-        if (autoSaveSettings.enabled) {
-          scheduleAutoSave(nodes, edges);
+          onDirtyChange?.(true);
+          
+          // Schedule auto-save if enabled
+          if (autoSaveSettings.enabled) {
+            scheduleAutoSave(nodes, edges);
+          }
         }
       } catch (error) {
         console.error('Error redoing command:', error);
         toast.error(`Failed to redo: ${commandToRedo.description}`);
       }
     }
-  }, [redoStack, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, onDirtyChange]);
+  }, [redoStack, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, onDirtyChange, saveManager, storyMap]);
 
   // Command factory functions
   const createNodeCommand = useCallback((
@@ -3056,8 +3075,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           position: node.position,
           data: {
             ...nodeData,
-            showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-            showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+            showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+            showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
           },
           selected: false // Don't preserve selection on re-init
         };
@@ -3072,7 +3091,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         label: edge.label,
         data: {
           ...edge,
-          showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
+          showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
         },
         type: 'smoothstep',
         markerEnd: {
@@ -3336,19 +3355,35 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // Confirm multi-selection (Canva-style)
   const confirmMultiSelection = useCallback(() => {
+    const pendingNodeIds = selection.pendingSelection;
+    
     const command: ICommand = {
       id: `multi-select-${Date.now()}`,
       type: 'MULTI_SELECT',
-      description: `เลือก ${selection.pendingSelection.length} nodes`,
+      description: `เลือก ${pendingNodeIds.length} nodes`,
       timestamp: Date.now(),
       execute: () => {
+        // อัปเดต selection state
         setSelection(prev => ({
           ...prev,
-          selectedNodes: prev.pendingSelection,
+          selectedNodes: pendingNodeIds,
+          selectedEdges: [],
           pendingSelection: [],
           showSelectionBar: false,
           multiSelectMode: false
         }));
+        
+        // อัปเดต node selection ใน React Flow
+        setNodes(prevNodes => 
+          prevNodes.map(n => ({
+            ...n,
+            selected: pendingNodeIds.includes(n.id)
+          }))
+        );
+        
+        // ล้าง single selection states
+        setSelectedNode(null);
+        setSelectedEdge(null);
         setIsMultiSelectActive(false);
       },
       undo: () => {
@@ -3360,13 +3395,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           pendingSelection: [],
           showSelectionBar: false
         }));
+        
+        // ล้าง visual selection
+        setNodes(prevNodes => 
+          prevNodes.map(n => ({ ...n, selected: false }))
+        );
+        
+        setSelectedNode(null);
+        setSelectedEdge(null);
         setIsMultiSelectActive(false);
       }
     };
     
     executeCommand(command as AnyCommand);
-    toast.success(`Selected ${selection.pendingSelection.length} nodes`);
-  }, [selection.pendingSelection, executeCommand]);
+    toast.success(`Selected ${pendingNodeIds.length} nodes`);
+  }, [selection.pendingSelection, executeCommand, setNodes]);
 
   // Cancel multi-selection
   const cancelMultiSelection = useCallback(() => {
@@ -3376,9 +3419,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       showSelectionBar: false,
       multiSelectMode: false
     }));
+    
+    // ล้าง visual selection
+    setNodes(prevNodes => 
+      prevNodes.map(n => ({ ...n, selected: false }))
+    );
+    
     setIsMultiSelectActive(false);
     toast.info('Multi-selection cancelled');
-  }, []);
+  }, [setNodes]);
 
   // Select all nodes
   const selectAllNodes = useCallback(() => {
@@ -3488,8 +3537,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 },
                 data: {
                   ...node.data,
-                  showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                  showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+                  showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+                  showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
                 }
               };
               commands.push(createNodeCommand('ADD_NODE', newNode.id, newNode));
@@ -3502,7 +3551,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 id: `edge_${Date.now()}_${Math.random()}`,
                 data: {
                   ...edge.data,
-                  showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
+                  showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
                 }
               };
               commands.push(createEdgeCommand('ADD_EDGE', newEdge.id, newEdge, newEdge.source, newEdge.target));
@@ -3549,8 +3598,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   },
                   data: {
                     ...originalNode.data,
-                    showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                    showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+                    showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+                    showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
                   }
                 };
                 duplicateCommands.push(createNodeCommand('ADD_NODE', duplicatedNode.id, duplicatedNode));
@@ -3655,8 +3704,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         nodeSpecificData: getDefaultNodeData(nodeType),
         color: getDefaultNodeColor(nodeType),
         zIndex: 1000,
-        showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                          showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+        showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+                          showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
       }
     };
     
@@ -3770,8 +3819,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         isCompleted: false,
         isFirstScene: nodeType === StoryMapNodeType.SCENE_NODE && 
           !nodes.some(n => n.data.nodeType === StoryMapNodeType.SCENE_NODE),
-        showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                          showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+        showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+                          showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
       }
     };
 
@@ -3884,7 +3933,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         targetHandleId: params.targetHandle,
         label: autoLabel,
         priority: 1,
-            showLabels: blueprintSettings.showNodeLabels, // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
+            showLabels: currentBlueprintSettings.showNodeLabels, // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
         // เพิ่มข้อมูลสำหรับการอัปเดต Scene
         sceneConnection: sourceNode?.data.nodeType === StoryMapNodeType.SCENE_NODE && 
                         targetNode?.data.nodeType === StoryMapNodeType.SCENE_NODE,
@@ -3952,16 +4001,32 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     // Don't interfere with multi-select mode
     if (selection.multiSelectMode) return;
     
-    // Set single selection states
-    setSelectedNode(selectedNodes[0] || null);
-    setSelectedEdge(selectedEdges[0] || null);
+    const selectedNodeIds = selectedNodes.map(n => n.id);
+    const selectedEdgeIds = selectedEdges.map(e => e.id);
     
-    // Update multi-selection state
+    // Update selection state
     setSelection(prev => ({
       ...prev,
-      selectedNodes: selectedNodes.map(n => n.id),
-      selectedEdges: selectedEdges.map(e => e.id)
+      selectedNodes: selectedNodeIds,
+      selectedEdges: selectedEdgeIds
     }));
+    
+    // Set single selection states only if single selection
+    if (selectedNodes.length === 1 && selectedEdges.length === 0) {
+      setSelectedNode(selectedNodes[0]);
+      setSelectedEdge(null);
+    } else if (selectedNodes.length === 0 && selectedEdges.length === 1) {
+      setSelectedNode(null);
+      setSelectedEdge(selectedEdges[0]);
+    } else if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+      // No selection
+      setSelectedNode(null);
+      setSelectedEdge(null);
+    } else {
+      // Multiple selection - clear single selection states
+      setSelectedNode(null);
+      setSelectedEdge(null);
+    }
   }, [selection.multiSelectMode]);
 
   // Keyboard event listeners
@@ -4008,16 +4073,43 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   };
 
-  // Custom node and edge types
+  // Custom node and edge types - สร้าง wrapper เพื่อส่ง nodeOrientation พร้อม real-time updates
   const nodeTypes: NodeTypes = useMemo(() => ({
-    scene_node: SceneNode,
-    choice_node: ChoiceNode,
-    branch_node: BranchNode,
-    comment_node: CommentNode,
-    ending_node: EndingNode,
+    scene_node: (props: any) => <SceneNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
+    choice_node: (props: any) => <ChoiceNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
+    branch_node: (props: any) => <BranchNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
+    comment_node: (props: any) => <CommentNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
+    ending_node: (props: any) => <EndingNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
     // Keep custom as fallback
     custom: CustomNode
-  }), []);
+  }), [currentBlueprintSettings.nodeOrientation]);
+  
+  // Track previous orientation to show toast only on actual changes
+  const [previousOrientation, setPreviousOrientation] = useState<'horizontal' | 'vertical'>(currentBlueprintSettings.nodeOrientation);
+  
+  // Force re-render all nodes when orientation changes to update handle positions immediately
+  useEffect(() => {
+    setNodes(prevNodes => 
+      prevNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          nodeOrientation: currentBlueprintSettings.nodeOrientation, // Force re-render
+          _orientationTimestamp: Date.now() // Unique key to trigger re-render
+        }
+      }))
+    );
+    
+    // Show a brief visual feedback for orientation change (only on actual changes)
+    if (typeof window !== 'undefined' && previousOrientation !== currentBlueprintSettings.nodeOrientation) {
+      const orientationLabel = currentBlueprintSettings.nodeOrientation === 'vertical' ? 'แนวตั้ง' : 'แนวนอน';
+      toast.success(`เปลี่ยนการวางแนว node เป็น${orientationLabel}`, {
+        duration: 1500,
+        icon: currentBlueprintSettings.nodeOrientation === 'vertical' ? '⬆️⬇️' : '⬅️➡️'
+      });
+      setPreviousOrientation(currentBlueprintSettings.nodeOrientation);
+    }
+  }, [currentBlueprintSettings.nodeOrientation, setNodes, previousOrientation]);
   
   const edgeTypes: EdgeTypes = useMemo(() => ({
     custom: CustomEdge,
@@ -4122,31 +4214,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     <TabsContent value="palette" className="flex-1 overflow-hidden">
                       <ScrollArea className="h-full px-4 pb-4 custom-scrollbar">
                         <div className="space-y-4 pt-4">
-                          {/* Professional Settings */}
-                          <Card className="border">
-                            <CardHeader className="py-2">
-                              <CardTitle className="text-sm flex items-center gap-2">
-                                <Settings className="w-4 h-4" />
-                                การตั้งค่าขั้นสูง
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="py-2 space-y-3">
-                              <div className="text-center text-gray-500 dark:text-gray-400 space-y-3 py-4">
-                                <Settings className="w-10 h-10 mx-auto opacity-50" />
-                                <div className="space-y-1">
-                                  <p className="text-sm font-medium">การตั้งค่า Blueprint</p>
-                                  <p className="text-xs leading-relaxed">
-                                    การตั้งค่าทั้งหมดถูกย้ายไปยัง<br />
-                                    เมนูการตั้งค่าหลักด้านบน
-                                  </p>
-                                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-medium">
-                                    คลิกปุ่ม ⚙️ เพื่อปรับแต่ง
-                                  </p>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-
                         <NodePalette 
                           onAddNode={onAddNode}
                           onDragStart={(nodeType, event) => {
@@ -4385,6 +4452,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       showSelectionBar: newPendingSelection.length > 0
                     }));
                     
+                    // อัปเดต visual selection สำหรับ nodes ที่อยู่ใน pending selection
+                    setNodes(prevNodes => 
+                      prevNodes.map(n => ({
+                        ...n,
+                        selected: newPendingSelection.includes(n.id)
+                      }))
+                    );
+                    
                     // Visual feedback
                     if (isAlreadySelected) {
                       toast.info(`Removed ${node.data?.title || node.id} from selection`);
@@ -4460,9 +4535,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }}
               >
                 <Background 
-                  variant={blueprintSettings.showGrid ? BackgroundVariant.Dots : BackgroundVariant.Cross} 
+                  variant={currentBlueprintSettings.showGrid ? BackgroundVariant.Dots : BackgroundVariant.Cross} 
                   gap={canvasState.gridSize}
-                  size={blueprintSettings.showGrid ? 1 : 2}
+                  size={currentBlueprintSettings.showGrid ? 1 : 2}
                   className="opacity-30"
                 />
                 
@@ -5242,8 +5317,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                                   ...nodeData,
                                   data: {
                                     ...nodeData.data,
-                                    showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                                    showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+                                    showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+                                    showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
                                   }
                                 };
                                 const cmd = createNodeCommand('ADD_NODE', updatedNodeData.id, updatedNodeData);
@@ -5255,7 +5330,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                                   ...edgeData,
                                   data: {
                                     ...edgeData.data,
-                                    showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
+                                    showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
                                   }
                                 };
                                 const cmd = createEdgeCommand('ADD_EDGE', updatedEdgeData.id, updatedEdgeData, updatedEdgeData.source, updatedEdgeData.target);
@@ -5323,8 +5398,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           ...nodeData,
                           data: {
                             ...nodeData.data,
-                            showThumbnails: blueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                            showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+                            showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
+                            showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
                           }
                         };
                         cmds.push(createNodeCommand('ADD_NODE', updatedNodeData.id, updatedNodeData));
@@ -5335,7 +5410,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           ...edgeData,
                           data: {
                             ...edgeData.data,
-                            showLabels: blueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
+                            showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings สำหรับการแสดงผล choice labels
                           }
                         };
                         cmds.push(createEdgeCommand('ADD_EDGE', updatedEdgeData.id, updatedEdgeData, updatedEdgeData.source, updatedEdgeData.target));

@@ -338,6 +338,7 @@ const createWhisper999Scenes = async (
       episodeId,
       sceneOrder: 1,
       nodeId: 'scene_arrival',
+      // storyMapNodeId จะถูกอัปเดตหลังสร้าง StoryMap
       title: 'การมาถึง',
       background: { type: 'image', value: '/images/background/ChurchCorridor_Sunset.png', isOfficialMedia: true, fitMode: 'cover' },
       sceneTransitionOut: { type: 'none', durationSeconds: 0 }, // Background เดียวกันกับ scene ถัดไป
@@ -355,6 +356,7 @@ const createWhisper999Scenes = async (
         episodeId,
         sceneOrder: 2,
         nodeId: 'scene_key_exchange',
+        // storyMapNodeId จะถูกอัปเดตหลังสร้าง StoryMap
         title: 'รับกุญแจ',
         background: { type: 'image', value: '/images/background/ChurchCorridor_Sunset.png', isOfficialMedia: true, fitMode: 'cover' },
         sceneTransitionOut: { type: 'fade', durationSeconds: 0.6 }, // เปลี่ยนไป ChurchCourtyardA_Sunset
@@ -994,7 +996,7 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
   // กำหนดตัวแปรเรื่องราว (Story Variables)
   const storyVariables: IStoryVariableDefinition[] = [
     {
-      variableId: 'karma',
+      variableId: uuidv4(), // ใช้ UUID เพื่อความ unique
       variableName: 'karma',
       dataType: StoryVariableDataType.NUMBER,
       initialValue: 0,
@@ -1004,7 +1006,7 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
       isVisibleToPlayer: false
     },
     {
-      variableId: 'has_explored_basement',
+      variableId: uuidv4(), // ใช้ UUID เพื่อความ unique
       variableName: 'has_explored_basement',
       dataType: StoryVariableDataType.BOOLEAN,
       initialValue: false,
@@ -1013,7 +1015,7 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
       isVisibleToPlayer: false
     },
     {
-      variableId: 'tape_listened',
+      variableId: uuidv4(), // ใช้ UUID เพื่อความ unique
       variableName: 'tape_listened',
       dataType: StoryVariableDataType.BOOLEAN,
       initialValue: false,
@@ -1023,211 +1025,641 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
     }
   ];
 
-  // กำหนด Nodes ของ StoryMap
+  // สร้าง mapping สำหรับ nodeId เพื่อให้สามารถอ้างอิงได้
+  const nodeIdMapping: Record<string, string> = {
+    'start_whisper999': uuidv4(),
+    'scene_arrival': uuidv4(),
+    'scene_key_exchange': uuidv4(),
+    'scene_nira_thoughts': uuidv4(),
+    'scene_agent_warning': uuidv4(),
+    'scene_enter_house': uuidv4(),
+    'choice_first_decision': uuidv4(),
+    'scene_explore_downstairs_1': uuidv4(),
+    'scene_found_box': uuidv4(),
+    'scene_found_tape': uuidv4(),
+    'choice_tape_decision': uuidv4(),
+    'scene_listen_tape_1': uuidv4(),
+    'scene_secret_door': uuidv4(),
+    'choice_secret_door_decision': uuidv4(),
+    'scene_enter_basement_1': uuidv4(),
+    'scene_basement_encounter': uuidv4(),
+    'scene_send_photo_1': uuidv4(),
+    'scene_other_doors': uuidv4(),
+    'scene_lock_door_1': uuidv4(),
+    'scene_vigil': uuidv4(),
+    'choice_lock_door_decision': uuidv4(),
+    'scene_reinforce_door_1': uuidv4(),
+    'scene_setup_camera_1': uuidv4(),
+    'scene_destroy_door_1': uuidv4(),
+    'ending_bad_1': uuidv4(),
+    'ending_bad_2': uuidv4(),
+    'ending_bad_3': uuidv4(),
+    'ending_bad_4': uuidv4(),
+    'ending_true': uuidv4(),
+    'ending_safe_day1': uuidv4(),
+    'ending_cliffhanger_3am': uuidv4(),
+    'ending_destroy_evidence': uuidv4()
+  };
+
+  // กำหนด tier และ spacing สำหรับการจัดเรียงอัตโนมัติ
+  const TIER_SPACING = 300; // ระยะห่างระหว่างชั้น
+  const NODE_SPACING = 200; // ระยะห่างระหว่าง node ในแนวเดียวกัน
+  const START_X = 100;
+  const START_Y = 300; // ตำแหน่งกลาง
+
+  // กำหนด Nodes ของ StoryMap พร้อม layout ที่สวยงาม
   const nodes: IStoryMapNode[] = [
-    // Start Node
+    // === TIER 0: Start Node ===
     {
-      nodeId: 'start_whisper999',
+      nodeId: nodeIdMapping['start_whisper999'],
       nodeType: StoryMapNodeType.START_NODE,
       title: 'จุดเริ่มต้น',
-      position: { x: 100, y: 100 },
+      position: { x: START_X, y: START_Y },
       nodeSpecificData: {},
-      notesForAuthor: 'จุดเริ่มต้นของเรื่อง - การมาถึงบ้านใหม่'
+      notesForAuthor: 'จุดเริ่มต้นของเรื่อง - การมาถึงบ้านใหม่',
+      editorVisuals: {
+        color: '#10B981', // สีเขียว
+        orientation: 'horizontal',
+        borderRadius: 12,
+        gradient: {
+          from: '#10B981',
+          to: '#059669',
+          direction: 'horizontal'
+        }
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 0,
+        order: 0
+      }
     },
     
-    // Scene Nodes
+    // === TIER 1: Scene Chain ===
     {
-      nodeId: 'scene_arrival',
+      nodeId: nodeIdMapping['scene_arrival'],
       nodeType: StoryMapNodeType.SCENE_NODE,
       title: 'การมาถึง',
-      position: { x: 300, y: 100 },
-      nodeSpecificData: { sceneId: 'scene_arrival' }
+      position: { x: START_X + TIER_SPACING, y: START_Y },
+      nodeSpecificData: { sceneId: 'scene_arrival' },
+      editorVisuals: {
+        color: '#3B82F6', // สีน้ำเงิน
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 1,
+        order: 0
+      }
     },
     {
-      nodeId: 'scene_key_exchange',
+      nodeId: nodeIdMapping['scene_key_exchange'],
       nodeType: StoryMapNodeType.SCENE_NODE,
       title: 'รับกุญแจ',
-      position: { x: 500, y: 100 },
-      nodeSpecificData: { sceneId: 'scene_key_exchange' }
+      position: { x: START_X + TIER_SPACING * 2, y: START_Y },
+      nodeSpecificData: { sceneId: 'scene_key_exchange' },
+      editorVisuals: {
+        color: '#3B82F6',
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 2,
+        order: 0
+      }
     },
     {
-      nodeId: 'scene_nira_thoughts',
+      nodeId: nodeIdMapping['scene_nira_thoughts'],
       nodeType: StoryMapNodeType.SCENE_NODE,
       title: 'ความคิดของนิรา',
-      position: { x: 700, y: 100 },
-      nodeSpecificData: { sceneId: 'scene_nira_thoughts' }
+      position: { x: START_X + TIER_SPACING * 3, y: START_Y },
+      nodeSpecificData: { sceneId: 'scene_nira_thoughts' },
+      editorVisuals: {
+        color: '#8B5CF6', // สีม่วง - ความคิด
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 3,
+        order: 0
+      }
     },
     {
-      nodeId: 'scene_agent_warning',
+      nodeId: nodeIdMapping['scene_agent_warning'],
       nodeType: StoryMapNodeType.SCENE_NODE,
       title: 'คำเตือน',
-      position: { x: 900, y: 100 },
-      nodeSpecificData: { sceneId: 'scene_agent_warning' }
+      position: { x: START_X + TIER_SPACING * 4, y: START_Y },
+      nodeSpecificData: { sceneId: 'scene_agent_warning' },
+      editorVisuals: {
+        color: '#F59E0B', // สีเหลือง - คำเตือน
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 4,
+        order: 0
+      }
     },
     {
-      nodeId: 'scene_enter_house',
+      nodeId: nodeIdMapping['scene_enter_house'],
       nodeType: StoryMapNodeType.SCENE_NODE,
       title: 'เข้าบ้าน',
-      position: { x: 1100, y: 100 },
-      nodeSpecificData: { sceneId: 'scene_enter_house' }
+      position: { x: START_X + TIER_SPACING * 5, y: START_Y },
+      nodeSpecificData: { sceneId: 'scene_enter_house' },
+      editorVisuals: {
+        color: '#3B82F6',
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 5,
+        order: 0
+      }
     },
     
-    // Choice Node - การตัดสินใจแรก
+    // === TIER 6: First Decision Point ===
     {
-      nodeId: 'choice_first_decision',
+      nodeId: nodeIdMapping['choice_first_decision'],
       nodeType: StoryMapNodeType.CHOICE_NODE,
       title: 'การตัดสินใจแรก',
-      position: { x: 1300, y: 100 },
+      position: { x: START_X + TIER_SPACING * 6, y: START_Y },
       nodeSpecificData: {
-        choiceIds: ['CHOICE_EXPLORE', 'CHOICE_CLEAN', 'CHOICE_CALL'],
+        choiceIds: [choiceCodeToId['CHOICE_EXPLORE'], choiceCodeToId['CHOICE_CLEAN'], choiceCodeToId['CHOICE_CALL']],
         promptText: 'ตอนนี้คุณจะทำอะไรเป็นอย่างแรก?',
         layout: 'vertical'
+      },
+      editorVisuals: {
+        color: '#EC4899', // สีชมพู - choice
+        orientation: 'vertical',
+        borderRadius: 12,
+        gradient: {
+          from: '#EC4899',
+          to: '#DB2777',
+          direction: 'vertical'
+        }
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 6,
+        order: 0
       }
     },
     
-    // Branch paths from first choice
+    // === TIER 7: Branch Paths ===
+    // Path A: Explore
     {
-      nodeId: 'scene_explore_downstairs_1',
+      nodeId: nodeIdMapping['scene_explore_downstairs_1'],
       nodeType: StoryMapNodeType.SCENE_NODE,
       title: 'สำรวจชั้นล่าง',
-      position: { x: 1500, y: 50 },
-      nodeSpecificData: { sceneId: 'scene_explore_downstairs_1' }
-    },
-    {
-      nodeId: 'scene_found_box',
-      nodeType: StoryMapNodeType.SCENE_NODE,
-      title: 'กล่องไม้เก่า',
-      position: { x: 1700, y: 50 },
-      nodeSpecificData: { sceneId: 'scene_found_box' }
-    },
-    {
-      nodeId: 'scene_found_tape',
-      nodeType: StoryMapNodeType.SCENE_NODE,
-      title: 'เทปลึกลับ',
-      position: { x: 1900, y: 50 },
-      nodeSpecificData: { sceneId: 'scene_found_tape' }
-    },
-    
-    // Choice Node - การตัดสินใจกับเทป
-    {
-      nodeId: 'choice_tape_decision',
-      nodeType: StoryMapNodeType.CHOICE_NODE,
-      title: 'การตัดสินใจกับเทป',
-      position: { x: 2100, y: 50 },
-      nodeSpecificData: {
-        choiceIds: ['CHOICE_LISTEN_NOW', 'CHOICE_LISTEN_LATER', 'CHOICE_BURN_TAPE'],
-        promptText: 'ตอนนี้คุณจะทำอะไรกับเทป?',
-        layout: 'vertical'
+      position: { x: START_X + TIER_SPACING * 7, y: START_Y - NODE_SPACING },
+      nodeSpecificData: { sceneId: 'scene_explore_downstairs_1' },
+      editorVisuals: {
+        color: '#6366F1', // สีน้ำเงินอิน๊ดิโก้
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 7,
+        order: 0
       }
     },
     
-    // Ending Nodes
+    // Path B: Safe endings (Clean/Call)
     {
-      nodeId: 'ending_bad_1',
+      nodeId: nodeIdMapping['ending_safe_day1'],
+      nodeType: StoryMapNodeType.ENDING_NODE,
+      title: 'วันแรกที่แสนสงบ',
+      position: { x: START_X + TIER_SPACING * 7, y: START_Y + NODE_SPACING },
+      nodeSpecificData: {
+        endingTitle: 'วันแรกที่แสนสงบ',
+        outcomeDescription: 'คุณเลือกที่จะใช้ชีวิตอย่างปกติสุขต่อไป และไม่มีอะไรผิดปกติเกิดขึ้นในวันแรก... อย่างน้อยก็ในตอนนี้'
+      },
+      editorVisuals: {
+        color: '#22C55E', // สีเขียว - ending ดี
+        orientation: 'horizontal',
+        borderRadius: 12,
+        gradient: {
+          from: '#22C55E',
+          to: '#16A34A',
+          direction: 'horizontal'
+        }
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 7,
+        order: 1
+      }
+    },
+    
+    // === Continue Exploration Path ===
+    {
+      nodeId: nodeIdMapping['scene_found_box'],
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'กล่องไม้เก่า',
+      position: { x: START_X + TIER_SPACING * 8, y: START_Y - NODE_SPACING },
+      nodeSpecificData: { sceneId: 'scene_found_box' },
+      editorVisuals: {
+        color: '#8B5CF6',
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 8,
+        order: 0
+      }
+    },
+    {
+      nodeId: nodeIdMapping['scene_found_tape'],
+      nodeType: StoryMapNodeType.SCENE_NODE,
+      title: 'เทปลึกลับ',
+      position: { x: START_X + TIER_SPACING * 9, y: START_Y - NODE_SPACING },
+      nodeSpecificData: { sceneId: 'scene_found_tape' },
+      editorVisuals: {
+        color: '#DC2626', // สีแดง - อันตราย
+        orientation: 'horizontal',
+        showThumbnail: true,
+        borderRadius: 8
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 9,
+        order: 0
+      }
+    },
+    
+    // === TIER 10: Tape Decision ===
+    {
+      nodeId: nodeIdMapping['choice_tape_decision'],
+      nodeType: StoryMapNodeType.CHOICE_NODE,
+      title: 'การตัดสินใจกับเทป',
+      position: { x: START_X + TIER_SPACING * 10, y: START_Y - NODE_SPACING },
+      nodeSpecificData: {
+        choiceIds: [choiceCodeToId['CHOICE_LISTEN_NOW'], choiceCodeToId['CHOICE_LISTEN_LATER'], choiceCodeToId['CHOICE_BURN_TAPE']],
+        promptText: 'ตอนนี้คุณจะทำอะไรกับเทป?',
+        layout: 'vertical'
+      },
+      editorVisuals: {
+        color: '#DC2626', // สีแดง - choice อันตราย
+        orientation: 'vertical',
+        borderRadius: 12,
+        gradient: {
+          from: '#DC2626',
+          to: '#B91C1C',
+          direction: 'vertical'
+        }
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 10,
+        order: 0
+      }
+    },
+    
+    // === Multiple Endings ===
+    {
+      nodeId: nodeIdMapping['ending_bad_1'],
       nodeType: StoryMapNodeType.ENDING_NODE,
       title: 'เสียงสุดท้าย',
-      position: { x: 2300, y: 0 },
+      position: { x: START_X + TIER_SPACING * 11, y: START_Y - NODE_SPACING * 2 },
       nodeSpecificData: {
         endingTitle: 'เสียงสุดท้าย',
         endingSceneId: 'scene_bad_ending_1',
         outcomeDescription: 'นิรากลายเป็นเสียงในเทปอันต่อไป หลังจากเผชิญหน้ากับสิ่งลี้ลับในห้องใต้ดิน'
+      },
+      editorVisuals: {
+        color: '#7F1D1D', // สีแดงเข้ม - bad ending
+        orientation: 'horizontal',
+        borderRadius: 12,
+        gradient: {
+          from: '#7F1D1D',
+          to: '#991B1B',
+          direction: 'horizontal'
+        }
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 11,
+        order: 0
       }
     },
     {
-      nodeId: 'ending_safe_day1',
+      nodeId: nodeIdMapping['ending_cliffhanger_3am'],
       nodeType: StoryMapNodeType.ENDING_NODE,
-      title: 'วันแรกที่แสนสงบ',
-      position: { x: 1500, y: 200 },
+      title: 'คำท้าทายตอนตีสาม',
+      position: { x: START_X + TIER_SPACING * 11, y: START_Y - NODE_SPACING },
       nodeSpecificData: {
-        endingTitle: 'วันแรกที่แสนสงบ',
-        outcomeDescription: 'คุณเลือกที่จะใช้ชีวิตอย่างปกติสุขต่อไป และไม่มีอะไรผิดปกติเกิดขึ้นในวันแรก... อย่างน้อยก็ในตอนนี้'
+        endingTitle: 'คำท้าทายตอนตีสาม',
+        outcomeDescription: 'คุณตัดสินใจที่จะทำตามคำท้าทายบนเทป... คืนนี้อะไรจะเกิดขึ้นกันแน่? (โปรดติดตามตอนต่อไป)'
+      },
+      editorVisuals: {
+        color: '#F59E0B', // สีเหลือง - cliffhanger
+        orientation: 'horizontal',
+        borderRadius: 12
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 11,
+        order: 1
+      }
+    },
+    {
+      nodeId: nodeIdMapping['ending_destroy_evidence'],
+      nodeType: StoryMapNodeType.ENDING_NODE,
+      title: 'ทำลายหลักฐาน',
+      position: { x: START_X + TIER_SPACING * 11, y: START_Y },
+      nodeSpecificData: {
+        endingTitle: 'ทำลายหลักฐาน',
+        outcomeDescription: 'คุณตัดสินใจทำลายเทปปริศนาทิ้ง บางทีการไม่รู้ อาจจะเป็นสิ่งที่ดีที่สุดแล้ว'
+      },
+      editorVisuals: {
+        color: '#6B7280', // สีเทา - neutral ending
+        orientation: 'horizontal',
+        borderRadius: 12
+      },
+      layoutConfig: {
+        mode: 'auto',
+        tier: 11,
+        order: 2
       }
     }
   ];
 
-  // กำหนด Edges (การเชื่อมโยง)
+  // กำหนด Edges (การเชื่อมโยง) พร้อม visual properties และ handle positions
   const edges: IStoryMapEdge[] = [
-    // เส้นทางหลัก
+    // === เส้นทางหลัก (Main Flow) ===
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'start_whisper999',
-      targetNodeId: 'scene_arrival',
-      label: 'เริ่มเรื่อง'
+      sourceNodeId: nodeIdMapping['start_whisper999'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_arrival'],
+      targetHandlePosition: 'left',
+      label: 'เริ่มเรื่อง',
+      editorVisuals: {
+        color: '#10B981',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 3,
+        markerEnd: 'arrowclosed',
+        labelStyle: {
+          backgroundColor: '#10B981',
+          color: '#FFFFFF',
+          borderRadius: 6
+        }
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_arrival',
-      targetNodeId: 'scene_key_exchange',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_arrival'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_key_exchange'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#3B82F6',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_key_exchange',
-      targetNodeId: 'scene_nira_thoughts',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_key_exchange'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_nira_thoughts'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#3B82F6',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_nira_thoughts',
-      targetNodeId: 'scene_agent_warning',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_nira_thoughts'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_agent_warning'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#8B5CF6',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_agent_warning',
-      targetNodeId: 'scene_enter_house',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_agent_warning'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_enter_house'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#F59E0B',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_enter_house',
-      targetNodeId: 'choice_first_decision',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_enter_house'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['choice_first_decision'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#3B82F6',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     
-    // จากทางเลือกแรก
+    // === จากทางเลือกแรก (First Decision Branches) ===
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'choice_first_decision',
-      targetNodeId: 'scene_explore_downstairs_1',
+      sourceNodeId: nodeIdMapping['choice_first_decision'],
+      sourceHandlePosition: 'top', // vertical orientation choice node
+      targetNodeId: nodeIdMapping['scene_explore_downstairs_1'],
+      targetHandlePosition: 'left',
       triggeringChoiceId: choiceCodeToId['CHOICE_EXPLORE'],
-      label: 'สำรวจบ้าน'
+      label: 'สำรวจบ้าน',
+      editorVisuals: {
+        color: '#EC4899',
+        lineStyle: 'solid',
+        pathType: 'step',
+        strokeWidth: 3,
+        labelStyle: {
+          backgroundColor: '#EC4899',
+          color: '#FFFFFF',
+          borderRadius: 6
+        }
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'choice_first_decision',
-      targetNodeId: 'ending_safe_day1',
+      sourceNodeId: nodeIdMapping['choice_first_decision'],
+      sourceHandlePosition: 'bottom',
+      targetNodeId: nodeIdMapping['ending_safe_day1'],
+      targetHandlePosition: 'left',
       triggeringChoiceId: choiceCodeToId['CHOICE_CLEAN'],
-      label: 'ทำความสะอาด'
+      label: 'ทำความสะอาด',
+      editorVisuals: {
+        color: '#22C55E',
+        lineStyle: 'solid',
+        pathType: 'step',
+        strokeWidth: 3,
+        labelStyle: {
+          backgroundColor: '#22C55E',
+          color: '#FFFFFF',
+          borderRadius: 6
+        }
+      }
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: nodeIdMapping['choice_first_decision'],
+      sourceHandlePosition: 'bottom',
+      targetNodeId: nodeIdMapping['ending_safe_day1'],
+      targetHandlePosition: 'left',
+      triggeringChoiceId: choiceCodeToId['CHOICE_CALL'],
+      label: 'โทรหาเพื่อน',
+      editorVisuals: {
+        color: '#22C55E',
+        lineStyle: 'dashed',
+        pathType: 'step',
+        strokeWidth: 2,
+        labelStyle: {
+          backgroundColor: '#22C55E',
+          color: '#FFFFFF',
+          borderRadius: 6
+        }
+      }
     },
     
-    // เส้นทางสำรวจ
+    // === เส้นทางสำรวจ (Exploration Path) ===
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_explore_downstairs_1',
-      targetNodeId: 'scene_found_box',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_explore_downstairs_1'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_found_box'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#6366F1',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_found_box',
-      targetNodeId: 'scene_found_tape',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_found_box'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['scene_found_tape'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#8B5CF6',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 2
+      }
     },
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'scene_found_tape',
-      targetNodeId: 'choice_tape_decision',
-      label: 'ต่อไป'
+      sourceNodeId: nodeIdMapping['scene_found_tape'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['choice_tape_decision'],
+      targetHandlePosition: 'left',
+      label: 'ต่อไป',
+      editorVisuals: {
+        color: '#DC2626',
+        lineStyle: 'solid',
+        pathType: 'smooth',
+        strokeWidth: 3,
+        animated: true
+      }
     },
     
-    // จากทางเลือกเทป
+    // === จากทางเลือกเทป (Tape Decision Branches) ===
     {
       edgeId: uuidv4(),
-      sourceNodeId: 'choice_tape_decision',
-      targetNodeId: 'ending_bad_1',
+      sourceNodeId: nodeIdMapping['choice_tape_decision'],
+      sourceHandlePosition: 'top',
+      targetNodeId: nodeIdMapping['ending_bad_1'],
+      targetHandlePosition: 'left',
       triggeringChoiceId: choiceCodeToId['CHOICE_LISTEN_NOW'],
-      label: 'ฟังเทปทันที'
+      label: 'ฟังเทปทันที',
+      editorVisuals: {
+        color: '#7F1D1D',
+        lineStyle: 'solid',
+        pathType: 'step',
+        strokeWidth: 4,
+        animated: true,
+        labelStyle: {
+          backgroundColor: '#7F1D1D',
+          color: '#FFFFFF',
+          borderRadius: 6,
+          fontWeight: 'bold'
+        }
+      }
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: nodeIdMapping['choice_tape_decision'],
+      sourceHandlePosition: 'right',
+      targetNodeId: nodeIdMapping['ending_cliffhanger_3am'],
+      targetHandlePosition: 'left',
+      triggeringChoiceId: choiceCodeToId['CHOICE_LISTEN_LATER'],
+      label: 'รอให้ถึงตีสาม',
+      editorVisuals: {
+        color: '#F59E0B',
+        lineStyle: 'dashed',
+        pathType: 'step',
+        strokeWidth: 3,
+        labelStyle: {
+          backgroundColor: '#F59E0B',
+          color: '#FFFFFF',
+          borderRadius: 6
+        }
+      }
+    },
+    {
+      edgeId: uuidv4(),
+      sourceNodeId: nodeIdMapping['choice_tape_decision'],
+      sourceHandlePosition: 'bottom',
+      targetNodeId: nodeIdMapping['ending_destroy_evidence'],
+      targetHandlePosition: 'left',
+      triggeringChoiceId: choiceCodeToId['CHOICE_BURN_TAPE'],
+      label: 'เผาเทปทิ้ง',
+      editorVisuals: {
+        color: '#6B7280',
+        lineStyle: 'dotted',
+        pathType: 'step',
+        strokeWidth: 2,
+        labelStyle: {
+          backgroundColor: '#6B7280',
+          color: '#FFFFFF',
+          borderRadius: 6
+        }
+      }
     }
   ];
 
@@ -1240,23 +1672,55 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
     nodes,
     edges,
     storyVariables,
-    startNodeId: 'start_whisper999',
+    startNodeId: nodeIdMapping['start_whisper999'],
     lastModifiedByUserId: authorId,
     isActive: true,
     editorMetadata: {
-      zoomLevel: 1,
-      viewOffsetX: 0,
-      viewOffsetY: 0,
+      zoomLevel: 0.8, // ย่อขนาดเพื่อให้เห็นภาพรวม
+      viewOffsetX: -50,
+      viewOffsetY: -100,
       gridSize: 20,
       showGrid: true,
-      autoLayoutAlgorithm: 'dagre'
+      showSceneThumbnails: true,
+      showNodeLabels: true,
+      autoLayoutAlgorithm: 'custom',
+      layoutPreferences: {
+        defaultOrientation: 'horizontal', // แนวนอนเป็นหลัก
+        nodeSpacing: { x: TIER_SPACING, y: NODE_SPACING },
+        tierSpacing: TIER_SPACING,
+        autoAlign: true,
+        preserveManualPositions: false,
+        flowDirection: 'left-right'
+      },
+      uiPreferences: {
+        nodeDefaultColor: '#3B82F6',
+        edgeDefaultColor: '#6B7280',
+        connectionLineStyle: 'smooth',
+        showConnectionLines: true,
+        autoSaveEnabled: false, // ตามที่ผู้ใช้ตั้งค่า
+        autoSaveIntervalSec: 30,
+        snapToGrid: true,
+        enableAnimations: true,
+        nodeDefaultOrientation: 'horizontal',
+        edgeDefaultPathType: 'smooth',
+        showMinimap: true,
+        enableNodeThumbnails: true
+      },
+      performanceSettings: {
+        virtualizeNodes: false, // กราฟไม่ใหญ่มาก
+        maxVisibleNodes: 50,
+        enableCaching: true
+      }
     }
   });
 
   const savedStoryMap = await storyMap.save();
   console.log(`✅ สร้าง StoryMap สำเร็จ: ${savedStoryMap._id} (${savedStoryMap.nodes.length} nodes, ${savedStoryMap.edges.length} edges)`);
   
-  return savedStoryMap;
+  return {
+    storyMap: savedStoryMap,
+    nodeIdMapping
+  };
 };
 
 export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
@@ -1423,7 +1887,31 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
 
   // สร้าง StoryMap สำหรับนิยาย
   console.log('📊 กำลังสร้าง StoryMap...');
-  const storyMap = await createWhisper999StoryMap(novel._id, authorId, choices);
+  const storyMapResult = await createWhisper999StoryMap(novel._id, authorId, choices);
+  const { storyMap, nodeIdMapping } = storyMapResult;
+
+  // อัปเดต scenes ให้มี storyMapNodeId
+  console.log('🔗 กำลังเชื่อมโยง scenes กับ StoryMap nodes...');
+  const sceneToNodeMapping: Record<string, string> = {
+    'scene_arrival': nodeIdMapping['scene_arrival'],
+    'scene_key_exchange': nodeIdMapping['scene_key_exchange'],
+    'scene_nira_thoughts': nodeIdMapping['scene_nira_thoughts'],
+    'scene_agent_warning': nodeIdMapping['scene_agent_warning'],
+    'scene_enter_house': nodeIdMapping['scene_enter_house'],
+    'scene_explore_downstairs_1': nodeIdMapping['scene_explore_downstairs_1'],
+    'scene_found_box': nodeIdMapping['scene_found_box'],
+    'scene_found_tape': nodeIdMapping['scene_found_tape']
+  };
+
+  for (const scene of episode1Scenes) {
+    if (scene.nodeId && sceneToNodeMapping[scene.nodeId]) {
+      await SceneModel.findByIdAndUpdate(scene._id, {
+        storyMapNodeId: sceneToNodeMapping[scene.nodeId]
+      });
+    }
+  }
+
+  console.log('✅ เชื่อมโยง scenes กับ StoryMap เสร็จสิ้น');
 
   return { 
     novel, 

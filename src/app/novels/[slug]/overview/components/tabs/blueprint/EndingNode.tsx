@@ -29,10 +29,11 @@ interface EndingNodeData {
  * แสดงข้อมูลจุดจบของเรื่องในนิยายแบบภาพ (Visual Novel)
  * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const EndingNode: React.FC<NodeProps> = ({ 
+const EndingNode: React.FC<NodeProps & { nodeOrientation?: 'horizontal' | 'vertical' }> = ({ 
   data, 
   selected, 
-  dragging 
+  dragging,
+  nodeOrientation = 'vertical'
 }) => {
   const nodeData = data as unknown as EndingNodeData;
   const nodeColor = nodeData.editorVisuals?.color || '#ef4444';
@@ -129,7 +130,7 @@ const EndingNode: React.FC<NodeProps> = ({
       {/* Input Handle */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={nodeOrientation === 'vertical' ? Position.Top : Position.Left}
         id="input"
         className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
         style={{

@@ -97,7 +97,7 @@ export interface IStoryVariableDefinition {
 }
 const StoryVariableDefinitionSchema = new Schema<IStoryVariableDefinition>(
   {
-    variableId: { type: String, required: true, trim: true, unique: true, comment: "UUID หรือ ID เฉพาะที่สร้างจาก client-side editor" },
+    variableId: { type: String, required: true, trim: true, comment: "UUID หรือ ID เฉพาะที่สร้างจาก client-side editor" },
     variableName: { type: String, required: true, trim: true, maxlength: [100, "ชื่อตัวแปรยาวเกินไป (ไม่เกิน 100 ตัวอักษร)"], comment: "ชื่อที่ผู้เขียนใช้อ้างอิงใน editor/script" },
     dataType: { type: String, enum: Object.values(StoryVariableDataType), required: true, comment: "ประเภทข้อมูลของตัวแปร" },
     initialValue: { type: Schema.Types.Mixed, required: true, comment: "ค่าเริ่มต้นของตัวแปร" },
@@ -258,9 +258,21 @@ export interface IEndingNodeData {
  * @property {string} [editorVisuals.color] - สีของโหนด
  * @property {string} [editorVisuals.icon] - ไอคอนของโหนด
  * @property {number} [editorVisuals.zIndex] - ลำดับการซ้อนทับใน Canvas
+ * @property {"vertical" | "horizontal"} [editorVisuals.orientation] - การวางแนวของโหนด (สำหรับ handle positions)
+ * @property {boolean} [editorVisuals.showThumbnail] - แสดงภาพตัวอย่างสำหรับ scene nodes
+ * @property {string} [editorVisuals.borderStyle] - รูปแบบเส้นขอบ ("solid", "dashed", "dotted")
+ * @property {number} [editorVisuals.borderRadius] - รัศมีความโค้งของมุม
+ * @property {object} [editorVisuals.gradient] - การไล่สีพื้นหลัง
+ * @property {string} [editorVisuals.gradient.from] - สีเริ่มต้น
+ * @property {string} [editorVisuals.gradient.to] - สีสิ้นสุด
+ * @property {string} [editorVisuals.gradient.direction] - ทิศทางการไล่สี
  * @property {object} [editorVisuals.animation] - การตั้งค่า Animation สำหรับ Node ใน Editor (เช่น enter, exit)
  * @property {string} [editorVisuals.animation.enter] - ชื่อ Animation หรือ config
  * @property {string} [editorVisuals.animation.exit] - ชื่อ Animation หรือ config
+ * @property {object} [layoutConfig] - การตั้งค่าการจัดเรียงโหนด
+ * @property {"auto" | "manual"} [layoutConfig.mode] - โหมดการจัดเรียง
+ * @property {number} [layoutConfig.tier] - ชั้นของโหนดในการจัดเรียงอัตโนมัติ
+ * @property {number} [layoutConfig.order] - ลำดับในชั้นเดียวกัน
  */
 export interface IStoryMapNode {
   nodeId: string; // Client-generated UUID
@@ -286,10 +298,24 @@ export interface IStoryMapNode {
     color?: string;
     icon?: string; // e.g., name of an icon from a library or a URL
     zIndex?: number;
+    orientation?: "vertical" | "horizontal"; // การวางแนวของโหนด
+    showThumbnail?: boolean; // แสดงภาพตัวอย่างสำหรับ scene nodes
+    borderStyle?: "solid" | "dashed" | "dotted"; // รูปแบบเส้นขอบ
+    borderRadius?: number; // รัศมีความโค้งของมุม
+    gradient?: {
+      from?: string; // สีเริ่มต้น
+      to?: string; // สีสิ้นสุด
+      direction?: "horizontal" | "vertical" | "diagonal"; // ทิศทางการไล่สี
+    };
     animation?: {
         enter?: string; // Animation name or config
         exit?: string;  // Animation name or config
-    }
+    };
+  };
+  layoutConfig?: {
+    mode?: "auto" | "manual"; // โหมดการจัดเรียง
+    tier?: number; // ชั้นของโหนดในการจัดเรียงอัตโนมัติ
+    order?: number; // ลำดับในชั้นเดียวกัน
   };
 }
 const StoryMapNodeSchema = new Schema<IStoryMapNode>(
@@ -316,11 +342,27 @@ const StoryMapNodeSchema = new Schema<IStoryMapNode>(
         color: { type: String, trim: true },
         icon: { type: String, trim: true },
         zIndex: { type: Number, default: 0 },
+        orientation: { type: String, enum: ["vertical", "horizontal"], default: "vertical" },
+        showThumbnail: { type: Boolean, default: false },
+        borderStyle: { type: String, enum: ["solid", "dashed", "dotted"], default: "solid" },
+        borderRadius: { type: Number, default: 8, min: 0, max: 50 },
+        gradient: {
+            from: { type: String, trim: true },
+            to: { type: String, trim: true },
+            direction: { type: String, enum: ["horizontal", "vertical", "diagonal"], default: "vertical" },
+            _id: false,
+        },
         animation: {
             enter: { type: String },
             exit: { type: String },
             _id: false,
         },
+        _id: false,
+    },
+    layoutConfig: {
+        mode: { type: String, enum: ["auto", "manual"], default: "manual" },
+        tier: { type: Number, default: 0 },
+        order: { type: Number, default: 0 },
         _id: false,
     },
   },
@@ -349,8 +391,10 @@ const StoryMapEdgeConditionSchema = new Schema<IStoryMapEdgeCondition>(
  * @property {string} edgeId - ID เฉพาะของเส้นเชื่อมนี้ (เช่น UUID, **ต้อง unique ภายใน StoryMap เดียวกัน**, Client สร้าง)
  * @property {string} sourceNodeId - ID ของโหนดต้นทาง
  * @property {string} [sourceHandleId] - (Optional) ID ของ handle/port ที่จุดปล่อยของโหนดต้นทาง (สำหรับโหนดที่มีหลาย output)
+ * @property {"top" | "bottom" | "left" | "right"} [sourceHandlePosition] - ตำแหน่งของ handle ต้นทาง
  * @property {string} targetNodeId - ID ของโหนดปลายทาง
  * @property {string} [targetHandleId] - (Optional) ID ของ handle/port ที่จุดรับของโหนดปลายทาง (สำหรับโหนดที่มีหลาย input)
+ * @property {"top" | "bottom" | "left" | "right"} [targetHandlePosition] - ตำแหน่งของ handle ปลายทาง
  * @property {Types.ObjectId} [triggeringChoiceId] - ID ของ Choice ที่ทำให้เกิดการเปลี่ยนผ่านตามเส้นเชื่อมนี้ (ถ้าเส้นเชื่อมนี้เกิดจาก Choice)
  * @property {string} [label] - ป้ายกำกับของเส้นเชื่อม (สำหรับแสดงใน Editor, เช่น "ถ้าเลือก A", "ถ้าค่า X > 10")
  * @property {IStoryMapEdgeCondition} [condition] - (Optional) เงื่อนไขที่ต้องเป็นจริงเพื่อให้เส้นเชื่อมนี้สามารถใช้งานได้
@@ -362,13 +406,19 @@ const StoryMapEdgeConditionSchema = new Schema<IStoryMapEdgeCondition>(
  * @property {string} [editorVisuals.color] - สีของเส้น
  * @property {"solid" | "dashed" | "dotted"} [editorVisuals.lineStyle] - รูปแบบเส้น
  * @property {boolean} [editorVisuals.animated] - เส้นมีการเคลื่อนไหวหรือไม่
+ * @property {"straight" | "smooth" | "step" | "bezier"} [editorVisuals.pathType] - รูปแบบเส้นทาง
+ * @property {number} [editorVisuals.strokeWidth] - ความหนาของเส้น
+ * @property {string} [editorVisuals.markerEnd] - รูปแบบลูกศรปลายทาง
+ * @property {object} [editorVisuals.labelStyle] - การจัดรูปแบบของ label
  */
 export interface IStoryMapEdge {
   edgeId: string; // Client-generated UUID
   sourceNodeId: string;
   sourceHandleId?: string;
+  sourceHandlePosition?: "top" | "bottom" | "left" | "right"; // ตำแหน่งของ handle ต้นทาง
   targetNodeId: string;
   targetHandleId?: string;
+  targetHandlePosition?: "top" | "bottom" | "left" | "right"; // ตำแหน่งของ handle ปลายทาง
   triggeringChoiceId?: Types.ObjectId; // Ref to Choice.ts
   label?: string;
   condition?: IStoryMapEdgeCondition;
@@ -380,6 +430,16 @@ export interface IStoryMapEdge {
     color?: string;
     lineStyle?: "solid" | "dashed" | "dotted";
     animated?: boolean;
+    pathType?: "straight" | "smooth" | "step" | "bezier"; // รูปแบบเส้นทาง
+    strokeWidth?: number; // ความหนาของเส้น
+    markerEnd?: string; // รูปแบบลูกศรปลายทาง
+    labelStyle?: {
+      fontSize?: number;
+      fontWeight?: string;
+      color?: string;
+      backgroundColor?: string;
+      borderRadius?: number;
+    }; // การจัดรูปแบบของ label
   };
 }
 const StoryMapEdgeSchema = new Schema<IStoryMapEdge>(
@@ -387,8 +447,10 @@ const StoryMapEdgeSchema = new Schema<IStoryMapEdge>(
     edgeId: { type: String, required: [true, "Edge ID is required"], trim: true, maxlength: [100, "Edge ID is too long"], comment: "UUID ที่สร้างจาก Client-side Editor" },
     sourceNodeId: { type: String, required: [true, "Source Node ID is required"], trim: true },
     sourceHandleId: { type: String, trim: true },
+    sourceHandlePosition: { type: String, enum: ["top", "bottom", "left", "right"], default: "bottom" },
     targetNodeId: { type: String, required: [true, "Target Node ID is required"], trim: true },
     targetHandleId: { type: String, trim: true },
+    targetHandlePosition: { type: String, enum: ["top", "bottom", "left", "right"], default: "top" },
     triggeringChoiceId: { type: Schema.Types.ObjectId, ref: "Choice" },
     label: { type: String, trim: true, maxlength: [255, "Edge label is too long"] },
     condition: { type: StoryMapEdgeConditionSchema },
@@ -398,8 +460,19 @@ const StoryMapEdgeSchema = new Schema<IStoryMapEdge>(
     authorDefinedPsychologicalImpact: { type: Number, comment: "ค่าผลกระทบทางจิตใจ เช่น -5 ถึง +5" },
     editorVisuals: {
         color: { type: String, trim: true },
-        lineStyle: { type: String, enum: ["solid", "dashed", "dotted"] },
-        animated: { type: Boolean },
+        lineStyle: { type: String, enum: ["solid", "dashed", "dotted"], default: "solid" },
+        animated: { type: Boolean, default: false },
+        pathType: { type: String, enum: ["straight", "smooth", "step", "bezier"], default: "smooth" },
+        strokeWidth: { type: Number, default: 2, min: 1, max: 10 },
+        markerEnd: { type: String, trim: true },
+        labelStyle: {
+            fontSize: { type: Number, default: 12, min: 8, max: 24 },
+            fontWeight: { type: String, enum: ["normal", "bold", "lighter", "bolder"], default: "normal" },
+            color: { type: String, trim: true },
+            backgroundColor: { type: String, trim: true },
+            borderRadius: { type: Number, default: 4, min: 0, max: 20 },
+            _id: false,
+        },
         _id: false,
     },
   },
@@ -526,6 +599,14 @@ export interface IStoryMap extends Document {
     showNodeLabels?: boolean; // Blueprint Tab setting
     autoLayoutAlgorithm?: "dagre" | "elk" | "custom"; // สำหรับ auto-layout
     layoutEngineSettings?: any; // การตั้งค่าเฉพาะของ layout engine
+    layoutPreferences?: { // การตั้งค่าการจัดเรียง
+        defaultOrientation?: "vertical" | "horizontal"; // แนวการจัดเรียงหลัก
+        nodeSpacing?: { x: number; y: number }; // ระยะห่างระหว่างโหนด
+        tierSpacing?: number; // ระยะห่างระหว่างชั้น
+        autoAlign?: boolean; // จัดเรียงอัตโนมัติ
+        preserveManualPositions?: boolean; // รักษาตำแหน่งที่จัดด้วยมือ
+        flowDirection?: "top-down" | "bottom-up" | "left-right" | "right-left"; // ทิศทางการไหล
+    };
     uiPreferences?: { // การตั้งค่า UI ของ editor
         nodeDefaultColor?: string;
         edgeDefaultColor?: string;
@@ -535,6 +616,10 @@ export interface IStoryMap extends Document {
         autoSaveIntervalSec?: 15 | 30;
         snapToGrid?: boolean;
         enableAnimations?: boolean; // Professional mode toggle
+        nodeDefaultOrientation?: "vertical" | "horizontal"; // แนวโหนดเริ่มต้น
+        edgeDefaultPathType?: "straight" | "smooth" | "step" | "bezier"; // รูปแบบเส้นเริ่มต้น
+        showMinimap?: boolean; // แสดง minimap
+        enableNodeThumbnails?: boolean; // เปิด thumbnails สำหรับ scene nodes
     };
     collaborationSettings?: { // Real-time collaboration features
         allowMultipleEditors?: boolean;

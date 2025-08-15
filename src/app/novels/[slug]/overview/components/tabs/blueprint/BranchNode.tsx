@@ -31,10 +31,11 @@ interface BranchNodeData {
  * แสดงข้อมูลตรรกะแบบมีเงื่อนไขในนิยายแบบภาพ (Visual Novel)
  * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const BranchNode: React.FC<NodeProps> = ({ 
+const BranchNode: React.FC<NodeProps & { nodeOrientation?: 'horizontal' | 'vertical' }> = ({ 
   data, 
   selected, 
-  dragging 
+  dragging,
+  nodeOrientation = 'vertical'
 }) => {
   const nodeData = data as unknown as BranchNodeData;
   const nodeColor = nodeData.editorVisuals?.color || '#f59e0b';
@@ -70,7 +71,7 @@ const BranchNode: React.FC<NodeProps> = ({
       {/* Input Handle */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={nodeOrientation === 'vertical' ? Position.Top : Position.Left}
         id="input"
         className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
         style={{
@@ -188,7 +189,7 @@ const BranchNode: React.FC<NodeProps> = ({
           <Handle
             key={`output-${index}`}
             type="source"
-            position={Position.Bottom}
+            position={nodeOrientation === 'vertical' ? Position.Bottom : Position.Right}
             id={isDefault ? 'default' : `condition-${condition?.conditionId || index}`}
             className={isDefault ? "!bg-gray-100 !border-gray-500 dark:!bg-gray-900 dark:!border-gray-400" : "!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"}
             style={{ 
