@@ -1,7 +1,14 @@
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import dbConnect from "@/backend/lib/mongodb";
+import BoardModel from "@/backend/models/Board";
+import { BoardType } from "@/backend/models/BoardClientSide";
+import { formatDistanceToNow } from 'date-fns';
+import { th } from 'date-fns/locale';
+import { Eye, MessageCircle, Plus } from "lucide-react";
 import { Metadata } from "next";
+import { getServerSession } from "next-auth";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus, Eye, MessageCircle } from "lucide-react";
 
 // Metadata for the page
 export const metadata: Metadata = {
@@ -11,142 +18,79 @@ export const metadata: Metadata = {
 
 interface Review {
   id: string;
+  slug: string;
   title: string;
   author: {
     name: string;
     avatar: string;
   };
-  thumbnail: string;
-  createdAt: string;
+  thumbnail?: string;
+  createdAt: Date;
   viewCount: number;
   commentCount: number;
 }
 
-// Mock data for reviews
-const reviews: Review[] = [
-  {
-    id: "1",
-    title: "นิยายรักใส ๆ ที่ไม่ได้โลเวอร์ ๆ แค่ในชื่อเรื่อง!",
-    author: {
-      name: "อ่อน",
-      avatar: "/images/default.png"
-    },
-    thumbnail: "/images/romance/novel1.jpg",
-    createdAt: "12 ม.ค. 2567 เวลา 13:30",
-    viewCount: 250,
-    commentCount: 15
-  },
-  {
-    id: "2",
-    title: "นิยายแฟนตาซีสายดาร์ก x วายเกมส์ ๆ จำเพาะเด็กเกมเมอร์",
-    author: {
-      name: "อ่อน",
-      avatar: "/images/default2.png"
-    },
-    thumbnail: "/images/romance/novel2.jpg",
-    createdAt: "12 ม.ค. 2567 เวลา 13:30",
-    viewCount: 250,
-    commentCount: 15
-  },
-  {
-    id: "3",
-    title: "รีวิว: เมื่อฉันกลายเป็นนางเอกในนิยายโรแมนซ์ย้อนยุค",
-    author: {
-      name: "BookWorm",
-      avatar: "/images/default-avatar.png"
-    },
-    thumbnail: "/images/romance/novel3.jpeg",
-    createdAt: "12 ม.ค. 2567 เวลา 12:45",
-    viewCount: 378,
-    commentCount: 42
-  },
-  {
-    id: "4",
-    title: "แนะนำนิยายแนวสืบสวนสอบสวน Top 5 ประจำเดือนมกราคม",
-    author: {
-      name: "DetectiveReader",
-      avatar: "/images/default.png"
-    },
-    thumbnail: "/images/romance/novel4.jpeg",
-    createdAt: "12 ม.ค. 2567 เวลา 11:20",
-    viewCount: 425,
-    commentCount: 28
-  },
-  {
-    id: "5",
-    title: "รีวิว: ตำนานดาบศักดิ์สิทธิ์ เล่ม 1-3 ฉบับปรับปรุงใหม่",
-    author: {
-      name: "FantasyLover",
-      avatar: "/images/default2.png"
-    },
-    thumbnail: "/images/romance/novel5.jpeg",
-    createdAt: "12 ม.ค. 2567 เวลา 10:15",
-    viewCount: 312,
-    commentCount: 19
-  },
-  {
-    id: "6",
-    title: "วิเคราะห์: เทคนิคการเขียนของนักเขียนรางวัลซีไรต์ปี 2566",
-    author: {
-      name: "LitCritic",
-      avatar: "/images/default-avatar.png"
-    },
-    thumbnail: "/images/thriller/choose.jpg",
-    createdAt: "11 ม.ค. 2567 เวลา 22:30",
-    viewCount: 567,
-    commentCount: 45
-  },
-  {
-    id: "7",
-    title: "รีวิว: นิยายแนวออฟฟิศโรแมนซ์ที่ทำยอดขายทะลุล้านเล่ม",
-    author: {
-      name: "RomanceQueen",
-      avatar: "/images/default.png"
-    },
-    thumbnail: "/images/romance/novel7.jpeg",
-    createdAt: "11 ม.ค. 2567 เวลา 20:45",
-    viewCount: 489,
-    commentCount: 37
-  },
-  {
-    id: "8",
-    title: "แนะนำนิยายแฟนตาซีแนวเอาชีวิตรอดในโลกเกม Must Read!",
-    author: {
-      name: "GameMaster",
-      avatar: "/images/default2.png"
-    },
-    thumbnail: "/images/fantasy/fantasy1.jpg",
-    createdAt: "11 ม.ค. 2567 เวลา 18:30",
-    viewCount: 634,
-    commentCount: 52
-  },
-  {
-    id: "9",
-    title: "รีวิว: ซีรีส์นิยายแนววิทยาศาสตร์ที่ควรอ่านก่อนถูกดัดแปลงเป็นซีรีส์",
-    author: {
-      name: "SciFiExpert",
-      avatar: "/images/default-avatar.png"
-    },
-    thumbnail: "/images/fantasy/fantasy2.jpg",
-    createdAt: "11 ม.ค. 2567 เวลา 16:20",
-    viewCount: 445,
-    commentCount: 31
-  },
-  {
-    id: "10",
-    title: "บทวิเคราะห์: ทำไมนิยายแนวย้อนเวลากลับมาฮิตอีกครั้ง",
-    author: {
-      name: "TrendAnalyst",
-      avatar: "/images/default.png"
-    },
-    thumbnail: "/images/thriller/thriller1.jpg",
-    createdAt: "11 ม.ค. 2567 เวลา 14:15",
-    viewCount: 523,
-    commentCount: 48
+// ดึงข้อมูลรีวิวจากฐานข้อมูล
+async function getReviews(): Promise<Review[]> {
+  await dbConnect();
+  
+  try {
+    // ดึงกระทู้ประเภทรีวิว
+    const reviews = await BoardModel.find({ 
+      boardType: BoardType.REVIEW,
+      status: "published", 
+      isDeleted: false 
+    })
+    .sort({ createdAt: -1 })
+    .populate('authorId', 'username profile.avatarUrl')
+    .populate('novelAssociated', 'coverImageUrl')
+    .lean();
+    
+    return reviews.map((review: any) => ({
+      id: review._id.toString(),
+      slug: review.slug,
+      title: review.title,
+      author: {
+        name: review.authorUsername || review.authorId?.username || "ไม่ระบุชื่อ",
+        avatar: review.authorAvatarUrl || review.authorId?.profile?.avatarUrl || "/images/default-avatar.png"
+      },
+      thumbnail: review.novelAssociated?.coverImageUrl || "/images/default.png",
+      createdAt: review.createdAt,
+      viewCount: review.stats?.viewsCount || 0,
+      commentCount: review.stats?.repliesCount || 0,
+    }));
+  } catch (error) {
+    console.error("Error fetching reviews:", error);
+    return [];
   }
-];
+}
 
-export default function ReviewsPage() {
+// ฟังก์ชันแปลงวันที่เป็นรูปแบบภาษาไทย
+function formatThaiDate(date: Date): string {
+  try {
+    // แปลง date string เป็น Date object (ถ้าเป็น string)
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // ตรวจสอบว่า date ถูกต้องหรือไม่
+    if (isNaN(dateObj.getTime())) {
+      return "ไม่ระบุวันที่";
+    }
+    
+    // แปลงเป็นรูปแบบ "X วันที่แล้ว" หรือวันที่เต็ม
+    return formatDistanceToNow(dateObj, { 
+      addSuffix: true, 
+      locale: th 
+    });
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "ไม่ระบุวันที่";
+  }
+}
+
+export default async function ReviewsPage() {
+  const session = await getServerSession(authOptions);
+  const reviews = await getReviews();
+
   const tabs = [
     { id: 'all', label: 'กระทู้รวม', href: '/board' },
     { id: 'reviews', label: 'รีวิว', href: '/board/reviews' },
@@ -185,64 +129,77 @@ export default function ReviewsPage() {
           </select>
         </div>
         <Link
-          href="/board/new"
+          href="/board/new?type=review"
           className="inline-flex items-center px-4 py-2 bg-[#8bc34a] text-white rounded-full hover:bg-[#7baf41] transition-colors"
         >
           <Plus size={18} className="mr-1" />
-          <span>เพิ่มกระทู้ใหม่</span>
+          <span>เขียนรีวิวใหม่</span>
         </Link>
       </div>
 
       {/* Reviews Grid */}
       <div className="space-y-4">
-        {reviews.map((review) => (
-          <Link 
-            key={review.id}
-            href={`/board/reviews/${review.id}`}
-            className="block bg-gray-100 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start p-4 gap-4">
-              <div className="relative w-48 h-32 rounded-md overflow-hidden shrink-0">
-                <Image
-                  src={review.thumbnail}
-                  alt={review.title}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-lg mb-2 line-clamp-2">
-                  {review.title}
-                </h3>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground mt-auto">
-                  <div className="flex items-center gap-2">
-                    <Image
-                      src={review.author.avatar}
-                      alt={review.author.name}
-                      width={20}
-                      height={20}
-                      className="rounded-full"
-                    />
-                    <span>{review.author.name}</span>
-                  </div>
-                  <span>•</span>
-                  <span>{review.createdAt}</span>
-                  <span>•</span>
-                  <div className="flex items-center gap-1">
-                    <Eye size={16} className="text-[#8bc34a]" />
-                    <span>{review.viewCount}</span>
-                  </div>
-                  <span>•</span>
-                  <div className="flex items-center gap-1">
-                    <MessageCircle size={16} className="text-[#8bc34a]" />
-                    <span>{review.commentCount}</span>
+        {reviews.length > 0 ? (
+          reviews.map((review) => (
+            <Link 
+              key={review.id}
+              href={`/board/${review.slug}`}
+              className="block bg-gray-100 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start p-4 gap-4">
+                <div className="relative w-48 h-32 rounded-md overflow-hidden shrink-0">
+                  <Image
+                    src={review.thumbnail || "/images/default.png"}
+                    alt={review.title}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-lg mb-2 line-clamp-2">
+                    {review.title}
+                  </h3>
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground mt-auto">
+                    <div className="flex items-center gap-2">
+                      <Image
+                        src={review.author.avatar}
+                        alt={review.author.name}
+                        width={20}
+                        height={20}
+                        className="rounded-full"
+                      />
+                      <span>{review.author.name}</span>
+                    </div>
+                    <span>•</span>
+                    <span>{formatThaiDate(review.createdAt)}</span>
+                    <span>•</span>
+                    <div className="flex items-center gap-1">
+                      <Eye size={16} className="text-[#8bc34a]" />
+                      <span>{review.viewCount.toLocaleString()}</span>
+                    </div>
+                    <span>•</span>
+                    <div className="flex items-center gap-1">
+                      <MessageCircle size={16} className="text-[#8bc34a]" />
+                      <span>{review.commentCount.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          ))
+        ) : (
+          <div className="text-center py-8 bg-gray-100 rounded-lg">
+            <p className="text-muted-foreground mb-2">ยังไม่มีรีวิวในขณะนี้</p>
+            <Link
+              href="/board/new?type=review"
+              className="inline-flex items-center px-4 py-2 bg-[#8bc34a] text-white rounded-full hover:bg-[#7baf41] transition-colors mt-2"
+            >
+              <Plus size={18} className="mr-1" />
+              <span>เขียนรีวิวแรก</span>
+            </Link>
+          </div>
+        )}
       </div>
     </main>
   );
-} 
+}

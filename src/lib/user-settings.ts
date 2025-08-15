@@ -1,5 +1,31 @@
 import type { IReaderSettings } from "@/components/read/ReaderSettings";
-import { deepmerge } from 'deepmerge-ts';
+
+/**
+ * A utility function that performs a deep merge of objects
+ * @param target The target object to merge into
+ * @param sources The source objects to merge from
+ * @returns A new object with all properties merged
+ */
+function deepMerge<T extends object = object>(...objects: Partial<T>[]): T {
+  const isObject = (obj: any): obj is object => obj && typeof obj === 'object' && !Array.isArray(obj);
+
+  return objects.reduce((prev, obj) => {
+    if (!obj) return prev;
+    
+    Object.keys(obj).forEach(key => {
+      const pVal = prev[key as keyof typeof prev];
+      const oVal = obj[key as keyof typeof obj];
+
+      if (isObject(pVal) && isObject(oVal)) {
+        prev[key as keyof typeof prev] = deepMerge(pVal, oVal) as any;
+      } else {
+        prev[key as keyof typeof prev] = oVal as any;
+      }
+    });
+
+    return prev;
+  }, {} as T);
+}
 
 /**
  * Default settings for the visual novel reader.
@@ -49,7 +75,7 @@ export async function getInitialSettings(userId?: string): Promise<IReaderSettin
       if (response.ok) {
         const dbSettings = await response.json();
         // Merge with defaults to ensure all keys are present
-        return deepmerge(DEFAULT_USER_SETTINGS, dbSettings) as IReaderSettings;
+        return deepMerge(DEFAULT_USER_SETTINGS, dbSettings) as IReaderSettings;
       }
     } catch (error) {
       console.warn('Could not fetch user settings from API, falling back.', error);
@@ -62,7 +88,7 @@ export async function getInitialSettings(userId?: string): Promise<IReaderSettin
     if (storedSettings) {
       const parsedSettings = JSON.parse(storedSettings);
       // Merge with defaults to ensure all keys are present after updates
-      return deepmerge(DEFAULT_USER_SETTINGS, parsedSettings) as IReaderSettings;
+      return deepMerge(DEFAULT_USER_SETTINGS, parsedSettings) as IReaderSettings;
     }
   } catch (error) {
     console.warn('Could not parse settings from localStorage, falling back.', error);
@@ -70,4 +96,4 @@ export async function getInitialSettings(userId?: string): Promise<IReaderSettin
 
   // 3. Fallback to default settings
   return DEFAULT_USER_SETTINGS;
-} 
+}

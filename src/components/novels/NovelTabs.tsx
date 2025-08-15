@@ -4,20 +4,21 @@
 
 "use client";
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  BookOpen, 
-  Info, 
-  Users, 
-  MessageSquare,
-  FileText,
-  Star
-} from 'lucide-react';
 import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
-import NovelEpisodesTab from './NovelEpisodesTab';
-import NovelDetailsTab from './NovelDetailsTab';
+import CommentSection from '@/components/comments/CommentSection';
+import { CommentableType } from '@/types/comment';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  BookOpen,
+  Info,
+  MessageSquare,
+  Star,
+  Users
+} from 'lucide-react';
+import React, { useState } from 'react';
 import NovelCharactersTab from './NovelCharactersTab';
+import NovelDetailsTab from './NovelDetailsTab';
+import NovelEpisodesTab from './NovelEpisodesTab';
 import NovelReviewsTab from './NovelReviewsTab';
 
 // ===================================================================
@@ -110,8 +111,14 @@ export default function NovelTabs({novel}: NovelTabsProps) {
     {
       id: 'reviews',
       label: 'รีวิว',
-      icon: <MessageSquare className="w-5 h-5" />,
+      icon: <Star className="w-5 h-5" />,
       count: novel.stats?.ratingsCount || 0
+    },
+    {
+      id: 'comments',
+      label: 'ความคิดเห็น',
+      icon: <MessageSquare className="w-5 h-5" />,
+      count: novel.stats?.commentsCount || 0 // จำนวนความคิดเห็นจริงจากฐานข้อมูล
     }
   ];
 
@@ -131,6 +138,16 @@ export default function NovelTabs({novel}: NovelTabsProps) {
         return <NovelCharactersTab novel={novel} />;
       case 'reviews':
         return <NovelReviewsTab novel={novel} />;
+      case 'comments':
+        return (
+          <CommentSection
+            targetId={novel._id}
+            targetType={CommentableType.NOVEL}
+            novelId={novel._id}
+            initialComments={novel.comments} // ส่งข้อมูลความคิดเห็นเริ่มต้นที่ดึงมาจาก API
+            initialTotal={novel.stats?.commentsCount || 0} // ส่งจำนวนความคิดเห็นทั้งหมด
+          />
+        );
       default:
         return <NovelEpisodesTab novel={novel} />;
     }

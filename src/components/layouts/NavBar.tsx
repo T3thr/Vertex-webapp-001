@@ -1,33 +1,34 @@
 // src/components/layouts/NavBar.tsx
 "use client";
 
+import { SessionUser as AppSessionUser } from "@/app/api/auth/[...nextauth]/options";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  LogOut,
-  Menu,
-  Search,
-  User,
-  X,
-  BookOpen as IconBookOpen, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
-  Home,
-  Grid,
-  Layout, // สำหรับ Dashboard
-  Settings,
-  Sun,
-  Moon,
+  Bookmark,
   // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
   ChevronDown,
-  Bookmark,
+  Grid, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
+  Home,
+  BookOpen as IconBookOpen,
+  Layout,
+  LogOut,
+  Menu,
+  MessageCircle,
+  Moon,
+  Search, // สำหรับ Dashboard
+  Settings,
+  Sun,
+  User,
+  X,
 } from "lucide-react"; // ตรวจสอบว่า Laptop icon จำเป็นหรือไม่
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React, { useEffect, useRef, useState, useCallback, useMemo, JSX } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthModal from "./AuthModal";
-import { useAuth } from "@/context/AuthContext";
-import { useTheme, ResolvedTheme } from "@/context/ThemeContext";
-import Image from "next/image";
 import SearchBar from "./SearchBar";
-import { SessionUser as AppSessionUser } from "@/app/api/auth/[...nextauth]/options";
 
 // Interface สำหรับ UserAvatarProps (คงเดิม)
 interface UserAvatarProps {
@@ -103,7 +104,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
   // และจะอัปเดตตามข้อมูลจาก client-side context (`authContextUser`) เมื่อมีการเปลี่ยนแปลง
   // เพื่อให้แน่ใจว่า UI ถูกต้องเสมอและไม่มีการกระพริบ
   const userDisplay = useMemo(() => authContextUser ?? initialUser, [authContextUser, initialUser]);
-  const isReadPage = pathname.startsWith('/read/');
+  const isReadPage = pathname?.startsWith('/read/') || false;
 
   const handleScroll = useCallback(() => {
     if (isReadPage) {
@@ -178,6 +179,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
       { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
       { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
+      { href: "/board", label: "กระทู้", icon: <MessageCircle size={18} /> },
     ],
     []
   );
@@ -351,7 +353,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                   key={link.href}
                   href={link.href}
                   className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors
-                    ${pathname === link.href
+                    ${(pathname === link.href) || false
                       ? "bg-primary/10 text-primary" // Active link: primary color
                       : "text-foreground hover:bg-muted hover:text-primary" // Default & Hover: foreground/muted/primary color
                     }`}
@@ -425,7 +427,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                       key={`mobile-${link.href}`}
                       href={link.href}
                       className={`flex items-center space-x-2 px-3 py-2.5 rounded-md text-base font-medium transition-colors
-                        ${pathname === link.href
+                        ${(pathname === link.href) || false
                           ? "bg-muted text-primary" // Active mobile link
                           : "text-foreground hover:bg-muted hover:text-primary" // Default mobile link
                         }`}

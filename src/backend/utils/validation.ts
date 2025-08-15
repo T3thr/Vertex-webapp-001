@@ -1,194 +1,191 @@
 // src/backend/utils/validation.ts
-// src/backend/utils/validation.ts
-
-
-/**
- * ตรวจสอบการยืนยันรหัสผ่าน
- * เปรียบเทียบรหัสผ่านและการยืนยันรหัสผ่านว่าตรงกันหรือไม่
- * @returns ผลการตรวจสอบพร้อมข้อความอธิบาย
- */
-export const validateConfirmPassword = (password: string, confirmPassword: string): { valid: boolean; message?: string } => {
-  const sanitizedPassword = sanitizeInput(password);
-  const sanitizedConfirmPassword = sanitizeInput(confirmPassword);
-  
-  if (!sanitizedConfirmPassword.trim()) {
-    return { valid: false, message: 'กรุณายืนยันรหัสผ่าน' };
-  }
-  
-  if (sanitizedPassword !== sanitizedConfirmPassword) {
-    return { valid: false, message: 'รหัสผ่านไม่ตรงกัน' };
-  }
-  
-  return { valid: true };
-};// src/backend/utils/validation.ts
-/**
- * Form validation utility functions - ฟังก์ชันตรวจสอบความถูกต้องของฟอร์ม
- */
+// ฟังก์ชันสำหรับตรวจสอบความถูกต้องของข้อมูล
 
 /**
- * สะอาดข้อมูลที่รับเข้ามาเพื่อป้องกันการโจมตี
- * ทำความสะอาดอินพุตโดยการตัดช่องว่างและกรองอักขระพิเศษที่อาจใช้ในการโจมตี XSS
+ * สร้าง slug จากข้อความ
+ * @param text ข้อความที่ต้องการแปลงเป็น slug
+ * @returns slug ที่สร้างจากข้อความ
  */
-const sanitizeInput = (input: string): string => {
-  if (!input) return '';
-  // ตัดช่องว่างและกรองแท็ก HTML ทั่วไปที่อาจใช้ในการโจมตี
-  return input.trim().replace(/[<>{}]/g, '');
+export const generateSlug = (text: string): string => {
+  return text
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // ลบเครื่องหมายวรรณยุกต์
+    .replace(/\s+/g, "-") // แทนที่ช่องว่างด้วยเครื่องหมายยัติภังค์
+    .replace(/[^\w-]+/g, "") // ลบอักขระพิเศษ
+    .replace(/\-\-+/g, "-") // แทนที่เครื่องหมายยัติภังค์ซ้ำด้วยเครื่องหมายเดียว
+    .replace(/^-+/, "") // ลบเครื่องหมายยัติภังค์ที่อยู่ด้านหน้า
+    .replace(/-+$/, ""); // ลบเครื่องหมายยัติภังค์ที่อยู่ด้านหลัง
 };
 
 /**
  * ตรวจสอบความถูกต้องของอีเมล
- * ใช้การตรวจสอบอีเมลแบบมาตรฐานตามมาตรฐาน RFC 5322
+ * @param email อีเมลที่ต้องการตรวจสอบ
+ * @returns ผลลัพธ์การตรวจสอบ
  */
-export const validateEmail = (email: string): boolean => {
-  const sanitizedEmail = sanitizeInput(email);
-  if (!sanitizedEmail) {
-    return false;
+export const validateEmail = (email: string): { valid: boolean; message?: string } => {
+  if (!email || email.trim() === '') {
+    return { valid: false, message: 'กรุณาระบุอีเมล' };
   }
   
-  // ตรวจสอบความยาวอีเมล (ตามมาตรฐาน)
-  if (sanitizedEmail.length > 254) {
-    return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return { valid: false, message: 'รูปแบบอีเมลไม่ถูกต้อง' };
   }
   
-  // รูปแบบอีเมลที่ถูกต้องตามมาตรฐาน RFC 5322
-  const emailPattern = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-  return emailPattern.test(sanitizedEmail);
+  return { valid: true };
+};
+
+/**
+ * ตรวจสอบความถูกต้องของอีเมล (แบบเก่า)
+ * @param email อีเมลที่ต้องการตรวจสอบ
+ * @returns true ถ้าอีเมลถูกต้อง, false ถ้าไม่ถูกต้อง
+ */
+export const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
 };
 
 /**
  * ตรวจสอบความถูกต้องของรหัสผ่าน
- * วิเคราะห์รหัสผ่านตามเกณฑ์ความปลอดภัยมาตรฐาน
- * @returns ผลการตรวจสอบ พร้อมข้อความอธิบายและรายละเอียดการตรวจสอบแต่ละเกณฑ์
+ * @param password รหัสผ่านที่ต้องการตรวจสอบ
+ * @returns ผลลัพธ์การตรวจสอบ
  */
-export const validatePassword = (password: string): { valid: boolean; message?: string; checks?: Record<string, boolean> } => {
-  const sanitizedPassword = sanitizeInput(password);
+export const validatePassword = (password: string): { valid: boolean; message?: string } => {
+  // รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร
+  if (password.length < 8) {
+    return { valid: false, message: 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร' };
+  }
   
-  // ตรวจสอบเงื่อนไขต่างๆของรหัสผ่าน
-  const checks = {
-    length: sanitizedPassword.length >= 8 && sanitizedPassword.length <= 128,
-    hasDigit: /\d/.test(sanitizedPassword),
-    hasUppercase: /[A-Z]/.test(sanitizedPassword),
-    hasLowercase: /[a-z]/.test(sanitizedPassword),
-    hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(sanitizedPassword)
-  };
+  // ต้องมีตัวพิมพ์เล็ก
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: 'รหัสผ่านต้องมีตัวพิมพ์เล็กอย่างน้อย 1 ตัว' };
+  }
+  
+  // ต้องมีตัวพิมพ์ใหญ่
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว' };
+  }
+  
+  // ต้องมีตัวเลข
+  if (!/\d/.test(password)) {
+    return { valid: false, message: 'รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว' };
+  }
+  
+  return { valid: true };
+};
 
-  // ตรวจสอบความยาว
-  if (!checks.length) {
-    if (sanitizedPassword.length < 8) {
-      return { 
-        valid: false, 
-        message: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร',
-        checks
-      };
-    }
-    
-    if (sanitizedPassword.length > 128) {
-      return { 
-        valid: false, 
-        message: 'รหัสผ่านต้องไม่เกิน 128 ตัวอักษร',
-        checks
-      };
-    }
-  }
-  
-  // ตรวจสอบว่ามีตัวเลขอย่างน้อยหนึ่งตัว
-  if (!checks.hasDigit) {
-    return { 
-      valid: false, 
-      message: 'รหัสผ่านต้องมีตัวเลขอย่างน้อยหนึ่งตัว',
-      checks
-    };
-  }
-  
-  // ตรวจสอบว่ามีตัวพิมพ์ใหญ่อย่างน้อยหนึ่งตัว
-  if (!checks.hasUppercase) {
-    return { 
-      valid: false, 
-      message: 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่อย่างน้อยหนึ่งตัว',
-      checks
-    };
-  }
-  
-  // ตรวจสอบว่ามีตัวพิมพ์เล็กอย่างน้อยหนึ่งตัว
-  if (!checks.hasLowercase) {
-    return { 
-      valid: false, 
-      message: 'รหัสผ่านต้องมีตัวพิมพ์เล็กอย่างน้อยหนึ่งตัว',
-      checks
-    };
-  }
-  
-  return { valid: true, checks };
+/**
+ * ตรวจสอบความถูกต้องของรหัสผ่าน (แบบเก่า)
+ * @param password รหัสผ่านที่ต้องการตรวจสอบ
+ * @returns true ถ้ารหัสผ่านถูกต้อง, false ถ้าไม่ถูกต้อง
+ */
+export const isValidPassword = (password: string): boolean => {
+  // รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร
+  // และมีอย่างน้อย 1 ตัวพิมพ์ใหญ่ 1 ตัวพิมพ์เล็ก และ 1 ตัวเลข
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+  return passwordRegex.test(password);
 };
 
 /**
  * ตรวจสอบความถูกต้องของชื่อผู้ใช้
- * ตรวจสอบชื่อผู้ใช้ตามเกณฑ์ความปลอดภัยและความเหมาะสม
- * @returns ผลการตรวจสอบ พร้อมข้อความอธิบายและรายละเอียดการตรวจสอบแต่ละเกณฑ์
+ * @param username ชื่อผู้ใช้ที่ต้องการตรวจสอบ
+ * @returns ผลลัพธ์การตรวจสอบ
  */
-export const validateUsername = (username: string): { valid: boolean; message?: string; checks?: Record<string, boolean> } => {
-  const sanitizedUsername = sanitizeInput(username);
-  
-  // ตรวจสอบเงื่อนไขต่างๆของชื่อผู้ใช้
-  const checks = {
-    length: sanitizedUsername.length >= 3 && sanitizedUsername.length <= 20,
-    validChars: /^[a-zA-Z0-9_]+$/.test(sanitizedUsername),
-    notReserved: true,
-    noConsecutiveUnderscores: !/__{2,}/.test(sanitizedUsername)
-  };
-  
-  // ตรวจสอบความยาว
-  if (!checks.length) {
-    if (sanitizedUsername.length < 3) {
-      return { 
-        valid: false, 
-        message: 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร',
-        checks
-      };
-    }
-    
-    if (sanitizedUsername.length > 20) {
-      return { 
-        valid: false, 
-        message: 'ชื่อผู้ใช้ต้องไม่เกิน 20 ตัวอักษร',
-        checks
-      };
-    }
+export const validateUsername = (username: string): { valid: boolean; message?: string } => {
+  // ชื่อผู้ใช้ต้องมีความยาวอย่างน้อย 3 ตัวอักษร
+  if (username.length < 3) {
+    return { valid: false, message: 'ชื่อผู้ใช้ต้องมีความยาวอย่างน้อย 3 ตัวอักษร' };
   }
   
-  // อนุญาตเฉพาะตัวอักษร ตัวเลข และเครื่องหมายขีดล่าง
-  if (!checks.validChars) {
-    return { 
-      valid: false, 
-      message: 'ชื่อผู้ใช้สามารถใช้ได้เฉพาะตัวอักษร, ตัวเลข และเครื่องหมายขีดล่างเท่านั้น',
-      checks
-    };
+  // ชื่อผู้ใช้ต้องไม่เกิน 20 ตัวอักษร
+  if (username.length > 20) {
+    return { valid: false, message: 'ชื่อผู้ใช้ต้องมีความยาวไม่เกิน 20 ตัวอักษร' };
   }
   
-  // ตรวจสอบไม่ให้มีขีดล่างติดกันมากกว่าหนึ่งตัว
-  if (!checks.noConsecutiveUnderscores) {
-    return {
-      valid: false,
-      message: 'ชื่อผู้ใช้ต้องไม่มีเครื่องหมายขีดล่างติดกันมากกว่าหนึ่งตัว',
-      checks
-    };
+  // ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร ตัวเลข ขีดล่าง หรือจุดเท่านั้น
+  if (!/^[a-zA-Z0-9._]+$/.test(username)) {
+    return { valid: false, message: 'ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร ตัวเลข ขีดล่าง หรือจุดเท่านั้น' };
   }
   
-  // ตรวจสอบชื่อที่สงวนไว้
-  const reservedUsernames = [
-    'admin', 'administrator',
-  ];
-  
-  checks.notReserved = !reservedUsernames.includes(sanitizedUsername.toLowerCase());
-  
-  if (!checks.notReserved) {
-    return { 
-      valid: false, 
-      message: 'ชื่อผู้ใช้นี้ถูกสงวนไว้ กรุณาเลือกชื่ออื่น',
-      checks
-    };
-  }
-  
-  return { valid: true, checks };
+  return { valid: true };
+};
 
+/**
+ * ตรวจสอบความถูกต้องของชื่อผู้ใช้ (แบบเก่า)
+ * @param username ชื่อผู้ใช้ที่ต้องการตรวจสอบ
+ * @returns true ถ้าชื่อผู้ใช้ถูกต้อง, false ถ้าไม่ถูกต้อง
+ */
+export const isValidUsername = (username: string): boolean => {
+  // ชื่อผู้ใช้ต้องมีความยาวอย่างน้อย 3 ตัวอักษร
+  // และประกอบด้วยตัวอักษร ตัวเลข ขีดล่าง หรือจุดเท่านั้น
+  const usernameRegex = /^[a-zA-Z0-9._]{3,}$/;
+  return usernameRegex.test(username);
+};
+
+/**
+ * ตรวจสอบความถูกต้องของ URL
+ * @param url URL ที่ต้องการตรวจสอบ
+ * @returns true ถ้า URL ถูกต้อง, false ถ้าไม่ถูกต้อง
+ */
+export const isValidUrl = (url: string): boolean => {
+  try {
+    new URL(url);
+    return true;
+  } catch (err) {
+    return false;
+  }
+};
+
+/**
+ * ตรวจสอบความถูกต้องของการยืนยันรหัสผ่าน
+ * @param password รหัสผ่าน
+ * @param confirmPassword รหัสผ่านยืนยัน
+ * @returns ผลลัพธ์การตรวจสอบ
+ */
+export const validateConfirmPassword = (password: string, confirmPassword: string): { valid: boolean; message?: string } => {
+  if (!confirmPassword) {
+    return { valid: false, message: 'กรุณายืนยันรหัสผ่าน' };
+  }
+  
+  if (password !== confirmPassword) {
+    return { valid: false, message: 'รหัสผ่านไม่ตรงกัน' };
+  }
+  
+  return { valid: true };
+};
+
+/**
+ * ตัดข้อความให้มีความยาวไม่เกินที่กำหนด
+ * @param text ข้อความที่ต้องการตัด
+ * @param maxLength ความยาวสูงสุดที่ต้องการ
+ * @returns ข้อความที่ถูกตัดให้มีความยาวไม่เกินที่กำหนด
+ */
+export const truncateText = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength) + '...';
+};
+
+/**
+ * แปลงข้อความเป็นรูปแบบ title case
+ * @param text ข้อความที่ต้องการแปลง
+ * @returns ข้อความในรูปแบบ title case
+ */
+export const toTitleCase = (text: string): string => {
+  return text.replace(
+    /\w\S*/g,
+    (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
+  );
+};
+
+/**
+ * ลบ HTML tags จากข้อความ
+ * @param html ข้อความ HTML ที่ต้องการลบ tags
+ * @returns ข้อความที่ไม่มี HTML tags
+ */
+export const stripHtmlTags = (html: string): string => {
+  return html.replace(/<[^>]*>?/gm, '');
 };

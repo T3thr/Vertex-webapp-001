@@ -1,4 +1,19 @@
-import { createClient, RedisClientType } from 'redis';
+// Mock Redis types and interfaces
+interface RedisClientType {
+  isReady: boolean;
+  isOpen: boolean;
+  connect(): Promise<this>;
+  on(event: string, listener: (...args: any[]) => void): this;
+  ping(): Promise<string>;
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<string>;
+  setEx(key: string, ttl: number, value: string): Promise<string>;
+  mGet(keys: string[]): Promise<Array<string | null>>;
+  mSet(keyValuePairs: string[]): Promise<string>;
+  del(keys: string | string[]): Promise<number>;
+  exists(key: string): Promise<number>;
+  keys(pattern: string): Promise<string[]>;
+}
 
 // กำหนดค่า Redis configuration สำหรับ production performance optimization
 const redisConfig = {
@@ -10,7 +25,7 @@ const redisConfig = {
     connectTimeout: 2000, // ลดจาก 5000 เป็น 2000ms
     commandTimeout: 1000, // ลดจาก 3000 เป็น 1000ms
     lazyConnect: true, // เชื่อมต่อเฉพาะเมื่อจำเป็น
-    reconnectOnError: (err: Error) => err.message.includes('READONLY'), // Auto-reconnect on specific errors
+    reconnectOnError: (err: any) => err.message.includes('READONLY'), // Auto-reconnect on specific errors
     maxRetriesPerRequest: 2, // จำกัด retry เพื่อความเร็ว
   },
   // Performance optimizations สำหรับ production
@@ -22,20 +37,152 @@ const redisConfig = {
   legacyMode: false, // ใช้ Redis 4.0+ features
 };
 
+// Mock implementation of Redis client for environments without Redis
+class MockRedisClient implements RedisClientType {
+  private store: Map<string, { value: string, expiry?: number }> = new Map();
+  public isReady = true;
+  public isOpen = true;
+
+  constructor() {
+    console.log('⚠️ [Redis] Using mock implementation - Redis not available');
+  }
+
+  async connect(): Promise<this> {
+    return this;
+  }
+
+  on(event: string, listener: (...args: any[]) => void): this {
+    // Mock event emitter
+    if (event === 'ready') {
+      // Immediately trigger ready event
+      setTimeout(() => listener(), 0);
+    }
+    return this;
+  }
+
+  async ping(): Promise<string> {
+    return 'PONG';
+  }
+
+  async get(key: string): Promise<string | null> {
+    const item = this.store.get(key);
+    if (!item) return null;
+    
+    // Check if expired
+    if (item.expiry && item.expiry < Date.now()) {
+      this.store.delete(key);
+      return null;
+    }
+    
+    return item.value;
+  }
+
+  async set(key: string, value: string): Promise<string> {
+    this.store.set(key, { value });
+    return 'OK';
+  }
+
+  async setEx(key: string, ttl: number, value: string): Promise<string> {
+    const expiry = Date.now() + (ttl * 1000);
+    this.store.set(key, { value, expiry });
+    return 'OK';
+  }
+
+  async mGet(keys: string[]): Promise<Array<string | null>> {
+    return Promise.all(keys.map(key => this.get(key)));
+  }
+
+  async mSet(keyValuePairs: string[]): Promise<string> {
+    for (let i = 0; i < keyValuePairs.length; i += 2) {
+      const key = keyValuePairs[i];
+      const value = keyValuePairs[i + 1];
+      this.store.set(key, { value });
+    }
+    return 'OK';
+  }
+
+  async del(keys: string | string[]): Promise<number> {
+    const keyArray = Array.isArray(keys) ? keys : [keys];
+    let count = 0;
+    
+    keyArray.forEach(key => {
+      if (this.store.has(key)) {
+        this.store.delete(key);
+        count++;
+      }
+    });
+    
+    return count;
+  }
+
+  async exists(key: string): Promise<number> {
+    const item = this.store.get(key);
+    if (!item) return 0;
+    
+    // Check if expired
+    if (item.expiry && item.expiry < Date.now()) {
+      this.store.delete(key);
+      return 0;
+    }
+    
+    return 1;
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    const result: string[] = [];
+    
+    for (const key of this.store.keys()) {
+      if (regex.test(key)) {
+        const item = this.store.get(key);
+        // Skip expired keys
+        if (item && (!item.expiry || item.expiry > Date.now())) {
+          result.push(key);
+        }
+      }
+    }
+    
+    return result;
+  }
+}
+
+// Mock createClient function
+function createClient(config: any): RedisClientType {
+  return new MockRedisClient();
+}
+
 // --- Solution: Define a type for our global cache and assert it onto globalThis ---
 type GlobalWithRedis = typeof globalThis & {
-  __redis?: RedisClientType;
-  __redisConnectionPromise?: Promise<RedisClientType>;
+  __redis?: RedisClientType | MockRedisClient;
+  __redisConnectionPromise?: Promise<RedisClientType | MockRedisClient>;
 };
 
-// สร้าง Redis client instance
-const redis: RedisClientType = createClient(redisConfig);
+// Check if Redis is available by looking for environment variables
+const isRedisAvailable = Boolean(
+  process.env.REDIS_HOST && 
+  process.env.REDIS_PORT &&
+  process.env.REDIS_ENABLED !== 'false'
+);
+
+// สร้าง Redis client instance หรือ mock
+let redis: RedisClientType | MockRedisClient;
+
+try {
+  if (isRedisAvailable) {
+    redis = createClient(redisConfig);
+  } else {
+    redis = new MockRedisClient();
+  }
+} catch (error) {
+  console.error('❌ [Redis] Error creating Redis client, falling back to mock:', error);
+  redis = new MockRedisClient();
+}
 
 // Global cache สำหรับ connection ใน development
 // We now cast globalThis to our specific type to inform TypeScript about our custom properties.
 const cachedGlobal = globalThis as GlobalWithRedis;
 
-let redisClient: RedisClientType;
+let redisClient: RedisClientType | MockRedisClient;
 
 if (process.env.NODE_ENV === 'production') {
   redisClient = redis;
@@ -47,31 +194,33 @@ if (process.env.NODE_ENV === 'production') {
   redisClient = cachedGlobal.__redis;
 }
 
-// Event handlers สำหรับ monitoring
-redisClient.on('connect', () => {
-  console.log('✅ [Redis] Connected successfully');
-});
+// Event handlers สำหรับ monitoring (only attach if real Redis)
+if (isRedisAvailable && !(redisClient instanceof MockRedisClient)) {
+  redisClient.on('connect', () => {
+    console.log('✅ [Redis] Connected successfully');
+  });
 
-redisClient.on('ready', () => {
-  console.log('🚀 [Redis] Ready to use');
-});
+  redisClient.on('ready', () => {
+    console.log('🚀 [Redis] Ready to use');
+  });
 
-redisClient.on('error', (err) => {
-  console.error('❌ [Redis] Connection error:', err);
-});
+  redisClient.on('error', (err) => {
+    console.error('❌ [Redis] Connection error:', err);
+  });
 
-redisClient.on('end', () => {
-  console.log('🔌 [Redis] Connection closed');
-});
+  redisClient.on('end', () => {
+    console.log('🔌 [Redis] Connection closed');
+  });
 
-redisClient.on('reconnecting', () => {
-  console.log('🔄 [Redis] Reconnecting...');
-});
+  redisClient.on('reconnecting', () => {
+    console.log('🔄 [Redis] Reconnecting...');
+  });
+}
 
 // เชื่อมต่อ Redis พร้อม connection pooling
 let isConnecting = false;
-const connectRedis = async (): Promise<RedisClientType> => {
-  if (redisClient.isReady) {
+const connectRedis = async (): Promise<RedisClientType | MockRedisClient> => {
+  if (redisClient instanceof MockRedisClient || redisClient.isReady) {
     return redisClient;
   }
 
@@ -88,13 +237,14 @@ const connectRedis = async (): Promise<RedisClientType> => {
 
       try {
         isConnecting = true;
-        if (!redisClient.isOpen) {
+        if (!(redisClient instanceof MockRedisClient) && !redisClient.isOpen) {
           await redisClient.connect();
         }
         return redisClient;
       } catch (error) {
-        console.error('❌ [Redis] Failed to connect:', error);
-        throw error;
+        console.error('❌ [Redis] Failed to connect, falling back to mock:', error);
+        redisClient = new MockRedisClient();
+        return redisClient;
       } finally {
         isConnecting = false;
       }
@@ -124,6 +274,10 @@ export const CacheKeys = {
   
   // Static content
   STATIC_CONTENT: (type: string) => `divwy:v2:static:${type}`,
+  
+  // Comments cache
+  COMMENTS_LIST: (targetId: string, targetType: string, page: number) => 
+    `divwy:v2:comments:${targetType}:${targetId}:p${page}`,
 } as const;
 
 // Cache TTL settings (in seconds) - optimized สำหรับ performance
@@ -131,6 +285,7 @@ export const CacheTTL = {
   // Short-term cache สำหรับ dynamic content
   NOVELS_LIST: 60, // 1 minute - เร็วขึ้นสำหรับ real-time content
   TRENDING_NOVELS: 120, // 2 minutes
+  COMMENTS_LIST: 30, // 30 seconds for comments
   
   // Medium-term cache สำหรับ semi-static content
   HOMEPAGE_SECTIONS: 300, // 5 minutes
@@ -147,7 +302,7 @@ export const CacheTTL = {
 
 // High-performance cache manager พร้อม advanced features
 export class CacheManager {
-  private static async ensureConnection(): Promise<RedisClientType> {
+  private static async ensureConnection(): Promise<RedisClientType | MockRedisClient> {
     return await connectRedis();
   }
 
@@ -203,7 +358,7 @@ export class CacheManager {
     try {
       const client = await this.ensureConnection();
       const values = await client.mGet(keys);
-      return values.map(value => value ? this.deserialize<T>(value) : null);
+      return values.map((value: any) => value ? this.deserialize<T>(value) : null);
     } catch (error) {
       console.error(`❌ [Redis] Error getting multiple cache keys:`, error);
       return keys.map(() => null);

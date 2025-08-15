@@ -1,34 +1,34 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Play, 
-  Pause, 
-  Settings, 
+import { DEFAULT_USER_SETTINGS, getInitialSettings } from '@/lib/user-settings';
+import { useDebouncedCallback } from '@/lib/utils';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
   ArrowLeft,
-  List,
-  MessageSquareText,
   Eye,
   EyeOff,
-  SkipForward,
-  Swords,
+  List,
   MessageSquare,
-  MessageSquareOff
+  MessageSquareOff,
+  MessageSquareText,
+  Pause,
+  Play,
+  Settings,
+  SkipForward,
+  Swords
 } from 'lucide-react';
-import VisualNovelContent, { DialogueHistoryItem } from './VisualNovelContent';
-import type { DetailedEpisode } from './VisualNovelContent';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import DialogueHistory from './DialogueHistory';
 import EpisodeNavigation from './EpisodeNavigation';
 import ReaderSettings, { IReaderSettings } from './ReaderSettings';
 import StoryStatusPanel from './StoryStatusPanel';
-import { DEFAULT_USER_SETTINGS, getInitialSettings } from '@/lib/user-settings';
-import { useDebouncedCallback } from 'use-debounce';
+import type { DetailedEpisode } from './VisualNovelContent';
+import VisualNovelContent, { DialogueHistoryItem } from './VisualNovelContent';
 
 // Refactored to import from models
-import type { INovel } from '@/backend/models/Novel';
 import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
+import type { INovel } from '@/backend/models/Novel';
 import type { IScene } from '@/backend/models/Scene';
 
 // The page provides a serialized version of INovel.
