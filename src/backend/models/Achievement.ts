@@ -246,8 +246,9 @@ export interface IAchievement extends Document {
   isActive: boolean;
   isSecret: boolean;
   isRepeatable: boolean;
-  maxRepeats?: number;
-  points?: number; // แต้ม XP ที่ได้จาก Achievement นี้โดยตรง (อาจจะรวมกับ rewards.experiencePointsAwarded)
+  maxRepeats?: number; // แต้ม XP ที่ได้จาก Achievement นี้โดยตรง (อาจจะรวมกับ rewards.experiencePointsAwarded)
+  points: number; // แต้ม XP ที่ได้จาก Achievement นี้โดยตรง (อาจจะรวมกับ rewards.experiencePointsAwarded)
+  maxTier?: number; // << ใหม่
   tierKey?: string; // << ใหม่
   tierLevel?: number; // << ใหม่
   previousTierAchievementId?: Types.ObjectId | IAchievement; // << ใหม่
@@ -374,11 +375,17 @@ const AchievementSchema = new Schema<IAchievement>(
         },
         comment: "(Optional) จำนวนครั้งสูงสุดที่สามารถปลดล็อกซ้ำได้ (ถ้า isRepeatable)",
     },
-    points: { // อาจจะใช้เป็น XP โดยตรง หรือเป็น point พิเศษสำหรับระบบ leaderboard
+    points: { // แต้ม XP ที่ได้จาก Achievement นี้โดยตรง (อาจจะรวมกับ rewards.experiencePointsAwarded)
         type: Number,
         min: 0,
         default: 0,
-        comment: "(Optional) แต้มที่เกี่ยวข้องกับ Achievement นี้ (อาจใช้แทน XP หรือเพิ่มเติมจาก rewards)",
+        comment: "(Optional) แต้ม XP ที่ได้จาก Achievement นี้โดยตรง (อาจจะรวมกับ rewards.experiencePointsAwarded)",
+    },
+    maxTier: { // << ใหม่
+        type: Number,
+        min: 1,
+        sparse: true,
+        comment: "(ใหม่) จำนวนระดับสูงสุดของ Tier Achievement นี้ (ถ้ามี)",
     },
     tierKey: { // << ใหม่
         type: String,

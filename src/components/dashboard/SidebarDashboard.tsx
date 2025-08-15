@@ -345,7 +345,7 @@ export default function SidebarDashboard({
       case 'overview':
         return (
           <OverviewTab
-            user={user}
+            user={user} // Pass the entire user object which now contains the combined achievements
             totalStats={totalStats}
             novels={novels}
             recentTransactions={recentTransactions}

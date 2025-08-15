@@ -16,6 +16,7 @@ import UserModel, { IAccount, IUser } from '@/backend/models/User';
 import UserProfileModel, { IUserProfile, IUserSocialStats } from '@/backend/models/UserProfile';
 import UserTrackingModel, { IUserTrackingStats } from '@/backend/models/UserTracking';
 import UserGamificationModel, { IUserWallet } from '@/backend/models/UserGamification';
+import UserAchievementModel from '@/backend/models/UserAchievement'; // <-- Import UserAchievementModel
 import UserSecurityModel, { IUserVerification } from '@/backend/models/UserSecurity';
 import WriterStatsModel, { IWriterStatsDoc as IWriterStats, IUserDonationSettings, IActiveNovelPromotionSummary, INovelPerformanceStats, ITrendingNovelSummary } from '@/backend/models/WriterStats';
 import UserSettingsModel, { IUserSettings as IUserPreferences, IUserContentPrivacyPreferences, IVisualNovelGameplayPreferences } from '@/backend/models/UserSettings';
@@ -26,6 +27,7 @@ import DonationApplicationModel, { IDonationApplication } from '@/backend/models
 import EarningTransactionModel, { IEarningTransaction } from '@/backend/models/EarningTransaction';
 import CategoryModel, { ICategory } from '@/backend/models/Category';
 import LevelModel, { ILevel } from '@/backend/models/Level';
+import AchievementModel from '@/backend/models/Achievement'; // Import AchievementModel
 
 // Client Components สำหรับ Interactive UI
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -277,6 +279,8 @@ async function getWriterDashboardData(userId: string): Promise<WriterDashboardDa
         coreUser,
         userProfile,
         userGamification,
+        userAchievements,
+        allTier1Achievements, // <-- Fetch all base achievements
         userSettings,
         userTracking,
         userSecurity,
@@ -287,11 +291,26 @@ async function getWriterDashboardData(userId: string): Promise<WriterDashboardDa
         // Populate ที่ Model ที่ถูกต้อง (UserGamificationModel)
         UserGamificationModel.findOne({ userId: new Types.ObjectId(userId) })
             .populate({
+                path: 'gamification.achievements', // <-- Keep this for old achievements
+                model: 'Achievement',
+                select: 'title description customIconUrl rarity tierKey achievementCode' // <-- ADD achievementCode
+            })
+            .populate({
                 path: 'gamification.currentLevelObject',
                 model: LevelModel,
                 select: 'levelNumber title xpRequiredForThisLevel xpToNextLevelFromThis description iconUrl themeColor isActive rewardsOnReach'
             })
             .lean(),
+        // <-- Start: Add query for UserAchievementModel -->
+        UserAchievementModel.findOne({ userId: new Types.ObjectId(userId) })
+            .populate({
+                path: 'earnedItems.itemModelId',
+                model: 'Achievement',
+                select: 'title description customIconUrl rarity tierKey'
+            })
+            .lean(),
+        // <-- End: Add query for UserAchievementModel -->
+        AchievementModel.find({ tierLevel: 1 }).lean(), // <-- Query for all Tier 1 achievements
         UserSettingsModel.findOne({ userId: new Types.ObjectId(userId) }).lean(),
         UserTrackingModel.findOne({ userId: new Types.ObjectId(userId) }).lean(),
         UserSecurityModel.findOne({ userId: new Types.ObjectId(userId) }).lean(),
@@ -310,6 +329,67 @@ async function getWriterDashboardData(userId: string): Promise<WriterDashboardDa
       throw new Error('❌ ไม่พบข้อมูลผู้ใช้ในระบบ');
     }
     
+    // --- [DEBUG LOGGING START] ---
+    console.log("--- DEBUG: Raw Data from DB ---");
+    console.log("UserAchievements:", JSON.stringify(userAchievements, null, 2));
+    console.log("UserGamification Achievements:", JSON.stringify(userGamification?.gamification.achievements, null, 2));
+    console.log("All Tier 1 Achievements:", JSON.stringify(allTier1Achievements, null, 2));
+    // --- [DEBUG LOGGING END] ---
+
+    // --- Start: New, more robust achievement combination logic ---
+    const legacyToTieredMap: { [key: string]: string } = {
+        'FIRST_STORY_COMPLETED': 'FIRST_READER', // Maps old achievement code to new tierKey
+    };
+
+    const combinedAchievements = new Map<string, any>();
+
+    // 1. Initialize map with all available Tier 1 achievements, showing 0 progress
+    allTier1Achievements.forEach((ach: any) => {
+        if (ach.tierKey) {
+            combinedAchievements.set(ach.tierKey, {
+                ...serializeDocument(ach),
+                progress: {
+                    current: 0,
+                    target: ach.unlockConditions[0]?.targetValue || 1,
+                    tier: 1,
+                },
+            });
+        }
+    });
+
+    console.log("--- DEBUG: After Step 1 (Init Tier 1) ---", JSON.stringify(Array.from(combinedAchievements.values()), null, 2));
+
+    // 2. Update the map with the user's actual progress for tiered achievements
+    userAchievements?.earnedItems.forEach((item: any) => {
+      if (item.itemModelId && item.itemCode) { // item.itemCode is the tierKey
+        // The itemModelId is populated with the full achievement document for the user's current tier
+        combinedAchievements.set(item.itemCode, {
+           ...serializeDocument(item.itemModelId),
+           progress: item.progress,
+        });
+      }
+    });
+
+    console.log("--- DEBUG: After Step 2 (User Progress) ---", JSON.stringify(Array.from(combinedAchievements.values()), null, 2));
+
+    // 3. Process legacy achievements, adding them only if not replaced by a tiered one
+    userGamification?.gamification.achievements.forEach((ach: any) => {
+      const tierKeyForLegacy = legacyToTieredMap[ach.achievementCode];
+      const canonicalKey = tierKeyForLegacy || ach.achievementCode;
+
+      // Only add the legacy achievement if a tiered version doesn't already exist in our map
+      if (!combinedAchievements.has(canonicalKey)) {
+          combinedAchievements.set(canonicalKey, {
+              ...serializeDocument(ach),
+              progress: null, // Legacy achievements have no progress
+          });
+      }
+    });
+    
+    const finalAchievements = Array.from(combinedAchievements.values());
+    console.log("--- DEBUG: After Step 3 (Legacy & Final Combined) ---", JSON.stringify(finalAchievements, null, 2));
+    // --- End: New achievement logic ---
+    
     // Step 3: รวมข้อมูลทั้งหมดเป็น Object เดียวเพื่อส่งให้ serializeDocument
     const combinedUserDoc = {
         ...(coreUser as any), // Cast to any to allow adding properties
@@ -318,7 +398,10 @@ async function getWriterDashboardData(userId: string): Promise<WriterDashboardDa
         trackingStats: userTracking?.trackingStats,
         preferences: userSettings,
         wallet: userGamification?.wallet,
-        gamification: userGamification?.gamification,
+        gamification: { // Rebuild gamification object
+          ...userGamification?.gamification,
+          achievements: finalAchievements,
+        },
         verification: userSecurity?.verification,
         donationSettings: writerStats?.donationSettings,
         writerStats: writerStats,

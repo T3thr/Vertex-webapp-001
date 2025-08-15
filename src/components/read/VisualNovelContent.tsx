@@ -149,6 +149,12 @@ const useAudio = (
         const masterVolume = (gameplaySettings.masterVolume ?? 100) / 100;
 
         scene?.audios?.forEach(audioConfig => {
+            // Check if mediaId is a valid, non-empty string before proceeding
+            if (!audioConfig.mediaId || audioConfig.mediaId.trim() === '') {
+                console.warn(`Skipping audio instanceId ${audioConfig.instanceId} because mediaId is missing or empty.`);
+                return; 
+            }
+            
             const id = audioConfig.instanceId;
             let audio = audioRefs.current[id];
             if (!audio) {
