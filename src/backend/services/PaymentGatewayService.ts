@@ -1,0 +1,215 @@
+// src/backend/services/PaymentGatewayService.ts
+// Service สำหรับเชื่อมต่อกับ Payment Gateway (ตัวอย่างนี้จะใช้การจำลองระบบ QR Payment)
+
+import { Types } from 'mongoose';
+import PaymentModel, { IPayment, PaymentStatus, PaymentGateway, PaymentForType } from '../models/Payment';
+
+/**
+ * ข้อมูลการสร้าง QR Code สำหรับชำระเงิน
+ */
+export interface QRPaymentRequest {
+  amount: number;       // จำนวนเงิน (บาท)
+  userId: string;       // ID ของผู้ใช้
+  description?: string; // รายละเอียดการชำระเงิน
+  metadata?: any;       // ข้อมูลเพิ่มเติม
+}
+
+/**
+ * ผลลัพธ์การสร้าง QR Code
+ */
+export interface QRPaymentResult {
+  success: boolean;
+  paymentId?: string;   // ID การชำระเงินในระบบ
+  qrData?: string;      // ข้อมูล QR Code (Base64 หรือ URL)
+  expiresAt?: Date;     // วันหมดอายุของ QR Code
+  amount?: number;      // จำนวนเงิน
+  reference?: string;   // รหัสอ้างอิงการชำระเงิน
+  transactionId?: string; // ID ธุรกรรมจาก Payment Gateway
+  paymentIntentId?: string; // ID Payment Intent จาก Payment Gateway
+  error?: string;       // ข้อความแสดงข้อผิดพลาด (ถ้ามี)
+}
+
+/**
+ * ข้อมูลการยืนยันการชำระเงิน
+ */
+export interface PaymentConfirmation {
+  paymentId: string;    // ID การชำระเงินในระบบ
+  status: PaymentStatus;
+  transactionId?: string; // ID ธุรกรรมจาก Payment Gateway
+  paidAt?: Date;        // วันเวลาที่ชำระเงิน
+  amount?: number;      // จำนวนเงินที่ชำระ
+  fee?: number;         // ค่าธรรมเนียม
+}
+
+/**
+ * Service สำหรับเชื่อมต่อกับระบบชำระเงิน
+ */
+export class PaymentGatewayService {
+  /**
+   * สร้าง QR Code สำหรับการชำระเงิน
+   * @param request ข้อมูลการสร้าง QR Code
+   */
+  async createQRPayment(request: QRPaymentRequest): Promise<QRPaymentResult> {
+    try {
+      // 1. ตรวจสอบข้อมูลเบื้องต้น
+      if (!request.userId || !Types.ObjectId.isValid(request.userId)) {
+        return { success: false, error: 'ไม่พบข้อมูลผู้ใช้หรือข้อมูลไม่ถูกต้อง' };
+      }
+
+      if (!request.amount || request.amount <= 0) {
+        return { success: false, error: 'จำนวนเงินไม่ถูกต้อง' };
+      }
+
+      // 2. สร้างรายการชำระเงินในระบบ
+      // สร้าง ID ที่อ่านได้และค่าที่ไม่ซ้ำกันสำหรับการชำระเงิน โดยใช้ timestamp และตัวเลขสุ่ม
+      const timestamp = Date.now();
+      const paymentReadableId = `PAY-${timestamp}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+      const userId = new Types.ObjectId(request.userId);
+      const reference = `REF${timestamp}${Math.floor(Math.random() * 1000)}`;
+      const tempTransactionId = `TX-${timestamp}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+      const tempPaymentIntentId = `PI-${timestamp}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+      const qrData = `https://example.com/qr-payment/${reference}`;
+      
+      // สร้าง Payment ด้วยข้อมูลครบถ้วนตั้งแต่แรก รวมถึง transactionId และ paymentIntentId ที่ไม่ซ้ำกัน
+      const payment = new PaymentModel({
+        paymentReadableId,
+        userId,
+        paymentForType: PaymentForType.COIN_TOPUP,
+        paymentGateway: PaymentGateway.PROMPTPAY_QR,
+        relatedDocumentId: userId,
+        amount: request.amount,
+        currency: 'THB',
+        netAmount: request.amount,
+        status: PaymentStatus.PENDING,
+        description: request.description || `เติมเหรียญ ${request.amount} บาท`,
+        metadata: request.metadata || {},
+        initiatedAt: new Date(),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        schemaVersion: 1,
+        reference,
+        gatewayDetails: {
+          qrCodeData: qrData,
+          transactionId: tempTransactionId,
+          paymentIntentId: tempPaymentIntentId
+        }
+      });
+
+      // บันทึกเพียงครั้งเดียว
+      await payment.save();
+
+      // 5. ส่งผลลัพธ์กลับ
+      return {
+        success: true,
+        paymentId: payment._id.toString(),
+        qrData,
+        expiresAt: payment.expiresAt,
+        amount: payment.amount,
+        reference,
+        transactionId: tempTransactionId,
+        paymentIntentId: tempPaymentIntentId
+      };
+    } catch (error: any) {
+      console.error('❌ [PaymentGatewayService] Error creating QR payment:', error);
+      return {
+        success: false,
+        error: error.message || 'เกิดข้อผิดพลาดในการสร้าง QR Code'
+      };
+    }
+  }
+
+  /**
+   * ตรวจสอบสถานะการชำระเงิน
+   * @param paymentId ID การชำระเงินในระบบ
+   */
+  async checkPaymentStatus(paymentId: string): Promise<IPayment | null> {
+    try {
+      if (!Types.ObjectId.isValid(paymentId)) {
+        return null;
+      }
+
+      // ในระบบจริงจะต้องเรียก API ของ Payment Gateway เพื่อตรวจสอบสถานะ
+      // แต่ในตัวอย่างนี้เราจะดึงข้อมูลจาก DB โดยตรง
+      const payment = await PaymentModel.findById(paymentId);
+      return payment;
+    } catch (error) {
+      console.error('❌ [PaymentGatewayService] Error checking payment status:', error);
+      return null;
+    }
+  }
+
+  /**
+   * อัปเดตสถานะการชำระเงิน (เรียกจาก Webhook หรือระบบอื่นๆ)
+   * @param confirmation ข้อมูลการยืนยันการชำระเงิน
+   */
+  async confirmPayment(confirmation: PaymentConfirmation): Promise<boolean> {
+    try {
+      if (!Types.ObjectId.isValid(confirmation.paymentId)) {
+        return false;
+      }
+
+      // 1. ดึงข้อมูลการชำระเงิน
+      const payment = await PaymentModel.findById(confirmation.paymentId);
+      if (!payment) {
+        console.error(`❌ [PaymentGatewayService] Payment not found: ${confirmation.paymentId}`);
+        return false;
+      }
+
+      // 2. ตรวจสอบว่าการชำระเงินยังไม่ถูกประมวลผลไปแล้ว
+      if (payment.status === PaymentStatus.SUCCEEDED || payment.status === PaymentStatus.REFUNDED) {
+        console.warn(`⚠️ [PaymentGatewayService] Payment already processed: ${confirmation.paymentId}`);
+        return true; // ถือว่าสำเร็จเพราะการชำระเงินถูกประมวลผลไปแล้ว
+      }
+
+      // 3. อัปเดตสถานะการชำระเงิน
+      payment.status = confirmation.status;
+      payment.transactionId = confirmation.transactionId || payment.transactionId;
+      payment.paidAt = confirmation.paidAt || (confirmation.status === PaymentStatus.SUCCEEDED ? new Date() : undefined);
+      
+      if (confirmation.amount) {
+        payment.amountReceived = confirmation.amount;
+      }
+      
+      if (confirmation.fee) {
+        payment.fee = confirmation.fee;
+      }
+
+      await payment.save();
+      return true;
+    } catch (error) {
+      console.error('❌ [PaymentGatewayService] Error confirming payment:', error);
+      return false;
+    }
+  }
+
+  /**
+   * จำลองการชำระเงินสำเร็จ (สำหรับการทดสอบเท่านั้น)
+   * @param paymentId ID การชำระเงินในระบบ
+   */
+  async simulateSuccessfulPayment(paymentId: string): Promise<boolean> {
+    try {
+      if (!Types.ObjectId.isValid(paymentId)) {
+        return false;
+      }
+
+      const payment = await PaymentModel.findById(paymentId);
+      if (!payment) {
+        return false;
+      }
+
+      return this.confirmPayment({
+        paymentId,
+        status: PaymentStatus.SUCCEEDED,
+        transactionId: `SIM${Date.now()}`,
+        paidAt: new Date(),
+        amount: payment.amount
+      });
+    } catch (error) {
+      console.error('❌ [PaymentGatewayService] Error simulating payment:', error);
+      return false;
+    }
+  }
+}
+
+// สร้าง instance เดียวเพื่อใช้งานทั่วทั้งแอป
+const paymentGatewayService = new PaymentGatewayService();
+export default paymentGatewayService;

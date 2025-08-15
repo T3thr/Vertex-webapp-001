@@ -329,8 +329,25 @@ PaymentSchema.virtual("relatedDocument", {
 
 PaymentSchema.index({ userId: 1, status: 1, createdAt: -1 }, { name: "UserPaymentStatusDateIndex" });
 // Unique index สำหรับ transactionId จาก gateway (sparse เพราะอาจไม่มีค่าเสมอไป)
-PaymentSchema.index({ "gatewayDetails.transactionId": 1, paymentGateway: 1 }, { name: "GatewayTransactionUniqueIndex", unique: true, sparse: true });
-PaymentSchema.index({ "gatewayDetails.paymentIntentId": 1, paymentGateway: 1 }, { name: "GatewayPaymentIntentUniqueIndex", unique: true, sparse: true });
+// แก้ไขเพื่อป้องกัน duplicate key error เมื่อ transactionId เป็น null
+PaymentSchema.index(
+  { "gatewayDetails.transactionId": 1, paymentGateway: 1 }, 
+  { 
+    name: "GatewayTransactionUniqueIndex", 
+    unique: true, 
+    sparse: true,
+    partialFilterExpression: { "gatewayDetails.transactionId": { $exists: true, $ne: null } }
+  }
+);
+PaymentSchema.index(
+  { "gatewayDetails.paymentIntentId": 1, paymentGateway: 1 }, 
+  { 
+    name: "GatewayPaymentIntentUniqueIndex", 
+    unique: true, 
+    sparse: true,
+    partialFilterExpression: { "gatewayDetails.paymentIntentId": { $exists: true, $ne: null } }
+  }
+);
 
 // แก้ไข: Partial Index สำหรับ Succeeded Payments
 // Index 'status: 1' หมายถึงการเรียงตาม status (ถ้า query มีการ sort หรือ range scan บน status ภายในกลุ่มที่ filter แล้ว)

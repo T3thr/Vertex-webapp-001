@@ -258,6 +258,8 @@ function ActivityItem({ transaction, index }: ActivityItemProps) {
     if (type.includes('earn')) return TrendingUp;
     if (type.includes('donation')) return Gift;
     if (type.includes('purchase')) return Coins;
+    if (type.includes('writer_coin')) return TrendingUp;
+    if (type.includes('writer_real_money')) return DollarSign;
     return DollarSign;
   };
 
@@ -265,6 +267,8 @@ function ActivityItem({ transaction, index }: ActivityItemProps) {
     if (type.includes('earn')) return 'text-green-600 bg-green-50 dark:bg-green-900/20';
     if (type.includes('donation')) return 'text-pink-600 bg-pink-50 dark:bg-pink-900/20';
     if (type.includes('purchase')) return 'text-blue-600 bg-blue-50 dark:bg-blue-900/20';
+    if (type.includes('writer_coin')) return 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20';
+    if (type.includes('writer_real_money')) return 'text-amber-600 bg-amber-50 dark:bg-amber-900/20';
     return 'text-purple-600 bg-purple-50 dark:bg-purple-900/20';
   };
 
@@ -602,7 +606,7 @@ export default function StatsOverview({ stats, recentTransactions, earningAnalyt
                 >
                   <Flame className="w-5 h-5 text-white" />
                 </motion.div>
-                กิจกรรมล่าสุด
+                ธุรกรรมล่าสุด
               </h3>
               
               <motion.button
@@ -618,13 +622,22 @@ export default function StatsOverview({ stats, recentTransactions, earningAnalyt
           <div className="bg-secondary/20 rounded-xl p-6 border border-border/50">
             {recentTransactions.length > 0 ? (
               <div className="space-y-3">
-                {recentTransactions.slice(0, 5).map((transaction, index) => (
-                  <ActivityItem
-                    key={transaction._id as string}
-                    transaction={transaction}
-                    index={index}
-                  />
-                ))}
+                {recentTransactions
+                  .filter(transaction => [
+                    'writer_coin.earn_from_episode_sale',
+                    'writer_coin.earn_from_donation',
+                    'writer_coin.earn_from_platform_bonus',
+                    'writer_real_money.revenue_share_accrual',
+                    'writer_real_money.withdrawal_completed'
+                  ].includes(transaction.transactionType))
+                  .slice(0, 5)
+                  .map((transaction, index) => (
+                    <ActivityItem
+                      key={transaction._id as string}
+                      transaction={transaction}
+                      index={index}
+                    />
+                  ))}
               </div>
             ) : (
               <motion.div 
@@ -638,8 +651,8 @@ export default function StatsOverview({ stats, recentTransactions, earningAnalyt
                 >
                   <Coffee className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                 </motion.div>
-                <h4 className="font-semibold mb-2 text-card-foreground">ยังไม่มีกิจกรรม</h4>
-                <p className="text-muted-foreground">เริ่มต้นเขียนนิยายเพื่อดูกิจกรรมและธุรกรรมของคุณ</p>
+                <h4 className="font-semibold mb-2 text-card-foreground">ยังไม่มีรายการธุรกรรม</h4>
+                <p className="text-muted-foreground">เมื่อมีผู้ซื้อตอนนิยายของคุณ รายได้จะปรากฏที่นี่</p>
               </motion.div>
             )}
           </div>

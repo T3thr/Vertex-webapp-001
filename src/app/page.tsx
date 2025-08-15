@@ -15,6 +15,7 @@ import {
   BookOpen,
   BadgePercent,
   ArrowRightCircle,
+  Coins,
 } from "lucide-react";
 import { Metadata } from 'next';
 import Link from "next/link";
@@ -462,6 +463,22 @@ export default async function HomePage() {
         </section>
 
         <div className="container-custom space-y-8 md:space-y-12">
+          {/* Wallet Top-up Banner */}
+          <Link href="/user/wallet" className="block mb-8">
+            <div className="bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-amber-900/20 dark:to-yellow-900/30 border border-yellow-200 dark:border-yellow-900/50 rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-center gap-3">
+                <div className="bg-yellow-500/20 p-3 rounded-full">
+                  <Coins className="h-6 w-6 text-yellow-600 dark:text-yellow-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">เติมเหรียญ</h3>
+                  <p className="text-sm text-muted-foreground">เติมเหรียญเพื่อซื้อตอนนิยายและสนับสนุนนักเขียน</p>
+                </div>
+              </div>
+              <ArrowRightCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-500" />
+            </div>
+          </Link>
+          
           {/* July 2025 Bonus Banner - Show for eligible users */}
           <JulyBonusBanner className="mb-8" />
           
