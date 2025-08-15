@@ -483,7 +483,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Check if the user already has settings
-    let existingSettings = await UserSettingsModel.findOne({ userId: userId }).lean();
+    const existingSettings = await UserSettingsModel.findOne({ userId: userId }).lean();
     
     let updatedSettings;
     if (existingSettings) {
