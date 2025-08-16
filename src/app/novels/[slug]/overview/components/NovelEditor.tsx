@@ -26,9 +26,9 @@ import BlueprintTab from './tabs/BlueprintTab'
 import DirectorTab from './tabs/DirectorTab'
 import SummaryTab from './tabs/SummaryTab'
 
-// Import ระบบ Save ใหม่ - เปลี่ยนเป็น EventManager
-import { EventManager, createEventManager } from './tabs/EventManager'
-import SaveStatusIndicator from './tabs/SaveStatusIndicator'
+// Import ระบบ Save ใหม่ - ใช้ SingleUserEventManager สำหรับโหมดผู้ใช้คนเดียว
+import { SingleUserEventManager, createSingleUserEventManager } from './tabs/SingleUserEventManager'
+import SingleUserSaveStatusIndicator from './tabs/SingleUserSaveStatusIndicator'
 
 // Import types
 import type { NovelData, EpisodeData, StoryMapData } from '../page'
@@ -73,18 +73,12 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   
   const [autoSaveIntervalSec, setAutoSaveIntervalSec] = useState<15 | 30>(30) // เริ่มต้นด้วยค่าคงที่
   
-  // ใช้ EventManager แทน SaveManager สำหรับ Command Pattern
-  const [eventManager] = useState(() => createEventManager({
+  // ใช้ SingleUserEventManager สำหรับโหมดผู้ใช้คนเดียว (Canva/Figma-like experience)
+  const [eventManager] = useState(() => createSingleUserEventManager({
     novelSlug: novel.slug,
     autoSaveEnabled: isAutoSaveEnabled,
     autoSaveIntervalMs: autoSaveIntervalSec * 1000,
     maxHistorySize: 50,
-    optimisticUpdates: true,
-    conflictResolutionStrategy: 'merge',
-    // Real-time collaboration settings - only enable in browser environment
-    realtimeEnabled: typeof window !== 'undefined' && process.env.NODE_ENV === 'development',
-    userId: userSettings?.userId || 'anonymous_user',
-    username: userSettings?.username || 'Anonymous User',
     onStateChange: (state) => {
       setSaveState(state);
     },
@@ -93,13 +87,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       console.log('[NovelEditor] Dirty state changed:', isDirty);
     },
     onError: (error, context) => {
-      // Only show toast for non-realtime errors
-      if (context !== 'REALTIME' && context !== 'REALTIME_INIT') {
-        console.error(`[NovelEditor] EventManager error in ${context}:`, error);
-        toast.error(`Save error: ${error.message}`);
-      } else {
-        console.log(`[NovelEditor] Real-time feature unavailable: ${error.message}`);
-      }
+      console.error(`[NovelEditor] SingleUserEventManager error in ${context}:`, error);
+      toast.error(`Save error: ${error.message}`);
     }
   }))
   
@@ -129,13 +118,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   const [snapToGrid, setSnapToGrid] = useState(false) // เริ่มต้นด้วยค่าคงที่
   const [nodeOrientation, setNodeOrientation] = useState<'horizontal' | 'vertical'>('vertical') // การวางแนว node ใหม่
 
-  // ✨ Professional Settings Management (Adobe/Canva/Figma style)
+  // ✨ Professional Settings Management (Adobe/Canva/Figma style) - เชื่อมต่อกับ Database จริง
   const saveBlueprintSettings = React.useCallback(async (key: string, value: any) => {
-    // บันทึกไปยัง localStorage ทันที (สำหรับ instant feedback)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`blueprint-${key}`, JSON.stringify(value));
-    }
-
     // Professional feedback with toast promise pattern
     const settingNames: Record<string, string> = {
       'auto-save-enabled': 'Auto-save',
@@ -149,7 +133,24 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
     const settingName = settingNames[key] || 'การตั้งค่า';
 
-    // Professional API call with toast feedback
+    // สร้าง API payload ที่ถูกต้องตาม UserSettings schema
+    const fieldMapping: Record<string, string> = {
+      'auto-save-enabled': 'autoSaveEnabled',
+      'auto-save-interval': 'autoSaveIntervalSec',
+      'show-scene-thumbnails': 'showSceneThumbnails',
+      'show-node-labels': 'showNodeLabels',
+      'show-grid': 'showGrid',
+      'snap-to-grid': 'snapToGrid',
+      'node-orientation': 'nodeOrientation'
+    };
+
+    const fieldName = fieldMapping[key];
+    if (!fieldName) {
+      console.error('[NovelEditor] Unknown setting key:', key);
+      return;
+    }
+
+    // Professional API call with proper error handling
     const savePromise = fetch('/api/user/settings', {
       method: 'PATCH',
       headers: {
@@ -158,39 +159,38 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       body: JSON.stringify({
         visualNovelGameplay: {
           blueprintEditor: {
-            [key === 'auto-save-enabled' ? 'autoSaveEnabled' : 
-             key === 'auto-save-interval' ? 'autoSaveIntervalSec' :
-             key === 'show-scene-thumbnails' ? 'showSceneThumbnails' :
-             key === 'show-node-labels' ? 'showNodeLabels' :
-             key === 'show-grid' ? 'showGrid' :
-             key === 'snap-to-grid' ? 'snapToGrid' :
-             key === 'node-orientation' ? 'nodeOrientation' :
-             key]: value
+            [fieldName]: value
           }
         }
       }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      return response.json();
     });
 
-    // Adobe/Figma style toast feedback
+    // Adobe/Figma style toast feedback with enhanced messages
     toast.promise(savePromise, {
-      loading: `💾 กำลังบันทึก${settingName}...`,
-      success: (response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+      loading: `💾 กำลังบันทึก${settingName}ไปยัง Database...`,
+      success: (data) => {
+        console.log('[NovelEditor] Settings saved successfully:', data);
         
-        // Special feedback for auto-save settings
+        // Special feedback for different setting types
         if (key === 'auto-save-enabled') {
           return value 
-            ? `✅ เปิดใช้งาน ${settingName} สำเร็จ`
-            : `⏸️ ปิดใช้งาน ${settingName} สำเร็จ`;
+            ? `✅ เปิดใช้งาน ${settingName} สำเร็จ - ระบบจะบันทึกอัตโนมัติทุก ${autoSaveIntervalSec} วินาที`
+            : `⏸️ ปิดใช้งาน ${settingName} สำเร็จ - จะบันทึกเฉพาะเมื่อกดปุ่ม Save`;
+        } else if (key === 'auto-save-interval') {
+          return `✅ ตั้งค่า${settingName}เป็น ${value} วินาที สำเร็จ`;
         }
         
         return `✅ บันทึก${settingName}สำเร็จ`;
       },
       error: (error) => {
-        console.warn('Error saving blueprint settings to UserSettings:', error);
-        return `❌ ไม่สามารถบันทึก${settingName}ได้`;
+        console.error('[NovelEditor] Error saving blueprint settings:', error);
+        return `❌ ไม่สามารถบันทึก${settingName}ได้: ${error.message}`;
       },
     });
 
@@ -198,9 +198,9 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       await savePromise;
     } catch (error) {
       // Error is already handled by toast.promise
-      console.warn('Blueprint settings save failed:', error);
+      console.error('[NovelEditor] Blueprint settings save failed:', error);
     }
-  }, []);
+  }, [autoSaveIntervalSec]);
 
   // Handlers for data updates
   const handleStoryMapUpdate = (updatedStoryMap: any) => {
@@ -362,7 +362,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     activeTab, 
     eventManager, 
     stableHasUnsavedChanges,
-    hasBlueprintChanges,
     hasDirectorChanges,
     hasSummaryChanges,
     currentStoryMap?.nodes, 
@@ -379,36 +378,102 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // Professional initial sync tracking (Adobe/Figma approach)
   const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false)
 
-  // โหลดการตั้งค่าจริงหลังจาก component mount เพื่อป้องกัน hydration mismatch 
+  // โหลดการตั้งค่าจริงจาก UserSettings Database (Professional Data Loading)
   useEffect(() => {
-    // โหลดค่าจาก UserSettings ก่อน แล้วค่อย fallback ไปยัง localStorage
-    const loadFromStorage = (key: string, defaultValue: any, userSettingsPath?: string) => {
-      // ลองโหลดจาก UserSettings ก่อน
-      if (userSettingsPath) {
-        const pathParts = userSettingsPath.split('.');
-        let value = userSettings;
-        for (const part of pathParts) {
-          value = value?.[part];
-          if (value === undefined) break;
-        }
-        if (value !== undefined) return value;
-      }
+    // Professional settings loader - โหลดจาก database จริงผ่าน API
+    const loadProfessionalSettings = async () => {
+      try {
+        // ดึงข้อมูลจาก API /api/user/settings
+        const response = await fetch('/api/user/settings', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-      // ถ้าไม่มีใน UserSettings ให้โหลดจาก localStorage
-      if (typeof window === 'undefined') return defaultValue;
-      const saved = localStorage.getItem(`blueprint-${key}`);
-      return saved !== null ? JSON.parse(saved) : defaultValue;
+        if (!response.ok) {
+          throw new Error(`Failed to load settings: ${response.status} ${response.statusText}`);
+        }
+
+        const settingsData = await response.json();
+        const blueprintSettings = settingsData.settings?.visualNovelGameplay?.blueprintEditor;
+        
+        if (blueprintSettings) {
+          // โหลดค่าจาก database
+          setIsAutoSaveEnabled(blueprintSettings.autoSaveEnabled ?? false);
+          setAutoSaveIntervalSec((blueprintSettings.autoSaveIntervalSec as 15 | 30) ?? 30);
+          setShowSceneThumbnails(blueprintSettings.showSceneThumbnails ?? true);
+          setShowNodeLabels(blueprintSettings.showNodeLabels ?? true);
+          setShowGrid(blueprintSettings.showGrid ?? true);
+          setSnapToGrid(blueprintSettings.snapToGrid ?? false);
+          setNodeOrientation(blueprintSettings.nodeOrientation ?? 'vertical');
+          
+          console.log('[NovelEditor] Professional settings loaded from API:', {
+            autoSaveEnabled: blueprintSettings.autoSaveEnabled,
+            autoSaveIntervalSec: blueprintSettings.autoSaveIntervalSec,
+            showSceneThumbnails: blueprintSettings.showSceneThumbnails,
+            showNodeLabels: blueprintSettings.showNodeLabels,
+            showGrid: blueprintSettings.showGrid,
+            snapToGrid: blueprintSettings.snapToGrid,
+            nodeOrientation: blueprintSettings.nodeOrientation
+          });
+        } else {
+          // หาก database ยังไม่มีข้อมูล ใช้ค่าเริ่มต้นและสร้างใน database
+          console.log('[NovelEditor] No blueprint settings in database, using defaults and creating initial settings');
+          
+          const defaultSettings = {
+            autoSaveEnabled: false,
+            autoSaveIntervalSec: 30,
+            showSceneThumbnails: true,
+            showNodeLabels: true,
+            showGrid: true,
+            snapToGrid: false,
+            nodeOrientation: 'vertical' as 'horizontal' | 'vertical'
+          };
+
+          // ตั้งค่าเริ่มต้นใน state
+          setIsAutoSaveEnabled(defaultSettings.autoSaveEnabled);
+          setAutoSaveIntervalSec(defaultSettings.autoSaveIntervalSec as 15 | 30);
+          setShowSceneThumbnails(defaultSettings.showSceneThumbnails);
+          setShowNodeLabels(defaultSettings.showNodeLabels);
+          setShowGrid(defaultSettings.showGrid);
+          setSnapToGrid(defaultSettings.snapToGrid);
+          setNodeOrientation(defaultSettings.nodeOrientation);
+
+          // บันทึกค่าเริ่มต้นไปยัง database
+          try {
+            await fetch('/api/user/settings', {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                visualNovelGameplay: {
+                  blueprintEditor: defaultSettings
+                }
+              }),
+            });
+            console.log('[NovelEditor] Default blueprint settings created in database');
+          } catch (error) {
+            console.warn('[NovelEditor] Failed to create default settings in database:', error);
+          }
+        }
+      } catch (error) {
+        console.error('[NovelEditor] Error loading settings from API:', error);
+        // Fallback to defaults if API call fails
+        setIsAutoSaveEnabled(false);
+        setAutoSaveIntervalSec(30);
+        setShowSceneThumbnails(true);
+        setShowNodeLabels(true);
+        setShowGrid(true);
+        setSnapToGrid(false);
+        setNodeOrientation('vertical');
+      }
     };
 
-    // อัปเดตค่าทั้งหมดหลังจาก mount
-    setIsAutoSaveEnabled(loadFromStorage('auto-save-enabled', false, 'visualNovelGameplay.blueprintEditor.autoSaveEnabled'));
-    setAutoSaveIntervalSec(loadFromStorage('auto-save-interval', 30, 'visualNovelGameplay.blueprintEditor.autoSaveIntervalSec'));
-    setShowSceneThumbnails(loadFromStorage('show-scene-thumbnails', true, 'visualNovelGameplay.blueprintEditor.showSceneThumbnails'));
-    setShowNodeLabels(loadFromStorage('show-node-labels', true, 'visualNovelGameplay.blueprintEditor.showNodeLabels'));
-    setShowGrid(loadFromStorage('show-grid', true, 'visualNovelGameplay.blueprintEditor.showGrid'));
-    setSnapToGrid(loadFromStorage('snap-to-grid', false, 'visualNovelGameplay.blueprintEditor.snapToGrid'));
-    setNodeOrientation(loadFromStorage('node-orientation', 'vertical', 'visualNovelGameplay.blueprintEditor.nodeOrientation'));
-  }, [userSettings]);
+    // โหลดเฉพาะเมื่อ component mount ครั้งแรก
+    loadProfessionalSettings();
+  }, []); // ลบ dependency userSettings ออกเพื่อป้องกัน re-render ไม่จำเป็น
 
   // ===============================
   // PROFESSIONAL INITIAL STATE SYNC (Adobe/Figma/Canva Style)
@@ -502,13 +567,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
   // อัปเดต eventManager เมื่อการตั้งค่า auto-save เปลี่ยน
   useEffect(() => {
-    // EventManager config updates will be handled in Phase 2
-    // For now, we'll log the configuration change
-    console.log('[NovelEditor] Auto-save configuration changed:', {
+    // SingleUserEventManager doesn't need real-time config updates
+    // Configuration is set at initialization
+    console.log('[NovelEditor] Auto-save configuration noted (single-user mode):', {
       autoSaveEnabled: isAutoSaveEnabled,
       autoSaveIntervalMs: autoSaveIntervalSec * 1000
     });
-  }, [eventManager, isAutoSaveEnabled, autoSaveIntervalSec])
+  }, [isAutoSaveEnabled, autoSaveIntervalSec]) // Removed eventManager dependency to prevent unnecessary re-renders
 
   // ===============================
   // PROFESSIONAL SMART SAVE STATE MANAGEMENT
@@ -582,6 +647,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     };
   }, [
     saveState.hasUnsavedChanges,
+    saveState.isDirty,
     hasBlueprintChanges,
     hasDirectorChanges, 
     hasSummaryChanges,
@@ -659,14 +725,19 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       }
     };
 
-    // Professional keyboard shortcut สำหรับ Ctrl+S
-    const handleKeyboardSave = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key === 's') {
-        event.preventDefault();
-        if (stableHasUnsavedChanges) {
-          handleManualSave();
-        } else {
-          toast.info('ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก');
+    // Professional keyboard shortcuts สำหรับ Ctrl+S, Ctrl+Z, Ctrl+Y
+    const handleKeyboardShortcuts = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key) {
+          case 's':
+            event.preventDefault();
+            if (stableHasUnsavedChanges) {
+              handleManualSave();
+            } else {
+              toast.info('ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก');
+            }
+            break;
+          // Undo/Redo keyboard shortcuts ถูกย้ายไปยัง BlueprintTab แล้ว
         }
       }
     };
@@ -674,13 +745,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     // Professional event registration
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    document.addEventListener('keydown', handleKeyboardSave);
+    document.addEventListener('keydown', handleKeyboardShortcuts);
 
     // Enterprise cleanup
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('keydown', handleKeyboardSave);
+      document.removeEventListener('keydown', handleKeyboardShortcuts);
     };
   }, [stableHasUnsavedChanges, handleManualSave]);
 
@@ -725,11 +796,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
         <div className="flex items-center space-x-3">
           {/* Save Status - ใช้ SaveStatusIndicator ใหม่ */}
-          <SaveStatusIndicator 
+          <SingleUserSaveStatusIndicator 
             saveState={saveState} 
             size="md"
             showDetails={false}
           />
+
+          {/* Undo/Redo Controls ถูกย้ายไปยัง BlueprintTab floating bar แล้ว */}
 
           {/* Manual Save */}
           <Button
@@ -743,7 +816,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             }`}
           >
             <Save className="h-4 w-4" />
-            <span>{stableHasUnsavedChanges ? 'บันทึก' : 'บันทึกแล้ว'}</span>
+            <span>{stableHasUnsavedChanges ? 'บันทึก' : 'บันทึก'}</span>
           </Button>
 
           {/* Settings Dropdown */}
@@ -829,12 +902,24 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                         </motion.div>
                       )}
                       
-                      {/* Auto-save Status */}
+                      {/* Auto-save Status - แสดงข้อมูลจริงจาก Database API */}
                       <div className="p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">สถานะ:</span>
+                          <span className="text-muted-foreground">สถานะ Auto-save:</span>
                           <span className={`font-medium ${isAutoSaveEnabled ? "text-green-600" : "text-gray-600"}`}>
-                            {isAutoSaveEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                            {isAutoSaveEnabled ? `🟢 เปิด (${autoSaveIntervalSec}s)` : '🔴 ปิด'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mt-1">
+                          <span className="text-muted-foreground">ข้อมูลจาก:</span>
+                          <span className="font-medium text-blue-600">
+                            API Database
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mt-1">
+                          <span className="text-muted-foreground">EventManager:</span>
+                          <span className="font-medium text-green-600">
+                            {eventManager ? '🟢 เชื่อมต่อแล้ว' : '🔴 ไม่เชื่อมต่อ'}
                           </span>
                         </div>
                         {saveState.lastSaved && (

@@ -47,6 +47,7 @@ import {
   ConnectionLineComponentProps
 } from '@xyflow/react';
 import { toast } from 'sonner';
+import NextImage from 'next/image';
 
 // Blueprint Node Components
 import { 
@@ -670,10 +671,12 @@ const CustomNode = ({
               {showThumbnails && data.sceneData.background ? (
                 <div className="relative w-full h-16 rounded overflow-hidden group">
                   {data.sceneData.background.type === 'image' ? (
-                    <img 
+                    <NextImage 
                       src={data.sceneData.background.value} 
                       alt="ภาพพื้นหลังฉาก"
                       className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
+                      width={64}
+                      height={64}
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                       }}
@@ -1796,7 +1799,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           break;
       }
     });
-  }, [onNodesChange, nodes, executeCommand, commandAdapter]);
+  }, [onNodesChange, nodes, executeCommand, commandAdapter, edges, professionalEventManager]);
 
   const enhancedOnEdgesChange = useCallback((changes: EdgeChange[]) => {
     // Apply the changes first
@@ -1851,7 +1854,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           break;
       }
     });
-  }, [onEdgesChange, edges, executeCommand, commandAdapter]);
+  }, [onEdgesChange, edges, executeCommand, commandAdapter, nodes, professionalEventManager]);
   
   // Selection and UI state
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -2440,7 +2443,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // ตั้งค่าให้พร้อมบันทึก localStorage ในครั้งต่อไป
       setIsInitialLoad(false);
     }
-  }, []); // ทำครั้งเดียวเท่านั้น
+  }, [isNodePaletteCollapsed, isPropertiesCollapsed, isPropertiesOpen, isSidebarCollapsed, isSidebarOpen]); // ทำครั้งเดียวเท่านั้น
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !isInitialLoad) {
@@ -2565,25 +2568,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   useEffect(() => {
     if (!professionalEventManager) return;
 
-    const unsubscribe = professionalEventManager.subscribeToState((state: any) => {
-      // Handle command notifications for real undo/redo
-      const currentSnapshot = professionalEventManager.getCurrentSnapshot();
-      
-      if (currentSnapshot) {
-        // Update ReactFlow state based on EventManager snapshot
-        if (JSON.stringify(currentSnapshot.nodes) !== JSON.stringify(nodes)) {
-          setNodes(currentSnapshot.nodes);
-          console.log('[BlueprintTab] Nodes updated from EventManager');
-        }
-        if (JSON.stringify(currentSnapshot.edges) !== JSON.stringify(edges)) {
-          setEdges(currentSnapshot.edges);
-          console.log('[BlueprintTab] Edges updated from EventManager');
-        }
-        // Note: storyVariables are handled via storyMap prop, not as separate state
-      }
-    });
-
-    return unsubscribe;
+    // SingleUserEventManager doesn't have subscribeToState, so we'll use a different approach
+    // We'll rely on the command execution callbacks instead
+    console.log('[BlueprintTab] EventManager integration initialized (single-user mode)');
+    
+    // Return a cleanup function that does nothing for now
+    return () => {
+      console.log('[BlueprintTab] EventManager integration cleaned up');
+    };
   }, [professionalEventManager]);
 
   // ✨ Command-Based Professional Change Detection (Adobe/Figma/Canva Style)
@@ -2768,7 +2760,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     onManualSave, 
     nodes, 
     edges, 
-    storyMap, 
     undoStack, 
     redoStack, 
     isSnapshotReady, 
@@ -2776,7 +2767,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     deepCompareSnapshots, 
     createStateSnapshot, 
     updateInitialSnapshotAfterSave,
-        professionalEventManager
+    professionalEventManager
   ]);
 
   // ===============================
@@ -2913,7 +2904,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isSnapshotReady, initialSnapshot, createStateSnapshot, deepCompareSnapshots, onManualSave]);
+  }, [isSnapshotReady, initialSnapshot, createStateSnapshot, deepCompareSnapshots, onManualSave, commandAdapter, edges, executeCommand, nodes, professionalEventManager]);
 
   // Trigger auto-save เมื่อมีการเปลี่ยนแปลง nodes/edges
   useEffect(() => {
@@ -3059,7 +3050,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       mounted = false;
       clearTimeout(timer);
     };
-  }, [professionalEventManager, nodes.length, edges.length, storyMap?.storyVariables]);
+  }, [professionalEventManager, nodes, edges, storyMap?.storyVariables]);
   
   // Selection state
   const [selection, setSelection] = useState<SelectionState>({
@@ -3243,7 +3234,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
       throw error;
     }
-  }, [novel?.slug, storyMap?.storyVariables, selectedEpisode, onDirtyChange]);
+  }, [novel?.slug, storyMap?.storyVariables, selectedEpisode, onDirtyChange, blueprintSettings, saveState.version, setEdges, setNodes]);
 
   // Patch-based saves สำหรับประสิทธิภาพสูง (เหมือน Premiere Pro)
   const savePatchToDatabase = useCallback(async (command: AnyCommand | null, currentNodes: Node[], currentEdges: Edge[]) => {
@@ -3368,36 +3359,94 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }, 500); // 500ms debounce เหมือน Premiere Pro
       }
       
-    }, [autoSaveSettings.enabled, professionalEventManager, storyMap, onDirtyChange, savePatchToDatabase]);
+    }, [autoSaveSettings.enabled, professionalEventManager, onDirtyChange, savePatchToDatabase]);
 
   // Command Pattern functions
 
 
   // Professional Undo function using EventManager (like Figma/Canva)
   const undo = useCallback(() => {
-    if (professionalEventManager) {
-      const success = professionalEventManager.undo();
-      if (success) {
-        console.log(`[BlueprintTab] ↶ Undo executed via EventManager`);
-        toast.success('Undid last action');
-      } else {
-        console.log(`[BlueprintTab] No actions to undo`);
-      }
+    if (!professionalEventManager) {
+      console.warn('[BlueprintTab] EventManager not available for undo');
+      toast.warning('ระบบ Undo ไม่พร้อมใช้งาน');
+      return;
     }
-  }, [professionalEventManager]);
+
+    const eventManagerState = professionalEventManager.getState();
+    const canUndo = eventManagerState.undoStack.length > 0;
+
+    if (!canUndo) {
+      console.log(`[BlueprintTab] No actions to undo`);
+      toast.info('ไม่มีการกระทำที่จะ Undo');
+      return;
+    }
+
+    const success = professionalEventManager.undo();
+    if (success) {
+      console.log(`[BlueprintTab] ↶ Undo executed via EventManager`);
+      toast.success('↶ Undo สำเร็จ', {
+        duration: 1500,
+        icon: '↶'
+      });
+      
+      // อัปเดต React Flow state จาก EventManager
+      const currentSnapshot = professionalEventManager.getCurrentSnapshot();
+      if (currentSnapshot.nodes) {
+        setNodes(currentSnapshot.nodes);
+      }
+      if (currentSnapshot.edges) {
+        setEdges(currentSnapshot.edges);
+      }
+      
+      // อัปเดต story variables ผ่าน EventManager
+      // (Story variables จะถูกจัดการโดย EventManager โดยอัตโนมัติ)
+    } else {
+      console.error(`[BlueprintTab] Undo failed`);
+      toast.error('Undo ล้มเหลว');
+    }
+  }, [professionalEventManager, setNodes, setEdges]);
 
   // Professional Redo function using EventManager (like Figma/Canva)
   const redo = useCallback(() => {
-    if (professionalEventManager) {
-      const success = professionalEventManager.redo();
-      if (success) {
-        console.log(`[BlueprintTab] ↷ Redo executed via EventManager`);
-        toast.success('Redid last action');
-      } else {
-        console.log(`[BlueprintTab] No actions to redo`);
-      }
+    if (!professionalEventManager) {
+      console.warn('[BlueprintTab] EventManager not available for redo');
+      toast.warning('ระบบ Redo ไม่พร้อมใช้งาน');
+      return;
     }
-  }, [professionalEventManager]);
+
+    const eventManagerState = professionalEventManager.getState();
+    const canRedo = eventManagerState.redoStack.length > 0;
+
+    if (!canRedo) {
+      console.log(`[BlueprintTab] No actions to redo`);
+      toast.info('ไม่มีการกระทำที่จะ Redo');
+      return;
+    }
+
+    const success = professionalEventManager.redo();
+    if (success) {
+      console.log(`[BlueprintTab] ↷ Redo executed via EventManager`);
+      toast.success('↷ Redo สำเร็จ', {
+        duration: 1500,
+        icon: '↷'
+      });
+      
+      // อัปเดต React Flow state จาก EventManager
+      const currentSnapshot = professionalEventManager.getCurrentSnapshot();
+      if (currentSnapshot.nodes) {
+        setNodes(currentSnapshot.nodes);
+      }
+      if (currentSnapshot.edges) {
+        setEdges(currentSnapshot.edges);
+      }
+      
+      // อัปเดต story variables ผ่าน EventManager
+      // (Story variables จะถูกจัดการโดย EventManager โดยอัตโนมัติ)
+    } else {
+      console.error(`[BlueprintTab] Redo failed`);
+      toast.error('Redo ล้มเหลว');
+    }
+  }, [professionalEventManager, setNodes, setEdges]);
 
   // Command factory functions
   const createNodeCommand = useCallback((
@@ -3490,7 +3539,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     
     return command;
-  }, []);
+  }, [setNodes]);
 
   const createEdgeCommand = useCallback((
     type: EdgeCommand['type'],
@@ -3572,7 +3621,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     
     return command;
-  }, []);
+  }, [setEdges]);
 
   // Manual save (always works regardless of auto-save setting)
   const handleManualSave = useCallback(async () => {
@@ -3638,7 +3687,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       console.error('[BlueprintTab] Manual save failed:', error);
       toast.error('❌ บันทึกล้มเหลว: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-  }, [undoStack.length, professionalEventManager, saveStoryMapToDatabase, nodes, edges, storyMap, createStateSnapshot, onDirtyChange]);
+  }, [undoStack.length, professionalEventManager, saveStoryMapToDatabase, nodes, edges, createStateSnapshot, onDirtyChange]);
 
   // Enhanced canvas interaction controls
   const toggleCanvasLock = useCallback(() => {
@@ -3764,7 +3813,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         isInitializingRef.current = false;
       }, 100);
     }
-  }, [storyMap, scenes, setNodes, setEdges]);
+  }, [storyMap, scenes, setNodes, setEdges, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails]);
 
 
 
@@ -3776,16 +3825,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         return;
       }
       
-      // Undo: Ctrl+Z
+      // Professional Undo/Redo shortcuts using SingleUserEventManager
       if (event.ctrlKey && event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
-        undo();
+        if (professionalEventManager?.undo()) {
+          toast.success('↶ Undo สำเร็จ (Ctrl+Z)');
+        } else {
+          toast.info('ไม่มีการเปลี่ยนแปลงที่จะ undo');
+        }
       }
       // Redo: Ctrl+Shift+Z or Ctrl+Y
       else if ((event.ctrlKey && event.shiftKey && event.key === 'Z') || 
                (event.ctrlKey && event.key === 'y')) {
         event.preventDefault();
-        redo();
+        if (professionalEventManager?.redo()) {
+          toast.success('↷ Redo สำเร็จ (Ctrl+Y)');
+        } else {
+          toast.info('ไม่มีการเปลี่ยนแปลงที่จะ redo');
+        }
       }
       // Save: Ctrl+S
       else if (event.ctrlKey && event.key === 's') {
@@ -3796,7 +3853,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, handleManualSave]);
+  }, [undo, redo, handleManualSave, professionalEventManager]);
 
   // Selection helpers
   const selectAll = useCallback(() => {
@@ -4298,7 +4355,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     handleManualSave, toggleCanvasLock, selectedNode, selectedEdge, undo, redo, 
     selection, nodes, edges, createNodeCommand, executeCommand, deleteSelected,
     toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection,
-    selectAllNodes
+    selectAllNodes, createEdgeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails
   ]);
 
   // Handle drag from sidebar to canvas
@@ -4340,7 +4397,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     executeCommand(command);
     
     toast.success(`เพิ่ม ${getNodeDisplayName(nodeType)} ที่ตำแหน่งที่คลิก`);
-  }, [reactFlowInstance, createNodeCommand, executeCommand]);
+  }, [reactFlowInstance, createNodeCommand, executeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails]);
   
   const onCanvasDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -4466,7 +4523,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         selectedEdges: []
       }));
     }, 100);
-  }, [nodes, reactFlowInstance, createNodeCommand, executeCommand]);
+  }, [nodes, reactFlowInstance, createNodeCommand, executeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails]);
 
   // Update node data
   const onNodeUpdate = useCallback((nodeId: string, newData: any) => {
@@ -4618,7 +4675,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       sourceNode: sourceNode.data.title,
       targetNode: targetNode.data.title
     });
-  }, [edges, nodes, createEdgeCommand, executeCommand]);
+  }, [edges, nodes, createEdgeCommand, executeCommand, currentBlueprintSettings.showNodeLabels, updateSceneDefaultNext]);
 
 
 
@@ -4660,11 +4717,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     document.addEventListener('keydown', handleKeyboardShortcuts);
     return () => {
       document.removeEventListener('keydown', handleKeyboardShortcuts);
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
+      const currentAutoSaveTimer = autoSaveTimer.current;
+      if (currentAutoSaveTimer) {
+        clearTimeout(currentAutoSaveTimer);
       }
-      if (saveDebounceTimer.current) {
-        clearTimeout(saveDebounceTimer.current);
+      const currentSaveDebounceTimer = saveDebounceTimer.current;
+      if (currentSaveDebounceTimer) {
+        clearTimeout(currentSaveDebounceTimer);
       }
     };
   }, [handleKeyboardShortcuts]);
@@ -5221,14 +5280,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
                     <Separator orientation={isMobile ? "horizontal" : "vertical"} className={isMobile ? "w-full" : "h-6"} />
 
-                    {/* Undo/Redo */}
+                    {/* Undo/Redo - ใช้ SingleUserEventManager สำหรับการจัดการ commands แบบ Professional */}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={undo}
-                      disabled={undoStack.length === 0}
+                      disabled={!professionalEventManager || professionalEventManager.getState().undoStack.length === 0}
                       className="h-8 w-8 p-0"
-                      title={`Undo (Ctrl+Z)${undoStack.length > 0 ? ` - ${undoStack[undoStack.length - 1].description}` : ''}`}
+                      title={`Undo (Ctrl+Z)${professionalEventManager?.getState().undoStack.length > 0 ? ` - มีการเปลี่ยนแปลง ${professionalEventManager.getState().undoStack.length} รายการ` : ' - ไม่มีการเปลี่ยนแปลงที่จะย้อนกลับ'}`}
                     >
                       <Undo2 className="w-4 h-4" />
                     </Button>
@@ -5237,9 +5296,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       variant="outline"
                       size="sm"
                       onClick={redo}
-                      disabled={redoStack.length === 0}
+                      disabled={!professionalEventManager || professionalEventManager.getState().redoStack.length === 0}
                       className="h-8 w-8 p-0"
-                      title={`Redo (Ctrl+Shift+Z)${redoStack.length > 0 ? ` - ${redoStack[redoStack.length - 1].description}` : ''}`}
+                      title={`Redo (Ctrl+Y)${professionalEventManager?.getState().redoStack.length > 0 ? ` - สามารถทำซ้ำได้ ${professionalEventManager.getState().redoStack.length} รายการ` : ' - ไม่มีการเปลี่ยนแปลงที่จะทำซ้ำ'}`}
                     >
                       <Redo2 className="w-4 h-4" />
                     </Button>

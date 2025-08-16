@@ -6,6 +6,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 // CODE-MOD: เพิ่มการ import คอมโพเนนต์ Link จาก next/link สำหรับการทำ internal navigation
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Plus,
   BookOpen,
@@ -131,14 +132,16 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
               className="relative flex-shrink-0 w-24 h-32 rounded-xl overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 border border-border/50"
             whileHover={{ scale: 1.05 }}
           >
-              {novel.coverImageUrl && !imageError ? (
-              <img
+                            {novel.coverImageUrl && !imageError ? (
+              <Image
                 src={novel.coverImageUrl}
                 alt={novel.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  width={96}
+                  height={128}
                   onError={() => setImageError(true)}
-              />
-            ) : (
+                />
+              ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-accent/10">
                   <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
                 </div>
@@ -243,14 +246,16 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
     >
       {/* Cover Image */}
       <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
-        {novel.coverImageUrl && !imageError ? (
-          <img
+                {novel.coverImageUrl && !imageError ? (
+          <Image
               src={novel.coverImageUrl}
               alt={novel.title}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            width={240}
+            height={320}
             onError={() => setImageError(true)}
-            />
-          ) : (
+          />
+        ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-accent/10">
             <ImageIcon className="w-12 h-12 text-muted-foreground" />
             </div>

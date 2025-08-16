@@ -150,7 +150,11 @@ export class BatchCommand extends BaseCommand {
   redo(): void {
     // Redo in original order
     for (const command of this.commands) {
-      command.redo?.() || command.execute();
+      if (command.redo) {
+        command.redo();
+      } else {
+        command.execute();
+      }
     }
   }
 

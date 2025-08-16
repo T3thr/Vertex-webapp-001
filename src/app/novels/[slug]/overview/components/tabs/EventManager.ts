@@ -192,10 +192,16 @@ export class EventManager {
     this.currentSnapshot = this.createEmptySnapshot();
     this.originalSnapshot = this.createEmptySnapshot();
     
-    // Initialize real-time collaboration if enabled
-    if (config.realtimeEnabled && config.userId) {
-      this.initializeRealtimeClient();
-    }
+    // TEMPORARILY DISABLE real-time collaboration for single-user mode
+    // Initialize real-time collaboration if enabled (non-blocking)
+    // if (config.realtimeEnabled && config.userId) {
+    //   // Initialize asynchronously to prevent blocking the main initialization
+    //   setTimeout(() => {
+    //     this.initializeRealtimeClient().catch(error => {
+    //       console.warn('[EventManager] Real-time initialization failed, continuing in offline mode:', error.message);
+    //     });
+    //   }, 1000);
+    // }
 
     // Start auto-save if enabled
     if (config.autoSaveEnabled) {
@@ -209,7 +215,7 @@ export class EventManager {
         autoSaveEnabled: config.autoSaveEnabled,
         autoSaveIntervalMs: config.autoSaveIntervalMs,
         optimisticUpdates: config.optimisticUpdates,
-        realtimeEnabled: config.realtimeEnabled
+        realtimeEnabled: false // Temporarily disabled for single-user mode
       });
     }
   }
@@ -347,7 +353,11 @@ export class EventManager {
       }
 
       const command = this.state.redoStack.pop()!;
-      command.redo?.() || command.execute();
+      if (command.redo) {
+        command.redo();
+      } else {
+        command.execute();
+      }
       
       this.state.undoStack.push(command);
       this.markAsDirty();
@@ -382,7 +392,8 @@ export class EventManager {
       const saveData = this.formatDataForAPI(this.currentSnapshot);
       
       // Send to server using the correct PUT endpoint
-      const response = await fetch(`/api/novels/${this.config.novelSlug}/storymap`, {
+      const encodedSlug = encodeURIComponent(this.config.novelSlug);
+      const response = await fetch(`/api/novels/${encodedSlug}/storymap`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -628,32 +639,47 @@ export class EventManager {
   }
 
   private formatDataForAPI(snapshot: SnapshotData): any {
-    // Convert snapshot to API format
+    // Convert snapshot to API format with proper validation
     return {
-      nodes: snapshot.nodes.map(node => ({
-        nodeId: node.id,
-        nodeType: node.type,
-        title: node.data?.title || '',
-        position: node.position,
-        nodeSpecificData: node.data,
-        editorVisuals: {
-          color: node.style?.backgroundColor,
-          orientation: node.data?.orientation || 'vertical'
-        }
-      })),
-      edges: snapshot.edges.map(edge => ({
-        edgeId: edge.id,
-        sourceNodeId: edge.source,
-        targetNodeId: edge.target,
-        sourceHandleId: edge.sourceHandle,
-        targetHandleId: edge.targetHandle,
-        label: edge.label,
-        editorVisuals: {
-          color: edge.style?.stroke,
-          animated: edge.animated
-        }
-      })),
-      storyVariables: snapshot.storyVariables
+      nodes: snapshot.nodes
+        .filter(node => node.id) // Filter out nodes without IDs
+        .map(node => ({
+          nodeId: node.id,
+          nodeType: node.type || 'unknown',
+          title: node.data?.title || '',
+          position: node.position || { x: 0, y: 0 },
+          nodeSpecificData: node.data || {},
+          editorVisuals: {
+            color: node.style?.backgroundColor,
+            orientation: node.data?.orientation || 'vertical'
+          }
+        })),
+      edges: snapshot.edges
+        .filter(edge => edge.id && edge.source && edge.target) // Filter out invalid edges
+        .map(edge => ({
+          edgeId: edge.id,
+          sourceNodeId: edge.source,
+          targetNodeId: edge.target,
+          sourceHandleId: edge.sourceHandle || '',
+          targetHandleId: edge.targetHandle || '',
+          label: edge.label || '',
+          editorVisuals: {
+            color: edge.style?.stroke,
+            animated: edge.animated || false
+          }
+        })),
+      storyVariables: (snapshot.storyVariables || [])
+        .filter(variable => variable && variable.variableId) // Filter out null/undefined variables and those without IDs
+        .map(variable => ({
+          variableId: variable.variableId,
+          variableName: variable.variableName || '',
+          dataType: variable.dataType || variable.variableType || 'string',
+          initialValue: variable.initialValue !== undefined ? variable.initialValue : (variable.defaultValue !== undefined ? variable.defaultValue : ''),
+          description: variable.description || '',
+          isGlobal: variable.isGlobal !== undefined ? variable.isGlobal : true,
+          isVisibleToPlayer: variable.isVisibleToPlayer || false
+        })),
+      version: this.state.localVersion // Include version for conflict detection
     };
   }
 
@@ -873,18 +899,49 @@ export class EventManager {
   }
 
   /**
-   * Update snapshot from current ReactFlow state
+   * Update snapshot from ReactFlow state (for real-time sync)
    */
   updateSnapshotFromReactFlow(nodes: any[], edges: any[], storyVariables: any[]): void {
-    this.currentSnapshot = produce(this.currentSnapshot, draft => {
-      draft.nodes = nodes;
-      draft.edges = edges;
-      draft.storyVariables = storyVariables;
-      draft.timestamp = Date.now();
-    });
+    this.currentSnapshot = {
+      nodes: [...nodes],
+      edges: [...edges],
+      storyVariables: [...storyVariables],
+      timestamp: Date.now(),
+      version: this.state.localVersion
+    };
     
-    console.log('[EventManager] Snapshot synced from ReactFlow state');
+    // Check if data has changed compared to original
+    const hasChanges = this.hasSnapshotChanges();
+    if (hasChanges && !this.state.isDirty) {
+      this.markAsDirty();
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[EventManager] Snapshot updated from ReactFlow:', {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        variableCount: storyVariables.length,
+        hasChanges
+      });
+    }
   }
+
+  /**
+   * Check if current snapshot has changes compared to original
+   */
+  private hasSnapshotChanges(): boolean {
+    try {
+      return JSON.stringify(this.currentSnapshot.nodes) !== JSON.stringify(this.originalSnapshot.nodes) ||
+             JSON.stringify(this.currentSnapshot.edges) !== JSON.stringify(this.originalSnapshot.edges) ||
+             JSON.stringify(this.currentSnapshot.storyVariables) !== JSON.stringify(this.originalSnapshot.storyVariables);
+    } catch (error) {
+      console.warn('[EventManager] Error comparing snapshots:', error);
+      return false;
+    }
+  }
+
+
+
 
   /**
    * Mark as dirty (for compatibility with existing code)

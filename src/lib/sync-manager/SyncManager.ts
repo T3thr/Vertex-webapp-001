@@ -246,7 +246,7 @@ export class SyncManager {
   private metrics: SyncMetrics;
   private syncTimer?: NodeJS.Timeout;
   private isInitialized = false;
-  private eventListeners: Map<string, Function[]> = new Map();
+  private eventListeners: Map<string, ((...args: any[]) => void)[]> = new Map();
   private conflictEvents: ConflictEvent[] = [];
   private lastSyncTimestamp = 0;
 
@@ -402,7 +402,7 @@ export class SyncManager {
     return [...this.conflictEvents];
   }
 
-  on(event: string, listener: Function): () => void {
+  on(event: string, listener: (...args: any[]) => void): () => void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
@@ -412,7 +412,7 @@ export class SyncManager {
     return () => this.off(event, listener);
   }
 
-  off(event: string, listener: Function): void {
+  off(event: string, listener: (...args: any[]) => void): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
       const index = listeners.indexOf(listener);

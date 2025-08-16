@@ -19,6 +19,7 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
+import { SingleUserState } from './SingleUserEventManager';
 import { EventManagerState } from './EventManager';
 
 // ===================================================================
@@ -63,7 +64,7 @@ const ConnectionStatus = ({ size }: { size: string }) => {
 };
 
 interface SaveStatusIndicatorProps {
-  saveState: EventManagerState;
+  saveState: SingleUserState;
   className?: string;
   showDetails?: boolean;
   size?: 'sm' | 'md' | 'lg';
@@ -89,14 +90,12 @@ export default function SaveStatusIndicator({
 }: SaveStatusIndicatorProps) {
   
   const getStatusConfig = (): StatusConfig => {
-    // Map EventManagerState to status for compatibility
-    const { isSaving, lastSaved, isConflicted, lastError, pendingCommands } = saveState;
+    // Map SingleUserState to status for compatibility
+    const { isSaving, lastSaved, lastError, pendingCommands } = saveState;
     
     let status: string;
     if (isSaving) {
       status = 'saving';
-    } else if (isConflicted) {
-      status = 'conflict';
     } else if (lastError) {
       status = 'error';
     } else {

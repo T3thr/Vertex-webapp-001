@@ -1,6 +1,7 @@
 // src/components/ui/Avatar.tsx
 "use client"
 import { useState } from 'react';
+import Image from 'next/image';
 
 interface AvatarProps {
   src?: string;
@@ -25,10 +26,12 @@ export const Avatar = ({ src, alt, fallback, size = 'md' }: AvatarProps) => {
   return (
     <div className={`relative rounded-full overflow-hidden flex items-center justify-center bg-primary/10 ${sizeClasses[size]}`}>
       {src && !imageError ? (
-        <img
+        <Image
           src={src}
           alt={alt}
           className="h-full w-full object-cover"
+          width={size === 'sm' ? 32 : size === 'md' ? 40 : 48}
+          height={size === 'sm' ? 32 : size === 'md' ? 40 : 48}
           onError={handleImageError}
         />
       ) : (

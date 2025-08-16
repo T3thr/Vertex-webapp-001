@@ -5,7 +5,7 @@
 // ===================================================================
 
 import { Node, Edge } from '@xyflow/react';
-import { EventManager } from './EventManager';
+import { SingleUserEventManager } from './SingleUserEventManager';
 
 // Legacy command interface from BlueprintTab
 interface ICommand {
@@ -50,9 +50,9 @@ type AnyCommand = NodeCommand | EdgeCommand | BatchCommand;
 // ===================================================================
 
 export class BlueprintCommandAdapter {
-  private eventManager: EventManager;
+  private eventManager: SingleUserEventManager;
 
-  constructor(eventManager: EventManager) {
+  constructor(eventManager: SingleUserEventManager) {
     this.eventManager = eventManager;
   }
 
@@ -201,6 +201,39 @@ export class BlueprintCommandAdapter {
   }
 
   /**
+   * Create a node command (Professional Canva/Figma style)
+   */
+  createNodeCommand(type: string, newNodeData: any, oldNodeData?: any): any {
+    const commandId = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    return {
+      id: commandId,
+      type,
+      description: `${type} "${newNodeData.data?.title || newNodeData.id}"`,
+      timestamp: Date.now(),
+      execute: () => {
+        this.eventManager.markAsDirty();
+        this.eventManager.notifyChange('NODE_COMMAND_EXECUTED', { 
+          type, 
+          newNodeData, 
+          oldNodeData 
+        });
+        console.log(`[BlueprintCommandAdapter] Node command executed: ${type}`);
+      },
+      undo: () => {
+        console.log(`[BlueprintCommandAdapter] Undo node command: ${type}`);
+      },
+      serialize: () => ({
+        id: commandId,
+        type,
+        timestamp: Date.now(),
+        newNodeData,
+        oldNodeData
+      })
+    };
+  }
+
+  /**
    * Create a simple command that just marks as dirty
    */
   createSimpleCommand(type: string, description: string, data?: any): any {
@@ -235,42 +268,7 @@ export class BlueprintCommandAdapter {
     };
   }
 
-  // Create professional-grade commands with real undo/redo functionality
-  createNodeCommand(
-    type: 'ADD_NODE' | 'DELETE_NODE' | 'MOVE_NODE' | 'UPDATE_NODE',
-    nodeData: any,
-    previousState?: any
-  ): any {
-    const commandId = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    return {
-      id: commandId,
-      type,
-      description: `${type}: ${nodeData.id || nodeData.nodeId}`,
-      timestamp: Date.now(),
-      nodeData,
-      previousState,
-      execute: () => {
-        // The actual execution will be handled by BlueprintTab
-        this.eventManager.markAsDirty();
-        this.eventManager.notifyChange('NODE_COMMAND_EXECUTED', { type, nodeData });
-        console.log(`[BlueprintCommandAdapter] Node command executed: ${type}`);
-      },
-      undo: () => {
-        // The actual undo will be handled by BlueprintTab
-        this.eventManager.notifyChange('NODE_COMMAND_UNDONE', { type, nodeData, previousState });
-        console.log(`[BlueprintCommandAdapter] Node command undone: ${type}`);
-      },
-      serialize: () => ({
-        id: commandId,
-        type,
-        description: `${type}: ${nodeData.id || nodeData.nodeId}`,
-        timestamp: Date.now(),
-        nodeData,
-        previousState
-      })
-    };
-  }
+
 
   createEdgeCommand(
     type: 'ADD_EDGE' | 'DELETE_EDGE' | 'UPDATE_EDGE',
@@ -363,7 +361,7 @@ export class BlueprintCommandAdapter {
 // Factory Function
 // ===================================================================
 
-export function createBlueprintCommandAdapter(eventManager: EventManager): BlueprintCommandAdapter {
+export function createBlueprintCommandAdapter(eventManager: SingleUserEventManager): BlueprintCommandAdapter {
   return new BlueprintCommandAdapter(eventManager);
 }
 

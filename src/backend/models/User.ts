@@ -279,7 +279,6 @@ UserSchema.pre<IUser>("save", async function (next) {
     let potentialUsername = baseUsername.substring(0, 40);
     let count = 0;
     const UserModelInstance = models.User || model<IUser>("User");
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const existingUser = await UserModelInstance.findOne({ username: potentialUsername });
       if (!existingUser) break;

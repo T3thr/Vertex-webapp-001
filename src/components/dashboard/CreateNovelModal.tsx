@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import {
   X,
   BookOpen,
@@ -363,7 +364,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                       >
                         <div className="aspect-[3/4] bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:border-purple-400 group-hover:bg-purple-50 dark:group-hover:bg-purple-900/30">
                           {coverPreview ? (
-                            <img src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" />
+                            <Image src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" width={300} height={400} />
                           ) : (
                             <div className="text-center">
                               <Camera className="w-8 h-8 text-purple-400 mx-auto mb-2" />
@@ -395,7 +396,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                       >
                         <div className="aspect-[16/9] bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:border-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30">
                           {bannerPreview ? (
-                            <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />
+                            <Image src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" width={400} height={225} />
                           ) : (
                             <div className="text-center">
                               <Upload className="w-6 h-6 text-blue-400 mx-auto mb-2" />

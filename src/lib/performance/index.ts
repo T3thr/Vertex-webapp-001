@@ -24,14 +24,17 @@ export type {
   VirtualNode,
   VirtualEdge,
   ClusterNode,
-  VirtualizationMetrics,
+  VirtualizationMetrics
+} from './VirtualizationManager';
+
+export type {
   LoadingConfig,
   LoadingRegion,
   DataChunk,
   LoadingMetrics,
   LoadingProgress,
   DataSource
-} from './VirtualizationManager';
+} from './IncrementalLoader';
 
 export type {
   LoadingConfig as IncrementalLoadingConfig,

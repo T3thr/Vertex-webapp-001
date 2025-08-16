@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 
 // ประเภทข้อมูลสำหรับ Category
 interface Category {
@@ -122,7 +123,7 @@ export const CategorySelector = ({ categories, selectedCategory, onChange }: Cat
             ${selectedCategory === category.slug ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
         >
           {category.iconUrl && (
-            <img src={category.iconUrl} alt="" className="w-4 h-4" />
+            <Image src={category.iconUrl} alt={`${category.name} icon`} className="w-4 h-4" width={16} height={16} />
           )}
           {category.name}
         </button>

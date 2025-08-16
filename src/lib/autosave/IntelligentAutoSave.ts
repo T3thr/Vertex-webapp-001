@@ -178,7 +178,7 @@ export class IntelligentAutoSave {
   private pendingCommands: CommandData[] = [];
   private timers: Map<string, NodeJS.Timeout> = new Map();
   private saveOperations: SaveOperation[] = [];
-  private eventListeners: Map<string, Function[]> = new Map();
+  private eventListeners: Map<string, ((...args: any[]) => void)[]> = new Map();
   private saveTimes: number[] = [];
   
   private isDestroyed = false;
@@ -300,7 +300,7 @@ export class IntelligentAutoSave {
     this.emit('configUpdated', this.config);
   }
 
-  on(event: string, listener: Function): () => void {
+  on(event: string, listener: (...args: any[]) => void): () => void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
@@ -310,7 +310,7 @@ export class IntelligentAutoSave {
     return () => this.off(event, listener);
   }
 
-  off(event: string, listener: Function): void {
+  off(event: string, listener: (...args: any[]) => void): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
       const index = listeners.indexOf(listener);

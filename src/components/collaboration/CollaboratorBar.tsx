@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/badge';
 import { Users, Wifi, WifiOff } from 'lucide-react';
@@ -69,10 +70,12 @@ const CollaboratorAvatar: React.FC<{
         title={`${collaborator.username} ${collaborator.isOnline ? '(online)' : '(offline)'}`}
       >
         {collaborator.avatar ? (
-          <img
+          <Image
             src={collaborator.avatar}
             alt={collaborator.username}
             className="w-full h-full rounded-full object-cover"
+            width={32}
+            height={32}
           />
         ) : (
           <span className="uppercase">

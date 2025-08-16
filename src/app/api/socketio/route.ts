@@ -366,16 +366,8 @@ export async function POST(req: NextRequest) {
 // Socket.IO Server Access for Next.js
 // ===================================================================
 
-export function getSocketIOServer(): SocketIOServer | undefined {
-  return io;
-}
-
-export function initSocketIOIfNeeded(server: NetServer): SocketIOServer {
-  if (!io) {
-    return initializeSocketIO(server);
-  }
-  return io;
-}
+// These functions are moved to a separate utility to avoid Next.js route export conflicts
+// Use them via import from @/lib/socketio-utils instead
 
 // Development helper
 if (process.env.NODE_ENV === 'development') {

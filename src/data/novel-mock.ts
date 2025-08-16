@@ -2214,7 +2214,7 @@ export const mockNovels = {
 };
 
 // Export default
-export default {
+const novelMockData = {
   loadMockNovelData,
   getNovelBySlug,
   getEpisodeBySlug,
@@ -2224,3 +2224,5 @@ export default {
   resetMockDataCache,
   mockNovels
 };
+
+export default novelMockData;
