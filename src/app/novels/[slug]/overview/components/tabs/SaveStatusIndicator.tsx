@@ -19,7 +19,7 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { UnifiedSaveState } from './SaveManager';
+import { EventManagerState } from './EventManager';
 
 // ===================================================================
 // SECTION: Type Definitions & Props
@@ -63,7 +63,7 @@ const ConnectionStatus = ({ size }: { size: string }) => {
 };
 
 interface SaveStatusIndicatorProps {
-  saveState: UnifiedSaveState;
+  saveState: EventManagerState;
   className?: string;
   showDetails?: boolean;
   size?: 'sm' | 'md' | 'lg';
@@ -89,7 +89,19 @@ export default function SaveStatusIndicator({
 }: SaveStatusIndicatorProps) {
   
   const getStatusConfig = (): StatusConfig => {
-    const { status, lastSaved, isSaving, pendingOperations } = saveState;
+    // Map EventManagerState to status for compatibility
+    const { isSaving, lastSaved, isConflicted, lastError, pendingCommands } = saveState;
+    
+    let status: string;
+    if (isSaving) {
+      status = 'saving';
+    } else if (isConflicted) {
+      status = 'conflict';
+    } else if (lastError) {
+      status = 'error';
+    } else {
+      status = 'idle';
+    }
     
     switch (status) {
       case 'saving':
@@ -98,8 +110,8 @@ export default function SaveStatusIndicator({
           color: 'text-blue-600',
           bgColor: 'bg-blue-50 dark:bg-blue-900/20',
           text: 'กำลังบันทึก...',
-          description: pendingOperations.length > 0 
-            ? `กำลังประมวลผล ${pendingOperations.length} การเปลี่ยนแปลง`
+          description: pendingCommands > 0 
+            ? `กำลังประมวลผล ${pendingCommands} การเปลี่ยนแปลง`
             : undefined
         };
       
@@ -197,16 +209,16 @@ export default function SaveStatusIndicator({
         {statusConfig.text}
       </span>
 
-      {/* Pending Operations Counter */}
+      {/* Pending Commands Counter */}
       <AnimatePresence>
-        {saveState.pendingOperations.length > 0 && (
+        {saveState.pendingCommands > 0 && (
           <motion.span
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0 }}
             className="inline-flex items-center justify-center h-5 w-5 text-xs font-bold text-white bg-blue-500 rounded-full"
           >
-            {saveState.pendingOperations.length}
+            {saveState.pendingCommands}
           </motion.span>
         )}
       </AnimatePresence>
@@ -222,7 +234,7 @@ export default function SaveStatusIndicator({
 // ===================================================================
 
 interface DetailedStatusPanelProps {
-  saveState: UnifiedSaveState;
+  saveState: EventManagerState;
   className?: string;
 }
 
@@ -271,7 +283,7 @@ export function DetailedStatusPanel({
         </div>
         <div>
           <span className="text-muted-foreground">รอดำเนินการ:</span>
-          <span className="ml-2 font-mono">{saveState.pendingOperations.length}</span>
+          <span className="ml-2 font-mono">{saveState.pendingCommands}</span>
         </div>
         {saveState.lastSaved && (
           <div className="col-span-2">
@@ -282,7 +294,7 @@ export function DetailedStatusPanel({
       </div>
 
       {/* Error Details */}
-      {saveState.status === 'error' && saveState.lastError && (
+      {saveState.lastError && (
         <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs">
           <strong className="text-red-700 dark:text-red-400">ข้อผิดพลาด:</strong>
           <br />
@@ -290,26 +302,14 @@ export function DetailedStatusPanel({
         </div>
       )}
 
-      {/* Pending Operations List */}
-      {saveState.pendingOperations.length > 0 && (
+      {/* Command History Summary */}
+      {saveState.pendingCommands > 0 && (
         <div className="mt-3">
           <h4 className="text-xs font-semibold mb-2 text-muted-foreground">
-            การดำเนินการที่รอคิว:
+            คำสั่งที่รอดำเนินการ:
           </h4>
-          <div className="space-y-1 max-h-20 overflow-y-auto">
-            {saveState.pendingOperations.slice(-5).map((op) => (
-              <div key={op.id} className="flex items-center justify-between text-xs">
-                <span className="truncate">{getOperationDisplayName(op.type)}</span>
-                <span className="text-muted-foreground ml-2">
-                  {formatRelativeTime(new Date(op.timestamp))}
-                </span>
-              </div>
-            ))}
-            {saveState.pendingOperations.length > 5 && (
-              <div className="text-xs text-muted-foreground text-center">
-                และอีก {saveState.pendingOperations.length - 5} รายการ...
-              </div>
-            )}
+          <div className="text-xs text-muted-foreground">
+            มี {saveState.pendingCommands} คำสั่งที่รอการประมวลผล
           </div>
         </div>
       )}
@@ -321,9 +321,20 @@ export function DetailedStatusPanel({
 // SECTION: Helper Functions
 // ===================================================================
 
-function getStatusConfig(saveState: UnifiedSaveState): StatusConfig {
-  // Same logic as in main component but extracted for reuse
-  const { status, lastSaved, pendingOperations } = saveState;
+function getStatusConfig(saveState: EventManagerState): StatusConfig {
+  // Map EventManagerState to status for compatibility
+  const { isSaving, lastSaved, isConflicted, lastError, pendingCommands } = saveState;
+  
+  let status: string;
+  if (isSaving) {
+    status = 'saving';
+  } else if (isConflicted) {
+    status = 'conflict';
+  } else if (lastError) {
+    status = 'error';
+  } else {
+    status = 'idle';
+  }
   
   switch (status) {
     case 'saving':
@@ -332,8 +343,8 @@ function getStatusConfig(saveState: UnifiedSaveState): StatusConfig {
         color: 'text-blue-600',
         bgColor: 'bg-blue-50 dark:bg-blue-900/20',
         text: 'กำลังบันทึก...',
-        description: pendingOperations.length > 0 
-          ? `กำลังประมวลผล ${pendingOperations.length} การเปลี่ยนแปลง`
+        description: pendingCommands > 0 
+          ? `กำลังประมวลผล ${pendingCommands} การเปลี่ยนแปลง`
           : undefined
       };
     

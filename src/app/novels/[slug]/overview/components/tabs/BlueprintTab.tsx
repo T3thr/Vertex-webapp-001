@@ -1,7 +1,7 @@
 // app/novels/[slug]/overview/components/tabs/BlueprintTab.tsx
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ReactFlow,
@@ -58,6 +58,9 @@ import {
 } from './blueprint';
 
 import '@xyflow/react/dist/style.css';
+
+// EventManager integration
+import { BlueprintCommandAdapter, createBlueprintCommandAdapter } from './BlueprintCommandAdapter';
 
 // Utility function สำหรับ debouncing
 const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
@@ -174,6 +177,8 @@ interface BlueprintTabProps {
   onManualSave?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onNavigateToDirector?: (sceneId?: string) => void;
+  // Professional Event Management Integration (Adobe/Canva/Figma style)
+  eventManager?: any; // EventManager instance from parent
   // การตั้งค่าการแสดงผลจาก localStorage
   blueprintSettings?: {
     showSceneThumbnails: boolean;
@@ -1646,11 +1651,207 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   onManualSave,
   onDirtyChange,
   onNavigateToDirector,
+  eventManager, // Professional Event Management Integration
   blueprintSettings
 }, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  // ✨ Professional Event Management Integration (Adobe/Canva/Figma style)
+  // Use EventManager from parent (NovelEditor) for command-based state management
+  const professionalEventManager = eventManager;
+  
+  // SaveManager compatibility layer - use EventManager for save operations
+  const saveManager = professionalEventManager;
+  const professionalSaveManager = professionalEventManager;
+
+  // Create CommandAdapter for bridging legacy commands with EventManager
+  const [commandAdapter] = useState(() => {
+    if (professionalEventManager) {
+      return createBlueprintCommandAdapter(professionalEventManager);
+    }
+    return null;
+  });
+
+  // Command execution function (moved up to be available for handlers)
+  const executeCommand = useCallback(async (command: any) => {
+    try {
+      // Execute command through CommandAdapter if available
+      if (commandAdapter) {
+        await commandAdapter.executeCommand(command);
+      } else {
+        // Fallback to direct execution
+        if (command.execute) {
+          command.execute();
+          // Manually mark as dirty if no adapter
+          if (professionalEventManager) {
+            professionalEventManager.markAsDirty();
+          }
+        }
+      }
+      
+      // Force dirty state update for immediate UI feedback
+      if (onDirtyChange) {
+        onDirtyChange(true);
+      }
+      
+      console.log(`[BlueprintTab] ⚡ Command executed: ${command.type} - ${command.description}`);
+      
+    } catch (error) {
+      console.error('[BlueprintTab] Command execution failed:', error);
+    }
+  }, [commandAdapter, professionalEventManager, onDirtyChange]);
+
+  // Enhanced ReactFlow handlers that create commands (Professional Canva/Figma style)
+  const enhancedOnNodesChange = useCallback((changes: NodeChange[]) => {
+    // Apply the changes first
+    onNodesChange(changes);
+    
+    // Sync with EventManager snapshot after ReactFlow update
+    if (professionalEventManager && !isInitializingRef.current) {
+      // Use setTimeout to ensure ReactFlow state is updated first
+      setTimeout(() => {
+        professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, []);
+      }, 0);
+    }
+    
+    // Create commands for meaningful changes
+    changes.forEach(change => {
+      if (isInitializingRef.current) return; // Skip during initialization
+      
+      // Only process changes that have an id
+      if (!('id' in change)) return;
+      
+      switch (change.type) {
+        case 'position':
+          if ('position' in change && change.position && !change.dragging) {
+            // Only create command when dragging is complete (like Figma)
+            const currentNode = nodes.find(n => n.id === change.id);
+            if (currentNode) {
+              const nodeCommand = commandAdapter?.createNodeCommand(
+                'MOVE_NODE',
+                { 
+                  id: change.id, 
+                  position: change.position,
+                  data: currentNode.data 
+                },
+                { 
+                  id: change.id, 
+                  position: currentNode.position,
+                  data: currentNode.data 
+                }
+              );
+              if (nodeCommand) {
+                executeCommand(nodeCommand);
+              }
+            }
+          }
+          break;
+          
+        case 'remove':
+          // Create simple command for node removal
+          const nodeToDelete = nodes.find(n => n.id === change.id);
+          if (nodeToDelete) {
+            const simpleCommand = commandAdapter?.createSimpleCommand(
+              'DELETE_NODE',
+              `Delete node: ${nodeToDelete.data?.title || change.id}`,
+              { nodeId: change.id, nodeData: nodeToDelete }
+            );
+            if (simpleCommand) {
+              executeCommand(simpleCommand);
+            }
+          }
+          break;
+          
+        case 'select':
+          // Track selection changes for professional UX
+          console.log(`[BlueprintTab] Node selection: ${change.id} - ${change.selected ? 'selected' : 'deselected'}`);
+          break;
+          
+        case 'dimensions':
+          // Track resize operations
+          if ('dimensions' in change && change.dimensions) {
+            const simpleCommand = commandAdapter?.createSimpleCommand(
+              'RESIZE_NODE',
+              `Resize node: ${change.id}`,
+              { nodeId: change.id, dimensions: change.dimensions }
+            );
+            if (simpleCommand) {
+              executeCommand(simpleCommand);
+            }
+          }
+          break;
+          
+        default:
+          // For other changes, create a simple command
+          const simpleCommand = commandAdapter?.createSimpleCommand(
+            'NODE_CHANGE',
+            `Node ${change.type}: ${change.id}`,
+            change
+          );
+          if (simpleCommand) {
+            executeCommand(simpleCommand);
+          }
+          break;
+      }
+    });
+  }, [onNodesChange, nodes, executeCommand, commandAdapter]);
+
+  const enhancedOnEdgesChange = useCallback((changes: EdgeChange[]) => {
+    // Apply the changes first
+    onEdgesChange(changes);
+    
+    // Sync with EventManager snapshot after ReactFlow update
+    if (professionalEventManager && !isInitializingRef.current) {
+      // Use setTimeout to ensure ReactFlow state is updated first
+      setTimeout(() => {
+        professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, []);
+      }, 0);
+    }
+    
+    // Create commands for meaningful changes (Professional Canva/Figma style)
+    changes.forEach(change => {
+      if (isInitializingRef.current) return; // Skip during initialization
+      
+      // Only process changes that have an id
+      if (!('id' in change)) return;
+      
+      switch (change.type) {
+        case 'remove':
+          // Create simple command for edge removal
+          const edgeToDelete = edges.find(e => e.id === change.id);
+          if (edgeToDelete) {
+            const simpleCommand = commandAdapter?.createSimpleCommand(
+              'DELETE_EDGE',
+              `Delete edge: ${change.id}`,
+              { edgeId: change.id, edgeData: edgeToDelete }
+            );
+            if (simpleCommand) {
+              executeCommand(simpleCommand);
+            }
+          }
+          break;
+          
+        case 'select':
+          // Track edge selection changes for professional UX
+          console.log(`[BlueprintTab] Edge selection: ${change.id} - ${change.selected ? 'selected' : 'deselected'}`);
+          break;
+          
+        default:
+          // For other changes, create a simple command
+          const simpleCommand = commandAdapter?.createSimpleCommand(
+            'EDGE_CHANGE',
+            `Edge ${change.type}: ${change.id}`,
+            change
+          );
+          if (simpleCommand) {
+            executeCommand(simpleCommand);
+          }
+          break;
+      }
+    });
+  }, [onEdgesChange, edges, executeCommand, commandAdapter]);
   
   // Selection and UI state
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -1687,40 +1888,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     pendingCommandCount: 0
   });
 
-  // รับ SaveManager จาก props หรือสร้างใหม่ (สำหรับ backward compatibility)
-  const [saveManager] = useState(() => {
-    // ถ้าไม่มี SaveManager ส่งมาจาก parent ให้สร้างใหม่
-    if (typeof window !== 'undefined') {
-      const { createSaveManager } = require('./SaveManager');
-      return createSaveManager({
-        novelSlug: novel.slug,
-        autoSaveEnabled: false, // จัดการโดย NovelEditor
-        autoSaveIntervalMs: 30 * 1000, // จัดการโดย NovelEditor
-        onStateChange: (newState: any) => {
-          // Sync กับ local saveState สำหรับ backward compatibility
-          setSaveState(prev => ({
-            ...prev,
-            isSaving: newState.isSaving,
-            lastSaved: newState.lastSaved,
-            hasUnsavedChanges: newState.hasUnsavedChanges,
-            isDirty: newState.isDirty
-          }));
-        },
-        onDirtyChange: (isDirty: boolean) => {
-          // แจ้ง parent component ให้อัปเดตสถานะปุ่ม save
-          onDirtyChange?.(isDirty);
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[BlueprintTab] Save button state changed:', {
-              isDirty,
-              timestamp: new Date().toISOString()
-            });
-          }
-        }
-      });
-    }
-    return null;
-  });
   
   // Canvas state - ใช้ค่าเริ่มต้น
   const [canvasState, setCanvasState] = useState<CanvasState>({
@@ -1737,6 +1904,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Command Stack for undo/redo (replacing old HistoryState)
   const [undoStack, setUndoStack] = useState<AnyCommand[]>([]);
   const [redoStack, setRedoStack] = useState<AnyCommand[]>([]);
+  const [lastSavedCommandPosition, setLastSavedCommandPosition] = useState<number>(0); // 0 = initial clean state
   const maxHistorySize = 50;
   
   // Drag tracking for Command Pattern
@@ -1919,7 +2087,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             lastSaved: new Date(),
             saveError: null,
             saveQueue: prev.saveQueue.slice(1), // ลบ command ที่สำเร็จแล้ว
-            pendingCommandCount: prev.pendingCommandCount - 1
+            pendingCommandCount: prev.pendingCommandCount - 1,
+            isSaving: false,
+            hasUnsavedChanges: prev.saveQueue.length > 1, // Still has pending commands
+            isDirty: prev.saveQueue.length > 1,
+            isProcessingQueue: prev.saveQueue.length > 1
           };
           currentSaveState = updated;
           return updated;
@@ -1952,7 +2124,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               ...prev,
               saveQueue: prev.saveQueue.slice(1),
               pendingCommandCount: prev.pendingCommandCount - 1,
-              saveError: `Failed to save: ${error instanceof Error ? error.message : String(error)}`
+              saveError: `Failed to save: ${error instanceof Error ? error.message : String(error)}`,
+              isSaving: false,
+              hasUnsavedChanges: prev.saveQueue.length > 1,
+              isDirty: prev.saveQueue.length > 1,
+              isProcessingQueue: prev.saveQueue.length > 1,
+              lastSaved: null
             };
             currentSaveState = updated;
             return updated;
@@ -2299,103 +2476,444 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     );
   }, [currentBlueprintSettings.showSceneThumbnails, currentBlueprintSettings.showNodeLabels, setNodes]);
   
-  // อัปเดต dirty state เมื่อ nodes/edges เปลี่ยน - Professional-grade detection
   // ===============================
-  // PROFESSIONAL CHANGE DETECTION 
+  // PROFESSIONAL SAVE STATE MANAGEMENT
+  // เทียบเท่า Adobe Creative Suite และ Canva
   // สำหรับการทำงานคนเดียว (Single-User Mode)
   // ===============================
-  
+
+  // สร้าง initial state snapshot เมื่อโหลดข้อมูลจาก database เสร็จ
+  const [initialSnapshot, setInitialSnapshot] = useState<{
+    nodes: any[];
+    edges: any[];
+    storyVariables: any[];
+    timestamp: number;
+  } | null>(null);
+
+  // Flag สำหรับตรวจสอบว่าได้สร้าง initial snapshot แล้วหรือยัง
+  const [isSnapshotReady, setIsSnapshotReady] = useState(false);
+
+  // สร้าง snapshot ของ state ปัจจุบันเพื่อเปรียบเทียบ
+  const createStateSnapshot = useCallback(() => {
+    return {
+      nodes: nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        position: {
+          x: Math.round(node.position.x),
+          y: Math.round(node.position.y)
+        },
+        data: node.data ? JSON.parse(JSON.stringify(node.data)) : {}
+      })).sort((a, b) => a.id.localeCompare(b.id)),
+      edges: edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        data: edge.data ? JSON.parse(JSON.stringify(edge.data)) : {}
+      })).sort((a, b) => a.id.localeCompare(b.id)),
+      storyVariables: (storyMap?.storyVariables || []).map((v: any) => 
+        JSON.parse(JSON.stringify(v))
+      ).sort((a: any, b: any) => (a.variableId || a.variableName || '').localeCompare(b.variableId || b.variableName || '')),
+      timestamp: Date.now()
+    };
+  }, [nodes, edges, storyMap?.storyVariables]);
+
+  // สร้าง initial snapshot เมื่อข้อมูลจาก database โหลดเสร็จ
   useEffect(() => {
-    let stabilizationTimer: NodeJS.Timeout;
+    // ตรวจสอบว่าข้อมูลจาก database พร้อมแล้ว และยังไม่ได้สร้าง snapshot
+    if (storyMap && nodes.length >= 0 && !initialSnapshot && !isInitializingRef.current) {
+      const snapshot = createStateSnapshot();
+      setInitialSnapshot(snapshot);
+      setIsSnapshotReady(true);
+      
+      // Initialize save position to 0 (clean state)
+      setLastSavedCommandPosition(0);
+      
+      // ✨ Professional Save Integration: Sync initial state with EventManager
+      if (professionalEventManager) {
+        professionalEventManager.initializeWithData({
+          nodes: snapshot.nodes,
+          edges: snapshot.edges,
+          storyVariables: snapshot.storyVariables
+        });
+      }
+      
+      // เริ่มต้นด้วยสถานะ disabled (ไม่มีการเปลี่ยนแปลง)
+      if (onDirtyChange) {
+        onDirtyChange(false);
+      }
+      
+      // Enterprise-grade initialization logging
+      console.log('[BlueprintTab] 🎯 Professional Editor Initialized:', {
+        novelSlug: novel?.slug,
+        nodeCount: snapshot.nodes.length,
+        edgeCount: snapshot.edges.length,
+        variableCount: snapshot.storyVariables.length,
+        saveButtonEnabled: false,
+        lastSavedCommandPosition: 0,
+        currentCommandPosition: 0,
+        timestamp: new Date().toISOString(),
+        userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'SSR',
+        sessionId: Math.random().toString(36).substr(2, 9)
+      });
+    }
+  }, [storyMap, nodes, edges, initialSnapshot, createStateSnapshot, professionalEventManager, onDirtyChange, novel?.slug]);
+
+  // Professional Command Execution Listener (like Figma/Canva)
+  useEffect(() => {
+    if (!professionalEventManager) return;
+
+    const unsubscribe = professionalEventManager.subscribeToState((state: any) => {
+      // Handle command notifications for real undo/redo
+      const currentSnapshot = professionalEventManager.getCurrentSnapshot();
+      
+      if (currentSnapshot) {
+        // Update ReactFlow state based on EventManager snapshot
+        if (JSON.stringify(currentSnapshot.nodes) !== JSON.stringify(nodes)) {
+          setNodes(currentSnapshot.nodes);
+          console.log('[BlueprintTab] Nodes updated from EventManager');
+        }
+        if (JSON.stringify(currentSnapshot.edges) !== JSON.stringify(edges)) {
+          setEdges(currentSnapshot.edges);
+          console.log('[BlueprintTab] Edges updated from EventManager');
+        }
+        // Note: storyVariables are handled via storyMap prop, not as separate state
+      }
+    });
+
+    return unsubscribe;
+  }, [professionalEventManager]);
+
+  // ✨ Command-Based Professional Change Detection (Adobe/Figma/Canva Style)
+  useEffect(() => {
+    let stabilizeTimer: NodeJS.Timeout;
     
-    // ข้าม change detection ระหว่างการ initialize 
-    if (isInitializingRef.current || isApplyingServerUpdateRef.current) {
+    // ข้าม change detection ถ้ายังไม่พร้อม หรือกำลัง initialize
+    if (!isSnapshotReady || isInitializingRef.current || isApplyingServerUpdateRef.current) {
       return;
     }
     
     if (onDirtyChange) {
-      // Professional-grade change detection ที่ป้องกัน flickering
-      const performStableChangeCheck = () => {
-        if (saveManager) {
-          // สร้าง normalized data สำหรับการเปรียบเทียบที่แม่นยำ
-          const currentData = {
-            nodes: nodes.map(node => ({
-              id: node.id,
-              position: { 
-                x: Math.round(node.position.x), 
-                y: Math.round(node.position.y) 
-              },
-              data: node.data,
-              type: node.type
-            })),
-            edges: edges.map(edge => ({
-              id: edge.id,
-              source: edge.source,
-              target: edge.target,
-              data: edge.data
-            })),
-            storyVariables: storyMap?.storyVariables || []
-          };
-          
-          // Real-time professional change detection เทียบกับ database
-          const hasActualChanges = saveManager.checkIfDataChanged(currentData);
-          
-          // SaveManager จะจัดการ onDirtyChange โดยอัตโนมัติแล้ว
-          // ไม่ต้องเรียก onDirtyChange ที่นี่เพื่อป้องกัน double call
-          
-          // Development logging เท่านั้น
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[BlueprintTab] Real-time professional change detection:', {
-              hasActualChanges,
-              nodeCount: nodes.length,
-              edgeCount: edges.length,
-              hasUndoHistory: undoStack.length > 0,
-              timestamp: new Date().toISOString(),
-              saveButtonStatus: hasActualChanges ? 'enabled' : 'disabled'
-            });
-          }
-          
-        } else {
-          // Fallback: ใช้ basic state checks แต่ยังคงความมั่นคง
-          const hasBasicChanges = saveState.isDirty || saveState.hasUnsavedChanges || undoStack.length > 0;
-          onDirtyChange(hasBasicChanges);
+      const performSmartChangeDetection = () => {
+        // ✨ NEW: ใช้ command position แทน snapshot comparison
+        const currentCommandPosition = undoStack.length;
+        const hasChanges = currentCommandPosition !== lastSavedCommandPosition;
+        
+        // ✨ Professional Save Integration: Use EventManager as single source of truth
+        if (professionalEventManager) {
+          // EventManager automatically tracks changes through command execution
+          // No need to manually mark dirty/clean state
         }
+        
+        // Keep legacy callback for backwards compatibility with NovelEditor
+        onDirtyChange(hasChanges);
+        
+        // Enterprise-grade change detection logging
+        console.log('[BlueprintTab] 🔍 Command-Based Save Detection:', {
+          hasChanges,
+          saveButtonEnabled: hasChanges,
+          currentCommandPosition,
+          lastSavedCommandPosition,
+          undoStackLength: undoStack.length,
+          redoStackLength: redoStack.length,
+          changeType: hasChanges ? 'DIRTY' : 'CLEAN',
+          canUndo: undoStack.length > 0,
+          canRedo: redoStack.length > 0,
+          sessionDuration: initialSnapshot ? Math.round((Date.now() - initialSnapshot.timestamp) / 1000) + 's' : '0s',
+          platform: typeof window !== 'undefined' ? 
+            (window.navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop') : 'server',
+          eventManagerIntegrated: !!professionalEventManager
+        });
       };
 
-      // Stabilization technique: รอให้ state stabilize ก่อนตรวจสอบ
-      // เป็นเทคนิคที่ Adobe และ Canva ใช้เพื่อป้องกัน UI flickering
-      stabilizationTimer = setTimeout(() => {
-        performStableChangeCheck();
-      }, 200); // Optimal delay สำหรับ professional UX
+      // Stabilization - รอให้ React update state ก่อนตรวจสอบ
+      stabilizeTimer = setTimeout(performSmartChangeDetection, 150);
     }
 
     return () => {
-      if (stabilizationTimer) {
-        clearTimeout(stabilizationTimer);
-      }
+      if (stabilizeTimer) clearTimeout(stabilizeTimer);
     };
   }, [
-    // Dependencies ที่คำนวณอย่างระมัดระวังเพื่อป้องกัน false positive
-    nodes.length, 
-    edges.length, 
-    // ใช้ JSON.stringify กับ normalized data เพื่อ accurate change detection
-    JSON.stringify(nodes.map(n => ({ 
-      id: n.id, 
-      x: Math.round(n.position.x), 
-      y: Math.round(n.position.y),
-      type: n.type 
-    }))),
-    JSON.stringify(edges.map(e => ({ 
-      id: e.id, 
-      source: e.source, 
-      target: e.target 
-    }))),
     undoStack.length,
-    saveManager,
-    onDirtyChange,
-    // เพิ่ม storyVariables เป็น dependency
-    JSON.stringify(storyMap?.storyVariables || [])
+    redoStack.length, 
+    lastSavedCommandPosition,
+    professionalEventManager,
+    onDirtyChange, 
+    isSnapshotReady,
+    initialSnapshot
   ]);
+
+  // Deep comparison function สำหรับ snapshots
+  const deepCompareSnapshots = useCallback((snapshot1: any, snapshot2: any): boolean => {
+    if (!snapshot1 || !snapshot2) return false;
+    
+    // เปรียบเทียบ nodes
+    if (snapshot1.nodes.length !== snapshot2.nodes.length) return false;
+    for (let i = 0; i < snapshot1.nodes.length; i++) {
+      if (!deepCompareNodes(snapshot1.nodes[i], snapshot2.nodes[i])) return false;
+    }
+    
+    // เปรียบเทียบ edges
+    if (snapshot1.edges.length !== snapshot2.edges.length) return false;
+    for (let i = 0; i < snapshot1.edges.length; i++) {
+      if (!deepCompareEdges(snapshot1.edges[i], snapshot2.edges[i])) return false;
+    }
+    
+    // เปรียบเทียบ story variables
+    if (snapshot1.storyVariables.length !== snapshot2.storyVariables.length) return false;
+    for (let i = 0; i < snapshot1.storyVariables.length; i++) {
+      if (JSON.stringify(snapshot1.storyVariables[i]) !== JSON.stringify(snapshot2.storyVariables[i])) return false;
+    }
+    
+    return true;
+  }, []);
+
+  // Professional node comparison
+  const deepCompareNodes = useCallback((node1: any, node2: any): boolean => {
+    if (node1.id !== node2.id) return false;
+    if (node1.type !== node2.type) return false;
+    if (Math.abs(node1.position.x - node2.position.x) > 1) return false;
+    if (Math.abs(node1.position.y - node2.position.y) > 1) return false;
+    
+    // เปรียบเทียบ data object
+    return JSON.stringify(node1.data || {}) === JSON.stringify(node2.data || {});
+  }, []);
+
+  // Professional edge comparison
+  const deepCompareEdges = useCallback((edge1: any, edge2: any): boolean => {
+    return (
+      edge1.id === edge2.id &&
+      edge1.source === edge2.source &&
+      edge1.target === edge2.target &&
+      (edge1.sourceHandle || '') === (edge2.sourceHandle || '') &&
+      (edge1.targetHandle || '') === (edge2.targetHandle || '') &&
+      JSON.stringify(edge1.data || {}) === JSON.stringify(edge2.data || {})
+    );
+  }, []);
+
+  // อัปเดต initial snapshot หลังจาก save สำเร็จ
+  const updateInitialSnapshotAfterSave = useCallback(() => {
+    if (isSnapshotReady) {
+      const newSnapshot = createStateSnapshot();
+      setInitialSnapshot(newSnapshot);
+      
+      console.log('[BlueprintTab] 💾 Initial snapshot updated after successful save - Save button DISABLED');
+      
+      // อัปเดต EventManager ด้วยข้อมูลใหม่
+      if (professionalEventManager) {
+        professionalEventManager.updateSnapshot({
+          nodes: newSnapshot.nodes,
+          edges: newSnapshot.edges,
+          storyVariables: newSnapshot.storyVariables,
+          timestamp: Date.now(),
+          version: 1
+        });
+      }
+    }
+  }, [isSnapshotReady, createStateSnapshot, professionalEventManager]);
+
+  // Expose functions to parent component
+  useImperativeHandle(ref, () => ({
+    // Manual save function
+    handleManualSave: async () => {
+      if (!isSnapshotReady || !initialSnapshot) {
+        console.warn('[BlueprintTab] Cannot save: snapshot not ready');
+        return;
+      }
+
+      const currentSnapshot = createStateSnapshot();
+      const hasChanges = !deepCompareSnapshots(initialSnapshot, currentSnapshot);
+      
+      if (!hasChanges) {
+        console.log('[BlueprintTab] No changes detected, skipping save');
+        return;
+      }
+
+      try {
+        if (professionalEventManager) {
+          await professionalEventManager.saveManual();
+        } else {
+          // Fallback สำหรับ legacy system
+          await onManualSave?.();
+        }
+        
+        // อัปเดต snapshot หลังบันทึกสำเร็จ
+        updateInitialSnapshotAfterSave();
+        
+      } catch (error) {
+        console.error('[BlueprintTab] Manual save failed:', error);
+        throw error;
+      }
+    },
+    // Canvas state information
+    getCanvasState: () => ({
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      hasUndoHistory: undoStack.length > 0,
+      hasRedoHistory: redoStack.length > 0,
+      isInitialized: !isInitializingRef.current,
+      isSnapshotReady: isSnapshotReady,
+      hasUnsavedChanges: initialSnapshot ? !deepCompareSnapshots(initialSnapshot, createStateSnapshot()) : false
+    }),
+    // Professional snapshot management สำหรับ parent component
+    updateInitialSnapshotAfterSave,
+    // Smart save detection สำหรับ external checking
+    hasUnsavedChanges: () => {
+      if (!initialSnapshot || !isSnapshotReady) return false;
+      return !deepCompareSnapshots(initialSnapshot, createStateSnapshot());
+    }
+  }), [
+    onManualSave, 
+    nodes, 
+    edges, 
+    storyMap, 
+    undoStack, 
+    redoStack, 
+    isSnapshotReady, 
+    initialSnapshot, 
+    deepCompareSnapshots, 
+    createStateSnapshot, 
+    updateInitialSnapshotAfterSave,
+        professionalEventManager
+  ]);
+
+  // ===============================
+  // PROFESSIONAL REFRESH PROTECTION
+  // เทียบเท่า Adobe Creative Suite และ Canva
+  // ===============================
+
+  // ป้องกันการ refresh เมื่อมีงานยังไม่บันทึก
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // ตรวจสอบว่ามีการเปลี่ยนแปลงที่ยังไม่บันทึกหรือไม่
+      if (isSnapshotReady && initialSnapshot) {
+        const currentSnapshot = createStateSnapshot();
+        const hasUnsavedChanges = !deepCompareSnapshots(initialSnapshot, currentSnapshot);
+        
+        if (hasUnsavedChanges) {
+          // แสดงข้อความเตือนแบบ professional
+          const message = '🚨 คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\nหากออกจากหน้านี้ การเปลี่ยนแปลงทั้งหมดจะสูญหาย\nกรุณาบันทึกงานก่อนออกจากหน้า';
+          event.returnValue = message;
+          return message;
+        }
+      }
+    };
+
+    // Professional-grade keyboard shortcuts (Canva/Figma style)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+S สำหรับ manual save
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        
+        if (isSnapshotReady && initialSnapshot) {
+          const currentSnapshot = createStateSnapshot();
+          const hasChanges = !deepCompareSnapshots(initialSnapshot, currentSnapshot);
+          
+          if (hasChanges) {
+            // เรียก manual save ผ่าน parent component
+            onManualSave?.();
+          } else {
+            console.log('[BlueprintTab] Ctrl+S pressed but no changes to save');
+          }
+        }
+      }
+      
+      // Ctrl+Z สำหรับ Undo
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        if (professionalEventManager) {
+          const success = professionalEventManager.undo();
+          if (success) {
+            console.log('[BlueprintTab] Undo executed via keyboard shortcut');
+          }
+        }
+      }
+      
+      // Ctrl+Y หรือ Ctrl+Shift+Z สำหรับ Redo
+      if (((event.ctrlKey || event.metaKey) && event.key === 'y') || 
+          ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'Z')) {
+        event.preventDefault();
+        if (professionalEventManager) {
+          const success = professionalEventManager.redo();
+          if (success) {
+            console.log('[BlueprintTab] Redo executed via keyboard shortcut');
+          }
+        }
+      }
+      
+      // Ctrl+C สำหรับ Copy (selected nodes/edges)
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+        event.preventDefault();
+        const selectedNodes = nodes.filter(node => node.selected);
+        const selectedEdges = edges.filter(edge => edge.selected);
+        
+        if (selectedNodes.length > 0 || selectedEdges.length > 0) {
+          // Store in clipboard state for paste operation
+          setSelection(prev => ({
+            ...prev,
+            clipboard: {
+              nodes: selectedNodes,
+              edges: selectedEdges
+            }
+          }));
+          
+          console.log(`[BlueprintTab] Copied ${selectedNodes.length} nodes and ${selectedEdges.length} edges`);
+          toast.success(`คัดลอก ${selectedNodes.length} โหนดและ ${selectedEdges.length} เส้นเชื่อม`);
+        }
+      }
+      
+      // Ctrl+V สำหรับ Paste
+      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+        event.preventDefault();
+        
+        if (selection.clipboard.nodes.length > 0 || selection.clipboard.edges.length > 0) {
+          // Create paste command
+          const pasteCommand = commandAdapter?.createSimpleCommand(
+            'PASTE_ITEMS',
+            `Paste ${selection.clipboard.nodes.length} nodes and ${selection.clipboard.edges.length} edges`,
+            { clipboard: selection.clipboard }
+          );
+          
+          if (pasteCommand) {
+            executeCommand(pasteCommand);
+            console.log(`[BlueprintTab] Pasted ${selection.clipboard.nodes.length} nodes and ${selection.clipboard.edges.length} edges`);
+            toast.success(`วาง ${selection.clipboard.nodes.length} โหนดและ ${selection.clipboard.edges.length} เส้นเชื่อม`);
+          }
+        }
+      }
+      
+      // Delete key สำหรับการลบ selected items
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        const selectedNodes = nodes.filter(node => node.selected);
+        const selectedEdges = edges.filter(edge => edge.selected);
+        
+        if (selectedNodes.length > 0 || selectedEdges.length > 0) {
+          const deleteCommand = commandAdapter?.createSimpleCommand(
+            'DELETE_SELECTED',
+            `Delete ${selectedNodes.length} nodes and ${selectedEdges.length} edges`,
+            { nodes: selectedNodes, edges: selectedEdges }
+          );
+          
+          if (deleteCommand) {
+            executeCommand(deleteCommand);
+            console.log(`[BlueprintTab] Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} edges`);
+          }
+        }
+      }
+    };
+
+    // เพิ่ม event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSnapshotReady, initialSnapshot, createStateSnapshot, deepCompareSnapshots, onManualSave]);
 
   // Trigger auto-save เมื่อมีการเปลี่ยนแปลง nodes/edges
   useEffect(() => {
@@ -2489,11 +3007,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     let mounted = true;
     
     const performInitialValidation = async () => {
-      if (!saveManager || !mounted) return;
+      if (!professionalEventManager || !mounted) return;
       
       try {
-        // ตรวจสอบ database validation
-        await saveManager.validateWithDatabase();
+        // EventManager handles validation internally
+        // await professionalEventManager.validateWithDatabase();
         
         if (!mounted) return;
         
@@ -2518,7 +3036,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         };
         
         // ตรวจสอบว่าต้อง enable ปุ่ม save หรือไม่
-        const hasChanges = saveManager.checkIfDataChanged(initialData);
+        const hasChanges = professionalEventManager.hasChanges();
         
         if (process.env.NODE_ENV === 'development') {
           console.log('[BlueprintTab] Initial validation completed:', {
@@ -2541,7 +3059,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       mounted = false;
       clearTimeout(timer);
     };
-  }, [saveManager, nodes.length, edges.length, storyMap?.storyVariables]);
+  }, [professionalEventManager, nodes.length, edges.length, storyMap?.storyVariables]);
   
   // Selection state
   const [selection, setSelection] = useState<SelectionState>({
@@ -2817,34 +3335,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         clearTimeout(saveDebounceTimer.current);
       }
       
-      // ใช้ SaveManager เป็นหลักหากมี, fallback เป็น legacy system
-      if (saveManager) {
-        // Professional-grade auto-save ผ่าน SaveManager
-        const currentData = {
-          nodes: currentNodes,
-          edges: currentEdges,
-          storyVariables: storyMap?.storyVariables || []
-        };
-        
-        // ตรวจสอบว่ามีการเปลี่ยนแปลงจริงๆ หรือไม่
-        const hasChanges = saveManager.checkIfDataChanged(currentData);
+      // ✨ Professional Auto-save Integration (Adobe/Canva/Figma style)
+      if (professionalEventManager && autoSaveSettings.enabled) {
+        // EventManager handles auto-save through command execution
+        // Commands are automatically tracked and saved
+        const hasChanges = professionalEventManager.hasChanges();
         
         if (hasChanges) {
-          // Mark as dirty และ schedule auto-save
-          saveManager.updateDirtyStateOnly(true);
-          
-          // Schedule debounced auto-save
-          saveManager.saveOperation({
-            type: 'BATCH_UPDATE',
-            data: currentData,
-            strategy: 'debounced'
-          }).catch((error: any) => {
-            console.error('[BlueprintTab] Auto-save failed via SaveManager:', error);
-          });
-          
-          console.log('[BlueprintTab] Auto-save scheduled via SaveManager');
+          // EventManager will handle the auto-save based on its configuration
+          console.log('[BlueprintTab] 🔄 EventManager handling auto-save');
         } else {
-          console.log('[BlueprintTab] No changes detected, skipping auto-save');
+          console.log('[BlueprintTab] ✓ No changes detected, skipping auto-save');
         }
       } else {
         // Legacy auto-save system (fallback)
@@ -2867,215 +3368,36 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }, 500); // 500ms debounce เหมือน Premiere Pro
       }
       
-    }, [autoSaveSettings.enabled, saveManager, storyMap, onDirtyChange, savePatchToDatabase]);
+    }, [autoSaveSettings.enabled, professionalEventManager, storyMap, onDirtyChange, savePatchToDatabase]);
 
   // Command Pattern functions
-  const executeCommand = useCallback((command: AnyCommand) => {
-    try {
-      command.execute();
-      
-      // Add to undo stack
-      setUndoStack(prev => {
-        const newUndoStack = [...prev, command];
-        if (newUndoStack.length > maxHistorySize) {
-          newUndoStack.shift(); // Remove oldest command
-        }
-        return newUndoStack;
-      });
-      
-      // Clear redo stack when new command is executed
-      setRedoStack([]);
-      
-      // ใช้ SaveManager เพื่อจัดการ save operation แบบ Professional-grade
-      if (saveManager) {
-        // รอให้ React update state ก่อนส่งข้อมูลไปยัง SaveManager
-        setTimeout(() => {
-          const currentData = {
-            nodes: nodes.map(node => ({
-              nodeId: node.id,
-              nodeType: node.data.nodeType,
-              title: node.data.title,
-              position: node.position,
-              nodeSpecificData: { ...node.data }
-            })),
-            edges: edges.map(edge => ({
-              edgeId: edge.id,
-              sourceNodeId: edge.source,
-              targetNodeId: edge.target,
-              data: edge.data || {}
-            })),
-            storyVariables: storyMap?.storyVariables || []
-          };
 
-          // ตรวจสอบว่ามีการเปลี่ยนแปลงจริงๆ หรือไม่
-          const hasChanges = saveManager.checkIfDataChanged(currentData);
-          
-          if (hasChanges) {
-            // Mark as dirty และ schedule save operation
-            saveManager.updateDirtyStateOnly(true);
-            
-            saveManager.saveOperation({
-              type: command.type as any,
-              data: {
-                commandId: command.id,
-                commandType: command.type,
-                commandData: command,
-                ...currentData
-              },
-              strategy: command.type === 'DELETE_NODE' || command.type === 'DELETE_EDGE' || 
-                       command.type === 'ADD_NODE' || command.type === 'ADD_EDGE' ? 'immediate' : 'debounced'
-            }).catch((error: any) => {
-              console.error('[BlueprintTab] SaveManager operation failed:', error);
-            });
-            
-            console.log(`[BlueprintTab] Command executed: ${command.type}, changes detected, save scheduled`);
-          } else {
-            console.log(`[BlueprintTab] Command executed: ${command.type}, no changes detected`);
-          }
-        }, 10); // รอ 10ms ให้ React update state
-      } else {
-        // Fallback สำหรับ backward compatibility
-        setSaveState(prev => ({
-          ...prev,
-          isDirty: true,
-          hasUnsavedChanges: true,
-          lastCommandId: command.id
-        }));
-        
-        // Notify parent of dirty state
-        if (typeof onDirtyChange === 'function') {
-          onDirtyChange(true);
-        }
-        
-        // Trigger auto-save if enabled - ใช้ patch-based saves
-        if (autoSaveSettings.enabled) {
-          scheduleAutoSave(nodes, edges, command);
-        }
-      }
-    } catch (error) {
-      console.error('Error executing command:', error);
-      toast.error('Failed to execute command');
-    }
-  }, [saveManager, onDirtyChange, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, storyMap]);
 
-  // Undo function with Professional-grade state detection
+  // Professional Undo function using EventManager (like Figma/Canva)
   const undo = useCallback(() => {
-    const commandToUndo = undoStack[undoStack.length - 1];
-    if (commandToUndo) {
-      try {
-        commandToUndo.undo();
-        setUndoStack(prev => prev.slice(0, prev.length - 1));
-        setRedoStack(prev => [commandToUndo, ...prev]);
-        toast.info(`ยกเลิก: ${commandToUndo.description}`);
-        
-        // Professional-grade undo state detection
-        // ใช้ setTimeout เพื่อให้ React update state ก่อน แล้วค่อยตรวจสอบ
-        setTimeout(() => {
-          if (saveManager) {
-            // รอให้ React update nodes และ edges ก่อนตรวจสอบ
-            const currentData = {
-              nodes: nodes,
-              edges: edges,
-              storyVariables: storyMap?.storyVariables || []
-            };
-            
-            // ตรวจสอบว่าสถานะปัจจุบันตรงกับ database หรือไม่
-            const hasChanges = saveManager.checkIfDataChanged(currentData);
-            saveManager.updateDirtyStateOnly(hasChanges);
-            
-            console.log(`[BlueprintTab] After undo: hasChanges=${hasChanges}, undoStackLength=${undoStack.length - 1}`);
-            
-            // Schedule auto-save เฉพาะเมื่อมีการเปลี่ยนแปลงจริงและ auto-save เปิดอยู่
-            if (hasChanges && autoSaveSettings.enabled) {
-              saveManager.saveOperation({
-                type: 'BATCH_UPDATE',
-                data: currentData,
-                strategy: 'debounced'
-              }).catch(console.error);
-            }
-          } else {
-            // Fallback สำหรับกรณีที่ไม่มี saveManager
-            const hasMoreCommands = undoStack.length > 1;
-            setSaveState(prev => ({
-              ...prev,
-              isDirty: hasMoreCommands,
-              hasUnsavedChanges: hasMoreCommands
-            }));
-            onDirtyChange?.(hasMoreCommands);
-            
-            // Schedule auto-save if enabled
-            if (autoSaveSettings.enabled) {
-              scheduleAutoSave(nodes, edges);
-            }
-          }
-        }, 50); // รอ 50ms ให้ React update state
-      } catch (error) {
-        console.error('Error undoing command:', error);
-        toast.error(`Failed to undo: ${commandToUndo.description}`);
+    if (professionalEventManager) {
+      const success = professionalEventManager.undo();
+      if (success) {
+        console.log(`[BlueprintTab] ↶ Undo executed via EventManager`);
+        toast.success('Undid last action');
+      } else {
+        console.log(`[BlueprintTab] No actions to undo`);
       }
     }
-  }, [undoStack, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, onDirtyChange, saveManager, storyMap]);
+  }, [professionalEventManager]);
 
-  // Redo function with Professional-grade state detection
+  // Professional Redo function using EventManager (like Figma/Canva)
   const redo = useCallback(() => {
-    const commandToRedo = redoStack[0];
-    if (commandToRedo) {
-      try {
-        if (commandToRedo.redo) {
-          commandToRedo.redo();
-        } else {
-          commandToRedo.execute();
-        }
-        setRedoStack(prev => prev.slice(1));
-        setUndoStack(prev => [...prev, commandToRedo]);
-        toast.success(`ทำซ้ำ: ${commandToRedo.description}`);
-        
-        // Professional-grade redo state detection 
-        // ใช้ setTimeout เพื่อให้ React update state ก่อน แล้วค่อยตรวจสอบ
-        setTimeout(() => {
-          if (saveManager) {
-            // รอให้ React update nodes และ edges ก่อนตรวจสอบ
-            const currentData = {
-              nodes: nodes,
-              edges: edges,
-              storyVariables: storyMap?.storyVariables || []
-            };
-            
-            // ตรวจสอบว่าสถานะปัจจุบันตรงกับ database หรือไม่
-            const hasChanges = saveManager.checkIfDataChanged(currentData);
-            saveManager.updateDirtyStateOnly(hasChanges);
-            
-            console.log(`[BlueprintTab] After redo: hasChanges=${hasChanges}, redoStackLength=${redoStack.length - 1}`);
-            
-            // Schedule auto-save เฉพาะเมื่อมีการเปลี่ยนแปลงจริงและ auto-save เปิดอยู่
-            if (hasChanges && autoSaveSettings.enabled) {
-              saveManager.saveOperation({
-                type: 'BATCH_UPDATE',
-                data: currentData,
-                strategy: 'debounced'
-              }).catch(console.error);
-            }
-          } else {
-            // Fallback สำหรับกรณีที่ไม่มี saveManager
-            setSaveState(prev => ({
-              ...prev,
-              isDirty: true,
-              hasUnsavedChanges: true
-            }));
-            onDirtyChange?.(true);
-            
-            // Schedule auto-save if enabled
-            if (autoSaveSettings.enabled) {
-              scheduleAutoSave(nodes, edges);
-            }
-          }
-        }, 50); // รอ 50ms ให้ React update state
-      } catch (error) {
-        console.error('Error redoing command:', error);
-        toast.error(`Failed to redo: ${commandToRedo.description}`);
+    if (professionalEventManager) {
+      const success = professionalEventManager.redo();
+      if (success) {
+        console.log(`[BlueprintTab] ↷ Redo executed via EventManager`);
+        toast.success('Redid last action');
+      } else {
+        console.log(`[BlueprintTab] No actions to redo`);
       }
     }
-  }, [redoStack, autoSaveSettings.enabled, scheduleAutoSave, nodes, edges, onDirtyChange, saveManager, storyMap]);
+  }, [professionalEventManager]);
 
   // Command factory functions
   const createNodeCommand = useCallback((
@@ -3260,35 +3582,63 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
     
     try {
-      if (saveManager) {
-        // ใช้ SaveManager สำหรับ manual save
-        const storyMapData = {
-          nodes: nodes.map(node => ({
-            nodeId: node.id,
-            nodeType: node.data.nodeType,
-            title: node.data.title,
-            position: node.position,
-            nodeSpecificData: { ...node.data }
-          })),
-          edges: edges.map(edge => ({
-            edgeId: edge.id,
-            sourceNodeId: edge.source,
-            targetNodeId: edge.target,
-            data: edge.data || {}
-          })),
-          storyVariables: storyMap?.storyVariables || []
-        };
+      if (professionalEventManager) {
+        // ใช้ EventManager สำหรับ manual save
+        await professionalEventManager.saveManual();
         
-        await saveManager.saveManual(storyMapData);
+        // ✨ NEW: Mark current command position as saved
+        setLastSavedCommandPosition(undoStack.length);
+        
+        // Update initial snapshot to current state for fallback comparison
+        const newSnapshot = createStateSnapshot();
+        setInitialSnapshot(newSnapshot);
+        
+        // Update EventManager with new baseline
+        professionalEventManager.updateSnapshot({
+          nodes: newSnapshot.nodes,
+          edges: newSnapshot.edges,
+          storyVariables: newSnapshot.storyVariables,
+          timestamp: Date.now(),
+          version: 1
+        });
+        
+        // Force dirty state to false
+        if (onDirtyChange) {
+          onDirtyChange(false);
+        }
+        
+        toast.success('✅ บันทึกสำเร็จ');
+        
+        console.log('[BlueprintTab] 💾 Manual Save Success:', {
+          savedAtCommandPosition: undoStack.length,
+          nodeCount: newSnapshot.nodes.length,
+          edgeCount: newSnapshot.edges.length,
+          timestamp: new Date().toISOString()
+        });
+        
       } else {
         // Fallback ไปยังระบบเดิม
         await saveStoryMapToDatabase(nodes, edges, true);
+        
+        // ✨ NEW: Mark current command position as saved (fallback)
+        setLastSavedCommandPosition(undoStack.length);
+        
+        // Update initial snapshot for fallback
+        const newSnapshot = createStateSnapshot();
+        setInitialSnapshot(newSnapshot);
+        
+        // Force dirty state to false
+        if (onDirtyChange) {
+          onDirtyChange(false);
+        }
+        
+        toast.success('✅ บันทึกสำเร็จ');
       }
     } catch (error) {
-      console.error('Manual save failed:', error);
-      toast.error('บันทึกไม่สำเร็จ');
+      console.error('[BlueprintTab] Manual save failed:', error);
+      toast.error('❌ บันทึกล้มเหลว: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-  }, [saveManager, saveStoryMapToDatabase, nodes, edges, storyMap]);
+  }, [undoStack.length, professionalEventManager, saveStoryMapToDatabase, nodes, edges, storyMap, createStateSnapshot, onDirtyChange]);
 
   // Enhanced canvas interaction controls
   const toggleCanvasLock = useCallback(() => {
@@ -4134,7 +4484,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     ));
   }, [setEdges]);
 
-  // Enhanced connections with database sync and validation
+  // Enhanced connections with database sync and validation (Professional Canva/Figma style)
   const onConnect = useCallback((params: Connection) => {
     if (!params.source || !params.target) {
       toast.error('ไม่สามารถสร้างการเชื่อมต่อได้: ข้อมูลไม่ครบถ้วน');
@@ -4580,91 +4930,71 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 edgeTypes={edgeTypes}
                 onDrop={onCanvasDrop}
                 onDragOver={onCanvasDragOver}
-                onNodesChange={(changes: NodeChange[]) => {
-                  // Prevent runtime error by safely handling changes
+                onNodesChange={enhancedOnNodesChange}
+                onEdgesChange={enhancedOnEdgesChange}
+                onConnect={(connection: Connection) => {
+                  // Handle new connections
                   try {
-                    onNodesChange(changes);
-                    // Only save to history for meaningful changes (position, selection, etc.)
-                    const meaningfulChanges = changes.filter(change => 
-                      change.type === 'position' || 
-                      change.type === 'add' || 
-                      change.type === 'remove'
+                    const newEdge = addEdge(connection, edges);
+                    setEdges(newEdge);
+                    
+                    // Create command for connection
+                    const simpleCommand = commandAdapter?.createSimpleCommand(
+                      'ADD_EDGE',
+                      `Connect: ${connection.source} → ${connection.target}`,
+                      { connection }
                     );
-                    if (!isInitializingRef.current && meaningfulChanges.length > 0) {
-                      // Use a debounced version for position changes to avoid excessive history entries
-                      if (meaningfulChanges.every(change => change.type === 'position')) {
-                        // Debounce position changes
-                        if (saveDebounceTimer.current) {
-                          clearTimeout(saveDebounceTimer.current);
-                        }
-                        saveDebounceTimer.current = setTimeout(() => {
-                          // Auto-save scheduled changes
-                          scheduleAutoSave(nodes, edges);
-                        }, 500);
-                      } else {
-                        // Immediate auto-save for add/remove operations
-                        scheduleAutoSave(nodes, edges);
-                      }
+                    if (simpleCommand) {
+                      executeCommand(simpleCommand);
                     }
                   } catch (error) {
-                    console.error('Error handling node changes:', error);
+                    console.error('[BlueprintTab] Error in onConnect:', error);
                   }
                 }}
+                onNodeClick={(event, node) => {
+                  setSelectedNode(node);
+                  setSelectedEdge(null);
+                }}
+                onEdgeClick={(event, edge) => {
+                  setSelectedEdge(edge);
+                  setSelectedNode(null);
+                }}
                 onNodeDragStart={(event, node) => {
-                  isDragging.current = true;
-                  
-                  // ถ้าเป็น multiple selection และ node ที่กำลังลากอยู่ในกลุ่มที่เลือก
-                  if (selection.selectedNodes.includes(node.id) && selection.selectedNodes.length > 1) {
-                    // เก็บตำแหน่งเริ่มต้นของทุก node ที่เลือก
-                    selection.selectedNodes.forEach(nodeId => {
-                      const selectedNode = nodes.find(n => n.id === nodeId);
-                      if (selectedNode) {
-                        multiSelectDragStart.current[nodeId] = { ...selectedNode.position };
+                  // Start tracking position for MOVE command
+                  if (selection.selectedNodes.length > 1 && selection.selectedNodes.includes(node.id)) {
+                    // Multi-drag start
+                    multiSelectDragStart.current = {};
+                    nodes.forEach(n => {
+                      if (selection.selectedNodes.includes(n.id)) {
+                        multiSelectDragStart.current[n.id] = { ...n.position };
                       }
                     });
                   } else {
-                    // Single node drag - เก็บตำแหน่งเริ่มต้นของ node เดียว
+                    // Single node drag start
                     dragStartPositions.current[node.id] = { ...node.position };
                   }
+                  isDragging.current = true;
                 }}
                 onNodeDragStop={(event, node) => {
-                  isDragging.current = false;
-                  
-                  if (!isInitializingRef.current) {
-                    // ตรวจสอบว่าเป็น multiple selection หรือไม่
-                    if (selection.selectedNodes.includes(node.id) && selection.selectedNodes.length > 1) {
-                      // สร้าง batch command สำหรับ multiple nodes
+                  if (isDragging.current) {
+                    isDragging.current = false;
+                    
+                    // Multi-drag stop
+                    if (selection.selectedNodes.length > 1 && multiSelectDragStart.current[node.id]) {
                       const commands: ICommand[] = [];
-                      let hasAnyMovement = false;
-                      
                       selection.selectedNodes.forEach(nodeId => {
                         const startPosition = multiSelectDragStart.current[nodeId];
-                        const currentNode = nodes.find(n => n.id === nodeId);
-                        
-                        if (startPosition && currentNode) {
-                          const hasPositionChanged = 
-                            Math.abs(startPosition.x - currentNode.position.x) > 1 || 
-                            Math.abs(startPosition.y - currentNode.position.y) > 1;
-                          
-                          if (hasPositionChanged) {
-                            hasAnyMovement = true;
-                            commands.push(createNodeCommand(
-                              'MOVE_NODE',
-                              nodeId,
-                              undefined,
-                              startPosition,
-                              currentNode.position
-                            ));
-                          }
+                        const endNode = nodes.find(n => n.id === nodeId);
+                        if (startPosition && endNode) {
+                          commands.push(createNodeCommand('MOVE_NODE', nodeId, undefined, startPosition, endNode.position));
                         }
                       });
                       
-                      // สร้าง batch command ถ้ามีการเคลื่อนที่จริง
-                      if (hasAnyMovement && commands.length > 0) {
+                      if (commands.length > 0) {
                         const batchCommand: BatchCommand = {
                           id: `batch-move-${Date.now()}`,
                           type: 'BATCH',
-                          description: `ย้าย ${commands.length} nodes`,
+                          description: `Move ${commands.length} nodes`,
                           timestamp: Date.now(),
                           commands,
                           execute: () => {
@@ -4703,22 +5033,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     }
                   }
                 }}
-                onEdgesChange={(changes: EdgeChange[]) => {
-                  // Prevent runtime error by safely handling changes
-                  try {
-                    onEdgesChange(changes);
-                    const meaningfulChanges = changes.filter(change => 
-                      change.type === 'add' || 
-                      change.type === 'remove'
-                    );
-                    if (!isInitializingRef.current && meaningfulChanges.length > 0) {
-                      scheduleAutoSave(nodes, edges);
-                    }
-                  } catch (error) {
-                    console.error('Error handling edge changes:', error);
-                  }
-                }}
-                onConnect={onConnect}
                 onSelectionChange={onSelectionChange}
                 onPaneClick={handleCanvasClick}
                 connectionMode={ConnectionMode.Loose}
@@ -4742,85 +5056,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     stroke: '#64748b'
                   },
                   animated: false
-                }}
-                onNodeClick={(event, node) => {
-                  // Legacy connection mode disabled - using React Flow handles instead
-                  // Connection handling is now done via React Flow handles automatically
-                  
-                  // Handle multi-select mode (Canva-style)
-                  if (selection.multiSelectMode) {
-                    const isAlreadySelected = selection.pendingSelection.includes(node.id);
-                    
-                    const newPendingSelection = isAlreadySelected
-                      ? selection.pendingSelection.filter(id => id !== node.id)
-                      : [...selection.pendingSelection, node.id];
-                    
-                    setSelection(prev => ({
-                      ...prev,
-                      pendingSelection: newPendingSelection,
-                      showSelectionBar: newPendingSelection.length > 0
-                    }));
-                    
-                    // อัปเดต visual selection สำหรับ nodes ที่อยู่ใน pending selection
-                    setNodes(prevNodes => 
-                      prevNodes.map(n => ({
-                        ...n,
-                        selected: newPendingSelection.includes(n.id)
-                      }))
-                    );
-                    
-                    // Visual feedback
-                    if (isAlreadySelected) {
-                      toast.info(`Removed ${node.data?.title || node.id} from selection`);
-                  } else {
-                      toast.info(`Added ${node.data?.title || node.id} to selection (${newPendingSelection.length})`);
-                    }
-                    
-                    return;
-                  }
-                  
-                  // Handle Ctrl+Click for quick multi-select (without entering multi-select mode)
-                  if (event.ctrlKey || event.metaKey) {
-                    const isAlreadySelected = selection.selectedNodes.includes(node.id);
-                    
-                    if (isAlreadySelected) {
-                      // Remove from selection
-                      const newSelection = selection.selectedNodes.filter(id => id !== node.id);
-                      setSelection(prev => ({
-                        ...prev,
-                        selectedNodes: newSelection,
-                        selectedEdges: []
-                      }));
-                      
-                      if (newSelection.length === 0) {
-                        setSelectedNode(null);
-                      } else {
-                        const firstSelected = nodes.find(n => n.id === newSelection[0]);
-                        setSelectedNode(firstSelected || null);
-                      }
-                      setSelectedEdge(null);
-                    } else {
-                      // Add to selection
-                      setSelection(prev => ({
-                        ...prev,
-                        selectedNodes: [...prev.selectedNodes, node.id],
-                        selectedEdges: []
-                      }));
-                    setSelectedNode(node);
-                    setSelectedEdge(null);
-                  }
-                    
-                    return;
-                  }
-                  
-                  // Regular single selection
-                  setSelectedNode(node);
-                  setSelectedEdge(null);
-                  setSelection(prev => ({
-                    ...prev,
-                    selectedNodes: [node.id],
-                    selectedEdges: []
-                  }));
                 }}
                 onInit={setReactFlowInstance}
                 fitView

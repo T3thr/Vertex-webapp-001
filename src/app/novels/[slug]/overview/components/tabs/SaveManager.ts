@@ -489,46 +489,81 @@ export class UnifiedSaveManager {
       this.updateDirtyState(false);
     }
 
-    // แสดงข้อความแจ้งเตือนและ console log ตามประเภทการบันทึก - Professional Grade
+    // ===============================
+    // PROFESSIONAL NOTIFICATION SYSTEM
+    // ลดความซับซ้อน - แจ้งเตือนเพียงครั้งเดียว
+    // ===============================
+    
+    // ป้องกันการแจ้งเตือนซ้ำซ้อน
+    const lastNotificationKey = `save_${operation.strategy}_${Date.now()}`;
+    
     if (operation.strategy === 'manual') {
-      // Manual save: แสดง toast และ console log
+      // Manual save: แสดง toast เพียงครั้งเดียว
       if (result.merged) {
         const message = result.mergeMessage || 'บันทึกและรวมการเปลี่ยนแปลงสำเร็จ';
-        toast.success(message, {
-          description: 'ข้อมูลของคุณได้รับการบันทึก',
-          duration: 4000
+        toast.success('💾 บันทึกสำเร็จ', {
+          description: 'ข้อมูลของคุณได้รับการบันทึกแล้ว',
+          duration: 2000, // ลดเวลาแสดงผล
+          id: lastNotificationKey // ป้องกันการแสดงซ้ำ
         });
-        console.log('[SaveManager] Manual save with merge successful:', {
-          message,
+      } else {
+        toast.success('💾 บันทึกสำเร็จ', {
+          description: 'การเปลี่ยนแปลงได้รับการบันทึกแล้ว',
+          duration: 2000, // ลดเวลาแสดงผล
+          id: lastNotificationKey // ป้องกันการแสดงซ้ำ
+        });
+      }
+      
+      // Professional logging สำหรับ development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[SaveManager] 💾 Manual save successful:', {
           operationId: operation.id,
           timestamp: now.toISOString(),
           nodeCount: result.storyMap?.nodes?.length || 0,
           edgeCount: result.storyMap?.edges?.length || 0,
-          merged: true
-        });
-      } else {
-        toast.success('บันทึกเรียบร้อยแล้ว', {
-          description: 'การเปลี่ยนแปลงของคุณได้รับการบันทึกเป็นที่เรียบร้อยแล้ว',
-          duration: 3000
-        });
-        console.log('[SaveManager] Manual save successful:', {
-          operationId: operation.id,
-          timestamp: now.toISOString(),
-          nodeCount: result.storyMap?.nodes?.length || 0,
-          edgeCount: result.storyMap?.edges?.length || 0
+          merged: Boolean(result.merged)
         });
       }
     } else {
       // Auto save: เฉพาะ console log - ไม่รบกวนผู้ใช้
-      const message = result.merged ? 'Auto-save with merge successful' : 'Auto-save successful';
-      console.log(`[SaveManager] ${message}`, {
-        operationId: operation.id,
-        timestamp: now.toISOString(),
-        nodeCount: result.storyMap?.nodes?.length || 0,
-        edgeCount: result.storyMap?.edges?.length || 0,
-        merged: Boolean(result.merged),
-        strategy: operation.strategy
-      });
+      if (process.env.NODE_ENV === 'development') {
+        const message = result.merged ? 'Auto-save with merge successful' : 'Auto-save successful';
+        console.log(`[SaveManager] 🔄 ${message}`, {
+          operationId: operation.id,
+          timestamp: now.toISOString(),
+          nodeCount: result.storyMap?.nodes?.length || 0,
+          edgeCount: result.storyMap?.edges?.length || 0,
+          merged: Boolean(result.merged),
+          strategy: operation.strategy
+        });
+      }
+    }
+
+    // ===============================
+    // PROFESSIONAL CROSS-TAB SYNC
+    // ===============================
+    
+    // Real-time localStorage sync สำหรับ cross-tab awareness
+    if (typeof window !== 'undefined') {
+      // แจ้ง tabs อื่นๆ ว่ามีการบันทึกข้อมูลแล้ว
+      localStorage.setItem('divwy-last-saved', now.getTime().toString());
+      localStorage.setItem('divwy-has-unsaved-changes', 'false');
+      
+      // Enterprise-grade cross-tab awareness
+      localStorage.setItem('divwy-external-change', 'true');
+      localStorage.setItem('divwy-last-external-change', now.getTime().toString());
+      
+      // Professional storage event dispatch
+      try {
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'divwy-save-success',
+          newValue: now.getTime().toString(),
+          storageArea: localStorage
+        }));
+      } catch (e) {
+        // Graceful degradation สำหรับ browsers ที่ไม่รองรับ
+        console.debug('[SaveManager] Storage event dispatch failed:', e);
+      }
     }
   }
 
@@ -588,32 +623,47 @@ export class UnifiedSaveManager {
         retryCount: operation.retryCount
       });
       
-      // Professional error handling เน้นการทำงานคนเดียว
+      // ===============================
+      // SIMPLIFIED ERROR HANDLING
+      // ลดความซับซ้อน - แจ้งเตือนเพียงครั้งเดียว
+      // ===============================
+      
+      // ป้องกันการแจ้งเตือน error ซ้ำซ้อน
+      const errorNotificationKey = `error_${operation.strategy}_${Date.now()}`;
+      
       if (operation.strategy === 'manual') {
-        // Enhanced manual save error messaging
+        // Manual save error: แจ้งเตือนสั้นและชัดเจน
         if (error.message.includes('conflict') || error.message.includes('409')) {
-          toast.error(
-            '🚨 พบข้อมูลที่ขัดแย้งกัน\n' +
-            '💡 เพื่อป้องกันปัญหา แนะนำให้ใช้เบราว์เซอร์แท็บเดียว\n' +
-            'กรุณารีเฟรชหน้าเพจแล้วลองใหม่'
-          );
+          toast.error('⚠️ ไม่สามารถบันทึกได้', {
+            description: 'กรุณารีเฟรชหน้าแล้วลองใหม่',
+            duration: 4000,
+            id: errorNotificationKey
+          });
         } else {
-          toast.error(
-            `❌ บันทึกล้มเหลว: ${error.message}\n` +
-            `💡 หากปัญหาเกิดขึ้นซ้ำ แนะนำให้ใช้เบราว์เซอร์แท็บเดียว`
-          );
+          toast.error('⚠️ บันทึกล้มเหลว', {
+            description: 'กรุณาลองอีกครั้ง',
+            duration: 3000,
+            id: errorNotificationKey
+          });
         }
-        console.error('[SaveManager] Manual save failed permanently:', error.message);
-      } else {
-        // Enhanced auto-save error handling สำหรับการทำงานคนเดียว
-        console.warn('[SaveManager] Auto-save failed permanently (single-user mode):', error.message);
         
-        // แสดง subtle notification สำหรับ auto-save errors
+        // Development logging เท่านั้น
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[SaveManager] ⚠️ Manual save failed:', error.message);
+        }
+      } else {
+        // Auto-save ล้มเหลว - ไม่แจ้งเตือนผู้ใช้ เว้นแต่เป็น conflict
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[SaveManager] 🔄 Auto-save failed:', error.message);
+        }
+        
+        // แจ้งเตือนเฉพาะกรณี conflict ที่สำคัญ
         if (error.message.includes('conflict')) {
-          toast.warning(
-            '⚠️ Auto-save หยุดชั่วคราว เนื่องจากตรวจพบการเปิดหลายแท็บ\n' +
-            'แนะนำให้ใช้แท็บเดียวเพื่อประสบการณ์ที่ดีที่สุด'
-          );
+          toast.warning('⚠️ Auto-save หยุดชั่วคราว', {
+            description: 'แนะนำให้ใช้แท็บเดียวเพื่อประสบการณ์ที่ดีที่สุด',
+            duration: 3000,
+            id: errorNotificationKey
+          });
         }
       }
     }
@@ -755,6 +805,73 @@ export class UnifiedSaveManager {
     this.config.onDirtyChange?.(false);
     
     console.log('[SaveManager] Original data updated, save button disabled');
+  }
+
+  /**
+   * Professional-grade baseline synchronization.
+   * Sets the initial state from the fully loaded editor component,
+   * preventing false positives on the initial dirty check.
+   * (Adobe/Canva/Figma approach)
+   */
+  public syncInitialState(initialEditorData: { nodes: any[]; edges: any[]; storyVariables: any[] }) {
+    console.log('[SaveManager] 🎯 Professional baseline sync started');
+    
+    this.originalData = {
+      nodes: JSON.parse(JSON.stringify(initialEditorData.nodes)),
+      edges: JSON.parse(JSON.stringify(initialEditorData.edges)),
+      storyVariables: JSON.parse(JSON.stringify(initialEditorData.storyVariables))
+    };
+    
+    // Ensure the initial state is clean
+    this.updateState({
+      status: 'idle',
+      isSaving: false,
+      isDirty: false,
+      hasUnsavedChanges: false,
+      lastError: undefined
+    });
+    
+    this.config.onDirtyChange?.(false);
+    
+    console.log('[SaveManager] ✅ Professional baseline sync complete:', {
+      nodeCount: initialEditorData.nodes.length,
+      edgeCount: initialEditorData.edges.length,
+      variableCount: initialEditorData.storyVariables.length,
+      saveButtonEnabled: false,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Mark as Saved - for Command Position Based Tracking
+   * ใช้สำหรับ command-based save state management
+   */
+  public markAsSaved() {
+    this.updateState({
+      status: 'idle',
+      isSaving: false,
+      lastSaved: new Date(),
+      isDirty: false,
+      hasUnsavedChanges: false,
+      lastError: undefined
+    });
+    
+    this.config.onDirtyChange?.(false);
+    console.log('[SaveManager] Marked as saved, save button disabled');
+  }
+
+  /**
+   * Mark as Dirty - for Command Position Based Tracking
+   * ใช้สำหรับ command-based save state management
+   */
+  public markAsDirty() {
+    this.updateState({
+      isDirty: true,
+      hasUnsavedChanges: true
+    });
+    
+    this.config.onDirtyChange?.(true);
+    console.log('[SaveManager] Marked as dirty, save button enabled');
   }
 
   /**
@@ -919,7 +1036,7 @@ export class UnifiedSaveManager {
         // ถ้าไม่มี ID ให้ใช้ deep comparison แบบ sequential
         const matchingItem = arr2.find(item2 => this.deepEqual(item1, item2));
         if (!matchingItem) {
-          return false;
+        return false;
         }
       } else {
         const item2 = map2.get(id);
@@ -1086,13 +1203,13 @@ export class UnifiedSaveManager {
     this.autoSaveTimer = setInterval(async () => {
       try {
         // Professional-grade auto-save logic
-        if (this.state.pendingOperations.length > 0 && !this.state.isProcessingQueue) {
-          console.log('[SaveManager] Auto-save timer triggered - processing pending operations');
-          await this.processPendingOperations();
-        } else if (this.state.hasUnsavedChanges && !this.state.isSaving) {
-          // Fallback สำหรับ hasUnsavedChanges โดยไม่มี pending operations
-          console.log('[SaveManager] Auto-save timer triggered - unsaved changes detected');
-          await this.processPendingOperations();
+      if (this.state.pendingOperations.length > 0 && !this.state.isProcessingQueue) {
+        console.log('[SaveManager] Auto-save timer triggered - processing pending operations');
+        await this.processPendingOperations();
+      } else if (this.state.hasUnsavedChanges && !this.state.isSaving) {
+        // Fallback สำหรับ hasUnsavedChanges โดยไม่มี pending operations
+        console.log('[SaveManager] Auto-save timer triggered - unsaved changes detected');
+        await this.processPendingOperations();
         }
         
         // Real-time conflict detection (ทุก 30 วินาที)
@@ -1110,11 +1227,49 @@ export class UnifiedSaveManager {
   }
 
   /**
-   * Real-time conflict detection เทียบเท่า Adobe และ Canva
+   * Enterprise-grade real-time conflict detection
+   * เทียบเท่า Adobe Premiere Pro และ Canva
    */
   private async performConflictCheck() {
     try {
-      // ตรวจสอบ timestamp ของไฟล์ในเซิร์ฟเวอร์
+      // ===============================
+      // CROSS-TAB CONFLICT DETECTION
+      // ===============================
+      
+      // ตรวจสอบการเปลี่ยนแปลงจาก browser tabs อื่น
+      if (typeof window !== 'undefined') {
+        const externalChangeFlag = localStorage.getItem('divwy-external-change');
+        const lastExternalChange = localStorage.getItem('divwy-last-external-change');
+        
+        if (externalChangeFlag === 'true' && lastExternalChange) {
+          const changeTime = parseInt(lastExternalChange);
+          const currentTime = Date.now();
+          
+          // ตรวจสอบการเปลี่ยนแปลงใน 30 วินาทีล่าสุด
+          if (currentTime - changeTime < 30000) {
+            console.warn('[SaveManager] Cross-tab conflict detected');
+            
+            // Professional user notification สำหรับ cross-tab conflict
+            if (this.state.hasUnsavedChanges) {
+              toast.warning(
+                '⚠️ ตรวจพบการแก้ไขจาก browser tab อื่น\n\n' +
+                '🚨 อาจมีความขัดแย้งของข้อมูล\n\n' +
+                '💡 แนะนำให้บันทึกงานทันทีและใช้ tab เดียว',
+                { duration: 8000 }
+              );
+            }
+            
+            // ล้าง flag เพื่อป้องกันการแจ้งเตือนซ้ำ
+            localStorage.removeItem('divwy-external-change');
+          }
+        }
+      }
+      
+      // ===============================
+      // SERVER-SIDE CONFLICT DETECTION
+      // ===============================
+      
+      // ตรวจสอบ ETag กับเซิร์ฟเวอร์
       const response = await fetch(`/api/novels/${this.config.novelSlug}/storymap`, {
         method: 'HEAD' // ใช้ HEAD เพื่อดึงเฉพาะ headers
       });
@@ -1123,9 +1278,9 @@ export class UnifiedSaveManager {
         const serverEtag = response.headers.get('etag');
         const lastModified = response.headers.get('last-modified');
         
-        // ตรวจสอบ conflict
+        // Professional server conflict detection
         if (this.state.etag && serverEtag && this.state.etag !== serverEtag) {
-          console.warn('[SaveManager] Real-time conflict detected:', {
+          console.warn('[SaveManager] Server-side conflict detected:', {
             localEtag: this.state.etag,
             serverEtag,
             lastModified
@@ -1133,14 +1288,23 @@ export class UnifiedSaveManager {
           
           this.updateState({ 
             status: 'conflict',
-            lastError: 'ตรวจพบการเปลี่ยนแปลงจากภายนอก แนะนำให้รีเฟรชหน้าเพจ'
+            lastError: '🔄 ตรวจพบการเปลี่ยนแปลงจากภายนอก แนะนำให้รีเฟรชหน้าเพจ'
           });
+          
+          // Professional server conflict notification
+          toast.error(
+            '🔄 ตรวจพบการเปลี่ยนแปลงจากเซิร์ฟเวอร์\n\n' +
+            '⚠️ ข้อมูลอาจไม่ตรงกับเซิร์ฟเวอร์\n\n' +
+            '🔃 แนะนำให้รีเฟรชหน้าเพจ',
+            { duration: 10000 }
+          );
         }
       }
+      
     } catch (error) {
-      // ไม่ log error เพราะอาจเป็นเรื่องปกติ (network issues)
+      // Graceful degradation - ไม่ log error เพราะอาจเป็นเรื่องปกติ (network issues)
       if (process.env.NODE_ENV === 'development') {
-        console.debug('[SaveManager] Conflict check failed:', error);
+        console.debug('[SaveManager] Professional conflict check failed:', error);
       }
     }
   }
