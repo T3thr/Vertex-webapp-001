@@ -54,9 +54,16 @@ export interface SnapshotData {
 
 class SingleUserCommandContext implements CommandContext {
   private eventManager: SingleUserEventManager;
+  // 🚀 NEW: External UI update callbacks
+  private reactFlowUpdater?: (nodes: any[], edges: any[]) => void;
 
   constructor(eventManager: SingleUserEventManager) {
     this.eventManager = eventManager;
+  }
+
+  // 🚀 NEW: Set external UI updater callback
+  setReactFlowUpdater(updater: (nodes: any[], edges: any[]) => void): void {
+    this.reactFlowUpdater = updater;
   }
 
   getCurrentNodes(): any[] {
@@ -77,6 +84,16 @@ class SingleUserCommandContext implements CommandContext {
       nodes,
       timestamp: Date.now()
     });
+    
+    // 🔥 CRITICAL: Immediate UI sync - แบบ Figma/Canva
+    if (this.reactFlowUpdater) {
+      console.log('[SingleUserCommandContext] 🔄 Immediate UI sync - setNodes:', nodes.length);
+      
+      // ✅ CRITICAL FIX: ใช้ nodes ที่ส่งเข้ามาแทน snapshot
+      // เพราะ snapshot อาจยัง out-of-sync
+      const currentSnapshot = this.eventManager.getCurrentSnapshot();
+      this.reactFlowUpdater([...nodes], [...currentSnapshot.edges]);
+    }
   }
 
   setEdges(edges: any[]): void {
@@ -85,6 +102,15 @@ class SingleUserCommandContext implements CommandContext {
       edges,
       timestamp: Date.now()
     });
+    
+    // 🔥 CRITICAL: Immediate UI sync - แบบ Figma/Canva
+    if (this.reactFlowUpdater) {
+      console.log('[SingleUserCommandContext] 🔄 Immediate UI sync - setEdges:', edges.length);
+      
+      // ✅ CRITICAL FIX: ใช้ edges ที่ส่งเข้ามาแทน snapshot
+      const currentSnapshot = this.eventManager.getCurrentSnapshot();
+      this.reactFlowUpdater([...currentSnapshot.nodes], [...edges]);
+    }
   }
 
   setStoryVariables(variables: any[]): void {
@@ -100,7 +126,7 @@ class SingleUserCommandContext implements CommandContext {
   }
 
   findEdgeById(id: string): any | null {
-    return this.getCurrentEdges().find(edge => edge.id === id) || null;
+    return this.getCurrentEdges().find(edge => edge.id === edge.id) || null;
   }
 
   generateNodeId(): string {
@@ -122,6 +148,24 @@ class SingleUserCommandContext implements CommandContext {
   notifyChange(changeType: string, data: any): void {
     this.eventManager.notifyChange(changeType, data);
   }
+
+  // 🚀 NEW: Bidirectional sync methods implementation
+  updateReactFlowUI?: (nodes: any[], edges: any[]) => void = (nodes: any[], edges: any[]) => {
+    if (this.reactFlowUpdater) {
+      this.reactFlowUpdater(nodes, edges);
+    }
+  };
+
+  syncBackToReactFlow?: () => void = () => {
+    if (this.reactFlowUpdater) {
+      const snapshot = this.eventManager.getCurrentSnapshot();
+      this.reactFlowUpdater(snapshot.nodes, snapshot.edges);
+    }
+  };
+
+  updateEventManagerState?: (nodes: any[], edges: any[], storyVariables: any[]) => void = (nodes: any[], edges: any[], storyVariables: any[]) => {
+    this.eventManager.updateSnapshotFromReactFlow(nodes, edges, storyVariables);
+  };
 }
 
 // ===================================================================
@@ -163,23 +207,36 @@ export class SingleUserEventManager {
         throw new Error('Invalid command');
       }
 
+      console.log(`[SingleUserEventManager] Executing command: ${command.type} - ${command.description}`);
+
       // Execute command
       if (command.execute) {
         await command.execute();
       }
 
-      // Add to history
-      this.addToHistory(command);
+      // Add to history เฉพาะ commands ที่สามารถ undo ได้
+      if (this.isUndoableCommand(command)) {
+        this.addToHistory(command);
+        
+        // Clear redo stack เมื่อมี command ใหม่ (เหมือน Canva/Figma)
+        this.state.redoStack = [];
+        
+        console.log(`[SingleUserEventManager] ✅ Command added to history. Undo: ${this.state.undoStack.length}, Redo: ${this.state.redoStack.length}`);
+      } else {
+        console.log(`[SingleUserEventManager] ⏭️ Command not undoable, skipping history`);
+      }
 
-      // Mark as dirty
-      this.markAsDirty();
+      // Mark as dirty (เฉพาะ commands ที่ไม่ใช่ UI-only)
+      if (!this.isUIOnlyCommand(command)) {
+        this.markAsDirty();
+      } else {
+        console.log(`[SingleUserEventManager] 🎨 UI-only command executed (no dirty state): ${command.type}`);
+      }
 
       // Update state
       this.updateState({
         totalEvents: this.state.totalEvents + 1
       });
-
-      console.log(`[SingleUserEventManager] Command executed: ${command.type}`);
 
       return {
         success: true,
@@ -205,8 +262,68 @@ export class SingleUserEventManager {
     }
   }
 
+  // ตรวจสอบว่า command สามารถ undo ได้หรือไม่ (เหมือน Canva/Figma)
+  private isUndoableCommand(command: Command): boolean {
+    const undoableTypes = [
+      'ADD_NODE', 'DELETE_NODE', 'UPDATE_NODE', 'MOVE_NODE', 'RESIZE_NODE',
+      'ADD_EDGE', 'DELETE_EDGE', 'UPDATE_EDGE',
+      'ADD_VARIABLE', 'DELETE_VARIABLE', 'UPDATE_VARIABLE',
+      'BATCH_OPERATION', 'COPY_NODES', 'PASTE_NODES',
+      // ✅ FIGMA/CANVA STYLE: Support for multiple selection operations
+      'BATCH_MOVE', 'BATCH_DELETE', 'BATCH_COPY', 'BATCH_CUT', 'BATCH_PASTE', 'MULTI_SELECT', 'REACTFLOW_MULTI_SELECT'
+    ];
+    
+    return undoableTypes.some(type => command.type.includes(type));
+  }
+
+  // ตรวจสอบว่า command เป็น UI-only หรือไม่ (ไม่ทำให้เป็น dirty state)
+  private isUIOnlyCommand(command: Command): boolean {
+    const uiOnlyTypes = [
+      'MULTI_SELECT', 'REACTFLOW_MULTI_SELECT', 'SELECT_ALL', 'DESELECT_ALL', 
+      'FOCUS_NODE', 'ZOOM_TO_FIT', 'UI_SELECTION'
+    ];
+    
+    return uiOnlyTypes.some(type => command.type.includes(type));
+  }
+
+  // เพิ่ม method สำหรับเพิ่ม command เข้า history โดยตรง (สำหรับ ReactFlow generated commands)
+  addCommandToHistory(command: Command): void {
+    try {
+      console.log(`[SingleUserEventManager] Adding command to history: ${command.type} - ${command.description}`);
+
+      // ตรวจสอบว่า command สามารถ undo ได้หรือไม่
+      if (this.isUndoableCommand(command)) {
+        this.addToHistory(command);
+        
+        // Clear redo stack เมื่อมี command ใหม่ (เหมือน Canva/Figma)
+        this.state.redoStack = [];
+        
+        console.log(`[SingleUserEventManager] ✅ Command added to history. Undo: ${this.state.undoStack.length}, Redo: ${this.state.redoStack.length}`);
+      } else {
+        console.log(`[SingleUserEventManager] ⏭️ Command not undoable, skipping history`);
+      }
+
+      // Mark as dirty (เฉพาะ commands ที่ไม่ใช่ UI-only)
+      if (!this.isUIOnlyCommand(command)) {
+        this.markAsDirty();
+      } else {
+        console.log(`[SingleUserEventManager] 🎨 UI-only command added to history (no dirty state): ${command.type}`);
+      }
+
+      // Update state
+      this.updateState({
+        totalEvents: this.state.totalEvents + 1
+      });
+
+    } catch (error) {
+      console.error('[SingleUserEventManager] Failed to add command to history:', error);
+      this.config.onError?.(error instanceof Error ? error : new Error('Failed to add command to history'), 'ADD_TO_HISTORY');
+    }
+  }
+
   undo(): boolean {
     if (this.state.undoStack.length === 0) {
+      console.log('[SingleUserEventManager] ↶ No actions to undo');
       return false;
     }
 
@@ -214,6 +331,8 @@ export class SingleUserEventManager {
     if (!command) return false;
 
     try {
+      console.log(`[SingleUserEventManager] ↶ Undoing: ${command.type} - ${command.description}`);
+
       if (command.undo) {
         command.undo();
       }
@@ -221,11 +340,19 @@ export class SingleUserEventManager {
       this.state.redoStack.push(command);
       this.markAsDirty();
 
-      console.log(`[SingleUserEventManager] Undid command: ${command.type}`);
+      // 🔥 FIGMA/CANVA STYLE: Force immediate UI sync
+      this.forceUISync();
+
+      // Update state
+      this.updateState({
+        totalEvents: this.state.totalEvents + 1
+      });
+
+      console.log(`[SingleUserEventManager] ✅ Undo successful. Undo: ${this.state.undoStack.length}, Redo: ${this.state.redoStack.length}`);
       return true;
 
     } catch (error) {
-      console.error('[SingleUserEventManager] Undo failed:', error);
+      console.error('[SingleUserEventManager] ❌ Undo failed:', error);
       // Re-add to undo stack if undo failed
       this.state.undoStack.push(command);
       return false;
@@ -234,6 +361,7 @@ export class SingleUserEventManager {
 
   redo(): boolean {
     if (this.state.redoStack.length === 0) {
+      console.log('[SingleUserEventManager] ↷ No actions to redo');
       return false;
     }
 
@@ -241,6 +369,8 @@ export class SingleUserEventManager {
     if (!command) return false;
 
     try {
+      console.log(`[SingleUserEventManager] ↷ Redoing: ${command.type} - ${command.description}`);
+
       if (command.execute) {
         command.execute();
       }
@@ -248,11 +378,19 @@ export class SingleUserEventManager {
       this.state.undoStack.push(command);
       this.markAsDirty();
 
-      console.log(`[SingleUserEventManager] Redid command: ${command.type}`);
+      // 🔥 FIGMA/CANVA STYLE: Force immediate UI sync
+      this.forceUISync();
+
+      // Update state
+      this.updateState({
+        totalEvents: this.state.totalEvents + 1
+      });
+
+      console.log(`[SingleUserEventManager] ✅ Redo successful. Undo: ${this.state.undoStack.length}, Redo: ${this.state.redoStack.length}`);
       return true;
 
     } catch (error) {
-      console.error('[SingleUserEventManager] Redo failed:', error);
+      console.error('[SingleUserEventManager] ❌ Redo failed:', error);
       // Re-add to redo stack if redo failed
       this.state.redoStack.push(command);
       return false;
@@ -261,22 +399,66 @@ export class SingleUserEventManager {
 
   async saveManual(): Promise<void> {
     if (!this.state.isDirty) {
-      console.log('[SingleUserEventManager] No changes to save');
+      console.log('[SingleUserEventManager] ✅ No changes to save');
       return;
     }
 
-    this.updateState({ isSaving: true });
+    this.updateState({ isSaving: true, lastError: undefined });
 
     try {
-      // Prepare data for API - ใช้ข้อมูลจาก currentSnapshot โดยตรง
+      // ตรวจสอบและทำความสะอาดข้อมูลก่อนบันทึก (ตรงกับ StoryMap model schema)
+      const nodes = this.currentSnapshot.nodes || [];
+      const edges = this.currentSnapshot.edges || [];
+      const storyVariables = this.currentSnapshot.storyVariables || [];
+
+      // ทำความสะอาดข้อมูล nodes ให้ตรงกับ IStoryMapNode interface
+      const cleanedNodes = nodes.map(node => ({
+        nodeId: node.id || node.nodeId,
+        nodeType: node.type || node.nodeType || 'scene_node',
+        title: node.data?.title || node.title || 'Untitled Node',
+        position: { 
+          x: Math.round(node.position?.x || 0), 
+          y: Math.round(node.position?.y || 0)
+        },
+        nodeSpecificData: node.data?.nodeSpecificData || {},
+        editorVisuals: {
+          color: node.data?.color || '#3b82f6',
+          orientation: node.data?.orientation || 'vertical'
+        }
+      }));
+
+      // ทำความสะอาดข้อมูล edges ให้ตรงกับ IStoryMapEdge interface
+      const cleanedEdges = edges.map(edge => ({
+        edgeId: edge.id || edge.edgeId,
+        sourceNodeId: edge.source || edge.sourceNodeId,
+        targetNodeId: edge.target || edge.targetNodeId,
+        label: edge.label || '',
+        editorVisuals: {
+          color: edge.data?.color || '#64748b',
+          lineStyle: edge.data?.lineStyle || 'solid'
+        }
+      }));
+
+      // ทำความสะอาดข้อมูล storyVariables ให้ตรงกับ IStoryVariableDefinition interface
+      const cleanedStoryVariables = storyVariables.map(variable => ({
+        variableId: variable.variableId || `var_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        variableName: variable.variableName || variable.name || 'Unknown Variable',
+        dataType: variable.dataType || variable.variableType || 'string',
+        initialValue: variable.initialValue !== undefined ? variable.initialValue : '',
+        description: variable.description || '',
+        isGlobal: variable.isGlobal !== undefined ? variable.isGlobal : true,
+        isVisibleToPlayer: variable.isVisibleToPlayer || false
+      }));
+
       const saveData = {
-        nodes: this.currentSnapshot.nodes || [],
-        edges: this.currentSnapshot.edges || [],
-        storyVariables: this.currentSnapshot.storyVariables || [],
-        version: this.currentSnapshot.version
+        nodes: cleanedNodes,
+        edges: cleanedEdges,
+        storyVariables: cleanedStoryVariables,
+        version: this.state.localVersion
       };
 
-      console.log('[SingleUserEventManager] Saving data:', {
+      console.log('[SingleUserEventManager] 🔄 Saving to database:', {
+        novelSlug: this.config.novelSlug,
         nodeCount: saveData.nodes.length,
         edgeCount: saveData.edges.length,
         variableCount: saveData.storyVariables.length,
@@ -293,22 +475,41 @@ export class SingleUserEventManager {
         body: JSON.stringify(saveData)
       });
 
+      console.log('[SingleUserEventManager] 📡 Server response status:', response.status);
+
       if (!response.ok) {
-        let errorMessage = `Save failed: ${response.status} ${response.statusText}`;
+        let errorMessage = `Save failed: ${response.status}`;
+        let errorDetail = '';
+        
         try {
           const errorData = await response.json();
+          console.error('[SingleUserEventManager] ❌ Server error details:', errorData);
+          
           if (errorData.error) {
             errorMessage = `Save failed: ${errorData.error}`;
           }
-        } catch {
-          // ถ้า parse JSON ไม่ได้ ใช้ status text
-          const errorText = await response.text();
-          errorMessage = `Save failed: ${response.status} ${response.statusText} - ${errorText}`;
+          if (errorData.details) {
+            errorDetail = ` - ${errorData.details}`;
+          }
+        } catch (parseError) {
+          // ถ้า parse JSON ไม่ได้ ใช้ response text
+          try {
+            const errorText = await response.text();
+            console.error('[SingleUserEventManager] ❌ Raw server error:', errorText);
+            errorDetail = ` - ${errorText.substring(0, 200)}`;
+          } catch {
+            errorDetail = ` - ${response.statusText}`;
+          }
         }
-        throw new Error(errorMessage);
+        
+        throw new Error(errorMessage + errorDetail);
       }
 
       const result = await response.json();
+      console.log('[SingleUserEventManager] ✅ Save successful, server response:', result);
+      
+      // Update version และ state หลังบันทึกสำเร็จ
+      const newVersion = result.newVersion || result.storyMap?.version || (this.state.serverVersion + 1);
       
       // Update state
       this.updateState({
@@ -316,18 +517,28 @@ export class SingleUserEventManager {
         lastSaved: new Date(),
         isDirty: false,
         hasUnsavedChanges: false,
-        serverVersion: result.newVersion || this.state.serverVersion + 1
+        localVersion: newVersion,
+        serverVersion: newVersion,
+        lastError: undefined
       });
 
-      // Update original snapshot
-      this.originalSnapshot = { ...this.currentSnapshot };
+      // Update original snapshot เพื่อใช้เป็นฐานในการตรวจสอบการเปลี่ยนแปลงครั้งต่อไป
+      this.originalSnapshot = { 
+        ...this.currentSnapshot,
+        version: newVersion,
+        timestamp: Date.now()
+      };
+      
+      // Reset command history หลังจากบันทึกสำเร็จ (เพื่อให้ undo/redo เริ่มนับใหม่จากจุดที่บันทึก)
+      this.state.undoStack = [];
+      this.state.redoStack = [];
       
       this.config.onDirtyChange?.(false);
 
-      console.log('[SingleUserEventManager] Manual save successful');
+      console.log('[SingleUserEventManager] ✅ Manual save completed successfully');
 
     } catch (error) {
-      console.error('[SingleUserEventManager] Manual save failed:', error);
+      console.error('[SingleUserEventManager] ❌ Manual save failed:', error);
       
       this.updateState({ 
         isSaving: false,
@@ -376,8 +587,34 @@ export class SingleUserEventManager {
     return this.commandContext;
   }
 
+  // 🚀 NEW: Set ReactFlow UI updater for bidirectional sync
+  setReactFlowUpdater(updater: (nodes: any[], edges: any[]) => void): void {
+    if (this.commandContext instanceof SingleUserCommandContext) {
+      this.commandContext.setReactFlowUpdater(updater);
+    }
+  }
+
   hasChanges(): boolean {
-    return this.state.isDirty || this.state.hasUnsavedChanges;
+    // ตรวจสอบการเปลี่ยนแปลงจริงโดยเปรียบเทียบ snapshot
+    const changeDetection = this.detectPreciseChanges(this.originalSnapshot, this.currentSnapshot);
+    return changeDetection.hasChanges;
+  }
+
+  // 🔥 FIGMA/CANVA STYLE: Force immediate UI sync method
+  private forceUISync(): void {
+    if (this.commandContext instanceof SingleUserCommandContext) {
+      const snapshot = this.getCurrentSnapshot();
+      console.log('[SingleUserEventManager] 🔄 Force UI sync:', {
+        nodeCount: snapshot.nodes.length,
+        edgeCount: snapshot.edges.length
+      });
+      
+      // ✅ CRITICAL FIX: Ensure reactFlowUpdater is called with updated references
+      if (this.commandContext.updateReactFlowUI) {
+        // Create new array references to force React re-render
+        this.commandContext.updateReactFlowUI([...snapshot.nodes], [...snapshot.edges]);
+      }
+    }
   }
 
   destroy(): void {
@@ -449,105 +686,7 @@ export class SingleUserEventManager {
     }, this.config.autoSaveIntervalMs);
   }
 
-  private formatDataForAPI(snapshot: SnapshotData): any {
-    // แปลงข้อมูลให้ตรงกับรูปแบบที่ StoryMap API คาดหวัง
-    const formattedData = {
-      nodes: snapshot.nodes
-        .filter(node => node && node.id) // กรองเฉพาะ node ที่มี id
-        .map(node => ({
-          nodeId: node.id,
-          nodeType: node.type || 'scene_node', // ใช้ default type ที่ถูกต้อง
-          title: node.data?.title || node.data?.label || `Node ${node.id}`,
-          position: node.position || { x: 0, y: 0 },
-          nodeSpecificData: {
-            // รวมข้อมูลทั้งหมดจาก node.data
-            ...node.data,
-            // เพิ่มข้อมูลเฉพาะประเภทของ node
-            ...(node.type === 'scene_node' && node.data?.sceneId ? { sceneId: node.data.sceneId } : {}),
-            ...(node.type === 'choice_node' && node.data?.choiceIds ? { choiceIds: node.data.choiceIds } : {}),
-          },
-          editorVisuals: {
-            color: node.style?.backgroundColor || node.data?.color || '#3b82f6',
-            orientation: node.data?.orientation || 'vertical',
-            // เพิ่มข้อมูล visual อื่นๆ
-            borderStyle: node.style?.borderStyle || 'solid',
-            borderRadius: node.style?.borderRadius || 8,
-            ...(node.style && {
-              zIndex: node.style.zIndex,
-              opacity: node.style.opacity
-            })
-          },
-          // เพิ่มข้อมูลเพิ่มเติมจาก node
-          notesForAuthor: node.data?.notes || node.data?.description || '',
-          authorDefinedEmotionTags: node.data?.emotionTags || [],
-          lastEdited: new Date()
-        })),
-      
-      edges: snapshot.edges
-        .filter(edge => edge && edge.id && edge.source && edge.target) // กรองเฉพาะ edge ที่ถูกต้อง
-        .map(edge => ({
-          edgeId: edge.id,
-          sourceNodeId: edge.source,
-          targetNodeId: edge.target,
-          sourceHandleId: edge.sourceHandle || 'bottom',
-          sourceHandlePosition: edge.sourceHandle || 'bottom',
-          targetHandleId: edge.targetHandle || 'top', 
-          targetHandlePosition: edge.targetHandle || 'top',
-          label: edge.label || edge.data?.label || '',
-          // เพิ่มข้อมูล condition หากมี
-          condition: edge.data?.condition ? {
-            expression: edge.data.condition
-          } : undefined,
-          priority: edge.data?.priority || 0,
-          editorVisuals: {
-            color: edge.style?.stroke || '#64748b',
-            lineStyle: edge.style?.strokeDasharray ? 'dashed' : 'solid',
-            animated: edge.animated || false,
-            pathType: edge.type || 'default',
-            strokeWidth: edge.style?.strokeWidth || 2,
-            markerEnd: edge.markerEnd || 'arrowclosed'
-          },
-          authorDefinedEmotionTags: edge.data?.emotionTags || []
-        })),
-      
-      storyVariables: (snapshot.storyVariables || [])
-        .filter(variable => variable && (variable.variableId || variable.id)) // รองรับทั้ง variableId และ id
-        .map(variable => ({
-          variableId: variable.variableId || variable.id || `var_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          variableName: variable.variableName || variable.name || 'Unnamed Variable',
-          dataType: variable.dataType || variable.variableType || 'string',
-          initialValue: variable.initialValue !== undefined 
-            ? variable.initialValue 
-            : (variable.defaultValue !== undefined ? variable.defaultValue : ''),
-          description: variable.description || '',
-          isGlobal: variable.isGlobal !== undefined ? variable.isGlobal : true,
-          isVisibleToPlayer: variable.isVisibleToPlayer !== undefined ? variable.isVisibleToPlayer : false,
-          allowedValues: variable.allowedValues || undefined
-        })),
-      
-      // เพิ่มข้อมูล metadata
-      version: this.state.localVersion,
-      lastModified: new Date(),
-      
-      // เพิ่มข้อมูลสำหรับการตรวจสอบ
-      clientInfo: {
-        userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'SingleUserEventManager',
-        timestamp: Date.now(),
-        nodeCount: snapshot.nodes.length,
-        edgeCount: snapshot.edges.length,
-        variableCount: snapshot.storyVariables.length
-      }
-    };
-
-    console.log('[SingleUserEventManager] Formatted API data:', {
-      nodeCount: formattedData.nodes.length,
-      edgeCount: formattedData.edges.length,
-      variableCount: formattedData.storyVariables.length,
-      version: formattedData.version
-    });
-
-    return formattedData;
-  }
+  // formatDataForAPI function ถูกลบออกแล้ว - ใช้การส่งข้อมูลตรงๆ แทน
 
   updateSnapshot(snapshotData: SnapshotData): void {
     this.currentSnapshot = snapshotData;
@@ -589,12 +728,16 @@ export class SingleUserEventManager {
   }
 
   markAsDirty(): void {
-    if (!this.state.isDirty) {
+    // ตรวจสอบการเปลี่ยนแปลงจริงก่อนอัปเดต state
+    const changeDetection = this.detectPreciseChanges(this.originalSnapshot, this.currentSnapshot);
+    const actuallyHasChanges = changeDetection.hasChanges;
+    
+    if (actuallyHasChanges !== this.state.isDirty) {
       this.updateState({
-        isDirty: true,
-        hasUnsavedChanges: true
+        isDirty: actuallyHasChanges,
+        hasUnsavedChanges: actuallyHasChanges
       });
-      this.config.onDirtyChange?.(true);
+      this.config.onDirtyChange?.(actuallyHasChanges);
     }
   }
 

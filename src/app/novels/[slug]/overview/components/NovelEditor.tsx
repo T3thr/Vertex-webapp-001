@@ -68,8 +68,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // State สำหรับ mobile menu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   
-  // State สำหรับ auto-save (โหลดจาก localStorage เท่านั้น) - แก้ไข hydration
-  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(false) // เริ่มต้นด้วยค่าคงที่เพื่อป้องกัน hydration mismatch
+  // State สำหรับ auto-save (ดึงจาก database API เท่านั้น) - ปิดเด็ดขาดโดย default
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(false) // ✅ ปิดเด็ดขาดเพื่อป้องกัน hydration mismatch
   
   const [autoSaveIntervalSec, setAutoSaveIntervalSec] = useState<15 | 30>(30) // เริ่มต้นด้วยค่าคงที่
   
@@ -418,11 +418,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             nodeOrientation: blueprintSettings.nodeOrientation
           });
         } else {
-          // หาก database ยังไม่มีข้อมูล ใช้ค่าเริ่มต้นและสร้างใน database
-          console.log('[NovelEditor] No blueprint settings in database, using defaults and creating initial settings');
+          // ✅ หาก database ยังไม่มีข้อมูล ใช้ค่าเริ่มต้นชั่วคราว (ไม่บังคับเปลี่ยน database)
+          console.log('[NovelEditor] ไม่พบการตั้งค่า blueprint ใน database, ใช้ค่าเริ่มต้นชั่วคราว');
           
           const defaultSettings = {
-            autoSaveEnabled: false,
+            autoSaveEnabled: false, // ✅ ปิดเด็ดขาดตามที่ผู้ใช้ร้องขอ
             autoSaveIntervalSec: 30,
             showSceneThumbnails: true,
             showNodeLabels: true,
@@ -440,28 +440,14 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           setSnapToGrid(defaultSettings.snapToGrid);
           setNodeOrientation(defaultSettings.nodeOrientation);
 
-          // บันทึกค่าเริ่มต้นไปยัง database
-          try {
-            await fetch('/api/user/settings', {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                visualNovelGameplay: {
-                  blueprintEditor: defaultSettings
-                }
-              }),
-            });
-            console.log('[NovelEditor] Default blueprint settings created in database');
-          } catch (error) {
-            console.warn('[NovelEditor] Failed to create default settings in database:', error);
-          }
+          // ✅ ไม่บันทึกค่าเริ่มต้นไปยัง database อัตโนมัติ
+          // ผู้ใช้ต้องตั้งค่าเองผ่าน UI และระบบจะบันทึกเมื่อมีการเปลี่ยนแปลง
+          console.log('[NovelEditor] ✅ ใช้ค่าเริ่มต้นชั่วคราว - ผู้ใช้สามารถปรับได้ตามต้องการ');
         }
       } catch (error) {
-        console.error('[NovelEditor] Error loading settings from API:', error);
-        // Fallback to defaults if API call fails
-        setIsAutoSaveEnabled(false);
+        console.error('[NovelEditor] ข้อผิดพลาดในการโหลดการตั้งค่าจาก API:', error);
+        // Fallback ไปยังค่าเริ่มต้นหาก API ล้มเหลว (auto-save ปิดเด็ดขาด)
+        setIsAutoSaveEnabled(false); // ✅ ปิดเด็ดขาดแม้ในกรณี error
         setAutoSaveIntervalSec(30);
         setShowSceneThumbnails(true);
         setShowNodeLabels(true);
@@ -471,9 +457,9 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       }
     };
 
-    // โหลดเฉพาะเมื่อ component mount ครั้งแรก
+    // โหลดเฉพาะเมื่อ component mount ครั้งแรก (ไม่เรียกซ้ำเมื่อรีเฟรช)
     loadProfessionalSettings();
-  }, []); // ลบ dependency userSettings ออกเพื่อป้องกัน re-render ไม่จำเป็น
+  }, []); // ✅ ว่างเปล่าเพื่อให้เรียกครั้งเดียวเมื่อ mount เท่านั้น - รักษาการตั้งค่าเดิมของผู้ใช้
 
   // ===============================
   // PROFESSIONAL INITIAL STATE SYNC (Adobe/Figma/Canva Style)
@@ -799,7 +785,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           <SingleUserSaveStatusIndicator 
             saveState={saveState} 
             size="md"
-            showDetails={false}
+            showDetails={true}
+            className="min-w-[180px]"
           />
 
           {/* Undo/Redo Controls ถูกย้ายไปยัง BlueprintTab floating bar แล้ว */}

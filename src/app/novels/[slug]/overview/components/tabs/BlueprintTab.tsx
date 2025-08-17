@@ -1678,13 +1678,41 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   });
 
   // Command execution function (moved up to be available for handlers)
+  // ✨ Enhanced Command execution function สำหรับ Canva/Figma-like experience
   const executeCommand = useCallback(async (command: any) => {
     try {
-      // Execute command through CommandAdapter if available
-      if (commandAdapter) {
+      // 🎯 ใช้ EventManager เป็นหลักในการจัดการ commands (Professional approach)
+      if (professionalEventManager) {
+        console.log(`[BlueprintTab] 🎯 Executing command via EventManager: ${command.type} - ${command.description}`);
+        
+        // Execute ผ่าน EventManager เพื่อให้ undo/redo tracking ทำงานถูกต้อง
+        const result = await professionalEventManager.executeCommand(command);
+        
+        if (result.success) {
+          console.log(`[BlueprintTab] ✅ Command executed successfully: ${command.type}`);
+          
+          // Notify dirty state change (EventManager จะจัดการ markAsDirty เอง)
+          if (onDirtyChange) {
+            onDirtyChange(professionalEventManager.hasChanges());
+          }
+        } else {
+          console.error(`[BlueprintTab] ❌ Command execution failed: ${result.error?.message}`);
+          toast.error(`การดำเนินการล้มเหลว: ${result.error?.message}`);
+        }
+        
+        return result;
+      } else if (commandAdapter) {
+        // Fallback ใช้ CommandAdapter
+        console.log(`[BlueprintTab] 📎 Executing command via CommandAdapter: ${command.type}`);
         await commandAdapter.executeCommand(command);
+        
+        // Force dirty state update for immediate UI feedback
+        if (onDirtyChange) {
+          onDirtyChange(true);
+        }
       } else {
-        // Fallback to direct execution
+        // Fallback ขั้นสุดท้าย
+        console.log(`[BlueprintTab] 🔧 Executing command directly: ${command.type}`);
         if (command.execute) {
           command.execute();
           // Manually mark as dirty if no adapter
@@ -1692,169 +1720,274 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             professionalEventManager.markAsDirty();
           }
         }
+        
+        // Force dirty state update for immediate UI feedback
+        if (onDirtyChange) {
+          onDirtyChange(true);
+        }
       }
       
-      // Force dirty state update for immediate UI feedback
-      if (onDirtyChange) {
-        onDirtyChange(true);
-      }
-      
-      console.log(`[BlueprintTab] ⚡ Command executed: ${command.type} - ${command.description}`);
+      console.log(`[BlueprintTab] ⚡ Command completed: ${command.type} - ${command.description}`);
       
     } catch (error) {
-      console.error('[BlueprintTab] Command execution failed:', error);
+      console.error('[BlueprintTab] ❌ Command execution failed:', error);
+      toast.error('การดำเนินการล้มเหลว กรุณาลองใหม่อีกครั้ง');
     }
   }, [commandAdapter, professionalEventManager, onDirtyChange]);
 
-  // Enhanced ReactFlow handlers that create commands (Professional Canva/Figma style)
+  // ฟังก์ชันตรวจสอบว่าควรสร้าง command หรือไม่
+  const shouldCreateCommand = useCallback((change: NodeChange | EdgeChange): boolean => {
+    // ข้ามการสร้าง command ในกรณีต่อไปนี้:
+    if (isInitializingRef.current) return false;
+    if (change.type === 'select') return false;
+    if (change.type === 'dimensions') return false;
+    
+    // สำหรับ position changes: ต้องเป็นการลากที่เสร็จสิ้นแล้ว (dragging: false)
+    if (change.type === 'position') {
+      return 'dragging' in change && change.dragging === false && 'id' in change && 
+             dragStartPositions.current[change.id] !== undefined;
+    }
+    
+    // Commands ที่ควรสร้าง: remove (delete), add (paste)
+    if (change.type === 'remove') return true;
+    if (change.type === 'add') return true;
+    
+    // อื่นๆ ไม่สร้าง command
+    return false;
+  }, []);
+
+  // 🔥 FIGMA/CANVA STYLE: สร้าง command โดยใช้ CommandContext แทน local state
+  const createCommandFromChange = useCallback((change: NodeChange | EdgeChange, type: 'nodes' | 'edges') => {
+    if (!professionalEventManager) return null;
+    
+    // ✅ ใช้ CommandContext เป็นหลักแทน local state
+    const context = professionalEventManager.getCommandContext();
+    
+    if (type === 'nodes') {
+      const nodeChange = change as NodeChange;
+      if (!('id' in nodeChange)) return null;
+      const node = nodes.find(n => n.id === nodeChange.id);
+      
+      switch (nodeChange.type) {
+        case 'position':
+          if (dragStartPositions.current[nodeChange.id] && 'dragging' in nodeChange && nodeChange.dragging === false) {
+            const originalPosition = dragStartPositions.current[nodeChange.id];
+            const newPosition = nodeChange.position;
+            
+            // เฉพาะเมื่อตำแหน่งเปลี่ยนแปลงจริงๆ
+            if (originalPosition.x !== newPosition?.x || originalPosition.y !== newPosition?.y) {
+              return {
+                id: `move-${nodeChange.id}-${Date.now()}`,
+                type: 'MOVE_NODE',
+                description: `Move node ${node?.data?.title || nodeChange.id}`,
+                timestamp: Date.now(),
+                execute: () => {
+                  // ✅ ใช้ CommandContext แทน local setState
+                  const currentNodes = context.getCurrentNodes();
+                  const updatedNodes = currentNodes.map((n: any) => 
+                    n.id === nodeChange.id 
+                      ? { ...n, position: newPosition }
+                      : n
+                  );
+                  context.setNodes(updatedNodes);
+                },
+                undo: () => {
+                  // ✅ ใช้ CommandContext แทน local setState - ไม่มี setTimeout
+                  const currentNodes = context.getCurrentNodes();
+                  const revertedNodes = currentNodes.map((n: any) => 
+                      n.id === nodeChange.id 
+                        ? { ...n, position: originalPosition }
+                        : n
+                    );
+                  context.setNodes(revertedNodes);
+                }
+              };
+            }
+          }
+          break;
+        case 'remove':
+          if (node) {
+            const edgesToDelete = edges.filter(e => e.source === nodeChange.id || e.target === nodeChange.id);
+            return {
+              id: `delete-${nodeChange.id}-${Date.now()}`,
+              type: 'DELETE_NODE',
+              description: `Delete node ${node.data?.title || nodeChange.id}`,
+              timestamp: Date.now(),
+              execute: () => {
+                // ✅ ใช้ CommandContext
+                const currentNodes = context.getCurrentNodes();
+                const currentEdges = context.getCurrentEdges();
+                
+                context.setNodes(currentNodes.filter((n: any) => n.id !== nodeChange.id));
+                context.setEdges(currentEdges.filter((e: any) => e.source !== nodeChange.id && e.target !== nodeChange.id));
+              },
+              undo: () => {
+                // ✅ ใช้ CommandContext - ไม่มี setTimeout
+                const currentNodes = context.getCurrentNodes();
+                const currentEdges = context.getCurrentEdges();
+                
+                context.setNodes([...currentNodes, node]);
+                context.setEdges([...currentEdges, ...edgesToDelete]);
+              }
+            };
+          }
+          break;
+      }
+    } else {
+      const edgeChange = change as EdgeChange;
+      if (!('id' in edgeChange)) return null;
+      const edge = edges.find(e => e.id === edgeChange.id);
+      
+      switch (edgeChange.type) {
+        case 'remove':
+          if (edge) {
+            return {
+              id: `delete-edge-${edgeChange.id}-${Date.now()}`,
+              type: 'DELETE_EDGE',
+              description: `Delete connection ${edge.source} → ${edge.target}`,
+              timestamp: Date.now(),
+              execute: () => {
+                // ✅ ใช้ CommandContext
+                const currentEdges = context.getCurrentEdges();
+                context.setEdges(currentEdges.filter((e: any) => e.id !== edgeChange.id));
+              },
+                undo: () => {
+                // ✅ ใช้ CommandContext - ไม่มี setTimeout
+                const currentEdges = context.getCurrentEdges();
+                context.setEdges([...currentEdges, edge]);
+              }
+            };
+          }
+          break;
+      }
+    }
+    return null;
+  }, [nodes, edges, professionalEventManager]);
+
+  // Enhanced ReactFlow handlers แบบใหม่ - Single Command Pipeline
+  // 🔥 FIGMA/CANVA STYLE: Enhanced multi-select batch operation support
   const enhancedOnNodesChange = useCallback((changes: NodeChange[]) => {
-    // Apply the changes first
+    // Track drag start positions สำหรับ move commands
+    changes.forEach(change => {
+      if (change.type === 'position' && 'id' in change && change.dragging === true) {
+        const node = nodes.find(n => n.id === change.id);
+        if (node && !dragStartPositions.current[change.id]) {
+          dragStartPositions.current[change.id] = { x: node.position.x, y: node.position.y };
+          isDragging.current = true;
+        }
+      }
+      if (change.type === 'position' && 'id' in change && change.dragging === false) {
+        isDragging.current = false;
+      }
+    });
+
+    // Apply ReactFlow changes first
     onNodesChange(changes);
     
-    // Sync with EventManager snapshot after ReactFlow update
+    // ✅ FIGMA/CANVA STYLE: Batch operations for multi-select
     if (professionalEventManager && !isInitializingRef.current) {
-      // Use setTimeout to ensure ReactFlow state is updated first
-      setTimeout(() => {
-        professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, []);
-      }, 0);
-    }
-    
-    // Create commands for meaningful changes
-    changes.forEach(change => {
-      if (isInitializingRef.current) return; // Skip during initialization
+      // Group position changes that happen simultaneously (multi-select drag)
+      const positionChanges = changes.filter(change => 
+        change.type === 'position' && 
+        'id' in change && 
+        change.dragging === false && 
+        shouldCreateCommand(change)
+      ) as (NodeChange & { type: 'position' })[];
       
-      // Only process changes that have an id
-      if (!('id' in change)) return;
-      
-      switch (change.type) {
-        case 'position':
-          if ('position' in change && change.position && !change.dragging) {
-            // Only create command when dragging is complete (like Figma)
-            const currentNode = nodes.find(n => n.id === change.id);
-            if (currentNode) {
-              const nodeCommand = commandAdapter?.createNodeCommand(
-                'MOVE_NODE',
-                { 
-                  id: change.id, 
-                  position: change.position,
-                  data: currentNode.data 
-                },
-                { 
-                  id: change.id, 
-                  position: currentNode.position,
-                  data: currentNode.data 
-                }
-              );
-              if (nodeCommand) {
-                executeCommand(nodeCommand);
+      if (positionChanges.length > 1) {
+        // ✅ FIGMA/CANVA STYLE: Create batch move command for multi-select operations
+        // Capture original positions for all moved nodes
+        const originalPositions = positionChanges.map(change => ({
+          nodeId: change.id,
+          originalPosition: dragStartPositions.current[change.id] || { x: 0, y: 0 },
+          newPosition: change.position || { x: 0, y: 0 }
+        }));
+        
+        const batchMoveCommand: ICommand = {
+          id: `batch-move-${Date.now()}`,
+          type: 'BATCH_MOVE',
+          description: `Move ${positionChanges.length} nodes`,
+          timestamp: Date.now(),
+          execute: () => {
+            // ✅ Use CommandContext for batch move execution
+            const context = professionalEventManager.getCommandContext();
+            const currentNodes = context.getCurrentNodes();
+            
+            const movedNodes = currentNodes.map((n: any) => {
+              const moveData = originalPositions.find(p => p.nodeId === n.id);
+              if (moveData) {
+                return { ...n, position: moveData.newPosition };
               }
-            }
+              return n;
+            });
+            
+            context.setNodes(movedNodes);
+            console.log(`[BlueprintTab] 🔄 Batch move executed for ${originalPositions.length} nodes`);
+          },
+          undo: () => {
+            // ✅ Use CommandContext for batch undo
+            const context = professionalEventManager.getCommandContext();
+            const currentNodes = context.getCurrentNodes();
+            
+            const revertedNodes = currentNodes.map((n: any) => {
+              const moveData = originalPositions.find(p => p.nodeId === n.id);
+              if (moveData) {
+                return { ...n, position: moveData.originalPosition };
+              }
+              return n;
+            });
+            
+            context.setNodes(revertedNodes);
+            console.log(`[BlueprintTab] ↶ Batch move undone for ${originalPositions.length} nodes`);
           }
-          break;
-          
-        case 'remove':
-          // Create simple command for node removal
-          const nodeToDelete = nodes.find(n => n.id === change.id);
-          if (nodeToDelete) {
-            const simpleCommand = commandAdapter?.createSimpleCommand(
-              'DELETE_NODE',
-              `Delete node: ${nodeToDelete.data?.title || change.id}`,
-              { nodeId: change.id, nodeData: nodeToDelete }
-            );
-            if (simpleCommand) {
-              executeCommand(simpleCommand);
-            }
+        };
+        
+        professionalEventManager.addCommandToHistory(batchMoveCommand);
+        console.log(`[BlueprintTab] 🔄 Created batch move command for ${positionChanges.length} nodes`);
+      } else {
+        // Single node operations
+      changes.forEach(change => {
+        if (shouldCreateCommand(change)) {
+          const command = createCommandFromChange(change, 'nodes');
+          if (command) {
+            professionalEventManager.addCommandToHistory(command);
           }
-          break;
-          
-        case 'select':
-          // Track selection changes for professional UX
-          console.log(`[BlueprintTab] Node selection: ${change.id} - ${change.selected ? 'selected' : 'deselected'}`);
-          break;
-          
-        case 'dimensions':
-          // Track resize operations
-          if ('dimensions' in change && change.dimensions) {
-            const simpleCommand = commandAdapter?.createSimpleCommand(
-              'RESIZE_NODE',
-              `Resize node: ${change.id}`,
-              { nodeId: change.id, dimensions: change.dimensions }
-            );
-            if (simpleCommand) {
-              executeCommand(simpleCommand);
-            }
-          }
-          break;
-          
-        default:
-          // For other changes, create a simple command
-          const simpleCommand = commandAdapter?.createSimpleCommand(
-            'NODE_CHANGE',
-            `Node ${change.type}: ${change.id}`,
-            change
-          );
-          if (simpleCommand) {
-            executeCommand(simpleCommand);
-          }
-          break;
+        }
+      });
+      }
+      
+      // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
+      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+    }
+
+    // Clear drag positions หลัง position change เสร็จ
+    changes.forEach(change => {
+      if (change.type === 'position' && 'id' in change && change.dragging === false) {
+        delete dragStartPositions.current[change.id];
       }
     });
-  }, [onNodesChange, nodes, executeCommand, commandAdapter, edges, professionalEventManager]);
+  }, [onNodesChange, shouldCreateCommand, createCommandFromChange, professionalEventManager, nodes, edges, storyMap]);
 
   const enhancedOnEdgesChange = useCallback((changes: EdgeChange[]) => {
-    // Apply the changes first
+    // Apply ReactFlow changes first
     onEdgesChange(changes);
     
-    // Sync with EventManager snapshot after ReactFlow update
+    // สร้าง commands เฉพาะการเปลี่ยนแปลงที่ undoable และเพิ่มเข้า history ทันที
     if (professionalEventManager && !isInitializingRef.current) {
-      // Use setTimeout to ensure ReactFlow state is updated first
-      setTimeout(() => {
-        professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, []);
-      }, 0);
+      changes.forEach(change => {
+        if (shouldCreateCommand(change)) {
+          const command = createCommandFromChange(change, 'edges');
+          if (command) {
+            // เพิ่มเข้า history โดยตรงแทนการ execute ซ้ำ (เพราะ ReactFlow ทำแล้ว)
+            professionalEventManager.addCommandToHistory(command);
+          }
+        }
+      });
+      
+      // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
+      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
     }
-    
-    // Create commands for meaningful changes (Professional Canva/Figma style)
-    changes.forEach(change => {
-      if (isInitializingRef.current) return; // Skip during initialization
-      
-      // Only process changes that have an id
-      if (!('id' in change)) return;
-      
-      switch (change.type) {
-        case 'remove':
-          // Create simple command for edge removal
-          const edgeToDelete = edges.find(e => e.id === change.id);
-          if (edgeToDelete) {
-            const simpleCommand = commandAdapter?.createSimpleCommand(
-              'DELETE_EDGE',
-              `Delete edge: ${change.id}`,
-              { edgeId: change.id, edgeData: edgeToDelete }
-            );
-            if (simpleCommand) {
-              executeCommand(simpleCommand);
-            }
-          }
-          break;
-          
-        case 'select':
-          // Track edge selection changes for professional UX
-          console.log(`[BlueprintTab] Edge selection: ${change.id} - ${change.selected ? 'selected' : 'deselected'}`);
-          break;
-          
-        default:
-          // For other changes, create a simple command
-          const simpleCommand = commandAdapter?.createSimpleCommand(
-            'EDGE_CHANGE',
-            `Edge ${change.type}: ${change.id}`,
-            change
-          );
-          if (simpleCommand) {
-            executeCommand(simpleCommand);
-          }
-          break;
-      }
-    });
-  }, [onEdgesChange, edges, executeCommand, commandAdapter, nodes, professionalEventManager]);
+  }, [onEdgesChange, shouldCreateCommand, createCommandFromChange, professionalEventManager, nodes, edges, storyMap]);
   
   // Selection and UI state
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -1904,15 +2037,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
 
   
-  // Command Stack for undo/redo (replacing old HistoryState)
-  const [undoStack, setUndoStack] = useState<AnyCommand[]>([]);
-  const [redoStack, setRedoStack] = useState<AnyCommand[]>([]);
-  const [lastSavedCommandPosition, setLastSavedCommandPosition] = useState<number>(0); // 0 = initial clean state
-  const maxHistorySize = 50;
+  // ✨ Professional Command Management สำหรับ Undo/Redo (ใช้ EventManager เป็นหลัก)
+  // ลบการใช้ local command stack และใช้ SingleUserEventManager แทน
+  // const [undoStack, setUndoStack] = useState<AnyCommand[]>([]); // ❌ ลบ local stack
+  // const [redoStack, setRedoStack] = useState<AnyCommand[]>([]); // ❌ ลบ local stack  
+  const [lastSavedCommandPosition, setLastSavedCommandPosition] = useState<number>(0);
   
   // Drag tracking for Command Pattern
   const dragStartPositions = useRef<Record<string, { x: number; y: number }>>({});
   const isDragging = useRef(false);
+
+
   const multiSelectDragStart = useRef<Record<string, { x: number; y: number }>>({});
   
   // Connection mode for manual edge creation (deprecated - using React Flow handles instead)
@@ -2534,6 +2669,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // Initialize save position to 0 (clean state)
       setLastSavedCommandPosition(0);
       
+      // 🔥 FIGMA/CANVA STYLE: Setup bidirectional sync between EventManager and ReactFlow
+      if (professionalEventManager) {
+        professionalEventManager.setReactFlowUpdater((nodes: any[], edges: any[]) => {
+          console.log('[BlueprintTab] 🔄 Force updating UI from EventManager:', {
+            nodeCount: nodes.length,
+            edgeCount: edges.length
+          });
+          
+          // Force new array references for React re-render
+          setNodes([...nodes]);
+          setEdges([...edges]);
+        });
+        console.log('[BlueprintTab] ✅ Figma/Canva style bidirectional sync setup completed');
+      }
+      
       // ✨ Professional Save Integration: Sync initial state with EventManager
       if (professionalEventManager) {
         professionalEventManager.initializeWithData({
@@ -2589,35 +2739,32 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     if (onDirtyChange) {
       const performSmartChangeDetection = () => {
-        // ✨ NEW: ใช้ command position แทน snapshot comparison
-        const currentCommandPosition = undoStack.length;
-        const hasChanges = currentCommandPosition !== lastSavedCommandPosition;
-        
-        // ✨ Professional Save Integration: Use EventManager as single source of truth
+        // ✨ Professional Save Integration: ใช้ SingleUserEventManager เป็น single source of truth
         if (professionalEventManager) {
-          // EventManager automatically tracks changes through command execution
-          // No need to manually mark dirty/clean state
-        }
-        
-        // Keep legacy callback for backwards compatibility with NovelEditor
-        onDirtyChange(hasChanges);
-        
-        // Enterprise-grade change detection logging
-        console.log('[BlueprintTab] 🔍 Command-Based Save Detection:', {
-          hasChanges,
-          saveButtonEnabled: hasChanges,
-          currentCommandPosition,
-          lastSavedCommandPosition,
-          undoStackLength: undoStack.length,
-          redoStackLength: redoStack.length,
-          changeType: hasChanges ? 'DIRTY' : 'CLEAN',
-          canUndo: undoStack.length > 0,
-          canRedo: redoStack.length > 0,
+          // EventManager จัดการ change detection และ dirty state อัตโนมัติ
+          const eventManagerHasChanges = professionalEventManager.hasChanges();
+          const eventManagerState = professionalEventManager.getState();
+          
+          onDirtyChange(eventManagerHasChanges);
+          
+          console.log('[BlueprintTab] 🔍 Professional Change Detection via EventManager:', {
+            hasChanges: eventManagerHasChanges,
+            saveButtonEnabled: eventManagerHasChanges,
+            canUndo: eventManagerState.undoStack.length > 0,
+            canRedo: eventManagerState.redoStack.length > 0,
+            changeType: eventManagerHasChanges ? 'DIRTY' : 'CLEAN',
+            undoStackLength: eventManagerState.undoStack.length,
+            redoStackLength: eventManagerState.redoStack.length,
           sessionDuration: initialSnapshot ? Math.round((Date.now() - initialSnapshot.timestamp) / 1000) + 's' : '0s',
           platform: typeof window !== 'undefined' ? 
-            (window.navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop') : 'server',
-          eventManagerIntegrated: !!professionalEventManager
-        });
+              (window.navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop') : 'server'
+          });
+          return;
+        }
+        
+        // Fallback: หากไม่มี EventManager (ไม่ควรเกิดขึ้นในโหมด Professional)
+        console.warn('[BlueprintTab] ⚠️ No EventManager available for change detection');
+        onDirtyChange(false);
       };
 
       // Stabilization - รอให้ React update state ก่อนตรวจสอบ
@@ -2628,9 +2775,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if (stabilizeTimer) clearTimeout(stabilizeTimer);
     };
   }, [
-    undoStack.length,
-    redoStack.length, 
-    lastSavedCommandPosition,
     professionalEventManager,
     onDirtyChange, 
     isSnapshotReady,
@@ -2739,16 +2883,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         throw error;
       }
     },
-    // Canvas state information
-    getCanvasState: () => ({
+    // Canvas state information via EventManager
+    getCanvasState: () => {
+      const eventManagerState = professionalEventManager?.getState();
+      return {
       nodeCount: nodes.length,
       edgeCount: edges.length,
-      hasUndoHistory: undoStack.length > 0,
-      hasRedoHistory: redoStack.length > 0,
+        hasUndoHistory: eventManagerState?.undoStack.length > 0 || false,
+        hasRedoHistory: eventManagerState?.redoStack.length > 0 || false,
       isInitialized: !isInitializingRef.current,
       isSnapshotReady: isSnapshotReady,
-      hasUnsavedChanges: initialSnapshot ? !deepCompareSnapshots(initialSnapshot, createStateSnapshot()) : false
-    }),
+        hasUnsavedChanges: professionalEventManager?.hasChanges() || false
+      };
+    },
     // Professional snapshot management สำหรับ parent component
     updateInitialSnapshotAfterSave,
     // Smart save detection สำหรับ external checking
@@ -2760,8 +2907,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     onManualSave, 
     nodes, 
     edges, 
-    undoStack, 
-    redoStack, 
     isSnapshotReady, 
     initialSnapshot, 
     deepCompareSnapshots, 
@@ -2834,63 +2979,99 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }
       }
       
-      // Ctrl+C สำหรับ Copy (selected nodes/edges)
+      // Ctrl+C สำหรับ Copy (selected nodes/edges) - ใช้ระบบ CommandContext ใหม่
       if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
         event.preventDefault();
-        const selectedNodes = nodes.filter(node => node.selected);
-        const selectedEdges = edges.filter(edge => edge.selected);
         
-        if (selectedNodes.length > 0 || selectedEdges.length > 0) {
-          // Store in clipboard state for paste operation
+        // ✅ CRITICAL FIX: ใช้ selection state แทน node.selected
+        const { selectedNodes: selectedNodeIds, selectedEdges: selectedEdgeIds } = selection;
+        
+        if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
+          // ✅ ใช้ copySelected function ที่มี undo/redo tracking
+          copySelected();
+        } else {
+          // Fallback: ตรวจสอบ ReactFlow selection
+          const reactFlowSelectedNodes = nodes.filter(node => node.selected);
+          const reactFlowSelectedEdges = edges.filter(edge => edge.selected);
+          
+          if (reactFlowSelectedNodes.length > 0 || reactFlowSelectedEdges.length > 0) {
+            // Update selection state แล้ว copy
           setSelection(prev => ({
             ...prev,
-            clipboard: {
-              nodes: selectedNodes,
-              edges: selectedEdges
-            }
-          }));
-          
-          console.log(`[BlueprintTab] Copied ${selectedNodes.length} nodes and ${selectedEdges.length} edges`);
-          toast.success(`คัดลอก ${selectedNodes.length} โหนดและ ${selectedEdges.length} เส้นเชื่อม`);
-        }
-      }
-      
-      // Ctrl+V สำหรับ Paste
-      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        event.preventDefault();
-        
-        if (selection.clipboard.nodes.length > 0 || selection.clipboard.edges.length > 0) {
-          // Create paste command
-          const pasteCommand = commandAdapter?.createSimpleCommand(
-            'PASTE_ITEMS',
-            `Paste ${selection.clipboard.nodes.length} nodes and ${selection.clipboard.edges.length} edges`,
-            { clipboard: selection.clipboard }
-          );
-          
-          if (pasteCommand) {
-            executeCommand(pasteCommand);
-            console.log(`[BlueprintTab] Pasted ${selection.clipboard.nodes.length} nodes and ${selection.clipboard.edges.length} edges`);
-            toast.success(`วาง ${selection.clipboard.nodes.length} โหนดและ ${selection.clipboard.edges.length} เส้นเชื่อม`);
+              selectedNodes: reactFlowSelectedNodes.map(n => n.id),
+              selectedEdges: reactFlowSelectedEdges.map(e => e.id)
+            }));
+            
+            // ใช้ timeout เพื่อให้ state update ก่อน
+            setTimeout(() => copySelected(), 10);
           }
         }
       }
       
-      // Delete key สำหรับการลบ selected items
+      // Ctrl+V สำหรับ Paste - ใช้ระบบ CommandContext ใหม่
+      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+        event.preventDefault();
+        
+        if (selection.clipboard.nodes.length > 0 || selection.clipboard.edges.length > 0) {
+          // ✅ ใช้ pasteSelected function ที่มี undo/redo tracking
+          pasteSelected();
+        }
+      }
+      
+      // Ctrl+X สำหรับ Cut (Copy + Delete) - ใช้ระบบ CommandContext ใหม่
+      if ((event.ctrlKey || event.metaKey) && event.key === 'x') {
+        event.preventDefault();
+        
+        // ✅ CRITICAL FIX: ใช้ selection state แทน node.selected
+        const { selectedNodes: selectedNodeIds, selectedEdges: selectedEdgeIds } = selection;
+        
+        if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
+          // ✅ ใช้ cutSelected function ที่มี undo/redo tracking
+          cutSelected();
+        } else {
+          // Fallback: ตรวจสอบ ReactFlow selection
+          const reactFlowSelectedNodes = nodes.filter(node => node.selected);
+          const reactFlowSelectedEdges = edges.filter(edge => edge.selected);
+          
+          if (reactFlowSelectedNodes.length > 0 || reactFlowSelectedEdges.length > 0) {
+            // Update selection state แล้ว cut
+            setSelection(prev => ({
+              ...prev,
+              selectedNodes: reactFlowSelectedNodes.map(n => n.id),
+              selectedEdges: reactFlowSelectedEdges.map(e => e.id)
+            }));
+            
+            // ใช้ timeout เพื่อให้ state update ก่อน
+            setTimeout(() => cutSelected(), 10);
+          }
+        }
+      }
+      
+      // Delete key สำหรับการลบ selected items - ใช้ระบบ CommandContext ใหม่
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        const selectedNodes = nodes.filter(node => node.selected);
-        const selectedEdges = edges.filter(edge => edge.selected);
         
-        if (selectedNodes.length > 0 || selectedEdges.length > 0) {
-          const deleteCommand = commandAdapter?.createSimpleCommand(
-            'DELETE_SELECTED',
-            `Delete ${selectedNodes.length} nodes and ${selectedEdges.length} edges`,
-            { nodes: selectedNodes, edges: selectedEdges }
-          );
+        // ✅ CRITICAL FIX: ใช้ selection state แทน node.selected
+        const { selectedNodes: selectedNodeIds, selectedEdges: selectedEdgeIds } = selection;
+        
+        if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
+          // ✅ ใช้ deleteSelected function ที่มี undo/redo tracking
+          deleteSelected();
+        } else {
+          // Fallback: ตรวจสอบ ReactFlow selection
+          const reactFlowSelectedNodes = nodes.filter(node => node.selected);
+          const reactFlowSelectedEdges = edges.filter(edge => edge.selected);
           
-          if (deleteCommand) {
-            executeCommand(deleteCommand);
-            console.log(`[BlueprintTab] Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} edges`);
+          if (reactFlowSelectedNodes.length > 0 || reactFlowSelectedEdges.length > 0) {
+            // Update selection state แล้ว delete
+            setSelection(prev => ({
+              ...prev,
+              selectedNodes: reactFlowSelectedNodes.map(n => n.id),
+              selectedEdges: reactFlowSelectedEdges.map(e => e.id)
+            }));
+            
+            // ใช้ timeout เพื่อให้ state update ก่อน
+            setTimeout(() => deleteSelected(), 10);
           }
         }
       }
@@ -3363,92 +3544,120 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // Command Pattern functions
 
+  // State สำหรับ force re-render UI เมื่อ EventManager state เปลี่ยน
+  const [forceUIUpdate, setForceUIUpdate] = useState(0);
 
-  // Professional Undo function using EventManager (like Figma/Canva)
+  // เก็บ reference ของ EventManager state เพื่อเปรียบเทียบ
+  const previousEventManagerState = useRef<any>(null);
+  
+  // Real-time UI State Sync กับ EventManager
+  useEffect(() => {
+    if (!professionalEventManager) return;
+    
+    const updateUI = () => {
+      const state = professionalEventManager.getState();
+      console.log(`[BlueprintTab] 🔄 EventManager state changed: Undo: ${state.undoStack.length}, Redo: ${state.redoStack.length}, isDirty: ${state.isDirty}`);
+      
+      // Force re-render toolbar และ UI elements ด้วย state ใหม่
+      setForceUIUpdate(prev => prev + 1);
+      
+      // อัปเดต dirty state ไปยัง parent ทันที
+      if (onDirtyChange) {
+        onDirtyChange(state.isDirty);
+      }
+    };
+    
+    // Initialize previous state
+    if (!previousEventManagerState.current) {
+      previousEventManagerState.current = professionalEventManager.getState();
+    }
+    
+    // Polling approach สำหรับ real-time sync (เนื่องจาก EventManager ไม่มี event emitter)
+    const stateUpdateInterval = setInterval(() => {
+      const currentState = professionalEventManager.getState();
+      const previousState = previousEventManagerState.current;
+      
+      // ตรวจสอบว่า state เปลี่ยนแปลงหรือไม่
+      if (!previousState || 
+          currentState.undoStack.length !== previousState.undoStack.length ||
+          currentState.redoStack.length !== previousState.redoStack.length ||
+          currentState.isDirty !== previousState.isDirty) {
+        updateUI();
+        previousEventManagerState.current = { ...currentState };
+      }
+    }, 100); // ตรวจสอบทุก 100ms สำหรับ responsiveness
+    
+    return () => {
+      if (stateUpdateInterval) {
+        clearInterval(stateUpdateInterval);
+      }
+    };
+  }, [professionalEventManager, onDirtyChange]);
+
+  // 🔥 FIGMA/CANVA STYLE: Professional Undo function using EventManager
   const undo = useCallback(() => {
     if (!professionalEventManager) {
-      console.warn('[BlueprintTab] EventManager not available for undo');
       toast.warning('ระบบ Undo ไม่พร้อมใช้งาน');
-      return;
+      return false;
     }
 
     const eventManagerState = professionalEventManager.getState();
-    const canUndo = eventManagerState.undoStack.length > 0;
-
-    if (!canUndo) {
-      console.log(`[BlueprintTab] No actions to undo`);
+    if (eventManagerState.undoStack.length === 0) {
       toast.info('ไม่มีการกระทำที่จะ Undo');
-      return;
+      return false;
     }
 
+    // 🔥 FIGMA/CANVA STYLE: Execute undo และ force UI update ทันที
     const success = professionalEventManager.undo();
+    
     if (success) {
-      console.log(`[BlueprintTab] ↶ Undo executed via EventManager`);
-      toast.success('↶ Undo สำเร็จ', {
-        duration: 1500,
-        icon: '↶'
-      });
+      // ✅ CRITICAL FIX: ไม่จำเป็นต้อง manual sync เพราะ CommandContext จะ handle
+      // CommandContext.setNodes/setEdges จะ trigger reactFlowUpdater อัตโนมัติ
       
-      // อัปเดต React Flow state จาก EventManager
-      const currentSnapshot = professionalEventManager.getCurrentSnapshot();
-      if (currentSnapshot.nodes) {
-        setNodes(currentSnapshot.nodes);
-      }
-      if (currentSnapshot.edges) {
-        setEdges(currentSnapshot.edges);
-      }
+      console.log(`[BlueprintTab] 🔄 Figma/Canva style undo executed - CommandContext handles UI sync automatically`);
       
-      // อัปเดต story variables ผ่าน EventManager
-      // (Story variables จะถูกจัดการโดย EventManager โดยอัตโนมัติ)
-    } else {
-      console.error(`[BlueprintTab] Undo failed`);
-      toast.error('Undo ล้มเหลว');
+      // Force re-render UI components เพื่อแสดงสถานะ undo/redo ใหม่
+      setForceUIUpdate(prev => prev + 1);
+      
+      toast.success('↶ Undo สำเร็จ');
+      return true;
     }
-  }, [professionalEventManager, setNodes, setEdges]);
+    
+    return false;
+  }, [professionalEventManager]);
 
-  // Professional Redo function using EventManager (like Figma/Canva)
+  // 🔥 FIGMA/CANVA STYLE: Professional Redo function using EventManager
   const redo = useCallback(() => {
     if (!professionalEventManager) {
-      console.warn('[BlueprintTab] EventManager not available for redo');
       toast.warning('ระบบ Redo ไม่พร้อมใช้งาน');
-      return;
+      return false;
     }
 
     const eventManagerState = professionalEventManager.getState();
-    const canRedo = eventManagerState.redoStack.length > 0;
-
-    if (!canRedo) {
-      console.log(`[BlueprintTab] No actions to redo`);
+    if (eventManagerState.redoStack.length === 0) {
       toast.info('ไม่มีการกระทำที่จะ Redo');
-      return;
+      return false;
     }
 
+    // 🔥 FIGMA/CANVA STYLE: Execute redo และ force UI update ทันที
     const success = professionalEventManager.redo();
+    
     if (success) {
-      console.log(`[BlueprintTab] ↷ Redo executed via EventManager`);
-      toast.success('↷ Redo สำเร็จ', {
-        duration: 1500,
-        icon: '↷'
-      });
+      // ✅ CRITICAL FIX: CommandContext handles UI sync automatically
+      console.log(`[BlueprintTab] 🔄 Figma/Canva style redo executed - CommandContext handles UI sync automatically`);
       
-      // อัปเดต React Flow state จาก EventManager
-      const currentSnapshot = professionalEventManager.getCurrentSnapshot();
-      if (currentSnapshot.nodes) {
-        setNodes(currentSnapshot.nodes);
-      }
-      if (currentSnapshot.edges) {
-        setEdges(currentSnapshot.edges);
-      }
+      // Force re-render UI components เพื่อแสดงสถานะ undo/redo ใหม่
+      setForceUIUpdate(prev => prev + 1);
       
-      // อัปเดต story variables ผ่าน EventManager
-      // (Story variables จะถูกจัดการโดย EventManager โดยอัตโนมัติ)
-    } else {
-      console.error(`[BlueprintTab] Redo failed`);
-      toast.error('Redo ล้มเหลว');
+      toast.success('↷ Redo สำเร็จ');
+      return true;
     }
-  }, [professionalEventManager, setNodes, setEdges]);
+    
+    return false;
+  }, [professionalEventManager]);
 
   // Command factory functions
+  // 🔥 FIGMA/CANVA STYLE: Command factory functions using CommandContext
   const createNodeCommand = useCallback((
     type: NodeCommand['type'],
     nodeId: string,
@@ -3458,6 +3667,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     oldData?: any,
     newData?: any
   ): NodeCommand => {
+    if (!professionalEventManager) {
+      throw new Error('EventManager is required for command creation');
+    }
+    
+    // ✅ ใช้ CommandContext เป็นหลักแทน local state
+    const context = professionalEventManager.getCommandContext();
+    
     const command: NodeCommand = {
       id: `${type}_${nodeId}_${Date.now()}`,
       type,
@@ -3473,7 +3689,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         switch (type) {
           case 'ADD_NODE':
             if (nodeData) {
-              setNodes(prev => [...prev, nodeData]);
+              // ✅ ใช้ CommandContext แทน local setState
+              const currentNodes = context.getCurrentNodes();
+              context.setNodes([...currentNodes, nodeData]);
             }
             break;
           case 'DELETE_NODE':
@@ -3490,16 +3708,22 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }
               ]);
             }
-            setNodes(prev => prev.filter(n => n.id !== nodeId));
+            // ✅ ใช้ CommandContext
+            const currentNodes = context.getCurrentNodes();
+            context.setNodes(currentNodes.filter((n: any) => n.id !== nodeId));
             break;
           case 'UPDATE_NODE':
             if (newData) {
-              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n));
+              // ✅ ใช้ CommandContext
+              const currentNodes = context.getCurrentNodes();
+              context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n));
             }
             break;
           case 'MOVE_NODE':
             if (newPosition) {
-              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, position: newPosition } : n));
+              // ✅ ใช้ CommandContext
+              const currentNodes = context.getCurrentNodes();
+              context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, position: newPosition } : n));
             }
             break;
         }
@@ -3507,11 +3731,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       undo: () => {
         switch (type) {
           case 'ADD_NODE':
-            setNodes(prev => prev.filter(n => n.id !== nodeId));
+            // ✅ ใช้ CommandContext - ไม่มี setTimeout
+            const currentNodesForUndo = context.getCurrentNodes();
+            context.setNodes(currentNodesForUndo.filter((n: any) => n.id !== nodeId));
             break;
           case 'DELETE_NODE':
             if (nodeData) {
-              setNodes(prev => [...prev, nodeData]);
+              // ✅ ใช้ CommandContext
+              const currentNodes = context.getCurrentNodes();
+              context.setNodes([...currentNodes, nodeData]);
               // เมื่อ undo การลบ ให้เอาออกจาก Trash History อัตโนมัติ (รายการล่าสุดที่ตรง id/type)
               setDeletedItems(prev => {
                 const idx = prev.findIndex(it => it.id === nodeId && it.type === 'node');
@@ -3526,12 +3754,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             break;
           case 'UPDATE_NODE':
             if (oldData) {
-              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...oldData } } : n));
+              // ✅ ใช้ CommandContext
+              const currentNodes = context.getCurrentNodes();
+              context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, data: { ...n.data, ...oldData } } : n));
             }
             break;
           case 'MOVE_NODE':
             if (oldPosition) {
-              setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, position: oldPosition } : n));
+              // ✅ ใช้ CommandContext
+              const currentNodes = context.getCurrentNodes();
+              context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, position: oldPosition } : n));
             }
             break;
         }
@@ -3539,8 +3771,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     
     return command;
-  }, [setNodes]);
+  }, [professionalEventManager, setDeletedItems]);
 
+  // 🔥 FIGMA/CANVA STYLE: Edge Command factory using CommandContext
   const createEdgeCommand = useCallback((
     type: EdgeCommand['type'],
     edgeId: string,
@@ -3550,6 +3783,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     oldData?: any,
     newData?: any
   ): EdgeCommand => {
+    if (!professionalEventManager) {
+      throw new Error('EventManager is required for edge command creation');
+    }
+    
+    // ✅ ใช้ CommandContext เป็นหลักแทน local state
+    const context = professionalEventManager.getCommandContext();
+    
     const command: EdgeCommand = {
       id: `${type}_${edgeId}_${Date.now()}`,
       type,
@@ -3565,7 +3805,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         switch (type) {
           case 'ADD_EDGE':
             if (edgeData) {
-              setEdges(prev => [...prev, edgeData]);
+              // ✅ ใช้ CommandContext แทน local setState
+              const currentEdges = context.getCurrentEdges();
+              context.setEdges([...currentEdges, edgeData]);
             }
             break;
           case 'DELETE_EDGE':
@@ -3582,11 +3824,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }
               ]);
             }
-            setEdges(prev => prev.filter(e => e.id !== edgeId));
+            // ✅ ใช้ CommandContext
+            const currentEdges = context.getCurrentEdges();
+            context.setEdges(currentEdges.filter((e: any) => e.id !== edgeId));
             break;
           case 'UPDATE_EDGE':
             if (newData) {
-              setEdges(prev => prev.map(e => e.id === edgeId ? { ...e, ...newData } : e));
+              // ✅ ใช้ CommandContext
+              const currentEdges = context.getCurrentEdges();
+              context.setEdges(currentEdges.map((e: any) => e.id === edgeId ? { ...e, ...newData } : e));
             }
             break;
         }
@@ -3594,11 +3840,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       undo: () => {
         switch (type) {
           case 'ADD_EDGE':
-            setEdges(prev => prev.filter(e => e.id !== edgeId));
+            // ✅ ใช้ CommandContext - ไม่มี setTimeout
+            const currentEdgesForUndo = context.getCurrentEdges();
+            context.setEdges(currentEdgesForUndo.filter((e: any) => e.id !== edgeId));
             break;
           case 'DELETE_EDGE':
             if (edgeData) {
-              setEdges(prev => [...prev, edgeData]);
+              // ✅ ใช้ CommandContext
+              const currentEdges = context.getCurrentEdges();
+              context.setEdges([...currentEdges, edgeData]);
               // เอาออกจาก Trash เมื่อกู้คืนผ่าน undo
               setDeletedItems(prev => {
                 const idx = prev.findIndex(it => it.id === edgeId && it.type === 'edge');
@@ -3613,7 +3863,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             break;
           case 'UPDATE_EDGE':
             if (oldData) {
-              setEdges(prev => prev.map(e => e.id === edgeId ? { ...e, ...oldData } : e));
+              // ✅ ใช้ CommandContext
+              const currentEdges = context.getCurrentEdges();
+              context.setEdges(currentEdges.map((e: any) => e.id === edgeId ? { ...e, ...oldData } : e));
             }
             break;
         }
@@ -3621,7 +3873,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     
     return command;
-  }, [setEdges]);
+  }, [professionalEventManager, setDeletedItems]);
 
   // Manual save (always works regardless of auto-save setting)
   const handleManualSave = useCallback(async () => {
@@ -3635,8 +3887,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         // ใช้ EventManager สำหรับ manual save
         await professionalEventManager.saveManual();
         
-        // ✨ NEW: Mark current command position as saved
-        setLastSavedCommandPosition(undoStack.length);
+        // ✨ NEW: Mark current command position as saved via EventManager
+        const eventManagerState = professionalEventManager.getState();
+        setLastSavedCommandPosition(eventManagerState.undoStack.length);
         
         // Update initial snapshot to current state for fallback comparison
         const newSnapshot = createStateSnapshot();
@@ -3659,7 +3912,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         toast.success('✅ บันทึกสำเร็จ');
         
         console.log('[BlueprintTab] 💾 Manual Save Success:', {
-          savedAtCommandPosition: undoStack.length,
+          savedAtCommandPosition: eventManagerState.undoStack.length,
           nodeCount: newSnapshot.nodes.length,
           edgeCount: newSnapshot.edges.length,
           timestamp: new Date().toISOString()
@@ -3670,7 +3923,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         await saveStoryMapToDatabase(nodes, edges, true);
         
         // ✨ NEW: Mark current command position as saved (fallback)
-        setLastSavedCommandPosition(undoStack.length);
+        // Note: Fallback mode won't have EventManager undoStack, using 0 as default
+        setLastSavedCommandPosition(0);
         
         // Update initial snapshot for fallback
         const newSnapshot = createStateSnapshot();
@@ -3687,7 +3941,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       console.error('[BlueprintTab] Manual save failed:', error);
       toast.error('❌ บันทึกล้มเหลว: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-  }, [undoStack.length, professionalEventManager, saveStoryMapToDatabase, nodes, edges, createStateSnapshot, onDirtyChange]);
+  }, [professionalEventManager, saveStoryMapToDatabase, nodes, edges, createStateSnapshot, onDirtyChange]);
 
   // Enhanced canvas interaction controls
   const toggleCanvasLock = useCallback(() => {
@@ -3867,6 +4121,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     toast.info(`Selected ${allNodeIds.length} nodes and ${allEdgeIds.length} edges`);
   }, [nodes, edges]);
 
+  // 🔥 FIGMA/CANVA STYLE: Multi-select delete using CommandContext
   const deleteSelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
@@ -3874,90 +4129,232 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
     
+    // ✅ CRITICAL FIX: Include edges connected to deleted nodes
+    const allEdgesToDelete = [
+      ...edgesToDelete,
+      ...edges.filter(e => 
+        !selectedEdges.includes(e.id) && 
+        (selectedNodes.includes(e.source) || selectedNodes.includes(e.target))
+      )
+    ];
+    
     if (nodesToDelete.length > 0) {
-      const ok = window.confirm(`ลบโหนด ${nodesToDelete.length} รายการหรือไม่? (สามารถ Undo ได้)`);
+      const totalItemsToDelete = nodesToDelete.length + allEdgesToDelete.length;
+      const ok = window.confirm(
+        `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`
+      );
       if (!ok) return;
     }
     
-    // Create batch command for multiple deletions
-    const commands: ICommand[] = [];
-    
-    // Add node deletion commands
-    nodesToDelete.forEach(node => {
-      commands.push(createNodeCommand('DELETE_NODE', node.id, node));
-    });
-    
-    // Add edge deletion commands
-    edgesToDelete.forEach(edge => {
-      commands.push(createEdgeCommand('DELETE_EDGE', edge.id, edge, edge.source, edge.target));
-    });
-    
-    // Create batch command if multiple items
-    if (commands.length > 1) {
-      const batchCommand: BatchCommand = {
-        id: `batch-delete-${Date.now()}`,
-        type: 'BATCH',
-        description: `Deleted ${nodesToDelete.length} nodes and ${edgesToDelete.length} connections`,
-        timestamp: Date.now(),
-        commands,
-        execute: () => {
-          commands.forEach(cmd => cmd.execute());
-        },
-        undo: () => {
-          // Undo in reverse order
-          commands.slice().reverse().forEach(cmd => cmd.undo());
-        }
-      };
-      executeCommand(batchCommand);
-    } else if (commands.length === 1) {
-      executeCommand(commands[0] as AnyCommand);
+    if (!professionalEventManager) {
+      toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
+      return;
     }
     
-    // Clear selection
+    // ✅ ใช้ CommandContext สำหรับ batch operations
+    const context = professionalEventManager.getCommandContext();
+    
+        // ✅ FIGMA/CANVA STYLE: Create batch command for multiple deletions
+    const batchCommand: ICommand = {
+        id: `batch-delete-${Date.now()}`,
+      type: 'BATCH_DELETE',
+      description: `Delete ${nodesToDelete.length} nodes and ${allEdgesToDelete.length} connections`,
+        timestamp: Date.now(),
+        execute: () => {
+        // ✅ ใช้ CommandContext แทน local state
+        const currentNodes = context.getCurrentNodes();
+        const currentEdges = context.getCurrentEdges();
+        
+        // Remove selected nodes and all associated edges
+        const filteredNodes = currentNodes.filter((n: any) => !selectedNodes.includes(n.id));
+        const filteredEdges = currentEdges.filter((e: any) => 
+          !allEdgesToDelete.some(edgeToDelete => edgeToDelete.id === e.id)
+        );
+        
+        context.setNodes(filteredNodes);
+        context.setEdges(filteredEdges);
+        
+        // Clear selection state
     setSelection(prev => ({
       ...prev,
       selectedNodes: [],
       selectedEdges: []
     }));
+        setSelectedNode(null);
+        setSelectedEdge(null);
+        
+        console.log(`[BlueprintTab] 🗑️ Batch delete executed: ${nodesToDelete.length} nodes, ${allEdgesToDelete.length} edges`);
+      },
+      undo: () => {
+        // ✅ ใช้ CommandContext สำหรับ restore
+        const currentNodes = context.getCurrentNodes();
+        const currentEdges = context.getCurrentEdges();
+        
+        // Restore deleted nodes and edges
+        const restoredNodes = [...currentNodes, ...nodesToDelete];
+        const restoredEdges = [...currentEdges, ...allEdgesToDelete];
+        
+        context.setNodes(restoredNodes);
+        context.setEdges(restoredEdges);
+        
+        console.log(`[BlueprintTab] ↶ Batch delete undone: ${nodesToDelete.length} nodes, ${allEdgesToDelete.length} edges restored`);
+      }
+    };
+    
+    // Execute through EventManager for proper undo/redo tracking
+    professionalEventManager.executeCommand(batchCommand);
     
     toast.success(
-      `Deleted ${selectedNodes.length} nodes and ${selectedEdges.length} connections. Use Ctrl+Z to undo.`
+      `🗑️ Deleted ${nodesToDelete.length} nodes and ${allEdgesToDelete.length} connections. Use Ctrl+Z to undo.`
     );
-  }, [selection, nodes, edges, createNodeCommand, createEdgeCommand, executeCommand]);
+  }, [selection, nodes, edges, professionalEventManager]);
 
+  // 🔥 FIGMA/CANVA STYLE: Multi-select copy using CommandContext
   const copySelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
     const nodesToCopy = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToCopy = edges.filter(e => selectedEdges.includes(e.id));
     
+    if (nodesToCopy.length === 0 && edgesToCopy.length === 0) {
+      toast.warning('ไม่มีรายการที่จะคัดลอก');
+      return;
+    }
+    
+    if (!professionalEventManager) {
+      toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
+      return;
+    }
+    
     // Create batch copy command for undo/redo history
     const copyCommand: ICommand = {
       id: `batch-copy-${Date.now()}`,
       type: 'BATCH_COPY',
-      description: `Copied ${nodesToCopy.length} nodes and ${edgesToCopy.length} connections`,
+      description: `Copy ${nodesToCopy.length} nodes and ${edgesToCopy.length} connections`,
       timestamp: Date.now(),
       execute: () => {
         setSelection(prev => ({
           ...prev,
           clipboard: { nodes: nodesToCopy, edges: edgesToCopy }
         }));
+        toast.success(`คัดลอก ${nodesToCopy.length} โหนดและ ${edgesToCopy.length} เส้นเชื่อม`);
       },
       undo: () => {
         setSelection(prev => ({
           ...prev,
           clipboard: { nodes: [], edges: [] }
         }));
+        toast.info('ยกเลิกการคัดลอก');
       }
     };
     
-    executeCommand(copyCommand as AnyCommand);
-    toast.success(`Copied ${nodesToCopy.length} nodes and ${edgesToCopy.length} connections`);
-  }, [selection, nodes, edges, executeCommand]);
+    // Execute through EventManager for proper undo/redo tracking
+    professionalEventManager.executeCommand(copyCommand);
+  }, [selection, nodes, edges, professionalEventManager]);
 
+  // 🔥 FIGMA/CANVA STYLE: Multi-select cut (copy + delete) using CommandContext
+  const cutSelected = useCallback(() => {
+    const { selectedNodes, selectedEdges } = selection;
+    const nodesToCut = nodes.filter(n => selectedNodes.includes(n.id));
+    const edgesToCut = edges.filter(e => selectedEdges.includes(e.id));
+    
+    // ✅ CRITICAL FIX: Include edges connected to cut nodes
+    const allEdgesToCut = [
+      ...edgesToCut,
+      ...edges.filter(e => 
+        !selectedEdges.includes(e.id) && 
+        (selectedNodes.includes(e.source) || selectedNodes.includes(e.target))
+      )
+    ];
+    
+    if (nodesToCut.length === 0 && edgesToCut.length === 0) {
+      toast.warning('ไม่มีรายการที่จะตัด');
+      return;
+    }
+    
+    if (!professionalEventManager) {
+      toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
+      return;
+    }
+    
+    // ✅ ใช้ CommandContext สำหรับ batch operations
+    const context = professionalEventManager.getCommandContext();
+    
+    // ✅ FIGMA/CANVA STYLE: Create batch cut command (copy to clipboard then delete)
+    const cutCommand: ICommand = {
+      id: `batch-cut-${Date.now()}`,
+      type: 'BATCH_CUT',
+      description: `Cut ${nodesToCut.length} nodes and ${allEdgesToCut.length} connections`,
+      timestamp: Date.now(),
+      execute: () => {
+        // Step 1: Copy to clipboard (only explicitly selected items)
+        setSelection(prev => ({
+          ...prev,
+          clipboard: { nodes: nodesToCut, edges: edgesToCut }
+        }));
+        
+        // Step 2: Delete items using CommandContext (including connected edges)
+        const currentNodes = context.getCurrentNodes();
+        const currentEdges = context.getCurrentEdges();
+        
+        // Remove selected nodes and all associated edges
+        const filteredNodes = currentNodes.filter((n: any) => !selectedNodes.includes(n.id));
+        const filteredEdges = currentEdges.filter((e: any) => 
+          !allEdgesToCut.some(edgeToCut => edgeToCut.id === e.id)
+        );
+        
+        context.setNodes(filteredNodes);
+        context.setEdges(filteredEdges);
+        
+        // Clear selection state
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: [],
+          selectedEdges: []
+        }));
+        setSelectedNode(null);
+        setSelectedEdge(null);
+        
+        console.log(`[BlueprintTab] ✂️ Batch cut executed: ${nodesToCut.length} nodes, ${allEdgesToCut.length} edges`);
+      },
+      undo: () => {
+        // Step 1: Restore deleted nodes and edges
+        const currentNodes = context.getCurrentNodes();
+        const currentEdges = context.getCurrentEdges();
+        
+        const restoredNodes = [...currentNodes, ...nodesToCut];
+        const restoredEdges = [...currentEdges, ...allEdgesToCut];
+        
+        context.setNodes(restoredNodes);
+        context.setEdges(restoredEdges);
+        
+        // Step 2: Clear clipboard
+        setSelection(prev => ({
+          ...prev,
+          clipboard: { nodes: [], edges: [] }
+        }));
+        
+        console.log(`[BlueprintTab] ↶ Batch cut undone: ${nodesToCut.length} nodes, ${allEdgesToCut.length} edges restored`);
+      }
+    };
+    
+    // Execute through EventManager for proper undo/redo tracking
+    professionalEventManager.executeCommand(cutCommand);
+    
+    toast.success(
+      `✂️ Cut ${nodesToCut.length} nodes and ${allEdgesToCut.length} connections to clipboard. Use Ctrl+Z to undo.`
+    );
+  }, [selection, nodes, edges, professionalEventManager]);
+
+  // 🔥 FIGMA/CANVA STYLE: Multi-select paste using CommandContext
   const pasteSelected = useCallback(() => {
     const { clipboard } = selection;
     if (clipboard.nodes.length === 0 && clipboard.edges.length === 0) {
-      toast.error('Clipboard is empty');
+      toast.error('📋 Clipboard is empty');
+      return;
+    }
+    
+    if (!professionalEventManager) {
+      toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
       return;
     }
     
@@ -3978,67 +4375,129 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       target: `${edge.target}-copy-${timestamp}`
     }));
     
-    // Create batch paste command for undo/redo
-    const commands: ICommand[] = [];
+    // ✅ ใช้ CommandContext สำหรับ batch operations
+    const context = professionalEventManager.getCommandContext();
     
-    // Add node creation commands
-    newNodes.forEach(node => {
-      commands.push(createNodeCommand('ADD_NODE', node.id, node));
-    });
-    
-    // Add edge creation commands
-    newEdges.forEach(edge => {
-      commands.push(createEdgeCommand('ADD_EDGE', edge.id, edge, edge.source, edge.target));
-    });
-    
-    // Create batch command if multiple items
-    if (commands.length > 1) {
-      const batchCommand: BatchCommand = {
+    // ✅ FIGMA/CANVA STYLE: Create batch paste command
+    const batchPasteCommand: ICommand = {
         id: `batch-paste-${timestamp}`,
-        type: 'BATCH',
-        description: `Pasted ${newNodes.length} nodes and ${newEdges.length} connections`,
+      type: 'BATCH_PASTE',
+      description: `Paste ${newNodes.length} nodes and ${newEdges.length} connections`,
         timestamp,
-        commands,
         execute: () => {
-          commands.forEach(cmd => cmd.execute());
+        // Add nodes and edges using CommandContext
+        const currentNodes = context.getCurrentNodes();
+        const currentEdges = context.getCurrentEdges();
+        
+        const updatedNodes = [...currentNodes, ...newNodes];
+        const updatedEdges = [...currentEdges, ...newEdges];
+        
+        context.setNodes(updatedNodes);
+        context.setEdges(updatedEdges);
+        
+        // Update selection to show pasted items
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: newNodes.map(n => n.id),
+          selectedEdges: newEdges.map(e => e.id)
+        }));
+        
+        console.log(`[BlueprintTab] 📋 Batch paste executed: ${newNodes.length} nodes, ${newEdges.length} edges`);
         },
         undo: () => {
-          // Undo in reverse order
-          commands.slice().reverse().forEach(cmd => cmd.undo());
-        }
-      };
-      executeCommand(batchCommand);
-    } else if (commands.length === 1) {
-      executeCommand(commands[0] as AnyCommand);
-    }
+        // Remove pasted nodes and edges using CommandContext
+        const currentNodes = context.getCurrentNodes();
+        const currentEdges = context.getCurrentEdges();
+        
+        const filteredNodes = currentNodes.filter((n: any) => 
+          !newNodes.some(newNode => newNode.id === n.id)
+        );
+        const filteredEdges = currentEdges.filter((e: any) => 
+          !newEdges.some(newEdge => newEdge.id === e.id)
+        );
+        
+        context.setNodes(filteredNodes);
+        context.setEdges(filteredEdges);
+        
+        // Clear selection
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: [],
+          selectedEdges: []
+        }));
+        
+        console.log(`[BlueprintTab] ↶ Batch paste undone: ${newNodes.length} nodes, ${newEdges.length} edges removed`);
+      }
+    };
     
-    toast.success(`Pasted ${newNodes.length} nodes and ${newEdges.length} connections`);
-  }, [selection, createNodeCommand, createEdgeCommand, executeCommand]);
+    // Execute through EventManager for proper undo/redo tracking
+    professionalEventManager.executeCommand(batchPasteCommand);
+    
+    toast.success(`📋 Pasted ${newNodes.length} nodes and ${newEdges.length} connections. Use Ctrl+Z to undo.`);
+  }, [selection, professionalEventManager]);
 
   // (removed older keyboard handler in favor of a single consolidated one below)
 
   // Keyboard shortcuts
-  // Toggle multi-select mode
+  // 🔥 CANVA STYLE: Toggle multi-select mode
   const toggleMultiSelectMode = useCallback(() => {
-    const newMode = !selection.multiSelectMode;
+    const currentMode = selection.multiSelectMode;
+    const newMode = !currentMode;
+    
+    console.log(`[BlueprintTab] 🎯 Toggling multi-select mode: ${currentMode} → ${newMode}`);
+    
     setSelection(prev => ({
       ...prev,
       multiSelectMode: newMode,
-      pendingSelection: newMode ? prev.selectedNodes : [],
-      showSelectionBar: newMode && prev.selectedNodes.length > 0
+      pendingSelection: [], // เริ่มใหม่เมื่อเปิด/ปิด multi-select mode
+      showSelectionBar: false, // ไม่แสดง confirmation bar ตอนเริ่มต้น
+      selectedNodes: newMode ? [] : prev.selectedNodes, // ล้าง selection เมื่อเข้า mode, คงเก่าเมื่อออก
+      selectedEdges: newMode ? [] : prev.selectedEdges
     }));
+    
     setIsMultiSelectActive(newMode);
     
+    // ล้าง ReactFlow selection เมื่อเข้า multi-select mode
     if (newMode) {
-      toast.info('Multi-select mode activated. Click nodes to select multiple items.');
+      setNodes(prevNodes => 
+        prevNodes.map(n => ({ ...n, selected: false }))
+      );
+      setEdges(prevEdges => 
+        prevEdges.map(e => ({ ...e, selected: false }))
+      );
+      
+      // Clear single selection states
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      
+      toast.info('🎯 Multi-select mode activated. Click nodes to select multiple items.');
     } else {
-      toast.info('Multi-select mode deactivated.');
+      // Cancel any pending selection when deactivating
+      setNodes(prevNodes => 
+        prevNodes.map(n => ({ ...n, selected: false }))
+      );
+      
+      toast.info('✅ Multi-select mode deactivated.');
     }
-  }, [selection.multiSelectMode]);
+  }, [selection.multiSelectMode, setNodes, setEdges]);
 
-  // Confirm multi-selection (Canva-style)
+  // 🔥 CANVA STYLE: Confirm multi-selection with undo/redo support
   const confirmMultiSelection = useCallback(() => {
     const pendingNodeIds = selection.pendingSelection;
+    
+    if (!professionalEventManager || pendingNodeIds.length === 0) {
+      if (pendingNodeIds.length === 0) {
+        toast.error('ไม่มี nodes ที่ถูกเลือก');
+      } else {
+        toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
+      }
+      return;
+    }
+
+    // Capture current state for undo
+    const previousSelectedNodes = [...selection.selectedNodes];
+    const previousSelectedEdges = [...selection.selectedEdges];
+    const previousNodesVisualState = nodes.map(n => ({ id: n.id, selected: n.selected }));
     
     const command: ICommand = {
       id: `multi-select-${Date.now()}`,
@@ -4068,31 +4527,61 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setSelectedNode(null);
         setSelectedEdge(null);
         setIsMultiSelectActive(false);
+        
+        console.log(`[BlueprintTab] ✅ Multi-selection confirmed: ${pendingNodeIds.length} nodes`);
       },
       undo: () => {
+        // คืนค่า selection state ให้ตรงกับก่อนหน้า
         setSelection(prev => ({
           ...prev,
-          selectedNodes: [],
-          selectedEdges: [],
-          multiSelectMode: false,
+          selectedNodes: previousSelectedNodes,
+          selectedEdges: previousSelectedEdges,
+          multiSelectMode: previousSelectedNodes.length > 1 || previousSelectedEdges.length > 1 || 
+                           (previousSelectedNodes.length > 0 && previousSelectedEdges.length > 0),
           pendingSelection: [],
           showSelectionBar: false
         }));
         
-        // ล้าง visual selection
+        // คืนค่า visual selection
         setNodes(prevNodes => 
-          prevNodes.map(n => ({ ...n, selected: false }))
+          prevNodes.map(n => {
+            const previousState = previousNodesVisualState.find(p => p.id === n.id);
+            return {
+              ...n,
+              selected: previousState ? previousState.selected : false
+            };
+          })
         );
         
-        setSelectedNode(null);
-        setSelectedEdge(null);
+        // คืนค่า single selection ถ้ามี
+        if (previousSelectedNodes.length === 1) {
+          const singleNode = nodes.find(n => n.id === previousSelectedNodes[0]);
+          if (singleNode) {
+            setSelectedNode(singleNode);
+          }
+        } else {
+          setSelectedNode(null);
+        }
+        
+        if (previousSelectedEdges.length === 1) {
+          const singleEdge = edges.find(e => e.id === previousSelectedEdges[0]);
+          if (singleEdge) {
+            setSelectedEdge(singleEdge);
+          }
+        } else {
+          setSelectedEdge(null);
+        }
+        
         setIsMultiSelectActive(false);
+        
+        console.log(`[BlueprintTab] ↶ Multi-selection undone - restored previous state`);
       }
     };
     
-    executeCommand(command as AnyCommand);
-    toast.success(`Selected ${pendingNodeIds.length} nodes`);
-  }, [selection.pendingSelection, executeCommand, setNodes]);
+    // ✅ ใช้ EventManager สำหรับ undo/redo tracking (เป็น UI-only command ไม่ทำให้ dirty)
+    professionalEventManager.addCommandToHistory(command);
+    toast.success(`✅ Selected ${pendingNodeIds.length} nodes. Use Ctrl+Z to undo.`);
+  }, [selection.pendingSelection, selection.selectedNodes, selection.selectedEdges, nodes, edges, professionalEventManager]);
 
   // Cancel multi-selection
   const cancelMultiSelection = useCallback(() => {
@@ -4679,19 +5168,112 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
 
 
-  // Enhanced Selection handler with multi-selection support
+  // 🔥 FIGMA/CANVA STYLE: Enhanced Selection handler with multiple selection support
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
-    // Don't interfere with multi-select mode
-    if (selection.multiSelectMode) return;
-    
     const selectedNodeIds = selectedNodes.map(n => n.id);
     const selectedEdgeIds = selectedEdges.map(e => e.id);
     
-    // Update selection state
+    // 🚨 CRITICAL: Don't override multi-select mode when in Canva-style pending selection
+    if (selection.multiSelectMode && selection.pendingSelection.length > 0) {
+      console.log(`[BlueprintTab] 🔒 Preventing onSelectionChange override - in Canva multi-select mode`);
+      return; // Don't process ReactFlow's selection changes during manual multi-select
+    }
+
+    // Capture previous state for undo (only for actual changes)
+    const previousSelectedNodes = [...selection.selectedNodes];
+    const previousSelectedEdges = [...selection.selectedEdges];
+    
+    // Check if this is a real change to prevent unnecessary command creation
+    const hasSelectionChanged = 
+      JSON.stringify(previousSelectedNodes.sort()) !== JSON.stringify(selectedNodeIds.sort()) ||
+      JSON.stringify(previousSelectedEdges.sort()) !== JSON.stringify(selectedEdgeIds.sort());
+
+    // ✅ FIGMA/CANVA STYLE: Auto-create undo/redo command for ReactFlow multi-selection (shift+click, drag selection)
+    const isMultiSelection = selectedNodeIds.length > 1 || selectedEdgeIds.length > 1 || 
+                            (selectedNodeIds.length > 0 && selectedEdgeIds.length > 0);
+    
+    if (hasSelectionChanged && isMultiSelection && professionalEventManager && !selection.multiSelectMode) {
+      console.log(`[BlueprintTab] 🎯 Creating ReactFlow multi-selection command`);
+      
+      const reactFlowSelectionCommand: ICommand = {
+        id: `reactflow-multi-select-${Date.now()}`,
+        type: 'REACTFLOW_MULTI_SELECT',
+        description: `ReactFlow Selection: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`,
+        timestamp: Date.now(),
+        execute: () => {
+          // อัปเดต selection state
+          setSelection(prev => ({
+            ...prev,
+            selectedNodes: selectedNodeIds,
+            selectedEdges: selectedEdgeIds,
+            multiSelectMode: true,
+            pendingSelection: [],
+            showSelectionBar: false
+          }));
+          
+          // Clear single selection states
+          setSelectedNode(null);
+          setSelectedEdge(null);
+          
+          console.log(`[BlueprintTab] ✅ ReactFlow multi-selection executed: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
+        },
+        undo: () => {
+          // คืนค่า selection state
+          setSelection(prev => ({
+            ...prev,
+            selectedNodes: previousSelectedNodes,
+            selectedEdges: previousSelectedEdges,
+            multiSelectMode: previousSelectedNodes.length > 1 || previousSelectedEdges.length > 1 || 
+                           (previousSelectedNodes.length > 0 && previousSelectedEdges.length > 0),
+            pendingSelection: [],
+            showSelectionBar: false
+          }));
+          
+          // คืนค่า visual selection
+          setNodes(prevNodes => 
+            prevNodes.map(n => ({
+              ...n,
+              selected: previousSelectedNodes.includes(n.id)
+            }))
+          );
+          
+          setEdges(prevEdges => 
+            prevEdges.map(e => ({
+              ...e,
+              selected: previousSelectedEdges.includes(e.id)
+            }))
+          );
+          
+          // คืนค่า single selection ถ้ามี
+          if (previousSelectedNodes.length === 1) {
+            const singleNode = nodes.find(n => n.id === previousSelectedNodes[0]);
+            if (singleNode) setSelectedNode(singleNode);
+          } else {
+            setSelectedNode(null);
+          }
+          
+          if (previousSelectedEdges.length === 1) {
+            const singleEdge = edges.find(e => e.id === previousSelectedEdges[0]);
+            if (singleEdge) setSelectedEdge(singleEdge);
+          } else {
+            setSelectedEdge(null);
+          }
+          
+          console.log(`[BlueprintTab] ↶ ReactFlow multi-selection undone`);
+        }
+      };
+      
+      // Execute as UI-only command (ไม่ทำให้เป็น dirty state)
+      professionalEventManager.addCommandToHistory(reactFlowSelectionCommand);
+    }
+    
+    // ✅ Update selection state 
     setSelection(prev => ({
       ...prev,
       selectedNodes: selectedNodeIds,
-      selectedEdges: selectedEdgeIds
+      selectedEdges: selectedEdgeIds,
+      // ✅ Auto-detect multiple selection mode
+      multiSelectMode: prev.multiSelectMode || isMultiSelection
     }));
     
     // Set single selection states only if single selection
@@ -4710,7 +5292,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setSelectedNode(null);
       setSelectedEdge(null);
     }
-  }, [selection.multiSelectMode]);
+    
+    // ✅ Log multiple selection for debugging
+    if (selectedNodeIds.length > 1 || selectedEdgeIds.length > 1) {
+      console.log(`[BlueprintTab] 🎯 Multiple selection detected: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
+    }
+  }, [selection.multiSelectMode, selection.pendingSelection.length, professionalEventManager]);
 
   // Keyboard event listeners
   useEffect(() => {
@@ -4841,6 +5428,32 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       window.removeEventListener('requestDeleteEdge', handleRequestDeleteEdge as EventListener);
     };
   }, [onConnect, edges, createEdgeCommand, executeCommand, removeSceneConnection]);
+
+  // 🔥 FIGMA/CANVA STYLE: Bidirectional sync setup useEffect
+  useEffect(() => {
+    if (professionalEventManager && setNodes && setEdges) {
+      // Register bidirectional sync
+      professionalEventManager.setReactFlowUpdater((nodes: any[], edges: any[]) => {
+        console.log('[BlueprintTab] 🔄 Force updating UI from EventManager:', {
+          nodeCount: nodes.length,
+          edgeCount: edges.length
+        });
+        
+        // Force new array references for React re-render
+        setNodes([...nodes]);
+        setEdges([...edges]);
+      });
+      
+      console.log('[BlueprintTab] ✅ Figma/Canva style bidirectional sync registered');
+    }
+    
+    return () => {
+      // Cleanup if needed
+      if (professionalEventManager) {
+        professionalEventManager.setReactFlowUpdater(() => {});
+      }
+    };
+  }, [professionalEventManager, setNodes, setEdges]);
   
   // Handle canvas click (legacy connection mode disabled)
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
@@ -4876,15 +5489,18 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         storyVariables: storyMap?.storyVariables || []
       };
     },
-    // Enterprise-grade state monitoring
-    getCanvasState: () => ({
+    // Enterprise-grade state monitoring via EventManager
+    getCanvasState: () => {
+      const eventManagerState = professionalEventManager?.getState();
+      return {
       nodeCount: nodes.length,
       edgeCount: edges.length,
-      hasUndoHistory: undoStack.length > 0,
-      hasRedoHistory: redoStack.length > 0,
+        hasUndoHistory: eventManagerState?.undoStack.length > 0 || false,
+        hasRedoHistory: eventManagerState?.redoStack.length > 0 || false,
       isInitialized: !isInitializingRef.current
-    })
-  }), [handleManualSave, nodes, edges, storyMap, undoStack, redoStack]);
+      };
+    }
+  }), [handleManualSave, nodes, edges, storyMap, professionalEventManager]);
 
   return (
       <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
@@ -4992,106 +5608,99 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 onNodesChange={enhancedOnNodesChange}
                 onEdgesChange={enhancedOnEdgesChange}
                 onConnect={(connection: Connection) => {
-                  // Handle new connections
+                  // 🔗 FIGMA/CANVA STYLE: Delegate to main onConnect function
                   try {
-                    const newEdge = addEdge(connection, edges);
-                    setEdges(newEdge);
-                    
-                    // Create command for connection
-                    const simpleCommand = commandAdapter?.createSimpleCommand(
-                      'ADD_EDGE',
-                      `Connect: ${connection.source} → ${connection.target}`,
-                      { connection }
-                    );
-                    if (simpleCommand) {
-                      executeCommand(simpleCommand);
-                    }
+                    console.log(`[BlueprintTab] 🔗 Creating new connection: ${connection.source} → ${connection.target}`);
+                    onConnect(connection);
                   } catch (error) {
-                    console.error('[BlueprintTab] Error in onConnect:', error);
+                    console.error('[BlueprintTab] ❌ Failed to create edge:', error);
+                    toast.error('ไม่สามารถสร้างการเชื่อมต่อได้');
                   }
                 }}
                 onNodeClick={(event, node) => {
+                  console.log(`[BlueprintTab] 🖱️ Node clicked: ${node.id}`, {
+                    multiSelectMode: selection.multiSelectMode,
+                    pendingSelectionLength: selection.pendingSelection.length,
+                    showSelectionBar: selection.showSelectionBar,
+                    currentPendingSelection: selection.pendingSelection
+                  });
+                  
+                  // 🔥 CANVA STYLE: Handle multi-select mode
+                  if (selection.multiSelectMode) {
+                    // Toggle node in pending selection
+                    const isPending = selection.pendingSelection.includes(node.id);
+                    const newPending = isPending 
+                      ? selection.pendingSelection.filter(id => id !== node.id)
+                      : [...selection.pendingSelection, node.id];
+                    
+                    console.log(`[BlueprintTab] 🎯 Multi-select toggling node ${node.id}:`, {
+                      isPending,
+                      oldPending: selection.pendingSelection,
+                      newPending,
+                      totalCount: newPending.length,
+                      shouldShowBar: newPending.length > 0
+                    });
+                    
+                    // ✅ CRITICAL FIX: Update selection state in single transaction
+                    setSelection(prev => {
+                      const updatedState = {
+                        ...prev,
+                        pendingSelection: newPending,
+                        showSelectionBar: newPending.length > 0,
+                        // ✅ CRITICAL: Keep multi-select mode explicitly active
+                        multiSelectMode: true
+                      };
+                      
+                      console.log(`[BlueprintTab] 🔄 Updating selection state:`, {
+                        oldState: { 
+                          pendingSelection: prev.pendingSelection, 
+                          showSelectionBar: prev.showSelectionBar,
+                          multiSelectMode: prev.multiSelectMode
+                        },
+                        newState: {
+                          pendingSelection: updatedState.pendingSelection,
+                          showSelectionBar: updatedState.showSelectionBar,
+                          multiSelectMode: updatedState.multiSelectMode
+                        }
+                      });
+                      
+                      return updatedState;
+                    });
+                    
+                    // ✅ CANVA STYLE: Visual feedback for pending selection
+                    setNodes(prevNodes => 
+                      prevNodes.map(n => ({
+                        ...n,
+                        selected: newPending.includes(n.id)
+                      }))
+                    );
+                    
+                    const actionText = isPending ? 'Removed from' : 'Added to';
+                    console.log(`[BlueprintTab] ✅ ${actionText} selection - Total: ${newPending.length} items, Show bar: ${newPending.length > 0}`);
+                    toast.info(`${actionText} selection (${newPending.length} items)`);
+                    } else {
+                    // Normal single selection mode
+                    console.log(`[BlueprintTab] 👆 Single selection mode: selecting node ${node.id}`);
+                    
                   setSelectedNode(node);
                   setSelectedEdge(null);
+                    
+                    // Clear multi-selection state
+                    setSelection(prev => ({
+                      ...prev,
+                      selectedNodes: [node.id],
+                      selectedEdges: [],
+                      pendingSelection: [],
+                      showSelectionBar: false,
+                      multiSelectMode: false
+                    }));
+                  }
                 }}
                 onEdgeClick={(event, edge) => {
                   setSelectedEdge(edge);
                   setSelectedNode(null);
                 }}
-                onNodeDragStart={(event, node) => {
-                  // Start tracking position for MOVE command
-                  if (selection.selectedNodes.length > 1 && selection.selectedNodes.includes(node.id)) {
-                    // Multi-drag start
-                    multiSelectDragStart.current = {};
-                    nodes.forEach(n => {
-                      if (selection.selectedNodes.includes(n.id)) {
-                        multiSelectDragStart.current[n.id] = { ...n.position };
-                      }
-                    });
-                  } else {
-                    // Single node drag start
-                    dragStartPositions.current[node.id] = { ...node.position };
-                  }
-                  isDragging.current = true;
-                }}
-                onNodeDragStop={(event, node) => {
-                  if (isDragging.current) {
-                    isDragging.current = false;
-                    
-                    // Multi-drag stop
-                    if (selection.selectedNodes.length > 1 && multiSelectDragStart.current[node.id]) {
-                      const commands: ICommand[] = [];
-                      selection.selectedNodes.forEach(nodeId => {
-                        const startPosition = multiSelectDragStart.current[nodeId];
-                        const endNode = nodes.find(n => n.id === nodeId);
-                        if (startPosition && endNode) {
-                          commands.push(createNodeCommand('MOVE_NODE', nodeId, undefined, startPosition, endNode.position));
-                        }
-                      });
-                      
-                      if (commands.length > 0) {
-                        const batchCommand: BatchCommand = {
-                          id: `batch-move-${Date.now()}`,
-                          type: 'BATCH',
-                          description: `Move ${commands.length} nodes`,
-                          timestamp: Date.now(),
-                          commands,
-                          execute: () => {
-                            commands.forEach(cmd => cmd.execute());
-                          },
-                          undo: () => {
-                            commands.slice().reverse().forEach(cmd => cmd.undo());
-                          }
-                        };
-                        executeCommand(batchCommand);
-                      }
-                      
-                      // เคลียร์ข้อมูล
-                      multiSelectDragStart.current = {};
-                    } else {
-                      // Single node drag
-                      const startPosition = dragStartPositions.current[node.id];
-                      if (startPosition) {
-                        const hasPositionChanged = 
-                          Math.abs(startPosition.x - node.position.x) > 1 || 
-                          Math.abs(startPosition.y - node.position.y) > 1;
-                        
-                        if (hasPositionChanged) {
-                          const moveCommand = createNodeCommand(
-                            'MOVE_NODE',
-                            node.id,
-                            undefined,
-                            startPosition,
-                            node.position
-                          );
-                          executeCommand(moveCommand);
-                        }
-                      }
-                      // เคลียร์ข้อมูล
-                      delete dragStartPositions.current[node.id];
-                    }
-                  }
-                }}
+
                 onSelectionChange={onSelectionChange}
                 onPaneClick={handleCanvasClick}
                 connectionMode={ConnectionMode.Loose}
@@ -5288,6 +5897,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       disabled={!professionalEventManager || professionalEventManager.getState().undoStack.length === 0}
                       className="h-8 w-8 p-0"
                       title={`Undo (Ctrl+Z)${professionalEventManager?.getState().undoStack.length > 0 ? ` - มีการเปลี่ยนแปลง ${professionalEventManager.getState().undoStack.length} รายการ` : ' - ไม่มีการเปลี่ยนแปลงที่จะย้อนกลับ'}`}
+                      key={`undo-${forceUIUpdate}`} // Force re-render เมื่อ state เปลี่ยน
                     >
                       <Undo2 className="w-4 h-4" />
                     </Button>
@@ -5299,6 +5909,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       disabled={!professionalEventManager || professionalEventManager.getState().redoStack.length === 0}
                       className="h-8 w-8 p-0"
                       title={`Redo (Ctrl+Y)${professionalEventManager?.getState().redoStack.length > 0 ? ` - สามารถทำซ้ำได้ ${professionalEventManager.getState().redoStack.length} รายการ` : ' - ไม่มีการเปลี่ยนแปลงที่จะทำซ้ำ'}`}
+                      key={`redo-${forceUIUpdate}`} // Force re-render เมื่อ state เปลี่ยน
                     >
                       <Redo2 className="w-4 h-4" />
                     </Button>
@@ -5505,41 +6116,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </Panel>
               )}
 
-              {/* Multiple Selection Bottom Notification (Mobile-friendly) - positioned below toolbar */}
-              {selection.multiSelectMode && selection.selectedNodes.length > 0 && (
-                <Panel position="bottom-center" className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 shadow-lg mb-20 lg:mb-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                        {selection.selectedNodes.length} node{selection.selectedNodes.length > 1 ? 's' : ''} selected
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [], multiSelectMode: false }))}
-                        className="h-8"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => {
-                          // Confirm selection and close multi-select mode
-                          setSelection(prev => ({ ...prev, multiSelectMode: false }));
-                          toast.success(`Confirmed selection of ${selection.selectedNodes.length} nodes`);
-                        }}
-                        className="h-8"
-                      >
-                        Confirm
-                      </Button>
-                    </div>
-                  </div>
-                </Panel>
-              )}
+
+
             </ReactFlow>
           </div>
         </ReactFlowProvider>
@@ -5574,23 +6152,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        // Cancel selection และปิด multi-select mode
-                        setSelection(prev => ({ 
-                          ...prev, 
-                          pendingSelection: [], 
-                          showSelectionBar: false,
-                          multiSelectMode: false
-                        }));
-                        setIsMultiSelectActive(false);
-                        
-                        // ล้าง visual selection
-                        setNodes(prevNodes => 
-                          prevNodes.map(n => ({ ...n, selected: false }))
-                        );
-                        
-                        toast.info('ยกเลิกการเลือกหลายรายการ');
-                      }}
+                      onClick={cancelMultiSelection}
                       className="text-xs px-3"
                     >
                       <X className="w-3 h-3 mr-1" />
@@ -5599,23 +6161,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     <Button
                       variant="default"
                       size="sm"
-                      onClick={() => {
-                        // Confirm selection และปิด multi-select mode
-                        setSelection(prev => ({
-                          ...prev,
-                          selectedNodes: prev.pendingSelection,
-                          pendingSelection: [],
-                          showSelectionBar: false,
-                          multiSelectMode: false // ปิด multi-select mode
-                        }));
-                        setIsMultiSelectActive(false); // ปิด UI state
-                        
-                        // Clear single selection
-                        setSelectedNode(null);
-                        setSelectedEdge(null);
-                        
-                        toast.success(`ยืนยันการเลือก ${selection.pendingSelection.length} รายการ`);
-                      }}
+                      onClick={confirmMultiSelection}
                       className="text-xs px-4 bg-primary hover:bg-primary/90"
                     >
                       <Check className="w-3 h-3 mr-1" />

@@ -227,6 +227,11 @@ export interface CommandContext {
   
   // Events
   notifyChange(changeType: string, data: any): void;
+  
+  // 🚀 NEW: Bidirectional sync methods for Undo/Redo
+  updateReactFlowUI?: (nodes: any[], edges: any[]) => void;
+  syncBackToReactFlow?: () => void;
+  updateEventManagerState?: (nodes: any[], edges: any[], storyVariables: any[]) => void;
 }
 
 // Command type constants for better type safety

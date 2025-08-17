@@ -77,83 +77,8 @@ export default function SingleUserSaveStatusIndicator({
   size = 'md'
 }: SingleUserSaveStatusIndicatorProps) {
   
-  const getStatusConfig = (): StatusConfig => {
-    const { isSaving, lastSaved, lastError, pendingCommands, isDirty, hasUnsavedChanges } = saveState;
-    
-    let status: string;
-    if (isSaving) {
-      status = 'saving';
-    } else if (lastError) {
-      status = 'error';
-    } else if (isDirty || hasUnsavedChanges) {
-      status = 'dirty';
-    } else {
-      status = 'saved';
-    }
-    
-    switch (status) {
-      case 'saving':
-        return {
-          icon: <Loader2 className="animate-spin" />,
-          color: 'text-blue-600',
-          bgColor: 'bg-blue-50 dark:bg-blue-900/20',
-          text: '💾 กำลังบันทึกข้อมูล...',
-          description: pendingCommands > 0 
-            ? `กำลังประมวลผลและบันทึก ${pendingCommands} การเปลี่ยนแปลง`
-            : 'กำลังบันทึกการเปลี่ยนแปลงของคุณไปยังเซิร์ฟเวอร์'
-        };
-      
-      case 'dirty':
-        return {
-          icon: <Clock />,
-          color: 'text-orange-600',
-          bgColor: 'bg-orange-50 dark:bg-orange-900/20',
-          text: '🔄 มีการเปลี่ยนแปลง',
-          description: 'มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก กดปุ่ม "บันทึก" เพื่อบันทึกข้อมูล'
-        };
-      
-      case 'saved':
-        if (lastSaved) {
-          return {
-            icon: <Check />,
-            color: 'text-green-600',
-            bgColor: 'bg-green-50 dark:bg-green-900/20',
-            text: '✅ บันทึกเรียบร้อย',
-            description: `การเปลี่ยนแปลงทั้งหมดได้รับการบันทึกแล้ว (${formatRelativeTime(lastSaved)})`
-          };
-        } else {
-          return {
-            icon: <Clock />,
-            color: 'text-gray-500',
-            bgColor: 'bg-gray-50 dark:bg-gray-900/20',
-            text: '⏳ พร้อมใช้งาน',
-            description: 'ระบบพร้อมใช้งาน ยังไม่มีการเปลี่ยนแปลงที่ต้องบันทึก'
-          };
-        }
-      
-      case 'error':
-        return {
-          icon: <X />,
-          color: 'text-red-600',
-          bgColor: 'bg-red-50 dark:bg-red-900/20',
-          text: '❌ บันทึกไม่สำเร็จ',
-          description: lastError 
-            ? `เกิดข้อผิดพลาด: ${lastError} - กรุณาลองใหม่หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต`
-            : 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
-        };
-      
-      default:
-        return {
-          icon: <Clock />,
-          color: 'text-gray-500',
-          bgColor: 'bg-gray-50 dark:bg-gray-900/20',
-          text: '❓ สถานะไม่ชัดเจน',
-          description: 'ไม่สามารถระบุสถานะการบันทึกได้ กรุณารีเฟรชหน้าเว็บ'
-        };
-    }
-  };
-
-  const formatRelativeTime = (date: Date): string => {
+  // ฟังก์ชันสำหรับแปลงเวลาให้อ่านง่าย
+  const formatRelativeTime = React.useCallback((date: Date): string => {
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -167,15 +92,111 @@ export default function SingleUserSaveStatusIndicator({
       return `${hours} ชั่วโมงที่แล้ว`;
     } else {
       return date.toLocaleDateString('th-TH', {
-        month: 'short',
         day: 'numeric',
+        month: 'short',
         hour: '2-digit',
         minute: '2-digit'
       });
     }
-  };
+  }, []);
+  
+  // ใช้ useMemo เพื่อป้องกันการคำนวณซ้ำที่ไม่จำเป็น
+  const config = React.useMemo((): StatusConfig & { statusKey: string } => {
+    const { isSaving, lastSaved, lastError, pendingCommands, isDirty, hasUnsavedChanges } = saveState;
+    
+    let status: string;
+    if (isSaving) {
+      status = 'saving';
+    } else if (lastError) {
+      status = 'error';
+    } else if (isDirty || hasUnsavedChanges) {
+      status = 'dirty';
+    } else if (lastSaved) {
+      status = 'saved';
+    } else {
+      status = 'ready';
+    }
 
-  const config = getStatusConfig();
+    // สร้าง stable key สำหรับแต่ละสถานะ (ไม่ใช้ random เพื่อป้องกัน excessive re-renders)
+    const statusKey = `${status}-${isSaving ? 'saving' : ''}${lastError ? '-error' : ''}${isDirty || hasUnsavedChanges ? '-dirty' : ''}${lastSaved ? '-saved' : ''}`;
+    
+    switch (status) {
+      case 'saving':
+        return {
+          statusKey,
+          icon: <Loader2 className="animate-spin" />,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+          text: '💾 กำลังบันทึกข้อมูล...',
+          description: pendingCommands > 0 
+            ? `กำลังประมวลผลและบันทึก ${pendingCommands} การเปลี่ยนแปลง`
+            : 'กำลังบันทึกการเปลี่ยนแปลงของคุณไปยังเซิร์ฟเวอร์'
+        };
+      
+      case 'dirty':
+        return {
+          statusKey,
+          icon: <Clock className="text-orange-500" />,
+          color: 'text-orange-600 font-semibold',
+          bgColor: 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200',
+          text: '🔄 มีการเปลี่ยนแปลง',
+          description: 'มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก กดปุ่ม "บันทึก" เพื่อบันทึกข้อมูล'
+        };
+      
+      case 'saved':
+        if (lastSaved) {
+          return {
+            statusKey,
+            icon: <Check className="text-green-500" />,
+            color: 'text-green-600 font-semibold',
+            bgColor: 'bg-green-50 dark:bg-green-900/20 border border-green-200',
+            text: '✅ บันทึกเรียบร้อย',
+            description: `การเปลี่ยนแปลงทั้งหมดได้รับการบันทึกแล้ว (${formatRelativeTime(lastSaved)})`
+          };
+        } else {
+          return {
+            statusKey,
+            icon: <Clock className="text-gray-400" />,
+            color: 'text-gray-600',
+            bgColor: 'bg-gray-50 dark:bg-gray-900/20 border border-gray-200',
+            text: '⏳ พร้อมใช้งาน',
+            description: 'ระบบพร้อมใช้งาน ยังไม่มีการเปลี่ยนแปลงที่ต้องบันทึก'
+          };
+        }
+        
+      case 'ready':
+        return {
+          statusKey,
+          icon: <Clock className="text-gray-400" />,
+          color: 'text-gray-600',
+          bgColor: 'bg-gray-50 dark:bg-gray-900/20 border border-gray-200',
+          text: '⏳ พร้อมใช้งาน',
+          description: 'ระบบพร้อมใช้งาน ยังไม่มีการเปลี่ยนแปลงใดๆ'
+        };
+      
+      case 'error':
+        return {
+          statusKey,
+          icon: <X className="text-red-500" />,
+          color: 'text-red-600 font-semibold',
+          bgColor: 'bg-red-50 dark:bg-red-900/20 border border-red-200',
+          text: '❌ เกิดข้อผิดพลาด',
+          description: lastError 
+            ? `เกิดข้อผิดพลาด: ${lastError} - กรุณาลองใหม่หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต`
+            : 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+        };
+      
+      default:
+        return {
+          statusKey,
+          icon: <Clock />,
+          color: 'text-gray-500',
+          bgColor: 'bg-gray-50 dark:bg-gray-900/20',
+          text: '❓ สถานะไม่ชัดเจน',
+          description: 'ไม่สามารถระบุสถานะการบันทึกได้ กรุณารีเฟรชหน้าเว็บ'
+        };
+    }
+  }, [saveState, formatRelativeTime]); // dependency array สำหรับ useMemo
   
   // Size configurations
   const sizeClasses = {
@@ -215,7 +236,7 @@ export default function SingleUserSaveStatusIndicator({
     >
       {/* Status Icon */}
       <motion.div
-        key={config.text} // Re-animate when status changes
+        key={`icon-${config.statusKey}`} // ใช้ unique key
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.2 }}
@@ -229,7 +250,7 @@ export default function SingleUserSaveStatusIndicator({
       {/* Status Text */}
       {showDetails && (
         <motion.span
-          key={config.text}
+          key={`text-${config.statusKey}`} // ใช้ unique key
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           className={`font-medium ${currentSize.text} whitespace-nowrap`}
@@ -252,25 +273,3 @@ export default function SingleUserSaveStatusIndicator({
 // SECTION: Utility Functions
 // ===================================================================
 
-// Format time helper - moved here to avoid re-creation
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (diffInSeconds < 60) {
-    return 'เมื่อสักครู่';
-  } else if (diffInSeconds < 3600) {
-    const minutes = Math.floor(diffInSeconds / 60);
-    return `${minutes} นาทีที่แล้ว`;
-  } else if (diffInSeconds < 86400) {
-    const hours = Math.floor(diffInSeconds / 3600);
-    return `${hours} ชั่วโมงที่แล้ว`;
-  } else {
-    return date.toLocaleDateString('th-TH', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-}

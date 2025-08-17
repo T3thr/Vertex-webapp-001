@@ -589,34 +589,40 @@ export async function GET(request: NextRequest) {
     // เชื่อมต่อฐานข้อมูล
     await dbConnect();
 
-    // ดึงการตั้งค่าผู้ใช้
-    const user = await UserModel.findById(session.user.id)
-      .select('settings.readerSettings')
+    // 🎯 ดึงการตั้งค่าผู้ใช้จาก UserSettings collection (ใหม่)
+    const userSettings = await UserSettingsModel.findOne({ userId: session.user.id })
       .lean();
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'ไม่พบผู้ใช้' },
-        { status: 404 }
-      );
+    console.log('[API GET Settings] 📖 Retrieved user settings:', {
+      userId: session.user.id,
+      hasSettings: !!userSettings,
+      hasBlueprintEditor: !!userSettings?.visualNovelGameplay?.blueprintEditor
+    });
+
+    if (!userSettings) {
+      console.log('[API GET Settings] ⚠️ No settings found, returning empty structure');
+      return NextResponse.json({
+        success: true,
+        settings: null,
+        message: 'No user settings found'
+      });
     }
 
-    // ส่งกลับการตั้งค่า หรือค่าเริ่มต้นหากไม่มี
-    const defaultSettings = {
-      textSpeed: 2,
-      fontSize: 16,
-      bgOpacity: 0.8,
-      autoPlay: false
-    };
-
+    // ส่งกลับการตั้งค่าจริงจาก database (ไม่มี default fallback)
     return NextResponse.json({
-      readerSettings: user.settings?.readerSettings || defaultSettings
+      success: true,
+      settings: userSettings,
+      message: 'Settings retrieved successfully'
     });
 
   } catch (error) {
-    console.error('Error fetching user settings:', error);
+    console.error('[API GET Settings] ❌ Error fetching user settings:', error);
     return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการดึงข้อมูลการตั้งค่า' },
+      { 
+        success: false,
+        error: 'เกิดข้อผิดพลาดในการดึงข้อมูลการตั้งค่า',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
