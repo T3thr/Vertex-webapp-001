@@ -63,13 +63,19 @@ import '@xyflow/react/dist/style.css';
 // EventManager integration
 import { BlueprintCommandAdapter, createBlueprintCommandAdapter } from './BlueprintCommandAdapter';
 
-// Utility function สำหรับ debouncing
-const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
+// Utility function สำหรับ debouncing with cancel method
+const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T & { cancel: () => void } => {
   let timeout: NodeJS.Timeout;
-  return ((...args: any[]) => {
+  const debounced = ((...args: any[]) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
-  }) as T;
+  }) as T & { cancel: () => void };
+  
+  debounced.cancel = () => {
+    clearTimeout(timeout);
+  };
+  
+  return debounced;
 };
 
 // Components
@@ -180,6 +186,11 @@ interface BlueprintTabProps {
   onNavigateToDirector?: (sceneId?: string) => void;
   // Professional Event Management Integration (Adobe/Canva/Figma style)
   eventManager?: any; // EventManager instance from parent
+  // ✅ PROFESSIONAL SOLUTION 4: เพิ่ม autoSaveConfig prop
+  autoSaveConfig?: {
+    enabled: boolean;
+    intervalSec: 15 | 30;
+  };
   // การตั้งค่าการแสดงผลจาก localStorage
   blueprintSettings?: {
     showSceneThumbnails: boolean;
@@ -245,6 +256,7 @@ interface SelectionState {
   isSelectionMode: boolean;
   pendingSelection: string[]; // For Canva-style multi-select confirmation
   showSelectionBar: boolean; // Show bottom confirmation bar
+  isReactFlowInstantMode: boolean; // 🎯 แยก ReactFlow instant mode จาก manual mode
 }
 
 // Canvas interaction state
@@ -1136,8 +1148,16 @@ const MultipleSelectionPanel = ({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onDeselectAll}
+          onClick={() => {
+            console.log(`[BlueprintTab] 🧹 MultipleSelectionPanel X button clicked`, {
+              selectedNodesCount: selectedNodes.length,
+              selectedEdgesCount: selectedEdges.length,
+              hasOnDeselectAll: !!onDeselectAll
+            });
+            onDeselectAll();
+          }}
           className="text-muted-foreground hover:text-foreground"
+          title="Clear Selection (ล้างการเลือกทั้งหมด)"
         >
           <X className="w-4 h-4" />
         </Button>
@@ -1339,8 +1359,16 @@ const PropertiesPanel = ({
   };
 
   const handleDeselectAll = () => {
+    console.log(`[BlueprintTab] 🧹 PropertiesPanel handleDeselectAll called`, {
+      hasOnDeselectAll: !!onDeselectAll,
+      selectedNodesCount: selectedNodes.length,
+      selectedEdgesCount: selectedEdges.length
+    });
+    
     if (onDeselectAll) {
       onDeselectAll();
+    } else {
+      console.warn(`[BlueprintTab] ⚠️ onDeselectAll callback not provided`);
     }
   };
 
@@ -1655,6 +1683,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   onDirtyChange,
   onNavigateToDirector,
   eventManager, // Professional Event Management Integration
+  autoSaveConfig, // ✅ PROFESSIONAL SOLUTION 5: รับ autoSaveConfig prop
   blueprintSettings
 }, ref) => {
   // Core ReactFlow state
@@ -2003,12 +2032,25 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Node Palette collapse state
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
   
-  // Auto-save settings จะถูกจัดการโดย NovelEditor ผ่าน localStorage โดยตรง
+  // Auto-save settings จะถูกจัดการโดย NovelEditor ผ่าน props
   const [autoSaveSettings, setAutoSaveSettings] = useState<AutoSaveSettings>({
     enabled: false, // Default: false ไม่บังคับผู้ใช้ (จัดการโดย NovelEditor)
     intervalSec: 30, // จัดการโดย NovelEditor
     conflictResolutionStrategy: 'merge' // จัดการโดย SaveManager
   });
+
+  // ✅ PROFESSIONAL SOLUTION 6: Sync autoSaveSettings จาก parent props
+  useEffect(() => {
+    if (autoSaveConfig) {
+      setAutoSaveSettings(prev => ({
+        ...prev,
+        enabled: autoSaveConfig.enabled,
+        intervalSec: autoSaveConfig.intervalSec
+      }));
+      
+      console.log('[BlueprintTab] 🔄 Auto-save settings updated from parent:', autoSaveConfig);
+    }
+  }, [autoSaveConfig]);
 
   // Enhanced save state with versioning - ใช้ SaveManager แทน
   const [saveState, setSaveState] = useState<SaveState>({
@@ -2518,85 +2560,84 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // บันทึก UI state ลง localStorage เมื่อเปลี่ยน (Desktop experience)
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
+  // ✅ CRITICAL FIX: Debounced localStorage updates to prevent rapid state changes
+  const debouncedUpdateLocalStorage = useMemo(
+    () => debounce((key: string, value: any) => {
+      if (typeof window !== 'undefined' && !isInitialLoad) {
+        localStorage.setItem(key, JSON.stringify(value));
+        console.log(`[BlueprintTab] 💾 Saved ${key}:`, value);
+      }
+    }, 100), // 100ms debounce
+    [isInitialLoad]
+  );
+  
   useEffect(() => {
-    if (typeof window !== 'undefined' && !isInitialLoad) {
-      localStorage.setItem('blueprint-sidebar-open', JSON.stringify(isSidebarOpen));
-    }
-  }, [isSidebarOpen, isInitialLoad]);
+    debouncedUpdateLocalStorage('blueprint-sidebar-open', isSidebarOpen);
+  }, [isSidebarOpen, debouncedUpdateLocalStorage]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !isInitialLoad) {
-      localStorage.setItem('blueprint-properties-open', JSON.stringify(isPropertiesOpen));
-    }
-  }, [isPropertiesOpen, isInitialLoad]);
+    debouncedUpdateLocalStorage('blueprint-properties-open', isPropertiesOpen);
+  }, [isPropertiesOpen, debouncedUpdateLocalStorage]);
 
   // Load UI states from localStorage after mount (ทำครั้งเดียวเพื่อป้องกัน infinite loops)
+  // ✅ CRITICAL FIX: Load UI states from localStorage ONCE on mount (prevent infinite loops)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      let hasChanges = false;
-      
-      // Load sidebar open state
-      const sidebarOpen = localStorage.getItem('blueprint-sidebar-open');
-      if (sidebarOpen && JSON.parse(sidebarOpen) !== isSidebarOpen) {
-        setIsSidebarOpen(JSON.parse(sidebarOpen));
-        hasChanges = true;
+    if (typeof window !== 'undefined' && isInitialLoad) {
+      try {
+        // Load all states in one batch to prevent cascade updates
+        const sidebarOpen = localStorage.getItem('blueprint-sidebar-open');
+        const propertiesOpen = localStorage.getItem('blueprint-properties-open');
+        const sidebarCollapsed = localStorage.getItem('blueprint-sidebar-collapsed');
+        const propertiesCollapsed = localStorage.getItem('blueprint-properties-collapsed');
+        const nodePaletteCollapsed = localStorage.getItem('blueprint-node-palette-collapsed');
+        
+        // Set all states at once using functional updates to prevent race conditions
+        if (sidebarOpen) {
+          setIsSidebarOpen(JSON.parse(sidebarOpen));
+        }
+        if (propertiesOpen) {
+          setIsPropertiesOpen(JSON.parse(propertiesOpen));
+        }
+        if (sidebarCollapsed) {
+          setIsSidebarCollapsed(JSON.parse(sidebarCollapsed));
+        }
+        if (propertiesCollapsed) {
+          setIsPropertiesCollapsed(JSON.parse(propertiesCollapsed));
+        }
+        if (nodePaletteCollapsed) {
+          setIsNodePaletteCollapsed(JSON.parse(nodePaletteCollapsed));
+        }
+        
+        console.log('[BlueprintTab] ✅ UI states loaded from localStorage - no infinite loops');
+      } catch (error) {
+        console.warn('[BlueprintTab] ⚠️ Failed to load UI states from localStorage:', error);
+      } finally {
+        // Mark as loaded AFTER all localStorage reads are complete (even if failed)
+        setIsInitialLoad(false);
       }
-      
-      // Load properties open state
-      const propertiesOpen = localStorage.getItem('blueprint-properties-open');
-      if (propertiesOpen && JSON.parse(propertiesOpen) !== isPropertiesOpen) {
-        setIsPropertiesOpen(JSON.parse(propertiesOpen));
-        hasChanges = true;
-      }
-      
-      // Load sidebar collapsed state
-      const sidebarCollapsed = localStorage.getItem('blueprint-sidebar-collapsed');
-      if (sidebarCollapsed && JSON.parse(sidebarCollapsed) !== isSidebarCollapsed) {
-        setIsSidebarCollapsed(JSON.parse(sidebarCollapsed));
-        hasChanges = true;
-      }
-      
-      // Load properties collapsed state
-      const propertiesCollapsed = localStorage.getItem('blueprint-properties-collapsed');
-      if (propertiesCollapsed && JSON.parse(propertiesCollapsed) !== isPropertiesCollapsed) {
-        setIsPropertiesCollapsed(JSON.parse(propertiesCollapsed));
-        hasChanges = true;
-      }
-      
-      // Load node palette collapsed state
-      const nodePaletteCollapsed = localStorage.getItem('blueprint-node-palette-collapsed');
-      if (nodePaletteCollapsed && JSON.parse(nodePaletteCollapsed) !== isNodePaletteCollapsed) {
-        setIsNodePaletteCollapsed(JSON.parse(nodePaletteCollapsed));
-        hasChanges = true;
-      }
-      
-      // Log เฉพาะเมื่อมีการเปลี่ยนแปลง
-      if (hasChanges) {
-        console.log('[BlueprintTab] Loaded UI states from localStorage');
-      }
-      
-      // ตั้งค่าให้พร้อมบันทึก localStorage ในครั้งต่อไป
-      setIsInitialLoad(false);
     }
-  }, [isNodePaletteCollapsed, isPropertiesCollapsed, isPropertiesOpen, isSidebarCollapsed, isSidebarOpen]); // ทำครั้งเดียวเท่านั้น
+  }, []); // ✅ CRITICAL: Empty dependency array - run only once on mount
+
+  // ✅ Cleanup debounced function on unmount
+  useEffect(() => {
+    return () => {
+      if ('cancel' in debouncedUpdateLocalStorage) {
+        (debouncedUpdateLocalStorage as any).cancel();
+      }
+    };
+  }, [debouncedUpdateLocalStorage]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !isInitialLoad) {
-      localStorage.setItem('blueprint-sidebar-collapsed', JSON.stringify(isSidebarCollapsed));
-    }
-  }, [isSidebarCollapsed, isInitialLoad]);
+    debouncedUpdateLocalStorage('blueprint-sidebar-collapsed', isSidebarCollapsed);
+  }, [isSidebarCollapsed, debouncedUpdateLocalStorage]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !isInitialLoad) {
-      localStorage.setItem('blueprint-properties-collapsed', JSON.stringify(isPropertiesCollapsed));
-    }
-  }, [isPropertiesCollapsed, isInitialLoad]);
+    debouncedUpdateLocalStorage('blueprint-properties-collapsed', isPropertiesCollapsed);
+  }, [isPropertiesCollapsed, debouncedUpdateLocalStorage]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !isInitialLoad) {
-      localStorage.setItem('blueprint-node-palette-collapsed', JSON.stringify(isNodePaletteCollapsed));
-    }
-  }, [isNodePaletteCollapsed, isInitialLoad]);
+    debouncedUpdateLocalStorage('blueprint-node-palette-collapsed', isNodePaletteCollapsed);
+  }, [isNodePaletteCollapsed, debouncedUpdateLocalStorage]);
 
   // การตั้งค่าถูกจัดการโดย NovelEditor ผ่าน localStorage โดยตรง
   
@@ -2741,23 +2782,22 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const performSmartChangeDetection = () => {
         // ✨ Professional Save Integration: ใช้ SingleUserEventManager เป็น single source of truth
         if (professionalEventManager) {
-          // EventManager จัดการ change detection และ dirty state อัตโนมัติ
-          const eventManagerHasChanges = professionalEventManager.hasChanges();
+          // 🔥 ADOBE/FIGMA STYLE: ใช้ command-based detection แทน undo stack length
+          const hasRealChanges = professionalEventManager.hasChanges();
           const eventManagerState = professionalEventManager.getState();
           
-          onDirtyChange(eventManagerHasChanges);
+          onDirtyChange(hasRealChanges);
           
-          console.log('[BlueprintTab] 🔍 Professional Change Detection via EventManager:', {
-            hasChanges: eventManagerHasChanges,
-            saveButtonEnabled: eventManagerHasChanges,
-            canUndo: eventManagerState.undoStack.length > 0,
-            canRedo: eventManagerState.redoStack.length > 0,
-            changeType: eventManagerHasChanges ? 'DIRTY' : 'CLEAN',
+          console.log('[BlueprintTab] 🔍 Professional Command-Based Change Detection:', {
+            hasChanges: hasRealChanges,
+            saveButtonEnabled: hasRealChanges,
             undoStackLength: eventManagerState.undoStack.length,
             redoStackLength: eventManagerState.redoStack.length,
-          sessionDuration: initialSnapshot ? Math.round((Date.now() - initialSnapshot.timestamp) / 1000) + 's' : '0s',
-          platform: typeof window !== 'undefined' ? 
-              (window.navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop') : 'server'
+            isDirty: eventManagerState.isDirty,
+            reason: hasRealChanges ? 'Has content changes' : 'No content changes (UI-only)',
+            sessionDuration: initialSnapshot ? Math.round((Date.now() - initialSnapshot.timestamp) / 1000) + 's' : '0s',
+            platform: typeof window !== 'undefined' ? 
+                (window.navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop') : 'server'
           });
           return;
         }
@@ -3241,12 +3281,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     clipboard: { nodes: [], edges: [] },
     isSelectionMode: false,
     pendingSelection: [],
-    showSelectionBar: false
+    showSelectionBar: false,
+    isReactFlowInstantMode: false // 🎯 เริ่มต้นเป็น false
   });
   
   // Multi-select UI state
   const [isMultiSelectActive, setIsMultiSelectActive] = useState(false);
   const [multiSelectStartPosition, setMultiSelectStartPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Previous selection tracking to prevent infinite loops
+  const previousSelectionRef = useRef<{ nodes: string[]; edges: string[] }>({ nodes: [], edges: [] });
   
   // Save state (ใช้ Enhanced Save State ที่ประกาศไว้แล้วด้านบน)
   const isInitializingRef = useRef<boolean>(true);
@@ -3882,6 +3926,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       clearTimeout(autoSaveTimer.current);
     }
     
+    // 🔥 ADOBE/FIGMA STYLE: ตรวจสอบการเปลี่ยนแปลงก่อนบันทึก
+    if (professionalEventManager && !professionalEventManager.hasChanges()) {
+      toast.info('🔍 ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก', {
+        description: 'เนื้อหาปัจจุบันตรงกับที่บันทึกไว้แล้ว'
+      });
+      return;
+    }
+
     try {
       if (professionalEventManager) {
         // ใช้ EventManager สำหรับ manual save
@@ -3939,7 +3991,25 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
     } catch (error) {
       console.error('[BlueprintTab] Manual save failed:', error);
-      toast.error('❌ บันทึกล้มเหลว: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // 🔥 ADOBE/FIGMA STYLE: Handle duplicate save gracefully
+      if (errorMessage === 'SAVE_IN_PROGRESS') {
+        toast.info('⏳ กำลังบันทึกอยู่', {
+          description: 'กรุณารอการบันทึกปัจจุบันให้เสร็จสิ้น'
+        });
+        return;
+      }
+      
+      if (errorMessage === 'DUPLICATE_DATA') {
+        toast.info('🔄 ไม่มีการเปลี่ยนแปลงใหม่', {
+          description: 'ข้อมูลถูกบันทึกไว้แล้ว'
+        });
+        return;
+      }
+      
+      toast.error('❌ บันทึกล้มเหลว: ' + errorMessage);
     }
   }, [professionalEventManager, saveStoryMapToDatabase, nodes, edges, createStateSnapshot, onDirtyChange]);
 
@@ -4452,7 +4522,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       pendingSelection: [], // เริ่มใหม่เมื่อเปิด/ปิด multi-select mode
       showSelectionBar: false, // ไม่แสดง confirmation bar ตอนเริ่มต้น
       selectedNodes: newMode ? [] : prev.selectedNodes, // ล้าง selection เมื่อเข้า mode, คงเก่าเมื่อออก
-      selectedEdges: newMode ? [] : prev.selectedEdges
+      selectedEdges: newMode ? [] : prev.selectedEdges,
+      isReactFlowInstantMode: false // 🎯 รีเซ็ต ReactFlow instant mode เมื่อเข้า manual mode
     }));
     
     setIsMultiSelectActive(newMode);
@@ -4481,23 +4552,23 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [selection.multiSelectMode, setNodes, setEdges]);
 
-  // 🔥 CANVA STYLE: Confirm multi-selection with undo/redo support
+  // 🔥 FIGMA/CANVA STYLE: Confirm multi-selection with complete undo/redo support
   const confirmMultiSelection = useCallback(() => {
     const pendingNodeIds = selection.pendingSelection;
     
-    if (!professionalEventManager || pendingNodeIds.length === 0) {
-      if (pendingNodeIds.length === 0) {
-        toast.error('ไม่มี nodes ที่ถูกเลือก');
-      } else {
-        toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
-      }
+    if (!professionalEventManager) {
+      toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
       return;
     }
-
-    // Capture current state for undo
-    const previousSelectedNodes = [...selection.selectedNodes];
-    const previousSelectedEdges = [...selection.selectedEdges];
-    const previousNodesVisualState = nodes.map(n => ({ id: n.id, selected: n.selected }));
+    
+    // 🎯 จัดเก็บสถานะเดิมก่อนการเปลี่ยนแปลง (สำหรับ undo ที่สมบูรณ์)
+    const previousSelection = {
+      nodes: [...selection.selectedNodes],
+      edges: [...selection.selectedEdges],
+      multiSelectMode: selection.multiSelectMode,
+      pendingSelection: [...selection.pendingSelection],
+      showSelectionBar: selection.showSelectionBar
+    };
     
     const command: ICommand = {
       id: `multi-select-${Date.now()}`,
@@ -4512,16 +4583,44 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           selectedEdges: [],
           pendingSelection: [],
           showSelectionBar: false,
-          multiSelectMode: false
+          multiSelectMode: true, // 🔧 FIX: ต้องเป็น true เพื่อให้ info panel แสดงผล
+          isReactFlowInstantMode: false // 🎯 ไม่ใช่ ReactFlow instant mode หลัง confirm
         }));
         
-        // อัปเดต node selection ใน React Flow
+        // 🔥 FIGMA STYLE: อัปเดต ReactFlow visual selection ให้ sync สมบูรณ์
         setNodes(prevNodes => 
           prevNodes.map(n => ({
             ...n,
             selected: pendingNodeIds.includes(n.id)
           }))
         );
+        setEdges(prevEdges => 
+          prevEdges.map(e => ({ ...e, selected: false }))
+        );
+
+        // 🔥 CRITICAL FIX: บังคับให้ ReactFlow instance sync selection state อย่างแน่นอน
+        if (reactFlowInstance) {
+          setTimeout(() => {
+            const allNodes = reactFlowInstance.getNodes();
+            const allEdges = reactFlowInstance.getEdges();
+            
+            reactFlowInstance.setNodes(
+              allNodes.map(node => ({
+                ...node,
+                selected: pendingNodeIds.includes(node.id)
+              }))
+            );
+            
+            reactFlowInstance.setEdges(
+              allEdges.map(edge => ({
+                ...edge,
+                selected: false
+              }))
+            );
+            
+            console.log(`[BlueprintTab] 🔄 ReactFlow instance force synced for execute with ${pendingNodeIds.length} selected nodes`);
+          }, 0);
+        }
         
         // ล้าง single selection states
         setSelectedNode(null);
@@ -4531,57 +4630,370 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         console.log(`[BlueprintTab] ✅ Multi-selection confirmed: ${pendingNodeIds.length} nodes`);
       },
       undo: () => {
-        // คืนค่า selection state ให้ตรงกับก่อนหน้า
+        // 🎯 คืนสถานะเดิมอย่างสมบูรณ์
         setSelection(prev => ({
           ...prev,
-          selectedNodes: previousSelectedNodes,
-          selectedEdges: previousSelectedEdges,
-          multiSelectMode: previousSelectedNodes.length > 1 || previousSelectedEdges.length > 1 || 
-                           (previousSelectedNodes.length > 0 && previousSelectedEdges.length > 0),
-          pendingSelection: [],
-          showSelectionBar: false
+          selectedNodes: previousSelection.nodes,
+          selectedEdges: previousSelection.edges,
+          multiSelectMode: previousSelection.multiSelectMode,
+          pendingSelection: previousSelection.pendingSelection,
+          showSelectionBar: previousSelection.showSelectionBar
         }));
         
-        // คืนค่า visual selection
+        // 🔥 FIGMA STYLE: ล้าง ReactFlow visual selection สมบูรณ์
         setNodes(prevNodes => 
-          prevNodes.map(n => {
-            const previousState = previousNodesVisualState.find(p => p.id === n.id);
-            return {
-              ...n,
-              selected: previousState ? previousState.selected : false
-            };
-          })
+          prevNodes.map(n => ({ ...n, selected: false }))
+        );
+        setEdges(prevEdges => 
+          prevEdges.map(e => ({ ...e, selected: false }))
         );
         
-        // คืนค่า single selection ถ้ามี
-        if (previousSelectedNodes.length === 1) {
-          const singleNode = nodes.find(n => n.id === previousSelectedNodes[0]);
-          if (singleNode) {
-            setSelectedNode(singleNode);
-          }
-        } else {
-          setSelectedNode(null);
+        // 🔥 FIGMA STYLE: บังคับให้ ReactFlow instance ล้าง selection อย่างแน่นอน
+        if (reactFlowInstance) {
+          setTimeout(() => {
+            // Force clear undo state
+            reactFlowInstance.setNodes(
+              reactFlowInstance.getNodes().map(node => ({
+                ...node,
+                selected: false
+              }))
+            );
+            
+            reactFlowInstance.setEdges(
+              reactFlowInstance.getEdges().map(edge => ({
+                ...edge,
+                selected: false
+              }))
+            );
+            
+            // Double clear เพื่อให้แน่ใจ (Figma-style reliability)
+            setTimeout(() => {
+              reactFlowInstance.setNodes(
+                reactFlowInstance.getNodes().map(node => ({
+                  ...node,
+                  selected: false
+                }))
+              );
+              console.log(`[BlueprintTab] 🔄 Manual multi-select undo double-cleared all selections`);
+            }, 50);
+            
+            console.log(`[BlueprintTab] 🔄 ReactFlow instance force cleared for manual undo`);
+          }, 10);
         }
         
-        if (previousSelectedEdges.length === 1) {
-          const singleEdge = edges.find(e => e.id === previousSelectedEdges[0]);
-          if (singleEdge) {
-            setSelectedEdge(singleEdge);
-          }
-        } else {
-          setSelectedEdge(null);
-        }
-        
+        setSelectedNode(null);
+        setSelectedEdge(null);
         setIsMultiSelectActive(false);
         
-        console.log(`[BlueprintTab] ↶ Multi-selection undone - restored previous state`);
+        console.log(`[BlueprintTab] ↶ Multi-selection undone`);
+      },
+      redo: () => {
+        // 🔥 FIGMA STYLE: explicit redo method สำหรับความชัดเจน
+        setSelection(prev => ({
+          ...prev,
+          selectedNodes: pendingNodeIds,
+          selectedEdges: [],
+          pendingSelection: [],
+          showSelectionBar: false,
+          multiSelectMode: true, // 🔧 FIX: ต้องเป็น true เพื่อให้ info panel แสดงผล
+          isReactFlowInstantMode: false // 🎯 ไม่ใช่ ReactFlow instant mode ใน redo
+        }));
+        
+        // 🔥 FIGMA STYLE: อัปเดต ReactFlow visual selection ให้ sync สมบูรณ์
+        setNodes(prevNodes => 
+          prevNodes.map(n => ({
+            ...n,
+            selected: pendingNodeIds.includes(n.id)
+          }))
+        );
+        setEdges(prevEdges => 
+          prevEdges.map(e => ({ ...e, selected: false }))
+        );
+
+        // 🔥 FIGMA STYLE: บังคับให้ ReactFlow instance sync selection state แบบ immediate
+        if (reactFlowInstance) {
+          // ใช้ multiple timeout เพื่อให้แน่ใจว่า sync อย่างสมบูรณ์
+          setTimeout(() => {
+            const allNodes = reactFlowInstance.getNodes();
+            const allEdges = reactFlowInstance.getEdges();
+            
+            // Force sync ครั้งแรก
+            reactFlowInstance.setNodes(
+              allNodes.map(node => ({
+                ...node,
+                selected: pendingNodeIds.includes(node.id)
+              }))
+            );
+            
+            reactFlowInstance.setEdges(
+              allEdges.map(edge => ({
+                ...edge,
+                selected: false
+              }))
+            );
+            
+            // Double sync เพื่อให้แน่ใจ (Figma-style reliability)
+            setTimeout(() => {
+              reactFlowInstance.setNodes(
+                reactFlowInstance.getNodes().map(node => ({
+                  ...node,
+                  selected: pendingNodeIds.includes(node.id)
+                }))
+              );
+              console.log(`[BlueprintTab] 🔄 ReactFlow redo double-synced: ${pendingNodeIds.length} selected nodes`);
+            }, 50);
+            
+            console.log(`[BlueprintTab] 🔄 ReactFlow instance force synced for redo with ${pendingNodeIds.length} selected nodes`);
+          }, 10);
+        }
+        
+        // ล้าง single selection states
+        setSelectedNode(null);
+        setSelectedEdge(null);
+        setIsMultiSelectActive(false);
+        
+        console.log(`[BlueprintTab] ↷ Multi-selection redone: ${pendingNodeIds.length} nodes with ReactFlow sync`);
       }
     };
     
-    // ✅ ใช้ EventManager สำหรับ undo/redo tracking (เป็น UI-only command ไม่ทำให้ dirty)
-    professionalEventManager.addCommandToHistory(command);
+    // ✅ ใช้ EventManager สำหรับ undo/redo tracking
+    professionalEventManager.executeCommand(command);
     toast.success(`✅ Selected ${pendingNodeIds.length} nodes. Use Ctrl+Z to undo.`);
-  }, [selection.pendingSelection, selection.selectedNodes, selection.selectedEdges, nodes, edges, professionalEventManager]);
+  }, [selection.pendingSelection, selection.selectedNodes, selection.selectedEdges, selection.multiSelectMode, selection.showSelectionBar, professionalEventManager, reactFlowInstance]);
+
+  // 🔧 FIGMA STYLE: Clear all selections with ULTRA-aggressive UI sync
+  const clearAllSelections = useCallback(() => {
+    // 🚨 EMERGENCY: Force immediate ReactFlow clear BEFORE any state updates
+    if (reactFlowInstance) {
+      try {
+        // Immediate synchronous clear - no delays
+        const currentNodes = reactFlowInstance.getNodes();
+        const currentEdges = reactFlowInstance.getEdges();
+        
+        // Force clear ALL selections immediately
+        reactFlowInstance.setNodes(currentNodes.map(n => ({ ...n, selected: false })));
+        reactFlowInstance.setEdges(currentEdges.map(e => ({ ...e, selected: false })));
+        
+        console.log(`[BlueprintTab] 🚨 EMERGENCY: Immediate ReactFlow clear executed FIRST`);
+      } catch (error) {
+        console.error(`[BlueprintTab] ❌ Emergency clear failed:`, error);
+      }
+    }
+    console.log(`[BlueprintTab] 🧹 Starting ULTRA-aggressive clear all selections - Figma style`, {
+      hasReactFlowInstance: !!reactFlowInstance,
+      currentSelection: selection,
+      selectedNodesCount: selection.selectedNodes.length,
+      selectedEdgesCount: selection.selectedEdges.length
+    });
+    
+    // 🚨 PRIORITY 1: Force immediate ReactFlow visual clear FIRST (highest priority)
+    if (reactFlowInstance) {
+      try {
+        const allNodes = reactFlowInstance.getNodes();
+        const allEdges = reactFlowInstance.getEdges();
+        
+        console.log(`[BlueprintTab] 🎯 Current ReactFlow state:`, {
+          nodesCount: allNodes.length,
+          edgesCount: allEdges.length,
+          selectedNodesCount: allNodes.filter(n => n.selected).length,
+          selectedEdgesCount: allEdges.filter(e => e.selected).length
+        });
+        
+        // 🎯 IMMEDIATE ReactFlow visual clear (ไม่รอ state update) - TRIPLE CLEAR
+        for (let i = 0; i < 3; i++) {
+          reactFlowInstance.setNodes(
+            reactFlowInstance.getNodes().map(node => ({
+              ...node,
+              selected: false,
+              data: { ...node.data, _immediateUnselect: Date.now() + i }
+            }))
+          );
+          
+          reactFlowInstance.setEdges(
+            reactFlowInstance.getEdges().map(edge => ({
+              ...edge,
+              selected: false,
+              data: { ...edge.data, _immediateUnselect: Date.now() + i }
+            }))
+          );
+        }
+        
+        console.log(`[BlueprintTab] 🔄 TRIPLE ReactFlow visual clear executed FIRST`);
+      } catch (error) {
+        console.error(`[BlueprintTab] ❌ Immediate visual clear failed:`, error);
+      }
+    } else {
+      console.warn(`[BlueprintTab] ⚠️ ReactFlow instance not available for immediate clear`);
+    }
+    
+    // 🎯 STEP 1: ล้าง React states ทันที
+    setSelection(prev => ({ 
+      ...prev, 
+      selectedNodes: [], 
+      selectedEdges: [],
+      multiSelectMode: false,
+      isReactFlowInstantMode: false,
+      pendingSelection: [],
+      showSelectionBar: false
+    }));
+    
+    // 🎯 STEP 2: ล้าง single selection states ทันที
+    setSelectedNode(null);
+    setSelectedEdge(null);
+    setIsMultiSelectActive(false);
+    
+    // 🎯 STEP 3: ล้าง ReactFlow visual selection states
+    setNodes(prevNodes => {
+      const updatedNodes = prevNodes.map(n => ({ ...n, selected: false }));
+      console.log(`[BlueprintTab] 🔄 React nodes cleared:`, {
+        totalNodes: updatedNodes.length,
+        selectedNodes: updatedNodes.filter(n => n.selected).length
+      });
+      return updatedNodes;
+    });
+    setEdges(prevEdges => {
+      const updatedEdges = prevEdges.map(e => ({ ...e, selected: false }));
+      console.log(`[BlueprintTab] 🔄 React edges cleared:`, {
+        totalEdges: updatedEdges.length,
+        selectedEdges: updatedEdges.filter(e => e.selected).length
+      });
+      return updatedEdges;
+    });
+
+    // 🔥 FIGMA STYLE: Aggressive ReactFlow instance clearing
+    if (reactFlowInstance) {
+      // Immediate clear - no delay
+      try {
+        const allNodes = reactFlowInstance.getNodes();
+        const allEdges = reactFlowInstance.getEdges();
+        
+        // Force clear immediately
+        reactFlowInstance.setNodes(
+          allNodes.map(node => ({
+            ...node,
+            selected: false,
+            // Force visual update
+            data: { ...node.data, _clearTimestamp: Date.now() }
+          }))
+        );
+        
+        reactFlowInstance.setEdges(
+          allEdges.map(edge => ({
+            ...edge,
+            selected: false,
+            // Force visual update
+            data: { ...edge.data, _clearTimestamp: Date.now() }
+          }))
+        );
+        
+        console.log(`[BlueprintTab] 🔄 ReactFlow immediate clear executed`);
+      } catch (error) {
+        console.error(`[BlueprintTab] ❌ Immediate clear failed:`, error);
+      }
+      
+      // Follow-up clears with timing
+      setTimeout(() => {
+        try {
+          reactFlowInstance.setNodes(
+            reactFlowInstance.getNodes().map(node => ({
+              ...node,
+              selected: false
+            }))
+          );
+          reactFlowInstance.setEdges(
+            reactFlowInstance.getEdges().map(edge => ({
+              ...edge,
+              selected: false
+            }))
+          );
+          console.log(`[BlueprintTab] 🔄 ReactFlow first follow-up clear`);
+        } catch (error) {
+          console.error(`[BlueprintTab] ❌ First follow-up clear failed:`, error);
+        }
+      }, 10);
+      
+      // Final clear for absolute certainty
+      setTimeout(() => {
+        try {
+          reactFlowInstance.setNodes(
+            reactFlowInstance.getNodes().map(node => ({
+              ...node,
+              selected: false
+            }))
+          );
+          reactFlowInstance.setEdges(
+            reactFlowInstance.getEdges().map(edge => ({
+              ...edge,
+              selected: false
+            }))
+          );
+          
+          // Force a viewport refresh to ensure visual reset
+          const viewport = reactFlowInstance.getViewport();
+          reactFlowInstance.setViewport({ ...viewport });
+          
+          console.log(`[BlueprintTab] 🔄 ReactFlow final clear and viewport refresh completed`);
+        } catch (error) {
+          console.error(`[BlueprintTab] ❌ Final clear failed:`, error);
+        }
+      }, 100);
+      
+      // 🔥 FIGMA STYLE: Final verification and emergency fallback
+      setTimeout(() => {
+        if (reactFlowInstance) {
+          const remainingSelected = reactFlowInstance.getNodes().filter(n => n.selected).length +
+                                   reactFlowInstance.getEdges().filter(e => e.selected).length;
+          
+          if (remainingSelected > 0) {
+            console.warn(`[BlueprintTab] ⚠️ Found ${remainingSelected} items still selected after clear - applying emergency fallback`);
+            
+            // Emergency fallback clear
+            try {
+              reactFlowInstance.setNodes(
+                reactFlowInstance.getNodes().map(n => ({ ...n, selected: false }))
+              );
+              reactFlowInstance.setEdges(
+                reactFlowInstance.getEdges().map(e => ({ ...e, selected: false }))
+              );
+              console.log(`[BlueprintTab] 🆘 Emergency fallback clear applied`);
+            } catch (error) {
+              console.error(`[BlueprintTab] ❌ Emergency fallback failed:`, error);
+            }
+          } else {
+            console.log(`[BlueprintTab] ✅ Clear verification passed - no items selected`);
+          }
+        }
+      }, 200);
+    }
+    
+    console.log(`[BlueprintTab] 🧹 ULTRA-aggressive clear all selections completed - Figma style with emergency fallback`);
+    
+    // 🔥 FIGMA STYLE: Immediate verification
+    if (reactFlowInstance) {
+      const immediateCheck = {
+        nodesSelected: reactFlowInstance.getNodes().filter(n => n.selected).length,
+        edgesSelected: reactFlowInstance.getEdges().filter(e => e.selected).length
+      };
+      console.log(`[BlueprintTab] 📊 Immediate clear verification:`, immediateCheck);
+      
+      if (immediateCheck.nodesSelected > 0 || immediateCheck.edgesSelected > 0) {
+        console.warn(`[BlueprintTab] ⚠️ CLEAR FAILED: Still have ${immediateCheck.nodesSelected + immediateCheck.edgesSelected} selected items`);
+      } else {
+        console.log(`[BlueprintTab] ✅ CLEAR SUCCESS: No items selected`);
+      }
+    }
+    
+    // 🔥 FIGMA STYLE: Final state verification
+    setTimeout(() => {
+      console.log(`[BlueprintTab] 📊 Final clear verification:`, {
+        selectionState: selection,
+        hasReactFlowInstance: !!reactFlowInstance,
+        reactFlowSelectedCount: reactFlowInstance ? 
+          reactFlowInstance.getNodes().filter(n => n.selected).length + 
+          reactFlowInstance.getEdges().filter(e => e.selected).length : 'N/A'
+      });
+    }, 300);
+  }, [reactFlowInstance, selection]);
 
   // Cancel multi-selection
   const cancelMultiSelection = useCallback(() => {
@@ -4589,7 +5001,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       ...prev,
       pendingSelection: [],
       showSelectionBar: false,
-      multiSelectMode: false
+      multiSelectMode: false,
+      isReactFlowInstantMode: false // 🎯 รีเซ็ต ReactFlow instant mode เมื่อ cancel
     }));
     
     // ล้าง visual selection
@@ -4816,20 +5229,44 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
         case 'Escape':
           event.preventDefault();
-          // Legacy connection mode disabled - React Flow handles this automatically
-          if (selection.multiSelectMode) {
-            // Cancel multi-select mode
-            cancelMultiSelection();
-          } else {
-            // Clear selection
-            setSelectedNode(null);
-            setSelectedEdge(null);
+          event.stopPropagation(); // 🔥 FIGMA STYLE: ป้องกัน event bubbling
+          event.stopImmediatePropagation(); // 🔥 FIGMA STYLE: หยุด event ทันที
+          
+          // 🔥 FIGMA STYLE: Clear all selections with ESC key - SINGLE PRESS CLEAR ALL
+          console.log(`[BlueprintTab] ⌨️ ESC pressed - ULTRA-aggressive clearing ALL selections in single press (Figma-style)`);
+          
+          // 🚨 PRIORITY: Force clear visual selection IMMEDIATELY
+          if (reactFlowInstance) {
+            try {
+              const allNodes = reactFlowInstance.getNodes();
+              const allEdges = reactFlowInstance.getEdges();
+              
+              reactFlowInstance.setNodes(allNodes.map(n => ({ ...n, selected: false })));
+              reactFlowInstance.setEdges(allEdges.map(e => ({ ...e, selected: false })));
+              
+              console.log(`[BlueprintTab] 🔄 ESC: Immediate ReactFlow visual clear executed`);
+            } catch (error) {
+              console.error(`[BlueprintTab] ❌ ESC: Immediate visual clear failed:`, error);
+            }
+          }
+          
+          // Always clear everything in one go - no conditional logic
+          clearAllSelections();
+          
+          // Force cancel any pending multi-select mode immediately
+          if (selection.multiSelectMode || selection.pendingSelection.length > 0) {
+            console.log(`[BlueprintTab] 🔄 ESC: Also force-canceling any multi-select mode`);
             setSelection(prev => ({
               ...prev,
+              multiSelectMode: false,
+              pendingSelection: [],
+              showSelectionBar: false,
+              isReactFlowInstantMode: false,
               selectedNodes: [],
               selectedEdges: []
             }));
           }
+          
           return;
           
         case 'Enter':
@@ -4843,8 +5280,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [
     handleManualSave, toggleCanvasLock, selectedNode, selectedEdge, undo, redo, 
     selection, nodes, edges, createNodeCommand, executeCommand, deleteSelected,
-    toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection,
-    selectAllNodes, createEdgeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails
+    toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection, clearAllSelections,
+    selectAllNodes, createEdgeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails,
+    reactFlowInstance // 🔥 FIGMA STYLE: เพิ่ม reactFlowInstance สำหรับ ESC handler
   ]);
 
   // Handle drag from sidebar to canvas
@@ -5173,117 +5611,59 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const selectedNodeIds = selectedNodes.map(n => n.id);
     const selectedEdgeIds = selectedEdges.map(e => e.id);
     
-    // 🚨 CRITICAL: Don't override multi-select mode when in Canva-style pending selection
-    if (selection.multiSelectMode && selection.pendingSelection.length > 0) {
-      console.log(`[BlueprintTab] 🔒 Preventing onSelectionChange override - in Canva multi-select mode`);
+    // 🚨 PREVENT INFINITE LOOPS: Check if selection actually changed
+    const hasSelectionChanged = 
+      JSON.stringify(selectedNodeIds.sort()) !== JSON.stringify(previousSelectionRef.current.nodes.sort()) ||
+      JSON.stringify(selectedEdgeIds.sort()) !== JSON.stringify(previousSelectionRef.current.edges.sort());
+    
+    if (!hasSelectionChanged) {
+      console.log(`[BlueprintTab] 🔄 Selection unchanged, skipping onSelectionChange`);
+      return;
+    }
+    
+    // Update previous selection ref
+    previousSelectionRef.current = { nodes: selectedNodeIds, edges: selectedEdgeIds };
+    
+    console.log(`[BlueprintTab] 📊 onSelectionChange called:`, {
+      selectedNodeIds,
+      selectedEdgeIds,
+      currentMultiSelectMode: selection.multiSelectMode,
+      pendingSelectionLength: selection.pendingSelection.length,
+      showSelectionBar: selection.showSelectionBar
+    });
+    
+    // 🚨 CRITICAL: Don't override multi-select mode when in manual multi-select mode with pending selection
+    if (selection.multiSelectMode && !selection.isReactFlowInstantMode && selection.pendingSelection.length > 0) {
+      console.log(`[BlueprintTab] 🔒 Preventing onSelectionChange override - in manual multi-select mode`);
       return; // Don't process ReactFlow's selection changes during manual multi-select
     }
-
-    // Capture previous state for undo (only for actual changes)
-    const previousSelectedNodes = [...selection.selectedNodes];
-    const previousSelectedEdges = [...selection.selectedEdges];
     
-    // Check if this is a real change to prevent unnecessary command creation
-    const hasSelectionChanged = 
-      JSON.stringify(previousSelectedNodes.sort()) !== JSON.stringify(selectedNodeIds.sort()) ||
-      JSON.stringify(previousSelectedEdges.sort()) !== JSON.stringify(selectedEdgeIds.sort());
-
-    // ✅ FIGMA/CANVA STYLE: Auto-create undo/redo command for ReactFlow multi-selection (shift+click, drag selection)
-    const isMultiSelection = selectedNodeIds.length > 1 || selectedEdgeIds.length > 1 || 
-                            (selectedNodeIds.length > 0 && selectedEdgeIds.length > 0);
-    
-    if (hasSelectionChanged && isMultiSelection && professionalEventManager && !selection.multiSelectMode) {
-      console.log(`[BlueprintTab] 🎯 Creating ReactFlow multi-selection command`);
+      // 🔥 ADOBE/FIGMA STYLE: Selection เป็น UI state เท่านั้น - ไม่ส่งไป EventManager
+  const isMultiSelection = selectedNodeIds.length > 1 || selectedEdgeIds.length > 1 || 
+                         (selectedNodeIds.length > 0 && selectedEdgeIds.length > 0);
+  
+  // 🚫 CRITICAL FIX: Selection commands ไม่ควรส่งไป EventManager เพื่อป้องกัน dirty state
+  // ✅ เก็บเฉพาะ UI state - ไม่มีผลต่อ save button หรือ refresh protection
+  
+  // ✅ Update selection state - pure UI state management (ไม่ trigger dirty change)
+  setSelection(prev => ({
+    ...prev,
+    selectedNodes: selectedNodeIds,
+    selectedEdges: selectedEdgeIds,
+    multiSelectMode: isMultiSelection,
+    pendingSelection: [], // ล้าง pending เพราะเป็นการเลือกแบบ instant
+    showSelectionBar: false, // ไม่แสดง confirmation bar สำหรับ ReactFlow selection
+    isReactFlowInstantMode: isMultiSelection // 🎯 ระบุโหมด ReactFlow instant เมื่อมี multi-selection
+  }));
       
-      const reactFlowSelectionCommand: ICommand = {
-        id: `reactflow-multi-select-${Date.now()}`,
-        type: 'REACTFLOW_MULTI_SELECT',
-        description: `ReactFlow Selection: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`,
-        timestamp: Date.now(),
-        execute: () => {
-          // อัปเดต selection state
-          setSelection(prev => ({
-            ...prev,
-            selectedNodes: selectedNodeIds,
-            selectedEdges: selectedEdgeIds,
-            multiSelectMode: true,
-            pendingSelection: [],
-            showSelectionBar: false
-          }));
-          
-          // Clear single selection states
-          setSelectedNode(null);
-          setSelectedEdge(null);
-          
-          console.log(`[BlueprintTab] ✅ ReactFlow multi-selection executed: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
-        },
-        undo: () => {
-          // คืนค่า selection state
-          setSelection(prev => ({
-            ...prev,
-            selectedNodes: previousSelectedNodes,
-            selectedEdges: previousSelectedEdges,
-            multiSelectMode: previousSelectedNodes.length > 1 || previousSelectedEdges.length > 1 || 
-                           (previousSelectedNodes.length > 0 && previousSelectedEdges.length > 0),
-            pendingSelection: [],
-            showSelectionBar: false
-          }));
-          
-          // คืนค่า visual selection
-          setNodes(prevNodes => 
-            prevNodes.map(n => ({
-              ...n,
-              selected: previousSelectedNodes.includes(n.id)
-            }))
-          );
-          
-          setEdges(prevEdges => 
-            prevEdges.map(e => ({
-              ...e,
-              selected: previousSelectedEdges.includes(e.id)
-            }))
-          );
-          
-          // คืนค่า single selection ถ้ามี
-          if (previousSelectedNodes.length === 1) {
-            const singleNode = nodes.find(n => n.id === previousSelectedNodes[0]);
-            if (singleNode) setSelectedNode(singleNode);
-          } else {
-            setSelectedNode(null);
-          }
-          
-          if (previousSelectedEdges.length === 1) {
-            const singleEdge = edges.find(e => e.id === previousSelectedEdges[0]);
-            if (singleEdge) setSelectedEdge(singleEdge);
-          } else {
-            setSelectedEdge(null);
-          }
-          
-          console.log(`[BlueprintTab] ↶ ReactFlow multi-selection undone`);
-        }
-      };
-      
-      // Execute as UI-only command (ไม่ทำให้เป็น dirty state)
-      professionalEventManager.addCommandToHistory(reactFlowSelectionCommand);
-    }
-    
-    // ✅ Update selection state 
-    setSelection(prev => ({
-      ...prev,
-      selectedNodes: selectedNodeIds,
-      selectedEdges: selectedEdgeIds,
-      // ✅ Auto-detect multiple selection mode
-      multiSelectMode: prev.multiSelectMode || isMultiSelection
-    }));
-    
     // Set single selection states only if single selection
-    if (selectedNodes.length === 1 && selectedEdges.length === 0) {
+    if (selectedNodeIds.length === 1 && selectedEdgeIds.length === 0) {
       setSelectedNode(selectedNodes[0]);
       setSelectedEdge(null);
-    } else if (selectedNodes.length === 0 && selectedEdges.length === 1) {
+    } else if (selectedEdgeIds.length === 1 && selectedNodeIds.length === 0) {
       setSelectedNode(null);
       setSelectedEdge(selectedEdges[0]);
-    } else if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+    } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 0) {
       // No selection
       setSelectedNode(null);
       setSelectedEdge(null);
@@ -5293,11 +5673,51 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setSelectedEdge(null);
     }
     
+    // 🎯 ไม่สร้าง command เพื่อป้องกัน dirty state
+    console.log(`[BlueprintTab] 👆 Selection updated (UI only): ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
+    
     // ✅ Log multiple selection for debugging
-    if (selectedNodeIds.length > 1 || selectedEdgeIds.length > 1) {
+    if (isMultiSelection) {
       console.log(`[BlueprintTab] 🎯 Multiple selection detected: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
     }
-  }, [selection.multiSelectMode, selection.pendingSelection.length, professionalEventManager]);
+  }, [selection.multiSelectMode, selection.pendingSelection.length, selection.showSelectionBar, selection.isReactFlowInstantMode]);
+
+  // 🔥 FIGMA STYLE: High-priority ESC key handler เพื่อป้องกัน ReactFlow interference
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        
+        console.log(`[BlueprintTab] 🚨 HIGH-PRIORITY ESC handler - clearing all selections`);
+        
+        // Force immediate visual clear
+        if (reactFlowInstance) {
+          try {
+            reactFlowInstance.setNodes(
+              reactFlowInstance.getNodes().map(n => ({ ...n, selected: false }))
+            );
+            reactFlowInstance.setEdges(
+              reactFlowInstance.getEdges().map(e => ({ ...e, selected: false }))
+            );
+          } catch (error) {
+            console.error(`[BlueprintTab] ❌ High-priority visual clear failed:`, error);
+          }
+        }
+        
+        // Execute comprehensive clear
+        clearAllSelections();
+      }
+    };
+
+    // Add with capture=true for highest priority
+    document.addEventListener('keydown', handleEscapeKey, { capture: true });
+    
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey, { capture: true });
+    };
+  }, [reactFlowInstance, clearAllSelections]);
 
   // Keyboard event listeners
   useEffect(() => {
@@ -5455,11 +5875,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [professionalEventManager, setNodes, setEdges]);
   
-  // Handle canvas click (legacy connection mode disabled)
+  // Handle canvas click - clear selections when clicking on empty space (Figma-style)
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
-    // Legacy connection mode disabled - React Flow handles connections automatically
-    // No special handling needed for connections
-  }, []);
+    // 🔥 FIGMA STYLE: Clear all selections when clicking on empty canvas
+    console.log(`[BlueprintTab] 🎯 Canvas clicked - clearing all selections (Figma-style)`);
+    clearAllSelections();
+  }, [clearAllSelections]);
 
   // ===============================
   // PROFESSIONAL API EXPOSURE
@@ -5625,8 +6046,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     currentPendingSelection: selection.pendingSelection
                   });
                   
-                  // 🔥 CANVA STYLE: Handle multi-select mode
-                  if (selection.multiSelectMode) {
+                  // 🔥 CANVA STYLE: Handle manual multi-select mode ONLY (ไม่ใช่ ReactFlow instant mode)
+                  if (selection.multiSelectMode && !selection.isReactFlowInstantMode) {
                     // Toggle node in pending selection
                     const isPending = selection.pendingSelection.includes(node.id);
                     const newPending = isPending 
@@ -5692,7 +6113,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       selectedEdges: [],
                       pendingSelection: [],
                       showSelectionBar: false,
-                      multiSelectMode: false
+                      multiSelectMode: false,
+                      isReactFlowInstantMode: false // 🎯 รีเซ็ต ReactFlow instant mode เมื่อเลือก single node
                     }));
                   }
                 }}
@@ -5733,6 +6155,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 multiSelectionKeyCode={selection.multiSelectMode ? null : ["Meta", "Control", "Shift"]}
                 // ปิดการลบผ่านระบบของ React Flow เพื่อให้ Command Pattern จัดการเอง (พร้อม Trash History)
                 deleteKeyCode={[]}
+                // 🔥 FIGMA STYLE: ปิด ReactFlow keyboard handlers เพื่อให้ custom handlers จัดการเอง
+                disableKeyboardA11y={true}
                 panOnDrag={!canvasState.isLocked && !selection.isSelectionMode}
                 zoomOnScroll={!canvasState.isLocked}
                 zoomOnPinch={!canvasState.isLocked}
@@ -6000,7 +6424,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [] }))}
+                          onClick={() => {
+                            console.log(`[BlueprintTab] 🧹 Clear button clicked - using clearAllSelections() for Figma-like behavior`);
+                            clearAllSelections(); // 🎯 ใช้ clearAllSelections() เหมือน ESC key และ Canvas click
+                          }}
                         >
                           <X className="w-3 h-3 mr-1" />
                           Clear
@@ -6124,7 +6551,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
           {/* Enhanced Selection Confirmation Bar - ปรับปรุงให้สวยงามและใช้งานง่าย */}
           <AnimatePresence>
-            {selection.showSelectionBar && selection.pendingSelection.length > 0 && (
+            {(() => {
+              const shouldShow = selection.showSelectionBar && selection.pendingSelection.length > 0;
+              console.log(`[BlueprintTab] 📊 Confirmation Bar Debug:`, {
+                showSelectionBar: selection.showSelectionBar,
+                pendingSelectionLength: selection.pendingSelection.length,
+                shouldShow,
+                multiSelectMode: selection.multiSelectMode
+              });
+              return shouldShow;
+            })() && (
               <motion.div
                 initial={{ y: 100, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -6231,7 +6667,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       onEdgeUpdate={onEdgeUpdate}
                       onDeleteSelected={deleteSelected}
                       onCopySelected={copySelected}
-                      onDeselectAll={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [] }))}
+                      onDeselectAll={clearAllSelections}
                       storyVariables={storyMap?.storyVariables || []}
                       scenes={scenes}
                       characters={characters}
@@ -6352,7 +6788,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   onEdgeUpdate={onEdgeUpdate}
                   onDeleteSelected={deleteSelected}
                   onCopySelected={copySelected}
-                  onDeselectAll={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [] }))}
+                  onDeselectAll={clearAllSelections}
                   storyVariables={storyMap?.storyVariables || []}
                   scenes={scenes}
                   characters={characters}
@@ -6393,7 +6829,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   onEdgeUpdate={onEdgeUpdate}
                   onDeleteSelected={deleteSelected}
                   onCopySelected={copySelected}
-                  onDeselectAll={() => setSelection(prev => ({ ...prev, selectedNodes: [], selectedEdges: [] }))}
+                  onDeselectAll={clearAllSelections}
                   storyVariables={storyMap?.storyVariables || []}
                   scenes={scenes}
                   characters={characters}

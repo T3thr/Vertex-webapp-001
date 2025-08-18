@@ -233,6 +233,7 @@ export default function SingleUserSaveStatusIndicator({
         ${className}
       `}
       title={config.description}
+      data-save-indicator // ✅ For refresh protection scroll target
     >
       {/* Status Icon */}
       <motion.div

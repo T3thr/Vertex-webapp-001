@@ -80,11 +80,71 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     autoSaveIntervalMs: autoSaveIntervalSec * 1000,
     maxHistorySize: 50,
     onStateChange: (state) => {
-      setSaveState(state);
+      // ✅ PROFESSIONAL FIX: Use command-based detection for perfect consistency with debounce
+      const commandBasedHasChanges = eventManager.hasChanges();
+      
+      const enhancedState = {
+        ...state,
+        isDirty: commandBasedHasChanges,
+        hasUnsavedChanges: commandBasedHasChanges
+      };
+      
+      // ✅ ADOBE/FIGMA STYLE: Debounced save state update to prevent flickering
+      setSaveState(prev => {
+        if (prev.isDirty !== commandBasedHasChanges || prev.hasUnsavedChanges !== commandBasedHasChanges) {
+          return enhancedState;
+        }
+        return prev; // No change, prevent re-render
+      });
+      
+      // ✅ CRITICAL: Immediate localStorage sync for refresh protection
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
+        localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString());
+        localStorage.setItem('divwy-command-has-changes', commandBasedHasChanges.toString());
+        
+        if (state.lastSaved && !commandBasedHasChanges) {
+          // ✅ ADOBE/FIGMA STYLE: Clear all change flags when truly saved
+          localStorage.setItem('divwy-last-saved', Date.now().toString());
+          localStorage.removeItem('divwy-last-change');
+          localStorage.removeItem('divwy-last-content-change');
+          
+          // ✅ PROFESSIONAL: Clear settings change flags separately
+          localStorage.setItem('divwy-settings-changes', 'false');
+          
+          console.log('[NovelEditor] ✅ All change flags cleared - save confirmed');
+        }
+        
+        // ✅ PROFESSIONAL: Update change timestamp for accurate refresh protection
+        if (commandBasedHasChanges) {
+          localStorage.setItem('divwy-last-change', Date.now().toString());
+        } else {
+          localStorage.removeItem('divwy-last-change');
+        }
+      }
     },
     onDirtyChange: (isDirty) => {
-      // Callback เมื่อสถานะ dirty เปลี่ยน
-      console.log('[NovelEditor] Dirty state changed:', isDirty);
+      // ✅ PROFESSIONAL FIX: Use command-based detection to prevent flickering
+      const commandBasedHasChanges = eventManager.hasChanges();
+      
+      // ✅ ADOBE/FIGMA STYLE: Update states only if truly changed
+      setHasBlueprintChanges(prev => prev !== commandBasedHasChanges ? commandBasedHasChanges : prev);
+      
+      // ✅ CRITICAL: Immediate localStorage sync with command-based state
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString());
+        if (commandBasedHasChanges) {
+          localStorage.setItem('divwy-last-change', Date.now().toString());
+        } else {
+          localStorage.removeItem('divwy-last-change'); // ✅ Clear when no changes
+        }
+      }
+      
+      console.log('[NovelEditor] 🔄 Command-based dirty state update:', {
+        originalIsDirty: isDirty,
+        commandBasedHasChanges,
+        preventFlicker: true
+      });
     },
     onError: (error, context) => {
       console.error(`[NovelEditor] SingleUserEventManager error in ${context}:`, error);
@@ -100,18 +160,20 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   const [hasDirectorChanges, setHasDirectorChanges] = useState(false)
   const [hasSummaryChanges, setHasSummaryChanges] = useState(false)
   
-  // Stable dirty state ที่ไม่ flicker
-  const [stableHasUnsavedChanges, setStableHasUnsavedChanges] = useState(false)
-  
   // ===============================
   // PROFESSIONAL SMART SAVE DETECTION
   // เทียบเท่า Adobe Premiere Pro & Canva
   // ===============================
   
-  // Combined dirty state แต่ให้ความสำคัญกับ EventManager ก่อน (เพื่อความแม่นยำ)
-  const hasUnsavedChanges = saveState.hasUnsavedChanges || saveState.isDirty || hasBlueprintChanges || hasDirectorChanges || hasSummaryChanges
+  // ✅ PROFESSIONAL FIX: Use command-based detection as single source of truth
+  const commandBasedHasChanges = eventManager?.hasChanges() || false
+  const hasUnsavedChanges = commandBasedHasChanges || hasDirectorChanges || hasSummaryChanges
   
-  // State สำหรับ Blueprint settings (โหลดจาก localStorage เท่านั้น) - แก้ไข hydration
+  // 🔥 เพิ่ม isInitialLoad flag เพื่อป้องกันการบันทึกตอนเริ่มต้น
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState(false)
+  
+  // State สำหรับ Blueprint settings (โหลดจาก API/localStorage) - แก้ไข hydration
   const [showSceneThumbnails, setShowSceneThumbnails] = useState(true) // เริ่มต้นด้วยค่าคงที่
   const [showNodeLabels, setShowNodeLabels] = useState(true) // เริ่มต้นด้วยค่าคงที่
   const [showGrid, setShowGrid] = useState(true) // เริ่มต้นด้วยค่าคงที่
@@ -119,7 +181,15 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   const [nodeOrientation, setNodeOrientation] = useState<'horizontal' | 'vertical'>('vertical') // การวางแนว node ใหม่
 
   // ✨ Professional Settings Management (Adobe/Canva/Figma style) - เชื่อมต่อกับ Database จริง
-  const saveBlueprintSettings = React.useCallback(async (key: string, value: any) => {
+  const saveBlueprintSettings = React.useCallback(async (key: string, value: any, options?: { silent?: boolean }) => {
+    // 🔥 SKIP การบันทึกถ้าเป็น initial load เพื่อป้องกัน toast spam
+    if (isInitialLoad || !isSettingsLoaded) {
+      console.log('[NovelEditor] 🚫 Skipping save during initial load:', { key, value, isInitialLoad, isSettingsLoaded });
+      return;
+    }
+    
+    const silent = options?.silent || false;
+    
     // Professional feedback with toast promise pattern
     const settingNames: Record<string, string> = {
       'auto-save-enabled': 'Auto-save',
@@ -132,6 +202,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     };
 
     const settingName = settingNames[key] || 'การตั้งค่า';
+    
+    // 🔥 ตรวจสอบว่าเป็น UI-only settings หรือไม่ (สำหรับ silent mode)
+    const uiOnlySettings = ['show-scene-thumbnails', 'show-node-labels', 'show-grid', 'snap-to-grid'];
+    const isUiOnlySetting = uiOnlySettings.includes(key);
+    
+    // 🔥 UI-only settings ใช้ silent mode โดยอัตโนมัติ
+    const shouldShowToast = !silent && !isUiOnlySetting;
 
     // สร้าง API payload ที่ถูกต้องตาม UserSettings schema
     const fieldMapping: Record<string, string> = {
@@ -171,36 +248,206 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       return response.json();
     });
 
-    // Adobe/Figma style toast feedback with enhanced messages
-    toast.promise(savePromise, {
-      loading: `💾 กำลังบันทึก${settingName}ไปยัง Database...`,
-      success: (data) => {
-        console.log('[NovelEditor] Settings saved successfully:', data);
-        
-        // Special feedback for different setting types
-        if (key === 'auto-save-enabled') {
-          return value 
-            ? `✅ เปิดใช้งาน ${settingName} สำเร็จ - ระบบจะบันทึกอัตโนมัติทุก ${autoSaveIntervalSec} วินาที`
-            : `⏸️ ปิดใช้งาน ${settingName} สำเร็จ - จะบันทึกเฉพาะเมื่อกดปุ่ม Save`;
-        } else if (key === 'auto-save-interval') {
-          return `✅ ตั้งค่า${settingName}เป็น ${value} วินาที สำเร็จ`;
-        }
-        
-        return `✅ บันทึก${settingName}สำเร็จ`;
-      },
-      error: (error) => {
-        console.error('[NovelEditor] Error saving blueprint settings:', error);
-        return `❌ ไม่สามารถบันทึก${settingName}ได้: ${error.message}`;
-      },
-    });
+    // 🔥 แสดง toast เฉพาะเมื่อไม่ใช่ silent mode และไม่ใช่ UI-only settings
+    if (shouldShowToast) {
+      // Adobe/Figma style toast feedback with enhanced messages
+      toast.promise(savePromise, {
+        loading: `💾 กำลังบันทึก${settingName}ไปยัง Database...`,
+        success: (data) => {
+          console.log('[NovelEditor] Settings saved successfully:', data);
+          
+          // Special feedback for different setting types
+          if (key === 'auto-save-enabled') {
+            return value 
+              ? `✅ เปิดใช้งาน ${settingName} สำเร็จ - ระบบจะบันทึกอัตโนมัติทุก ${autoSaveIntervalSec} วินาที`
+              : `⏸️ ปิดใช้งาน ${settingName} สำเร็จ - จะบันทึกเฉพาะเมื่อกดปุ่ม Save`;
+          } else if (key === 'auto-save-interval') {
+            return `✅ ตั้งค่า${settingName}เป็น ${value} วินาที สำเร็จ`;
+          }
+          
+          return `✅ บันทึก${settingName}สำเร็จ`;
+        },
+        error: (error) => {
+          console.error('[NovelEditor] Error saving blueprint settings:', error);
+          return `❌ ไม่สามารถบันทึก${settingName}ได้: ${error.message}`;
+        },
+      });
+    }
 
     try {
       await savePromise;
+      
+              // 🔥 บันทึกลง localStorage สำหรับ fallback (เฉพาะ UI settings)
+        if (isUiOnlySetting) {
+          const fieldMapping: Record<string, string> = {
+            'show-scene-thumbnails': 'showSceneThumbnails',
+            'show-node-labels': 'showNodeLabels',
+            'show-grid': 'showGrid',
+            'snap-to-grid': 'snapToGrid',
+            'node-orientation': 'nodeOrientation'
+          };
+          
+          const fieldName = fieldMapping[key];
+          if (fieldName) {
+            const currentSettings = JSON.parse(localStorage.getItem('blueprint-settings') || '{}');
+            currentSettings[fieldName] = value;
+            localStorage.setItem('blueprint-settings', JSON.stringify(currentSettings));
+            
+            // ✅ PROFESSIONAL FIX: Settings changes ไม่ trigger refresh protection
+            localStorage.setItem('divwy-settings-only-changes', 'true');
+            localStorage.setItem('divwy-last-settings-change', Date.now().toString());
+            
+            // ✅ CRITICAL: Explicitly clear content/command flags after settings save
+            localStorage.setItem('divwy-content-changes', 'false');
+            localStorage.setItem('divwy-command-has-changes', 'false');
+            localStorage.removeItem('divwy-last-change');
+            localStorage.removeItem('divwy-last-content-change');
+            
+            // ✅ EXTRA PROTECTION: Set timestamp for recent settings change detection
+            setTimeout(() => {
+              localStorage.setItem('divwy-settings-only-changes', 'true');
+              localStorage.setItem('divwy-last-settings-change', Date.now().toString());
+            }, 100); // Small delay to ensure flags are set after any potential content flags
+            
+            console.log(`[NovelEditor] 🎨 Settings change recorded (no refresh protection): ${settingName} = ${value}`);
+          }
+        } else {
+          // 🔥 Critical settings (auto-save, intervals) ไม่ถือเป็น changes ที่ต้องเตือน
+          localStorage.setItem('divwy-settings-only-changes', 'true');
+          localStorage.setItem('divwy-last-settings-change', Date.now().toString());
+          
+          // ✅ CRITICAL: Clear content flags for critical settings too
+          localStorage.setItem('divwy-content-changes', 'false');
+          localStorage.setItem('divwy-command-has-changes', 'false');
+          localStorage.removeItem('divwy-last-change');
+          localStorage.removeItem('divwy-last-content-change');
+          
+          // ✅ EXTRA PROTECTION: Set timestamp for recent settings change detection (critical settings)
+          setTimeout(() => {
+            localStorage.setItem('divwy-settings-only-changes', 'true');
+            localStorage.setItem('divwy-last-settings-change', Date.now().toString());
+          }, 100); // Small delay to ensure flags are set after any potential content flags
+          
+          console.log(`[NovelEditor] ⚙️ Critical setting saved (no refresh protection): ${settingName} = ${value}`);
+        }
+      
+      // 🔥 Silent logging สำหรับ UI-only settings
+      if (silent || isUiOnlySetting) {
+        console.log(`[NovelEditor] 🔇 Silent save: ${settingName} = ${value}`);
+      }
+      
     } catch (error) {
-      // Error is already handled by toast.promise
+      // Error is already handled by toast.promise (หากไม่ใช่ silent mode)
       console.error('[NovelEditor] Blueprint settings save failed:', error);
+      
+      // 🔥 แสดง error toast แม้ใน silent mode (เพราะ error สำคัญ)
+      if (silent || isUiOnlySetting) {
+        toast.error(`❌ ไม่สามารถบันทึก${settingName}ได้: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
-  }, [autoSaveIntervalSec]);
+  }, [autoSaveIntervalSec, isInitialLoad, isSettingsLoaded]);
+
+  // 🔥 เพิ่มฟังก์ชัน Batch Save สำหรับ settings หลายตัวพร้อมกัน (User-Centric Design)
+  const saveBlueprintSettingsBatch = React.useCallback(async (
+    settings: Record<string, any>, 
+    options?: { silent?: boolean; showToast?: boolean }
+  ) => {
+    // Skip ถ้าเป็น initial load
+    if (isInitialLoad || !isSettingsLoaded) {
+      console.log('[NovelEditor] 🚫 Skipping batch save during initial load:', settings);
+      return;
+    }
+
+    const { silent = false, showToast = true } = options || {};
+    
+    try {
+      // สร้าง API payload สำหรับ batch update
+      const blueprintEditorUpdates: Record<string, any> = {};
+      const fieldMapping: Record<string, string> = {
+        'auto-save-enabled': 'autoSaveEnabled',
+        'auto-save-interval': 'autoSaveIntervalSec',
+        'show-scene-thumbnails': 'showSceneThumbnails',
+        'show-node-labels': 'showNodeLabels',
+        'show-grid': 'showGrid',
+        'snap-to-grid': 'snapToGrid',
+        'node-orientation': 'nodeOrientation'
+      };
+
+      // แปลง key ให้ตรงกับ database schema
+      Object.entries(settings).forEach(([key, value]) => {
+        const dbField = fieldMapping[key];
+        if (dbField) {
+          blueprintEditorUpdates[dbField] = value;
+        }
+      });
+
+      if (Object.keys(blueprintEditorUpdates).length === 0) {
+        console.warn('[NovelEditor] No valid fields in batch save request');
+        return;
+      }
+
+      // Professional API call
+      const savePromise = fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          visualNovelGameplay: {
+            blueprintEditor: blueprintEditorUpdates
+          }
+        }),
+      }).then(async (response) => {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      });
+
+      // แสดง toast เฉพาะเมื่อต้องการ
+      if (showToast && !silent) {
+        toast.promise(savePromise, {
+          loading: `💾 กำลังบันทึกการตั้งค่า Blueprint (${Object.keys(settings).length} รายการ)...`,
+          success: () => {
+            console.log('[NovelEditor] Batch settings saved successfully');
+            return `✅ บันทึกการตั้งค่า Blueprint สำเร็จ (${Object.keys(settings).length} รายการ)`;
+          },
+          error: (error) => {
+            console.error('[NovelEditor] Batch save failed:', error);
+            return `❌ ไม่สามารถบันทึกการตั้งค่าได้: ${error.message}`;
+          },
+        });
+      }
+
+      await savePromise;
+
+      // บันทึกลง localStorage สำหรับ fallback
+      const currentLocalSettings = JSON.parse(localStorage.getItem('blueprint-settings') || '{}');
+      Object.entries(settings).forEach(([key, value]) => {
+        const dbField = fieldMapping[key];
+        if (dbField) {
+          currentLocalSettings[dbField] = value;
+        }
+      });
+      localStorage.setItem('blueprint-settings', JSON.stringify(currentLocalSettings));
+
+      if (silent) {
+        console.log(`[NovelEditor] 🔇 Silent batch save completed: ${Object.keys(settings).length} settings`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[NovelEditor] Batch settings save failed:', error);
+      
+      // แสดง error แม้ใน silent mode (เพราะ error สำคัญ)
+      if (showToast) {
+        toast.error(`❌ ไม่สามารถบันทึกการตั้งค่าได้: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+      
+      return false;
+    }
+  }, [isInitialLoad, isSettingsLoaded, autoSaveIntervalSec]);
 
   // Handlers for data updates
   const handleStoryMapUpdate = (updatedStoryMap: any) => {
@@ -302,8 +549,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       } else if (activeTab === 'summary') {
         hasActualChanges = hasSummaryChanges;
       } else {
-        // Fallback check
-        hasActualChanges = stableHasUnsavedChanges;
+        // 🔥 ADOBE/FIGMA STYLE: ใช้ EventManager's command-based detection เป็นหลัก
+        hasActualChanges = eventManager?.hasChanges() || false;
       }
       
       // Professional early exit สำหรับ efficiency
@@ -346,7 +593,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       setHasBlueprintChanges(false);
       setHasDirectorChanges(false);
       setHasSummaryChanges(false);
-      setStableHasUnsavedChanges(false);
       
       // Real-time localStorage sync
       if (typeof window !== 'undefined') {
@@ -361,7 +607,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   }, [
     activeTab, 
     eventManager, 
-    stableHasUnsavedChanges,
+    hasUnsavedChanges,
     hasDirectorChanges,
     hasSummaryChanges,
     currentStoryMap?.nodes, 
@@ -378,10 +624,12 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // Professional initial sync tracking (Adobe/Figma approach)
   const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false)
 
-  // โหลดการตั้งค่าจริงจาก UserSettings Database (Professional Data Loading)
+  // 🔥 โหลดการตั้งค่าจริงจาก UserSettings Database (Professional Data Loading)
   useEffect(() => {
     // Professional settings loader - โหลดจาก database จริงผ่าน API
     const loadProfessionalSettings = async () => {
+      console.log('[NovelEditor] 🔄 เริ่มโหลดการตั้งค่าจาก API...');
+      
       try {
         // ดึงข้อมูลจาก API /api/user/settings
         const response = await fetch('/api/user/settings', {
@@ -399,7 +647,9 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         const blueprintSettings = settingsData.settings?.visualNovelGameplay?.blueprintEditor;
         
         if (blueprintSettings) {
-          // โหลดค่าจาก database
+          // 🔥 โหลดค่าจาก database อย่างระมัดระวัง
+          console.log('[NovelEditor] 📖 โหลดการตั้งค่าจาก Database:', blueprintSettings);
+          
           setIsAutoSaveEnabled(blueprintSettings.autoSaveEnabled ?? false);
           setAutoSaveIntervalSec((blueprintSettings.autoSaveIntervalSec as 15 | 30) ?? 30);
           setShowSceneThumbnails(blueprintSettings.showSceneThumbnails ?? true);
@@ -408,58 +658,65 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           setSnapToGrid(blueprintSettings.snapToGrid ?? false);
           setNodeOrientation(blueprintSettings.nodeOrientation ?? 'vertical');
           
-          console.log('[NovelEditor] Professional settings loaded from API:', {
-            autoSaveEnabled: blueprintSettings.autoSaveEnabled,
-            autoSaveIntervalSec: blueprintSettings.autoSaveIntervalSec,
-            showSceneThumbnails: blueprintSettings.showSceneThumbnails,
-            showNodeLabels: blueprintSettings.showNodeLabels,
-            showGrid: blueprintSettings.showGrid,
-            snapToGrid: blueprintSettings.snapToGrid,
-            nodeOrientation: blueprintSettings.nodeOrientation
-          });
         } else {
-          // ✅ หาก database ยังไม่มีข้อมูล ใช้ค่าเริ่มต้นชั่วคราว (ไม่บังคับเปลี่ยน database)
-          console.log('[NovelEditor] ไม่พบการตั้งค่า blueprint ใน database, ใช้ค่าเริ่มต้นชั่วคราว');
+          // 🔥 ลอง fallback ไปยัง localStorage
+          console.log('[NovelEditor] 💾 ไม่พบข้อมูลใน Database, ตรวจสอบ localStorage...');
           
-          const defaultSettings = {
-            autoSaveEnabled: false, // ✅ ปิดเด็ดขาดตามที่ผู้ใช้ร้องขอ
-            autoSaveIntervalSec: 30,
-            showSceneThumbnails: true,
-            showNodeLabels: true,
-            showGrid: true,
-            snapToGrid: false,
-            nodeOrientation: 'vertical' as 'horizontal' | 'vertical'
-          };
-
-          // ตั้งค่าเริ่มต้นใน state
-          setIsAutoSaveEnabled(defaultSettings.autoSaveEnabled);
-          setAutoSaveIntervalSec(defaultSettings.autoSaveIntervalSec as 15 | 30);
-          setShowSceneThumbnails(defaultSettings.showSceneThumbnails);
-          setShowNodeLabels(defaultSettings.showNodeLabels);
-          setShowGrid(defaultSettings.showGrid);
-          setSnapToGrid(defaultSettings.snapToGrid);
-          setNodeOrientation(defaultSettings.nodeOrientation);
-
-          // ✅ ไม่บันทึกค่าเริ่มต้นไปยัง database อัตโนมัติ
-          // ผู้ใช้ต้องตั้งค่าเองผ่าน UI และระบบจะบันทึกเมื่อมีการเปลี่ยนแปลง
-          console.log('[NovelEditor] ✅ ใช้ค่าเริ่มต้นชั่วคราว - ผู้ใช้สามารถปรับได้ตามต้องการ');
+          const localSettings = localStorage.getItem('blueprint-settings');
+          if (localSettings) {
+            try {
+              const parsed = JSON.parse(localSettings);
+              console.log('[NovelEditor] 📁 โหลดการตั้งค่าจาก localStorage:', parsed);
+              
+              setShowSceneThumbnails(parsed.showSceneThumbnails ?? true);
+              setShowNodeLabels(parsed.showNodeLabels ?? true);
+              setShowGrid(parsed.showGrid ?? true);
+              setSnapToGrid(parsed.snapToGrid ?? false);
+              setNodeOrientation(parsed.nodeOrientation ?? 'vertical');
+            } catch (parseError) {
+              console.error('[NovelEditor] ❌ Error parsing localStorage settings:', parseError);
+            }
+          }
+          
+          // ✅ ใช้ค่าเริ่มต้นสำหรับการตั้งค่าที่ไม่มีใน localStorage
+          console.log('[NovelEditor] ✅ ใช้ค่าเริ่มต้น - ผู้ใช้สามารถปรับได้ตามต้องการ');
         }
       } catch (error) {
-        console.error('[NovelEditor] ข้อผิดพลาดในการโหลดการตั้งค่าจาก API:', error);
-        // Fallback ไปยังค่าเริ่มต้นหาก API ล้มเหลว (auto-save ปิดเด็ดขาด)
+        console.error('[NovelEditor] ❌ ข้อผิดพลาดในการโหลดการตั้งค่าจาก API:', error);
+        
+        // 🔥 Fallback: ลอง localStorage ก่อน
+        try {
+          const localSettings = localStorage.getItem('blueprint-settings');
+          if (localSettings) {
+            const parsed = JSON.parse(localSettings);
+            console.log('[NovelEditor] 💾 Fallback: ใช้การตั้งค่าจาก localStorage:', parsed);
+            
+            setShowSceneThumbnails(parsed.showSceneThumbnails ?? true);
+            setShowNodeLabels(parsed.showNodeLabels ?? true);
+            setShowGrid(parsed.showGrid ?? true);
+            setSnapToGrid(parsed.snapToGrid ?? false);
+            setNodeOrientation(parsed.nodeOrientation ?? 'vertical');
+          }
+        } catch (localError) {
+          console.error('[NovelEditor] ❌ Error reading localStorage:', localError);
+        }
+        
+        // Fallback สุดท้าย: ค่าเริ่มต้น
         setIsAutoSaveEnabled(false); // ✅ ปิดเด็ดขาดแม้ในกรณี error
         setAutoSaveIntervalSec(30);
-        setShowSceneThumbnails(true);
-        setShowNodeLabels(true);
-        setShowGrid(true);
-        setSnapToGrid(false);
-        setNodeOrientation('vertical');
+      } finally {
+        // 🔥 สำคัญ: เปิดใช้งานการบันทึกหลังจากโหลดเสร็จแล้ว
+        setTimeout(() => {
+          setIsSettingsLoaded(true);
+          setIsInitialLoad(false);
+          console.log('[NovelEditor] ✅ การโหลดเสร็จสิ้น - เปิดใช้งานการบันทึก');
+        }, 500); // หน่วงเวลา 500ms เพื่อให้แน่ใจว่า state ทั้งหมดอัปเดตแล้ว
       }
     };
 
-    // โหลดเฉพาะเมื่อ component mount ครั้งแรก (ไม่เรียกซ้ำเมื่อรีเฟรช)
+    // โหลดเฉพาะเมื่อ component mount ครั้งแรก
     loadProfessionalSettings();
-  }, []); // ✅ ว่างเปล่าเพื่อให้เรียกครั้งเดียวเมื่อ mount เท่านั้น - รักษาการตั้งค่าเดิมของผู้ใช้
+  }, []); // ✅ ว่างเปล่าเพื่อให้เรียกครั้งเดียวเมื่อ mount เท่านั้น
 
   // ===============================
   // PROFESSIONAL INITIAL STATE SYNC (Adobe/Figma/Canva Style)
@@ -502,29 +759,70 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   useEffect(() => {
     // Professional state synchronization
     const updateSaveState = (newState: any) => {
-      setSaveState(newState);
+      // 🔥 ADOBE/FIGMA STYLE: Override with command-based detection for all systems
+      const commandBasedHasChanges = eventManager.hasChanges();
       
-      // Real-time localStorage sync สำหรับ refresh protection
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('divwy-has-unsaved-changes', newState.hasUnsavedChanges.toString());
-        localStorage.setItem('divwy-save-state', JSON.stringify({
-          isDirty: newState.isDirty,
-          hasUnsavedChanges: newState.hasUnsavedChanges,
-          lastSaved: newState.lastSaved,
-          timestamp: Date.now()
-        }));
-      }
+      const enhancedState = {
+        ...newState,
+        isDirty: commandBasedHasChanges,
+        hasUnsavedChanges: commandBasedHasChanges
+      };
+      
+      setSaveState(enhancedState);
+      
+                // Real-time localStorage sync สำหรับ refresh protection - ใช้ command-based state
+          if (typeof window !== 'undefined') {
+            // 🔥 แยก Content Changes จาก Settings Changes
+            localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
+            localStorage.setItem('divwy-command-has-changes', commandBasedHasChanges.toString());
+            localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString()); // 🔥 NEW: Content-specific flag
+            localStorage.setItem('divwy-save-state', JSON.stringify({
+              isDirty: commandBasedHasChanges,
+              hasUnsavedChanges: commandBasedHasChanges,
+              lastSaved: enhancedState.lastSaved,
+              timestamp: Date.now(),
+              changeType: 'content' // 🔥 NEW: Mark as content change
+            }));
+            
+            // 🔥 ADOBE/FIGMA STYLE: Update change timestamp เฉพาะ content commands
+            if (commandBasedHasChanges) {
+              localStorage.setItem('divwy-last-change', Date.now().toString());
+              localStorage.setItem('divwy-last-content-change', Date.now().toString()); // 🔥 NEW: Content-specific timestamp
+            } else {
+              localStorage.removeItem('divwy-last-change');
+              localStorage.removeItem('divwy-last-content-change');
+            }
+          }
     };
     
     const handleDirtyChange = (isDirty: boolean) => {
-      // Professional dirty state management
+      // 🔥 ADOBE/FIGMA STYLE: Use command-based detection for Status Indicator consistency
+      const commandBasedHasChanges = eventManager.hasChanges();
+      
+      console.log('[NovelEditor] 🔍 Status Indicator Sync Check:', {
+        eventManagerIsDirty: isDirty,
+        commandBasedHasChanges,
+        willUseCommandBased: true
+      });
+      
+      // Professional dirty state management - ใช้ command-based detection
       setSaveState(prev => {
-        if (prev.isDirty !== isDirty || prev.hasUnsavedChanges !== isDirty) {
-          const newState = { ...prev, isDirty, hasUnsavedChanges: isDirty };
+        if (prev.isDirty !== commandBasedHasChanges || prev.hasUnsavedChanges !== commandBasedHasChanges) {
+          const newState = { ...prev, isDirty: commandBasedHasChanges, hasUnsavedChanges: commandBasedHasChanges };
           
-          // Real-time localStorage update
+          // Real-time localStorage update - ใช้ command-based state
           if (typeof window !== 'undefined') {
-            localStorage.setItem('divwy-has-unsaved-changes', isDirty.toString());
+            localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
+            
+            // 🔥 CRITICAL: Store command-based state for Refresh Protection
+            localStorage.setItem('divwy-command-has-changes', commandBasedHasChanges.toString());
+            
+            // 🔥 ADOBE/FIGMA STYLE: Update change timestamp เฉพาะ content commands
+            if (commandBasedHasChanges) {
+              localStorage.setItem('divwy-last-change', Date.now().toString());
+            } else {
+              localStorage.removeItem('divwy-last-change');
+            }
           }
           
           return newState;
@@ -532,10 +830,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         return prev;
       });
       
-      // Enterprise logging สำหรับ debugging
+      // Enterprise logging สำหรับ debugging - improved with command-based info
       if (process.env.NODE_ENV === 'development') {
         console.log('[NovelEditor] Real-time dirty state change:', {
-          isDirty,
+          originalIsDirty: isDirty,
+          commandBasedHasChanges,
           activeTab,
           timestamp: new Date().toISOString()
         });
@@ -553,122 +852,76 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
   // อัปเดต eventManager เมื่อการตั้งค่า auto-save เปลี่ยน
   useEffect(() => {
-    // SingleUserEventManager doesn't need real-time config updates
-    // Configuration is set at initialization
-    console.log('[NovelEditor] Auto-save configuration noted (single-user mode):', {
-      autoSaveEnabled: isAutoSaveEnabled,
-      autoSaveIntervalMs: autoSaveIntervalSec * 1000
-    });
-  }, [isAutoSaveEnabled, autoSaveIntervalSec]) // Removed eventManager dependency to prevent unnecessary re-renders
+    // ✅ PROFESSIONAL SOLUTION 2: Real-time EventManager config update
+    if (eventManager && isSettingsLoaded) {
+      eventManager.updateConfig({
+        autoSaveEnabled: isAutoSaveEnabled,
+        autoSaveIntervalMs: autoSaveIntervalSec * 1000
+      });
+      
+      console.log('[NovelEditor] 🔄 EventManager config updated:', {
+        autoSaveEnabled: isAutoSaveEnabled,
+        autoSaveIntervalMs: autoSaveIntervalSec * 1000
+      });
+
+      // ✅ PROFESSIONAL SOLUTION 7: Professional User Feedback
+      if (isAutoSaveEnabled) {
+        console.log(`[NovelEditor] ✅ Auto-save enabled - saving every ${autoSaveIntervalSec} seconds`);
+      } else {
+        console.log('[NovelEditor] ⏸️ Auto-save disabled - manual save only');
+      }
+    }
+  }, [isAutoSaveEnabled, autoSaveIntervalSec, eventManager, isSettingsLoaded])
 
   // ===============================
   // PROFESSIONAL SMART SAVE STATE MANAGEMENT
   // เทียบเท่า Adobe Premiere Pro & Canva
   // ===============================
   
+  // ✅ REMOVED: Complex stabilization logic replaced with unified hasUnsavedChanges
+
+  // 🔥 บันทึก settings ลง UserSettings และ localStorage เมื่อเปลี่ยนแปลง (หลังจาก initial load)
   useEffect(() => {
-    // Professional-grade change detection ที่ไม่ทำให้ปุ่ม Save flicker
-    const performProfessionalChangeDetection = async () => {
-      let actualChangeState = false;
-      
-      if (activeTab === 'blueprint' && blueprintTabRef.current?.getCurrentData) {
-        try {
-          const currentData = blueprintTabRef.current.getCurrentData();
-          // ใช้ EventManager เป็นแหล่งข้อมูลหลักสำหรับการตรวจจับการเปลี่ยนแปลง
-          const eventManagerHasChanges = eventManager.hasChanges();
-          const eventManagerState = eventManager.getState();
-          
-          actualChangeState = eventManagerHasChanges || eventManagerState.isDirty || eventManagerState.hasUnsavedChanges;
-          
-          // Enterprise logging สำหรับ debugging และ monitoring
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[NovelEditor] Professional Blueprint change detection:', {
-              hasActualChanges: actualChangeState,
-              eventManagerHasChanges,
-              eventManagerIsDirty: eventManagerState.isDirty,
-              eventManagerHasUnsaved: eventManagerState.hasUnsavedChanges,
-              nodeCount: currentData.nodes?.length || 0,
-              edgeCount: currentData.edges?.length || 0,
-              timestamp: new Date().toISOString()
-            });
-          }
-          
-        } catch (error) {
-          console.error('[NovelEditor] Error in Blueprint change detection:', error);
-          // Fallback: ใช้ saveState เป็นหลัก
-          actualChangeState = saveState.hasUnsavedChanges || saveState.isDirty;
-        }
-      } else if (activeTab === 'director') {
-        // Professional Director tab change detection
-        actualChangeState = hasDirectorChanges;
-      } else if (activeTab === 'summary') {
-        // Professional Summary tab change detection  
-        actualChangeState = hasSummaryChanges;
-      } else {
-        // Fallback: ใช้ combined state
-        actualChangeState = saveState.hasUnsavedChanges || hasBlueprintChanges || hasDirectorChanges || hasSummaryChanges;
-      }
-      
-      // อัปเดต stable state เฉพาะเมื่อมีการเปลี่ยนแปลงจริง
-      setStableHasUnsavedChanges(actualChangeState);
-      
-      // Real-time localStorage sync สำหรับ refresh protection
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('divwy-has-unsaved-changes', actualChangeState.toString());
-        if (actualChangeState) {
-          localStorage.setItem('divwy-last-change', Date.now().toString());
-        }
-      }
-    };
-
-    // Professional stabilization technique เพื่อป้องกัน UI flickering
-    const stabilizationTimer = setTimeout(() => {
-      performProfessionalChangeDetection();
-    }, 200); // Optimal delay สำหรับ professional UX และป้องกัน false positive
-
-    return () => {
-      if (stabilizationTimer) {
-        clearTimeout(stabilizationTimer);
-      }
-    };
-  }, [
-    saveState.hasUnsavedChanges,
-    saveState.isDirty,
-    hasBlueprintChanges,
-    hasDirectorChanges, 
-    hasSummaryChanges,
-    activeTab, 
-    eventManager
-  ])
-
-  // บันทึก settings ลง UserSettings และ localStorage เมื่อเปลี่ยนแปลง
-  useEffect(() => {
-    saveBlueprintSettings('auto-save-enabled', isAutoSaveEnabled);
-  }, [isAutoSaveEnabled, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('auto-save-enabled', isAutoSaveEnabled);
+    }
+  }, [isAutoSaveEnabled, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   useEffect(() => {
-    saveBlueprintSettings('auto-save-interval', autoSaveIntervalSec);
-  }, [autoSaveIntervalSec, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('auto-save-interval', autoSaveIntervalSec);
+    }
+  }, [autoSaveIntervalSec, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   useEffect(() => {
-    saveBlueprintSettings('show-scene-thumbnails', showSceneThumbnails);
-  }, [showSceneThumbnails, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('show-scene-thumbnails', showSceneThumbnails, { silent: true });
+    }
+  }, [showSceneThumbnails, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   useEffect(() => {
-    saveBlueprintSettings('show-node-labels', showNodeLabels);
-  }, [showNodeLabels, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('show-node-labels', showNodeLabels, { silent: true });
+    }
+  }, [showNodeLabels, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   useEffect(() => {
-    saveBlueprintSettings('show-grid', showGrid);
-  }, [showGrid, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('show-grid', showGrid, { silent: true });
+    }
+  }, [showGrid, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   useEffect(() => {
-    saveBlueprintSettings('snap-to-grid', snapToGrid);
-  }, [snapToGrid, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('snap-to-grid', snapToGrid, { silent: true });
+    }
+  }, [snapToGrid, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   useEffect(() => {
-    saveBlueprintSettings('node-orientation', nodeOrientation);
-  }, [nodeOrientation, saveBlueprintSettings])
+    if (isSettingsLoaded && !isInitialLoad) {
+      saveBlueprintSettings('node-orientation', nodeOrientation, { silent: true });
+    }
+  }, [nodeOrientation, saveBlueprintSettings, isSettingsLoaded, isInitialLoad])
 
   // ===============================
   // PROFESSIONAL REFRESH PROTECTION
@@ -677,7 +930,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   useEffect(() => {
     // Professional-grade beforeunload handler เทียบเท่า Adobe/Canva
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (stableHasUnsavedChanges) {
+      if (hasUnsavedChanges) {
         // Professional warning message
         const message = '🚨 คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\n' +
                        'หากออกจากหน้านี้ การเปลี่ยนแปลงทั้งหมดจะสูญหาย\n\n' +
@@ -693,14 +946,14 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       if (document.visibilityState === 'hidden') {
         // เก็บ timestamp และ unsaved state เมื่อหน้าถูกซ่อน
         localStorage.setItem('divwy-last-hidden', Date.now().toString());
-        localStorage.setItem('divwy-has-unsaved-changes', stableHasUnsavedChanges.toString());
+        localStorage.setItem('divwy-has-unsaved-changes', hasUnsavedChanges.toString());
       } else if (document.visibilityState === 'visible') {
         // ตรวจสอบเมื่อกลับมาที่หน้า
         const lastHidden = localStorage.getItem('divwy-last-hidden');
         if (lastHidden) {
           const hiddenDuration = Date.now() - parseInt(lastHidden);
           // หากซ่อนไปนานกว่า 5 นาที และมีการเปลี่ยนแปลง ให้แจ้งเตือน
-          if (hiddenDuration > 5 * 60 * 1000 && stableHasUnsavedChanges) {
+          if (hiddenDuration > 5 * 60 * 1000 && hasUnsavedChanges) {
             toast.warning(
               '⚠️ คุณออกจากหน้านี้ไปนานกว่า 5 นาที\n' +
               'หากมีการเปลี่ยนแปลงอื่น อาจมีความเสี่ยงในการสูญเสียข้อมูล\n' +
@@ -717,7 +970,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         switch (event.key) {
           case 's':
             event.preventDefault();
-            if (stableHasUnsavedChanges) {
+            if (hasUnsavedChanges) {
               handleManualSave();
             } else {
               toast.info('ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก');
@@ -739,7 +992,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [stableHasUnsavedChanges, handleManualSave]);
+  }, [hasUnsavedChanges, handleManualSave]);
 
   // Handle click outside to close settings dropdown
   useEffect(() => {
@@ -781,9 +1034,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* Save Status - ใช้ SaveStatusIndicator ใหม่ */}
+          {/* Save Status - ใช้ unified state */}
           <SingleUserSaveStatusIndicator 
-            saveState={saveState} 
+            saveState={{
+              ...saveState,
+              isDirty: hasUnsavedChanges,
+              hasUnsavedChanges: hasUnsavedChanges
+            }} 
             size="md"
             showDetails={true}
             className="min-w-[180px]"
@@ -794,16 +1051,16 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           {/* Manual Save */}
           <Button
             onClick={handleManualSave}
-            disabled={saveState.isSaving || !stableHasUnsavedChanges}
+            disabled={saveState.isSaving || !hasUnsavedChanges}
             size="sm"
             className={`flex items-center space-x-2 ${
-              stableHasUnsavedChanges
+              hasUnsavedChanges
                 ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                 : 'bg-muted text-muted-foreground'
             }`}
           >
             <Save className="h-4 w-4" />
-            <span>{stableHasUnsavedChanges ? 'บันทึก' : 'บันทึก'}</span>
+            <span>{hasUnsavedChanges ? 'บันทึก' : 'บันทึก'}</span>
           </Button>
 
           {/* Settings Dropdown */}
@@ -1054,10 +1311,10 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
         <Button
           onClick={handleManualSave}
-          disabled={saveState.isSaving || !stableHasUnsavedChanges}
+          disabled={saveState.isSaving || !hasUnsavedChanges}
           size="sm"
           className={`${
-            stableHasUnsavedChanges
+            hasUnsavedChanges
               ? 'bg-blue-600 hover:bg-blue-700 text-white' 
               : 'bg-muted text-muted-foreground'
           }`}
@@ -1237,6 +1494,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 }} // ส่ง dirty state callback
                 // ✨ Professional Event Management Integration (Adobe/Canva/Figma style)
                 eventManager={eventManager}
+                // ✅ PROFESSIONAL SOLUTION 3: ส่ง auto-save config ไปยัง BlueprintTab
+                autoSaveConfig={{
+                  enabled: isAutoSaveEnabled,
+                  intervalSec: autoSaveIntervalSec
+                }}
                 // ส่งการตั้งค่าการแสดงผลจาก localStorage
                 blueprintSettings={{
                   showSceneThumbnails,
