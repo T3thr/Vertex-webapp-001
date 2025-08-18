@@ -2,6 +2,9 @@
 
 import dbConnect from "@/backend/lib/mongodb"; // Utility สำหรับเชื่อมต่อ MongoDB
 import UserModel from "@/backend/models/User"; // Mongoose Model สำหรับ User
+import UserAchievementModel from "@/backend/models/UserAchievement"; // Import a UserAchievement model
+import UserGamificationModel from "@/backend/models/UserGamification";
+import AchievementModel from "@/backend/models/Achievement";
 import { notFound } from "next/navigation"; // Function สำหรับแสดงหน้า 404
 import Image from "next/image"; // Component สำหรับแสดงรูปภาพจาก Next.js
 import React from "react"; // React library
@@ -38,6 +41,106 @@ export default async function UserPage({
   // TypeScript จะพยายาม infer type จาก .lean() และ .select()
   // ถ้าต้องการความแม่นยำสูงสุด สามารถกำหนด Interface/Type สำหรับ user object ที่ดึงมาได้
   const { profile, username, roles, isActive, isBanned } = user;
+
+  // --- Start of new data fetching logic ---
+
+  // 1. Fetch data from both models in parallel
+  const [userAchievementsData, gamificationData, allAchievements] = await Promise.all([
+    UserAchievementModel.findOne({ userId: user._id })
+      .populate({
+        path: 'earnedItems.itemModelId',
+        model: 'Achievement',
+        select: 'title description customIconUrl rarity tierKey'
+      })
+      .lean(),
+    UserGamificationModel.findOne({ userId: user._id })
+      .populate({
+        path: 'gamification.achievements',
+        model: 'Achievement',
+        select: 'title description customIconUrl rarity tierKey achievementCode'
+      })
+      .select('gamification.achievements gamification.level gamification.experiencePoints')
+      .lean(),
+    // All active achievements definitions (for showing locked/inactive progress = 0)
+    AchievementModel.find({ isActive: true })
+      .select('title description customIconUrl rarity tierKey tierLevel unlockConditions')
+      .sort({ tierKey: 1, tierLevel: 1 })
+      .lean()
+  ]);
+
+  const combinedAchievements = new Map<string, any>();
+
+  // Pre-seed with Tier 1 of each tierKey so that locked achievements appear with progress 0/target
+  const firstTierByKey = new Map<string, any>();
+  allAchievements?.forEach((ach: any) => {
+    if (!ach.tierKey) return;
+    const exists = firstTierByKey.get(ach.tierKey);
+    if (!exists || (ach.tierLevel ?? Infinity) < (exists.tierLevel ?? Infinity)) {
+      firstTierByKey.set(ach.tierKey, ach);
+    }
+  });
+  firstTierByKey.forEach((ach: any, tierKey: string) => {
+    const target = ach?.unlockConditions?.[0]?.targetValue ?? 1;
+    combinedAchievements.set(tierKey, {
+      _id: ach._id?.toString() || tierKey,
+      title: ach.title,
+      description: ach.description,
+      customIconUrl: ach.customIconUrl,
+      rarity: ach.rarity,
+      progress: { current: 0, target, tier: 1 },
+    });
+  });
+
+  // 2. Process new tiered achievements from UserAchievementModel (Source of Truth for these)
+  // Be robust even if populate fails; still show earned tier by code with a friendly title
+  userAchievementsData?.earnedItems?.forEach((item: any) => {
+    const populated = item.itemModelId as any;
+    const achievementKey = item.itemCode || populated?.tierKey || populated?._id?.toString() || `ACH_${Math.random().toString(36).slice(2)}`;
+    const displayTitle = populated?.title ||
+      (item.itemCode === 'FIRST_READER' ? 'ก้าวแรกสู่นักอ่าน I' : (item.itemCode || 'Achievement'));
+    const description = populated?.description || undefined;
+    const customIconUrl = populated?.customIconUrl || undefined;
+    const rarity = populated?.rarity || 'Common';
+    const id = (populated?._id?.toString()) || achievementKey;
+
+    combinedAchievements.set(achievementKey, {
+      _id: id,
+      title: displayTitle,
+      description,
+      customIconUrl,
+      rarity,
+      progress: item.progress || null,
+    });
+  });
+
+  // 3. Process old achievements from UserGamificationModel, adding them only if they don't already exist
+  gamificationData?.gamification.achievements.forEach((ach: any) => {
+    const achievementKey = ach.tierKey || ach.achievementCode; // Use tierKey or code to check for existence
+    if (ach._id && !combinedAchievements.has(achievementKey)) {
+      combinedAchievements.set(achievementKey, {
+        _id: ach._id.toString(),
+        title: ach.title,
+        description: ach.description,
+        customIconUrl: ach.customIconUrl,
+        rarity: ach.rarity,
+        progress: null, // No progress data for old achievements
+      });
+    }
+  });
+  
+  const achievements = Array.from(combinedAchievements.values()).sort((a: any, b: any) => {
+    const score = (x: any) => {
+      const p = x?.progress;
+      if (!p) return -1; // ไม่มี progress ให้ถอยไปท้าย
+      const completedTiers = Math.max(0, (p.tier || 1) - 1);
+      const fraction = p && p.target > 0 ? p.current / p.target : 0;
+      // ให้น้ำหนักกับจำนวน Tier ที่ปลดล็อกก่อน จากนั้นดูเปอร์เซ็นต์ tier ปัจจุบัน
+      return completedTiers * 1000 + fraction;
+    };
+    return score(b) - score(a);
+  });
+
+  // --- End of new data fetching logic ---
 
   const totalNovels = user?.writerStats?.totalNovelsPublished ?? 0;
   const favoriteNovels = 5; // TODO: ดึงจาก UserLibraryItem หรือระบบ Favorite จริง
@@ -102,8 +205,15 @@ export default async function UserPage({
         </div>
       </div>
       <div className="border-t border-b border-gray-300 py-4">
-        <Tabs />
+        <Tabs
+          achievements={achievements}
+          level={gamificationData?.gamification.level || 1} 
+          experiencePoints={gamificationData?.gamification.experiencePoints || 0}
+        />
       </div>
     </main>
   );
 }
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;

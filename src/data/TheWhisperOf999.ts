@@ -1923,6 +1923,3 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
     storyMap
   };
 };
-
-
-

@@ -57,7 +57,7 @@ interface SceneData {
   characters: Array<{
     instanceId: string;
     characterId: string;
-    characterData: Character;
+    characterData?: Character; // Make optional to handle cases where character data might not be populated
     expressionId?: string;
     transform?: {
       positionX?: number;
@@ -68,16 +68,32 @@ interface SceneData {
     };
     isVisible?: boolean;
   }>;
-  dialogue: DialogueText[];
+  textContents: Array<{
+    instanceId: string; 
+    type: "dialogue" | "narration" | "thought_bubble" | "ui_text" | "label" | "system_message"; 
+    characterId?: string; // Change from ObjectId to string
+    speakerDisplayName?: string; 
+    content: string; 
+    voiceOverMediaId?: string; // Change from ObjectId to string
+    voiceOverMediaSourceType?: "Media" | "OfficialMedia"; // Add this field
+  }>; // Renamed from dialogue to textContents
   choices?: Choice[];
-  nextSceneId?: string;
-  audioElements?: Array<{
+  defaultNextSceneId?: string; // Renamed from nextSceneId to defaultNextSceneId
+  audios?: Array<{
     instanceId: string;
-    type: "background_music" | "audio_effect" | "voice_over";
-    mediaId: string;
+    type: "audio_effect" | "background_music" | "voice_over";
+    mediaId: string; // Ensure this is string
+    mediaSourceType?: "Media" | "OfficialMedia"; // Add this field
     volume?: number;
     loop?: boolean;
   }>;
+  ending?: {
+    endingType: "TRUE" | "GOOD" | "NORMAL" | "BAD" | "SECRET" | "ALTERNATE" | "JOKE";
+    title: string;
+    description: string;
+    imageUrl?: string;
+    endingId: string;
+  };
 }
 
 interface VisualNovelReaderProps {
@@ -169,9 +185,12 @@ export default function VisualNovelReader({
       }
       
       // Start background music if available
-      const bgMusic = sceneData.audioElements?.find(audio => audio.type === "background_music");
+      const bgMusic = sceneData.audios?.find(audio => audio.type === "background_music");
       if (bgMusic && audioRef.current) {
-        audioRef.current.src = `/api/media/${bgMusic.mediaId}`;
+        const mediaUrl = bgMusic.mediaSourceType === 'OfficialMedia' 
+          ? `/media/official/${bgMusic.mediaId}.mp3`
+          : `/media/user/${bgMusic.mediaId}.mp3`;
+        audioRef.current.src = mediaUrl;
         audioRef.current.volume = (bgMusic.volume || 1) * (isMuted ? 0 : 1);
         audioRef.current.loop = bgMusic.loop || false;
         audioRef.current.play().catch(console.error);
@@ -189,13 +208,13 @@ export default function VisualNovelReader({
   const handleNext = useCallback(() => {
     if (!currentScene || showChoices) return;
     
-    if (currentDialogueIndex < currentScene.dialogue.length - 1) {
+    if (currentDialogueIndex < currentScene.textContents.length - 1) {
       setCurrentDialogueIndex(prev => prev + 1);
     } else if (currentScene.choices && currentScene.choices.length > 0) {
       setShowChoices(true);
       setIsAutoPlay(false);
-    } else if (currentScene.nextSceneId) {
-      loadScene(currentScene.nextSceneId);
+    } else if (currentScene.defaultNextSceneId) {
+      loadScene(currentScene.defaultNextSceneId);
     } else {
       // End of episode
       router.push(`/novels/${novelSlug}`);
@@ -342,7 +361,7 @@ export default function VisualNovelReader({
     return themes[backgroundColor] || themes.dark;
   };
 
-  const currentDialogue = currentScene?.dialogue[currentDialogueIndex];
+  const currentDialogue = currentScene?.textContents[currentDialogueIndex];
 
   // Render loading state
   if (isLoading) {
@@ -420,9 +439,9 @@ export default function VisualNovelReader({
           {currentScene?.characters
             .filter(char => char.isVisible !== false)
             .map((char) => {
-              const expression = char.characterData.expressions.find(
+              const expression = char.characterData?.expressions.find(
                 exp => exp.expressionId === char.expressionId
-              ) || char.characterData.expressions[0];
+              ) || char.characterData?.expressions[0];
               
               return (
                 <motion.div
@@ -441,7 +460,7 @@ export default function VisualNovelReader({
                     <div className="relative w-[200px] md:w-[300px] lg:w-[400px] h-[300px] md:h-[450px] lg:h-[600px]">
                       <Image
                         src={`/images/character/${expression.mediaId}.png`}
-                        alt={char.characterData.name}
+                        alt={char.characterData?.name || 'Character'}
                         fill
                         className="object-contain"
                       />
@@ -505,10 +524,10 @@ export default function VisualNovelReader({
           className="bg-black/80 backdrop-blur-sm border-t border-white/20"
         >
           {/* Speaker Name */}
-          {currentDialogue?.speaker && (
+          {currentDialogue?.speakerDisplayName && (
             <div className="px-4 md:px-6 pt-4">
               <span className="inline-block px-3 py-1 bg-white/10 rounded-full text-sm">
-                {currentDialogue.speaker}
+                {currentDialogue.speakerDisplayName}
               </span>
             </div>
           )}

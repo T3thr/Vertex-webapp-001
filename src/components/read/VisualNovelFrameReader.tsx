@@ -23,6 +23,8 @@ import ReaderSettings, { IReaderSettings } from './ReaderSettings';
 import StoryStatusPanel from './StoryStatusPanel';
 import { DEFAULT_USER_SETTINGS, getInitialSettings } from '@/lib/user-settings';
 import { useDebouncedCallback } from 'use-debounce';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { saveReadingProgress } from '@/lib/actions/user.actions';
 
 // Refactored to import from models
@@ -83,6 +85,7 @@ export default function VisualNovelFrameReader({
   userId 
 }: VisualNovelFrameReaderProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Core Reader State
   const [isPlaying] = useState(true); // Always true since we removed play/pause functionality
@@ -283,25 +286,18 @@ export default function VisualNovelFrameReader({
   }, []);
 
   const handleEpisodeEnd = useCallback((ending?: ISceneEnding) => {
-    console.log("Episode has ended.", ending);
-    
-    // ✅ แก้ไข: ตรวจสอบ novel type และ episode order สำหรับ single_ending
+    // ✅ แก้ไข: ตรวจสอบ novel type และ episode orderสำหรับ single_ending
     const isSingleEnding = novel.endingType === 'single_ending';
     const isLastEpisode = activeEpisode.episodeOrder === novel.totalEpisodesCount;
     
-    console.log(`🎯 Episode End Check - Novel: "${novel.title}", Type: "${novel.endingType}", Episode: ${activeEpisode.episodeOrder}/${novel.totalEpisodesCount}`);
-    console.log(`📊 Single Ending: ${isSingleEnding}, Last Episode: ${isLastEpisode}, Has Ending: ${!!ending}`);
-    
     if (isSingleEnding && !isLastEpisode) {
       // ✅ สำหรับ single_ending ที่ไม่ใช่ตอนสุดท้าย: ไม่แสดง ending screen
-      console.log(`⏭️ Single ending novel - skipping ending screen for non-final episode`);
       
       // หา episode ถัดไป
       const nextEpisodeOrder = activeEpisode.episodeOrder + 1;
       const nextEpisode = Object.values(loadedEpisodesData).find(ep => ep.episodeOrder === nextEpisodeOrder);
       
       if (nextEpisode) {
-        console.log(`📖 Moving to next episode: ${nextEpisode.title} (${nextEpisode.episodeOrder})`);
         setActiveEpisode({
           _id: nextEpisode._id,
           title: nextEpisode.title,
@@ -319,7 +315,20 @@ export default function VisualNovelFrameReader({
         
         // Save progress for current episode
         if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
-          saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
+          saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true)
+            .then((res) => {
+              // Immediately refresh gamification summary so toast can show without delay
+              queryClient.invalidateQueries({ queryKey: ['gamificationSummary', userId] });
+              if (res?.achievement?.unlocked && res?.achievement?.unlockedTitle) {
+                toast.success('ปลดล็อกรางวัล!', {
+                  description: `คุณได้รับ: "${res.achievement.unlockedTitle}"`,
+                  duration: 5000,
+                });
+              } else {
+                toast.info('บันทึกความคืบหน้าแล้ว', { duration: 2500 });
+              }
+            })
+            .catch(() => {/* swallow */});
         }
         return;
       } else {
@@ -330,13 +339,25 @@ export default function VisualNovelFrameReader({
     // ✅ แสดง ending screen เฉพาะเมื่อ:
     // 1. ไม่ใช่ single_ending (multiple_endings, ongoing, etc.)
     // 2. หรือเป็น single_ending แต่เป็นตอนสุดท้าย
-    console.log(`🎊 Showing ending screen`);
     setEndingDetails(ending || null);
     setShowSummary(true);
     
     // Save progress
     if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
-      saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
+      saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true)
+        .then((res) => {
+          // Immediately refresh gamification summary so toast can show without delay
+          queryClient.invalidateQueries({ queryKey: ['gamificationSummary', userId] });
+          if (res?.achievement?.unlocked && res?.achievement?.unlockedTitle) {
+            toast.success('ปลดล็อกรางวัล!', {
+              description: `คุณได้รับ: "${res.achievement.unlockedTitle}"`,
+              duration: 5000,
+            });
+          } else {
+            toast.info('บันทึกความคืบหน้าแล้ว', { duration: 2500 });
+          }
+        })
+        .catch(() => {/* swallow */});
     }
   }, [userId, activeEpisode, novel, currentSceneId, loadedEpisodesData]);
 

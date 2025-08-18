@@ -6,7 +6,7 @@
 // Header สำหรับ Writer Dashboard พร้อม animation และ responsive design ที่อัพเกรดแล้ว
 // รองรับ global.css theme system และมี interactive elements ที่สวยงาม
 
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll, useTransform, Variants } from 'framer-motion';
 import Image from 'next/image';
 import { 
   User, 
@@ -244,7 +244,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
   };
 
   // Animation variants
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0, y: -20 },
     visible: {
       opacity: 1,

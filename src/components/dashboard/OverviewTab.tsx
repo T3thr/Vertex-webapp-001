@@ -44,7 +44,21 @@ import DashboardHeader from './DashboardHeader';
 import StatsOverview from './StatsOverview';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import DailyCheckInButton from '@/components/gamification/DailyCheckInButton';
 import CreateNovelModal from './CreateNovelModal';
+
+// Define the type for a single achievement object based on what's passed from the dashboard page
+interface Achievement {
+  _id: string;
+  achievementCode?: string;
+  title?: string;
+  description?: string;
+  progress?: {
+    current: number;
+    target: number;
+    tier: number;
+  } | null;
+}
 
 interface OverviewTabProps {
   user: SerializedUser;
@@ -63,7 +77,9 @@ interface OverviewTabProps {
 }
 
 // Component สำหรับ Achievement Card
-function AchievementCard({ achievement, delay }: { achievement: any; delay: number }) {
+function AchievementCard({ achievement, delay }: { achievement: Achievement; delay: number }) {
+  const hasProgress = achievement.progress != null;
+
   return (
     <motion.div
       className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 
@@ -80,10 +96,26 @@ function AchievementCard({ achievement, delay }: { achievement: any; delay: numb
           <Trophy className="w-6 h-6 text-white" />
         </div>
         <div className="flex-1">
-          <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">{achievement.title}</h4>
-          <p className="text-xs text-yellow-600 dark:text-yellow-500">{achievement.description}</p>
+          <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">{achievement.title || 'Unknown Achievement'}</h4>
+          <p className="text-xs text-yellow-600 dark:text-yellow-500">{achievement.description || 'No description available'}</p>
         </div>
       </div>
+      {hasProgress && achievement.progress && (
+        <div className="mt-3">
+          <div className="flex justify-between text-xs text-yellow-700 dark:text-yellow-500 mb-1">
+            <span>Tier {achievement.progress.tier}</span>
+            <span>{achievement.progress.current}/{achievement.progress.target}</span>
+          </div>
+          <div className="w-full bg-yellow-200/50 dark:bg-yellow-800/50 rounded-full h-2">
+            <motion.div 
+              className="bg-gradient-to-r from-yellow-400 to-orange-400 h-2 rounded-full" 
+              initial={{ width: 0 }}
+              animate={{ width: `${(achievement.progress.current / achievement.progress.target) * 100}%` }}
+              transition={{ duration: 0.8, ease: "easeInOut", delay }}
+            />
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -238,11 +270,19 @@ export default function OverviewTab({
     }
   ];
 
-  // จำลอง Achievements (ในอนาคตดึงจาก UserAchievement)
-  const achievements = [
-    { title: 'นักเขียนมือใหม่', description: 'เผยแพร่นิยายเรื่องแรก' },
-    { title: 'ยอดนิยม', description: 'มียอดชมเกิน 1,000 ครั้ง' }
-  ];
+  // Use achievements from props, and sort them to show achievements with progress first.
+  const achievements = [...(user.gamification?.achievements || [])].sort((a, b) => {
+    const aHasProgress = a.progress != null;
+    const bHasProgress = b.progress != null;
+    if (aHasProgress && !bHasProgress) return -1;
+    if (!aHasProgress && bHasProgress) return 1;
+    return 0;
+  });
+
+  // --- [DEBUG LOGGING START] ---
+  console.log("--- DEBUG: Achievements received in OverviewTab ---");
+  console.log(JSON.stringify(achievements, null, 2));
+  // --- [DEBUG LOGGING END] ---
 
   // Recent novels (5 เรื่องล่าสุด)
   const recentNovels = Array.isArray(novels) ? novels.slice(0, 5) : [];
@@ -280,7 +320,7 @@ export default function OverviewTab({
                 </p>
               </div>
 
-              {/* Daily Stats */}
+              {/* Daily Stats + Check-in */}
               <div className="flex items-center gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-primary">{totalStats.totalViews.toLocaleString()}</div>
@@ -290,6 +330,9 @@ export default function OverviewTab({
                 <div className="text-center">
                   <div className="text-3xl font-bold text-green-500">+{Math.floor(totalStats.totalEarnings / 100)}</div>
                   <div className="text-sm text-muted-foreground">รายได้วันนี้ (บาท)</div>
+                </div>
+                <div className="hidden md:block">
+                  <DailyCheckInButton />
                 </div>
               </div>
             </div>
@@ -369,8 +412,8 @@ export default function OverviewTab({
                 ความสำเร็จล่าสุด
               </h3>
               <div className="space-y-3">
-                {achievements.map((achievement, index) => (
-                  <AchievementCard key={achievement.title} achievement={achievement} delay={0.1 * index} />
+                {achievements.slice(0, 3).map((achievement, index) => ( // Show top 3 recent
+                  <AchievementCard key={achievement._id || achievement.achievementCode || index} achievement={achievement} delay={0.1 * index} />
                 ))}
               </div>
             </motion.div>

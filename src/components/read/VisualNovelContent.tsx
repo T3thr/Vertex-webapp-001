@@ -33,6 +33,8 @@ type SerializedTextContent = Omit<ITextContent, 'characterId' | 'voiceOverMediaI
 
 type SerializedChoice = Omit<IChoice, '_id'> & { _id: string };
 
+type SerializedAudioElement = Omit<IAudioElement, 'mediaId'> & { mediaId: string; };
+
 type SerializedScene = Omit<IScene, '_id' | 'novelId' | 'episodeId' | 'characters' | 'textContents' | 'choiceIds' | 'audios' | 'defaultNextSceneId' | 'previousSceneId'> & {
     _id: string;
     novelId: string;
@@ -40,7 +42,7 @@ type SerializedScene = Omit<IScene, '_id' | 'novelId' | 'episodeId' | 'character
     characters: PopulatedCharacter[];
     textContents: SerializedTextContent[];
     choices: SerializedChoice[];
-    audios: IAudioElement[];
+    audios: SerializedAudioElement[];
     defaultNextSceneId?: string;
     previousSceneId?: string;
     ending?: ISceneEnding;
@@ -149,6 +151,12 @@ const useAudio = (
         const masterVolume = (gameplaySettings.masterVolume ?? 100) / 100;
 
         scene?.audios?.forEach(audioConfig => {
+            // Check if mediaId is a valid, non-empty string before proceeding
+            if (!audioConfig.mediaId) {
+                console.warn(`Skipping audio instanceId ${audioConfig.instanceId} because mediaId is missing or empty.`);
+                return; 
+            }
+            
             const id = audioConfig.instanceId;
             let audio = audioRefs.current[id];
             if (!audio) {

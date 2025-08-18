@@ -44,7 +44,7 @@ const choiceData = [
   // Major Choices
   { choiceCode: 'CHOICE_EXPLORE', text: 'เดินสำรวจบ้านชั้นล่างทันที', actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_explore_downstairs_1' } }], isMajorChoice: true },
   { choiceCode: 'CHOICE_CLEAN', text: 'ทำความสะอาดห้องนั่งเล่นและเปิดผ้าม่าน', actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }], isMajorChoice: true },
-  { choiceCode: 'CHOICE_CALL', text: 'โทรหาเพื่อนเพื่อเล่าเรื่องบ้านใหม่', actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }], isMajorChoice: true },
+  { choiceCode: 'CHOICE_CALL', text: 'โทรหาเพื่อนสนิทเพื่อเล่าเรื่องบ้านและชวนมาค้าง', actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_end_of_prologue' } }], isMajorChoice: true },
   
   // Path 1.1 choices
   { choiceCode: 'CHOICE_LISTEN_NOW', text: 'กดฟังเทปทันที', actions: [{ actionId: 'action1', type: 'go_to_node', parameters: { targetNodeId: 'scene_listen_tape_1' } }], isMajorChoice: false },
