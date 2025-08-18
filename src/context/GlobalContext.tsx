@@ -1,14 +1,13 @@
 // src/context/GlobalContext.tsx
 "use client";
 
-import { SessionProvider } from "next-auth/react";
 import { AuthProvider } from "@/context/AuthContext"; // ตรวจสอบ path
 import { ThemeProvider, useTheme } from "@/context/ThemeContext"; // ตรวจสอบ path และ import useTheme
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState, ReactNode } from "react";
-import { Toaster } from "sonner";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import { SessionProvider } from "next-auth/react";
+import { ReactNode, useEffect, useState } from "react";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,14 +56,17 @@ const AppContent = ({ children }: { children: ReactNode }) => {
   return (
     <>
       {children}
-      <Toaster
-        richColors
+      <ToastContainer
         position="top-center"
-        theme={
-          resolvedTheme === "sepia"
-            ? "light"
-            : (resolvedTheme as "light" | "dark" | "system" | undefined)
-        }
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme={resolvedTheme === "dark" ? "dark" : "light"}
       />
     </>
   );

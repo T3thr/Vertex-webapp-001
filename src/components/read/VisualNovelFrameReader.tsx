@@ -6,17 +6,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Settings, 
   ArrowLeft,
-  List,
-  MessageSquareText,
   Eye,
   EyeOff,
-  SkipForward,
-  Swords,
+  List,
   MessageSquare,
-  MessageSquareOff
+  MessageSquareOff,
+  MessageSquareText,
+  Pause,
+  Play,
+  Settings,
+  SkipForward,
+  Swords
 } from 'lucide-react';
-import VisualNovelContent, { DialogueHistoryItem } from './VisualNovelContent';
-import type { DetailedEpisode } from './VisualNovelContent';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import DialogueHistory from './DialogueHistory';
 import EpisodeNavigation from './EpisodeNavigation';
 import ReaderSettings, { IReaderSettings } from './ReaderSettings';
@@ -26,7 +29,6 @@ import { useDebouncedCallback } from 'use-debounce';
 import { saveReadingProgress } from '@/lib/actions/user.actions';
 
 // Refactored to import from models
-import type { INovel } from '@/backend/models/Novel';
 import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
 import type { IScene, ISceneEnding } from '@/backend/models/Scene';
 

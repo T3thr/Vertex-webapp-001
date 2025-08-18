@@ -2,24 +2,25 @@
 // API Route สำหรับดึงข้อมูลนิยายตาม slug เพื่อแสดงในหน้ารายละเอียด
 // รองรับการ populate ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น หมวดหมู่, ผู้เขียน, ตัวละคร, ตอน
 
-import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/backend/lib/mongodb";
+import CategoryModel, { ICategory } from "@/backend/models/Category";
+import CharacterModel, { CharacterRoleInStory } from "@/backend/models/Character";
+import CommentModel from "@/backend/models/Comment";
+import EpisodeModel, { EpisodeAccessType, EpisodeStatus } from "@/backend/models/Episode";
 import NovelModel, {
-  INovel,
-  IThemeAssignment,
-  ISourceType,
-  INarrativeFocus,
-  IWorldBuildingDetails,
-  INovelStats,
+  ICollaborationSettings,
   IMonetizationSettings,
+  INarrativeFocus,
+  INovel,
+  INovelStats,
   IPsychologicalAnalysisConfig,
-  ICollaborationSettings
+  ISourceType,
+  IWorldBuildingDetails
 } from "@/backend/models/Novel";
+import RatingModel from "@/backend/models/Rating";
 import UserModel, { IUser } from "@/backend/models/User";
 import { IUserProfile } from '@/backend/models/UserProfile';
-import CategoryModel, { ICategory } from "@/backend/models/Category";
-import CharacterModel, { ICharacter, CharacterRoleInStory } from "@/backend/models/Character";
-import EpisodeModel, { IEpisode, EpisodeStatus, EpisodeAccessType } from "@/backend/models/Episode";
+import { NextRequest, NextResponse } from "next/server";
 
 // ===================================================================
 // SECTION: TypeScript Interfaces สำหรับ API Response
@@ -133,7 +134,9 @@ export interface PopulatedNovelForDetailPage {
   firstEpisodeId?: string;
   totalEpisodesCount: number;
   publishedEpisodesCount: number;
-  stats: INovelStats;
+  stats: INovelStats & {
+    scoreDistribution?: Record<number, number>;
+  };
   monetizationSettings: IMonetizationSettings;
   psychologicalAnalysisConfig: IPsychologicalAnalysisConfig;
   collaborationSettings?: ICollaborationSettings;
@@ -148,6 +151,8 @@ export interface PopulatedNovelForDetailPage {
   updatedAt: string;
   characters?: PopulatedCharacterForDetailPage[];
   episodes?: PopulatedEpisodeForDetailPage[];
+  ratings?: any[]; // รายการรีวิวจากผู้อ่าน
+  comments?: any[]; // รายการความคิดเห็น
 }
 
 // ===================================================================
@@ -321,6 +326,62 @@ export async function GET(
       );
     }
 
+    // ดึงข้อมูลรีวิวจากฐานข้อมูล
+    const ratingsFromDb = await RatingModel.find({
+      targetId: novelFromDb._id,
+      targetType: "Novel",
+      status: "visible",
+      reviewContent: { $exists: true, $ne: "" } // เฉพาะรีวิวที่มีเนื้อหา
+    })
+    .sort({ createdAt: -1 }) // เรียงตามวันที่สร้างล่าสุด
+    .limit(10) // จำกัดจำนวน 10 รายการ
+    .populate({ path: "userId", model: UserModel, select: "_id username avatarUrl primaryPenName roles" })
+    .lean();
+    
+    // ดึงข้อมูลความคิดเห็นจากฐานข้อมูล
+    const commentsFromDb = await CommentModel.find({
+      targetId: novelFromDb._id,
+      targetType: "Novel",
+      status: "visible",
+      parentCommentId: null // เฉพาะความคิดเห็นระดับบนสุด (ไม่รวมการตอบกลับ)
+    })
+    .sort({ createdAt: -1 }) // เรียงตามวันที่สร้างล่าสุด
+    .limit(5) // จำกัดจำนวน 5 รายการ
+    .populate({ path: "userId", model: UserModel, select: "_id username avatarUrl primaryPenName roles" })
+    .lean();
+    
+    // นับจำนวนความคิดเห็นทั้งหมด (รวมการตอบกลับ)
+    const totalCommentsCount = await CommentModel.countDocuments({
+      targetId: novelFromDb._id,
+      targetType: "Novel",
+      status: "visible"
+    });
+    
+    // ดึงข้อมูลการกระจายคะแนนรีวิว
+    const scoreDistribution = {
+      1: 0, 2: 0, 3: 0, 4: 0, 5: 0
+    };
+    
+    if (novelFromDb.stats?.ratingsCount > 0) {
+      // ดึงข้อมูลการกระจายคะแนนจากฐานข้อมูล
+      const ratingAggregation = await RatingModel.aggregate([
+        { $match: { targetId: novelFromDb._id, targetType: "Novel", status: "visible" } },
+        { $group: {
+            _id: { $round: "$overallScore" }, // ปัดเศษให้เป็นจำนวนเต็ม 1-5
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      
+      // แปลงผลลัพธ์เป็นรูปแบบที่ต้องการ
+      ratingAggregation.forEach(item => {
+        const score = item._id as number;
+        if (score >= 1 && score <= 5) {
+          scoreDistribution[score as 1|2|3|4|5] = item.count;
+        }
+      });
+    }
+    
     // แปลงข้อมูลนิยายเป็น PopulatedNovelForDetailPage
     const responseData: PopulatedNovelForDetailPage = {
       _id: novelFromDb._id.toString(),
@@ -329,7 +390,7 @@ export async function GET(
       author: {
         _id: populatedAuthor._id.toString(),
         username: populatedAuthor.username,
-        profile: populatedAuthor.profile,
+        profile: populatedAuthor.profile as any, // Type cast เพื่อแก้ปัญหา TypeScript
         writerStats: populatedAuthor.writerStats
           ? {
               totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
@@ -367,7 +428,11 @@ export async function GET(
       firstEpisodeId: novelFromDb.firstEpisodeId?.toString(),
       totalEpisodesCount: novelFromDb.totalEpisodesCount,
       publishedEpisodesCount: novelFromDb.publishedEpisodesCount,
-      stats: novelFromDb.stats as INovelStats,
+      stats: {
+        ...novelFromDb.stats as INovelStats,
+        scoreDistribution, // เพิ่มข้อมูลการกระจายคะแนน
+        commentsCount: totalCommentsCount // อัปเดตจำนวนความคิดเห็นจากฐานข้อมูลจริง
+      },
       monetizationSettings: novelFromDb.monetizationSettings as IMonetizationSettings,
       psychologicalAnalysisConfig: novelFromDb.psychologicalAnalysisConfig as IPsychologicalAnalysisConfig,
       collaborationSettings: novelFromDb.collaborationSettings,
@@ -382,6 +447,8 @@ export async function GET(
       updatedAt: novelFromDb.updatedAt.toISOString(),
       characters,
       episodes,
+      ratings: ratingsFromDb, // เพิ่มข้อมูลรีวิว
+      comments: commentsFromDb, // เพิ่มข้อมูลความคิดเห็น
     };
 
     console.log(

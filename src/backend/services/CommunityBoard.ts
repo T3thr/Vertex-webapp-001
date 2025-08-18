@@ -1,0 +1,238 @@
+// src/backend/services/CommunityBoard.ts
+// บริการจัดการกระทู้และการสนทนาในชุมชน
+
+import mongoose from 'mongoose';
+import BoardModel, { BoardStatus, BoardType, IBoard } from '../models/Board';
+
+// อินเตอร์เฟซสำหรับข้อมูลที่ใช้สร้างกระทู้ใหม่
+export interface CreateBoardPostDto {
+  title: string;
+  content: string;
+  authorId: string;
+  boardType: BoardType;
+  categoryAssociatedId: string;
+  novelAssociatedId?: string;
+  tags?: string[];
+  containsSpoilers?: boolean;
+  reviewDetails?: {
+    ratingValue: number;
+    ratingBreakdown?: {
+      story?: number;
+      characters?: number;
+      visuals?: number;
+      audio?: number;
+      gameplay?: number;
+    };
+    readingProgress: "not_started" | "in_progress" | "completed";
+  };
+}
+
+// คลาสบริการจัดการกระทู้
+class CommunityBoardService {
+  /**
+   * สร้างกระทู้ใหม่
+   * @param postData ข้อมูลกระทู้ที่จะสร้าง
+   * @returns กระทู้ที่สร้างแล้ว
+   */
+  async createBoardPost(postData: CreateBoardPostDto): Promise<IBoard> {
+    try {
+      // ตรวจสอบข้อมูลที่จำเป็น
+      if (!postData.title || !postData.content || !postData.authorId || !postData.categoryAssociatedId) {
+        throw new Error('ข้อมูลไม่ครบถ้วน กรุณาระบุหัวข้อ เนื้อหา ผู้เขียน และหมวดหมู่');
+      }
+
+      // สร้าง slug จากชื่อกระทู้
+      const slug = await this.generateUniqueSlug(postData.title);
+
+      // สร้างกระทู้ใหม่
+      const newBoardPost = new BoardModel({
+        title: postData.title,
+        slug,
+        content: postData.content,
+        contentFormat: 'markdown', // ค่าเริ่มต้นเป็น markdown
+        authorId: new mongoose.Types.ObjectId(postData.authorId),
+        boardType: postData.boardType || BoardType.DISCUSSION,
+        status: BoardStatus.PUBLISHED,
+        categoryAssociated: new mongoose.Types.ObjectId(postData.categoryAssociatedId),
+        tags: postData.tags || [],
+        containsSpoilers: postData.containsSpoilers || false,
+        stats: {
+          viewsCount: 0,
+          repliesCount: 0,
+          likesCount: 0,
+          upvotesCount: 0,
+          downvotesCount: 0,
+          sharesCount: 0,
+          bookmarksCount: 0
+        }
+      });
+
+      // เพิ่มข้อมูลนิยายที่เกี่ยวข้อง (ถ้ามี)
+      if (postData.novelAssociatedId) {
+        newBoardPost.novelAssociated = new mongoose.Types.ObjectId(postData.novelAssociatedId);
+      }
+
+      // เพิ่มข้อมูลรีวิว (ถ้าเป็นกระทู้ประเภทรีวิว)
+      if (postData.boardType === BoardType.REVIEW && postData.reviewDetails) {
+        newBoardPost.reviewDetails = postData.reviewDetails;
+      }
+
+      // บันทึกกระทู้
+      await newBoardPost.save();
+      return newBoardPost;
+    } catch (error) {
+      console.error('Error creating board post:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * สร้าง slug ที่ไม่ซ้ำสำหรับกระทู้
+   * @param title ชื่อกระทู้
+   * @returns slug ที่ไม่ซ้ำ
+   */
+  private async generateUniqueSlug(title: string): Promise<string> {
+    // สร้าง slug จากชื่อกระทู้
+    let baseSlug = title
+      .toString()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // ลบเครื่องหมายวรรณยุกต์
+      .replace(/\s+/g, "-") // แทนที่ช่องว่างด้วยเครื่องหมายยัติภังค์
+      .replace(/[^\w-]+/g, "") // ลบอักขระพิเศษ
+      .replace(/\-\-+/g, "-") // แทนที่เครื่องหมายยัติภังค์ซ้ำด้วยเครื่องหมายเดียว
+      .replace(/^-+/, "") // ลบเครื่องหมายยัติภังค์ที่อยู่ด้านหน้า
+      .replace(/-+$/, ""); // ลบเครื่องหมายยัติภังค์ที่อยู่ด้านหลัง
+      
+    if (!baseSlug) {
+      baseSlug = `board-${new mongoose.Types.ObjectId().toString().slice(-8)}`;
+    }
+
+    let finalSlug = baseSlug.substring(0, 240);
+    let count = 0;
+
+    // ตรวจสอบว่า slug ซ้ำหรือไม่
+    while (true) {
+      const existingBoard = await BoardModel.findOne({ slug: finalSlug });
+      if (!existingBoard) break;
+      count++;
+      finalSlug = `${baseSlug.substring(0, 240 - String(count).length - 1)}-${count}`;
+    }
+
+    return finalSlug;
+  }
+
+  /**
+   * ดึงกระทู้ล่าสุดทั้งหมด
+   * @param limit จำนวนกระทู้ที่ต้องการดึง
+   * @param skip จำนวนกระทู้ที่ต้องการข้าม
+   * @returns รายการกระทู้
+   */
+  async getLatestPosts(limit: number = 10, skip: number = 0): Promise<any[]> {
+    try {
+      return await BoardModel.find({ status: BoardStatus.PUBLISHED, isDeleted: false })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('authorId', 'username profile.avatarUrl')
+        .populate('categoryAssociated', 'name')
+        .lean();
+    } catch (error) {
+      console.error('Error fetching latest posts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ดึงกระทู้ยอดนิยม
+   * @param limit จำนวนกระทู้ที่ต้องการดึง
+   * @returns รายการกระทู้ยอดนิยม
+   */
+  async getPopularPosts(limit: number = 5): Promise<any[]> {
+    try {
+      return await BoardModel.find({ status: BoardStatus.PUBLISHED, isDeleted: false })
+        .sort({ 'stats.viewsCount': -1, 'stats.likesCount': -1 })
+        .limit(limit)
+        .populate('authorId', 'username profile.avatarUrl')
+        .populate('categoryAssociated', 'name')
+        .lean();
+    } catch (error) {
+      console.error('Error fetching popular posts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ดึงกระทู้ตามประเภท
+   * @param boardType ประเภทของกระทู้
+   * @param limit จำนวนกระทู้ที่ต้องการดึง
+   * @param skip จำนวนกระทู้ที่ต้องการข้าม
+   * @returns รายการกระทู้ตามประเภท
+   */
+  async getPostsByType(boardType: BoardType, limit: number = 10, skip: number = 0): Promise<any[]> {
+    try {
+      return await BoardModel.find({ boardType, status: BoardStatus.PUBLISHED, isDeleted: false })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('authorId', 'username profile.avatarUrl')
+        .populate('categoryAssociated', 'name')
+        .lean();
+    } catch (error) {
+      console.error(`Error fetching ${boardType} posts:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * ดึงกระทู้ตาม ID
+   * @param boardId ID ของกระทู้
+   * @returns ข้อมูลกระทู้
+   */
+  async getBoardById(boardId: string): Promise<any | null> {
+    try {
+      return await BoardModel.findById(boardId)
+        .populate('authorId', 'username profile.avatarUrl')
+        .populate('categoryAssociated', 'name')
+        .lean();
+    } catch (error) {
+      console.error('Error fetching board by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ดึงกระทู้ตาม slug
+   * @param slug slug ของกระทู้
+   * @returns ข้อมูลกระทู้
+   */
+  async getBoardBySlug(slug: string): Promise<any | null> {
+    try {
+      return await BoardModel.findOne({ slug, status: BoardStatus.PUBLISHED, isDeleted: false })
+        .populate('authorId', 'username profile.avatarUrl')
+        .populate('categoryAssociated', 'name')
+        .lean();
+    } catch (error) {
+      console.error('Error fetching board by slug:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * เพิ่มจำนวนการดู
+   * @param boardId ID ของกระทู้
+   * @param userId ID ของผู้ใช้ (ถ้ามี)
+   */
+  async incrementViewCount(boardId: string, userId?: string): Promise<void> {
+    try {
+      await BoardModel.findByIdAndUpdate(boardId, {
+        $inc: { 'stats.viewsCount': 1 }
+      });
+    } catch (error) {
+      console.error('Error incrementing view count:', error);
+      throw error;
+    }
+  }
+}
+
+export default new CommunityBoardService();

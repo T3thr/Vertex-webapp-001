@@ -1,9 +1,13 @@
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import dbConnect from "@/backend/lib/mongodb";
+import BoardModel from "@/backend/models/Board";
+import { formatDistanceToNow } from 'date-fns';
+import { th } from 'date-fns/locale';
+import { Eye, MessageCircle, Plus } from "lucide-react";
 import { Metadata } from "next";
+import { getServerSession } from "next-auth";
 import Image from "next/image";
 import Link from "next/link";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/options";
-import { Plus, Eye, MessageCircle } from "lucide-react";
 
 // Metadata for the page
 export const metadata: Metadata = {
@@ -11,8 +15,8 @@ export const metadata: Metadata = {
   description: "กระทู้และการสนทนาทั้งหมดบน DIVWY",
 };
 
-// Types
-interface Post {
+// types/board.ts
+export interface Post {
   id: string;
   title: string;
   author: {
@@ -25,321 +29,105 @@ interface Post {
   imageUrl?: string;
 }
 
-// Mock data fetching function (replace with actual API call)
-async function getPosts() {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+// ดึงข้อมูลกระทู้จากฐานข้อมูล
+async function getPosts(): Promise<any[]> {
+  await dbConnect();
+  
+  try {
+    // ดึงกระทู้ล่าสุด
+    const latestPosts = await BoardModel.find({ 
+      status: "published", 
+      isDeleted: false 
+    })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .populate('authorId', 'username profile.avatarUrl')
+    .lean();
+    
+    return latestPosts.map((post: any) => ({
+      id: post._id.toString(),
+      slug: post.slug,
+      title: post.title,
+      content: post.content,
+      author: {
+        id: post.authorId._id.toString(),
+        name: post.authorUsername || post.authorId.username,
+        avatar: post.authorAvatarUrl || post.authorId.profile?.avatarUrl,
+      },
+      createdAt: post.createdAt,
+      viewCount: post.stats?.viewsCount || 0,
+      commentCount: post.stats?.repliesCount || 0,
+    }));
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    return [];
+  }
+}
 
-  // Mock data
-  const posts: Post[] = [
-    {
-      id: "1",
-      title: "ม่านบังตาเปิดเผยเรื่องราวความรักของเรา",
-      author: {
-        name: "นักเขียนนิรนาม",
-        avatar: "/images/default.png",
-      },
-      createdAt: "25 ม.ค. 2567 เวลา 13:55",
-      viewCount: 150,
-      commentCount: 12,
-      imageUrl: "/images/romance/novel1.jpg",
-    },
-    {
-      id: "2",
-      title: "เรื่องราวของคุณ & ฉัน จบลงด้วยความสุข 💗",
-      author: {
-        name: "ผู้แต่งนิยาย",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "25 ม.ค. 2567 เวลา 12:55",
-      viewCount: 89,
-      commentCount: 5,
-      imageUrl: "/images/romance/novel2.jpg",
-    },
-    {
-      id: "3",
-      title: "วิธีแก้ปัญหาการอัพโหลดไฟล์ PDF ขนาดใหญ่",
-      author: {
-        name: "TechHelper",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "25 ม.ค. 2567 เวลา 11:30",
-      viewCount: 245,
-      commentCount: 18,
-      imageUrl: "/images/fantasy/fantasy1.jpg",
-    },
-    {
-      id: "4",
-      title: "รีวิว: นิยายแนวสืบสวนที่ต้องอ่าน!",
-      author: {
-        name: "MysteryReader",
-        avatar: "/images/default.png",
-      },
-      createdAt: "25 ม.ค. 2567 เวลา 10:15",
-      viewCount: 320,
-      commentCount: 25,
-      imageUrl: "/images/thriller/thriller1.jpg",
-    },
-    {
-      id: "5",
-      title: "แชร์เทคนิคการเขียนฉากแอคชั่น",
-      author: {
-        name: "ActionWriter",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "25 ม.ค. 2567 เวลา 09:45",
-      viewCount: 178,
-      commentCount: 15,
-      imageUrl: "/images/fantasy/fantasy2.jpg",
-    },
-    {
-      id: "6",
-      title: "ปัญหาการชำระเงิน: วิธีแก้ไขเบื้องต้น",
-      author: {
-        name: "AdminSupport",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "25 ม.ค. 2567 เวลา 08:30",
-      viewCount: 423,
-      commentCount: 32,
-      imageUrl: "/images/thriller/choose.jpg",
-    },
-    {
-      id: "7",
-      title: "แนะนำนิยายแนวตลกเบาสมอง Top 5",
-      author: {
-        name: "ComedyFan",
-        avatar: "/images/default.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 22:15",
-      viewCount: 267,
-      commentCount: 19,
-      imageUrl: "/images/comedy/comedy2.jpg",
-    },
-    {
-      id: "8",
-      title: "วิธีสร้างตัวละครให้มีเสน่ห์",
-      author: {
-        name: "CharacterDesigner",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 21:00",
-      viewCount: 345,
-      commentCount: 28,
-      imageUrl: "/images/romance/novel3.jpeg",
-    },
-    {
-      id: "9",
-      title: "รีวิว: นิยายแฟนตาซีเรื่องใหม่ของนักเขียนดัง",
-      author: {
-        name: "FantasyExpert",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 19:45",
-      viewCount: 512,
-      commentCount: 45,
-      imageUrl: "/images/fantasy/fantasy1.jpg",
-    },
-    {
-      id: "10",
-      title: "สอนใช้งานระบบแจ้งเตือนบนเว็บไซต์",
-      author: {
-        name: "SystemGuide",
-        avatar: "/images/default.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 18:30",
-      viewCount: 189,
-      commentCount: 14,
-      imageUrl: "/images/thriller/thriller2.jpg",
-    },
-    {
-      id: "11",
-      title: "แนะนำนิยายแนวย้อนยุคมาใหม่",
-      author: {
-        name: "HistoryNerd",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 17:15",
-      viewCount: 234,
-      commentCount: 21,
-      imageUrl: "/images/romance/novel4.jpeg",
-    },
-    {
-      id: "12",
-      title: "วิธีเขียนบทสนทนาให้สมจริง",
-      author: {
-        name: "DialoguePro",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 16:00",
-      viewCount: 378,
-      commentCount: 31,
-      imageUrl: "/images/comedy/novel1.jpg",
-    },
-    {
-      id: "13",
-      title: "รีวิว: นิยายรักโรแมนติกเรื่องล่าสุด",
-      author: {
-        name: "RomanceReader",
-        avatar: "/images/default.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 14:45",
-      viewCount: 445,
-      commentCount: 38,
-      imageUrl: "/images/romance/novel5.jpeg",
-    },
-    {
-      id: "14",
-      title: "แชร์ประสบการณ์: จากนักอ่านสู่นักเขียน",
-      author: {
-        name: "NewAuthor",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 13:30",
-      viewCount: 289,
-      commentCount: 24,
-      imageUrl: "/images/fantasy/fantasy2.jpg",
-    },
-    {
-      id: "15",
-      title: "วิธีสร้างโครงเรื่องให้น่าติดตาม",
-      author: {
-        name: "PlotMaster",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 12:15",
-      viewCount: 567,
-      commentCount: 42,
-      imageUrl: "/images/romance/novel7.jpeg",
-    },
-    {
-      id: "16",
-      title: "เทคนิคการเขียนนิยายแนวสยองขวัญ",
-      author: {
-        name: "HorrorWriter",
-        avatar: "/images/default.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 11:00",
-      viewCount: 432,
-      commentCount: 36,
-      imageUrl: "/images/thriller/thriller1.jpg",
-    },
-    {
-      id: "17",
-      title: "วิธีการสร้างแรงบันดาลใจในการเขียน",
-      author: {
-        name: "InspirationGuru",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 09:45",
-      viewCount: 623,
-      commentCount: 47,
-      imageUrl: "/images/fantasy/fantasy2.jpg",
-    },
-    {
-      id: "18",
-      title: "แนะนำนิยายแนววิทยาศาสตร์สุดล้ำ",
-      author: {
-        name: "SciFiLover",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "24 ม.ค. 2567 เวลา 08:30",
-      viewCount: 345,
-      commentCount: 29,
-      imageUrl: "/images/comedy/novel2.jpg",
-    },
-    {
-      id: "19",
-      title: "เคล็ดลับการเขียนนิยายให้ขายดี",
-      author: {
-        name: "BestsellerAuthor",
-        avatar: "/images/default.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 22:15",
-      viewCount: 789,
-      commentCount: 56,
-      imageUrl: "/images/romance/novel1.jpg",
-    },
-    {
-      id: "20",
-      title: "รีวิว: นิยายแนวผจญภัยเรื่องใหม่",
-      author: {
-        name: "AdventureSeeker",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 21:00",
-      viewCount: 567,
-      commentCount: 43,
-      imageUrl: "/images/fantasy/fantasy1.jpg",
-    },
-    {
-      id: "21",
-      title: "วิธีการสร้างฉากที่น่าจดจำ",
-      author: {
-        name: "SceneMaster",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 19:45",
-      viewCount: 432,
-      commentCount: 35,
-      imageUrl: "/images/romance/novel2.jpg",
-    },
-    {
-      id: "22",
-      title: "เทคนิคการเขียนบทบรรยาย",
-      author: {
-        name: "DescriptionPro",
-        avatar: "/images/default.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 18:30",
-      viewCount: 345,
-      commentCount: 28,
-      imageUrl: "/images/thriller/thriller2.jpg",
-    },
-    {
-      id: "23",
-      title: "แชร์ประสบการณ์: การเขียนนิยายเรื่องแรก",
-      author: {
-        name: "FirstTimer",
-        avatar: "/images/default2.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 17:15",
-      viewCount: 678,
-      commentCount: 52,
-      imageUrl: "/images/comedy/novel1.jpg",
-    },
-    {
-      id: "24",
-      title: "รีวิว: นิยายแนวดราม่าสุดซึ้ง",
-      author: {
-        name: "DramaLover",
-        avatar: "/images/default-avatar.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 16:00",
-      viewCount: 456,
-      commentCount: 39,
-      imageUrl: "/images/romance/novel3.jpeg",
-    },
-    {
-      id: "25",
-      title: "วิธีการสร้างความขัดแย้งในเรื่อง",
-      author: {
-        name: "ConflictCreator",
-        avatar: "/images/default.png",
-      },
-      createdAt: "23 ม.ค. 2567 เวลา 14:45",
-      viewCount: 543,
-      commentCount: 41,
-      imageUrl: "/images/fantasy/fantasy2.jpg",
+// ดึงข้อมูลกระทู้ยอดนิยม
+async function getPopularPosts(): Promise<any[]> {
+  await dbConnect();
+  
+  try {
+    // ดึงกระทู้ยอดนิยม (เรียงตามจำนวนการเข้าชม)
+    const popularPosts = await BoardModel.find({ 
+      status: "published", 
+      isDeleted: false 
+    })
+    .sort({ 'stats.viewsCount': -1 })
+    .limit(5)
+    .lean();
+    
+    return popularPosts.map((post: any) => ({
+      id: post._id.toString(),
+      slug: post.slug,
+      title: post.title,
+      createdAt: post.createdAt,
+      author: post.authorUsername,
+      viewCount: post.stats?.viewsCount || 0,
+    }));
+  } catch (error) {
+    console.error("Error fetching popular posts:", error);
+    return [];
+  }
+}
+
+// ฟังก์ชันแปลงวันที่เป็นรูปแบบภาษาไทย
+function formatThaiDate(date: Date): { date: string; time: string } {
+  try {
+    // แปลง date string เป็น Date object (ถ้าเป็น string)
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // ตรวจสอบว่า date ถูกต้องหรือไม่
+    if (isNaN(dateObj.getTime())) {
+      return { date: "ไม่ระบุ", time: "ไม่ระบุ" };
     }
-  ];
-
-  return posts;
+    
+    // แปลงเป็นรูปแบบ "X วันที่แล้ว" หรือวันที่เต็ม
+    const relativeTime = formatDistanceToNow(dateObj, { 
+      addSuffix: true, 
+      locale: th 
+    });
+    
+    // แยกเวลา
+    const hours = dateObj.getHours().toString().padStart(2, '0');
+    const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+    const time = `${hours}:${minutes} น.`;
+    
+    return { 
+      date: relativeTime, 
+      time: time 
+    };
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return { date: "ไม่ระบุ", time: "ไม่ระบุ" };
+  }
 }
 
 export default async function BoardPage() {
   const session = await getServerSession(authOptions);
   const posts = await getPosts();
+  const popularPosts = await getPopularPosts();
 
   const tabs = [
     { id: 'all', label: 'กระทู้รวม', href: '/board' },
@@ -383,69 +171,42 @@ export default async function BoardPage() {
 
       {/* Top 5 Popular Topics */}
       <section className="mb-8">
-        <h2 className="text-lg font-semibold mb-4">Top 5 กระทู้ยอดนิยมประจำเดือน</h2>
+        <h2 className="text-lg font-semibold mb-4">Top 5 กระทู้ยอดนิยม</h2>
         <div className="space-y-3">
-          {[
-            {
-              title: "วิธีการเขียนนิยายให้น่าสนใจ สำหรับมือใหม่",
-              date: "28 มกราคม 2567",
-              time: "09:30 น.",
-              author: "WritingMaster",
-              views: 892
-            },
-            {
-              title: "รีวิว: เส้นทางรักนักเขียนออนไลน์ เล่ม 1-3",
-              date: "27 มกราคม 2567",
-              time: "15:45 น.",
-              author: "BookLover99",
-              views: 654
-            },
-            {
-              title: "แชร์ประสบการณ์: จากนักอ่านสู่นักเขียนมือใหม่",
-              date: "26 มกราคม 2567",
-              time: "18:20 น.",
-              author: "NewWriter2024",
-              views: 543
-            },
-            {
-              title: "ทริคการวางโครงเรื่องให้น่าติดตาม",
-              date: "25 มกราคม 2567",
-              time: "11:15 น.",
-              author: "StoryGuide",
-              views: 421
-            },
-            {
-              title: "ชวนคุยเรื่องการสร้างตัวละครให้มีมิติ",
-              date: "24 มกราคม 2567",
-              time: "14:05 น.",
-              author: "CharacterPro",
-              views: 387
-            }
-          ].map((post, index) => (
-            <div key={index} className="flex items-start gap-3 text-sm">
-              <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center font-medium mt-1">
-                {index + 1}
-              </span>
-              <div className="flex-1">
-                <Link href="#" className="hover:text-primary transition-colors block mb-1">
-                  {post.title}
-                </Link>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <span>{post.date}</span>
-                    <span>•</span>
-                    <span>เวลา {post.time}</span>
-                    <span>•</span>
-                    <span>โดย {post.author}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[#8bc34a] text-base font-semibold">{post.views}</span>
-                    <span className="text-muted-foreground text-xs">Views</span>
+          {popularPosts.length > 0 ? (
+            popularPosts.map((post, index) => {
+              const { date, time } = formatThaiDate(post.createdAt);
+              return (
+                <div key={post.id} className="flex items-start gap-3 text-sm">
+                  <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center font-medium mt-1">
+                    {index + 1}
+                  </span>
+                  <div className="flex-1">
+                    <Link href={`/board/${post.slug}`} className="hover:text-primary transition-colors block mb-1">
+                      {post.title}
+                    </Link>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span>{date}</span>
+                        <span>•</span>
+                        <span>เวลา {time}</span>
+                        <span>•</span>
+                        <span>โดย {post.author}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[#8bc34a] text-base font-semibold">{post.viewCount.toLocaleString()}</span>
+                        <span className="text-muted-foreground text-xs">Views</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              );
+            })
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              ยังไม่มีกระทู้ยอดนิยม
             </div>
-          ))}
+          )}
         </div>
       </section>
 
@@ -457,55 +218,54 @@ export default async function BoardPage() {
       {/* Posts Grid */}
       <section>
         <div className="grid gap-6">
-          {posts.map((post) => (
-            <article key={post.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <div className="flex items-start gap-4">
-                {post.imageUrl && (
-                  <div className="relative w-24 h-24 rounded-md overflow-hidden shrink-0">
-                    <Image
-                      src={post.imageUrl}
-                      alt={post.title}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <Link href={`/board/${post.id}`}>
-                    <h3 className="font-medium text-lg mb-2 hover:text-primary transition-colors">
-                      {post.title}
-                    </h3>
-                  </Link>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      {post.author.avatar && (
-                        <Image
-                          src={post.author.avatar}
-                          alt={post.author.name}
-                          width={20}
-                          height={20}
-                          className="rounded-full"
-                        />
-                      )}
-                      <span>{post.author.name}</span>
-                    </div>
-                    <span>•</span>
-                    <span>{post.createdAt}</span>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <Eye size={16} className="text-[#8bc34a]" />
-                      <span>{post.viewCount} Views</span>
-                    </div>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <MessageCircle size={16} className="text-[#8bc34a]" />
-                      <span>{post.commentCount} ความคิดเห็น</span>
+          {posts.length > 0 ? (
+            posts.map((post) => {
+              const { date } = formatThaiDate(post.createdAt);
+              return (
+                <article key={post.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <Link href={`/board/${post.slug}`}>
+                        <h3 className="font-medium text-lg mb-2 hover:text-primary transition-colors">
+                          {post.title}
+                        </h3>
+                      </Link>
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          {post.author.avatar && (
+                            <Image
+                              src={post.author.avatar}
+                              alt={post.author.name}
+                              width={20}
+                              height={20}
+                              className="rounded-full"
+                            />
+                          )}
+                          <span>{post.author.name}</span>
+                        </div>
+                        <span>•</span>
+                        <span>{date}</span>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
+                          <Eye size={16} className="text-[#8bc34a]" />
+                          <span>{post.viewCount.toLocaleString()} Views</span>
+                        </div>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
+                          <MessageCircle size={16} className="text-[#8bc34a]" />
+                          <span>{post.commentCount.toLocaleString()} ความคิดเห็น</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </article>
-          ))}
+                </article>
+              );
+            })
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              ยังไม่มีกระทู้ในขณะนี้
+            </div>
+          )}
         </div>
       </section>
     </main>
