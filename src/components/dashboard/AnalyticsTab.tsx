@@ -759,7 +759,7 @@ function Top30ViewsChart({ novels }: { novels: SerializedNovel[] }) {
 }
 
 // Component สำหรับแสดง Top 30 Earnings Chart - Mobile Responsive
-function Top30EarningsChart({ novels, earningAnalytics }: { novels: SerializedNovel[]; earningAnalytics: SerializedEarningAnalytic[] }) {
+function Top30EarningsChart({ novels, earningAnalytics, user }: { novels: SerializedNovel[]; earningAnalytics: SerializedEarningAnalytic[]; user: SerializedUser }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -793,20 +793,38 @@ function Top30EarningsChart({ novels, earningAnalytics }: { novels: SerializedNo
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // สร้าง earnings map จาก analytics data
+    // สร้าง earnings map จาก analytics data และ writerStats.novelPerformanceSummaries
     const earningsMap = new Map<string, number>();
+    
+    // 1. เก็บข้อมูลจาก earningAnalytics
     earningAnalytics.forEach(analytic => {
       if (analytic.novelId) {
         const novelId = typeof analytic.novelId === 'string' ? analytic.novelId : (analytic.novelId as any)?._id || analytic.novelId;
         earningsMap.set(novelId, (earningsMap.get(novelId) || 0) + (analytic.netEarnings || 0));
       }
     });
+    
+    // 2. เก็บข้อมูลจาก writerStats.novelPerformanceSummaries
+    if (user.writerStats?.novelPerformanceSummaries) {
+      user.writerStats.novelPerformanceSummaries.forEach((summary: any) => {
+        if (summary.novelId && summary.totalEarningsFromNovel) {
+          const novelId = typeof summary.novelId === 'string' ? summary.novelId : summary.novelId._id || summary.novelId;
+          // ถ้ายังไม่มีข้อมูลใน earningsMap หรือข้อมูลใน writerStats มากกว่า ให้ใช้ข้อมูลจาก writerStats
+          const currentEarnings = earningsMap.get(novelId) || 0;
+          if (summary.totalEarningsFromNovel > currentEarnings) {
+            earningsMap.set(novelId, summary.totalEarningsFromNovel);
+          }
+        }
+      });
+    }
 
     // เตรียมข้อมูล - เอา Top 30 (หรือน้อยกว่าถ้ามีไม่ถึง 30) ตามรายได้
     const novelsWithEarnings = novels.map(novel => ({
       ...novel,
       earnings: earningsMap.get(novel._id) || 0
     }));
+    
+    // ใช้ข้อมูลรายได้จากทั้ง earningAnalytics และ writerStats.novelPerformanceSummaries
 
     const sortedNovels = novelsWithEarnings
       .sort((a, b) => b.earnings - a.earnings)
@@ -935,7 +953,14 @@ export default function AnalyticsTab({ earningAnalytics, novels, recentTransacti
   const averageRating = novels.length > 0 
     ? novels.reduce((sum, novel) => sum + (novel.stats?.averageRating || 0), 0) / novels.length 
     : 0;
-  const totalEarnings = earningAnalytics.reduce((sum, item) => sum + (item.netEarnings || 0), 0);
+  
+  // คำนวณรายได้ทั้งหมดจาก earningAnalytics
+  let totalEarnings = earningAnalytics.reduce((sum, item) => sum + (item.netEarnings || 0), 0);
+  
+  // ถ้าไม่มีข้อมูลรายได้ ให้ใช้ข้อมูลจาก user.writerStats?.totalEarningsToDate
+  if (totalEarnings === 0 && user.writerStats?.totalEarningsToDate) {
+    totalEarnings = user.writerStats.totalEarningsToDate;
+  }
 
   // คำนวณ engagement rate
   const engagementRate = totalViews > 0 ? ((totalLikes + totalComments) / totalViews) * 100 : 0;
@@ -1196,9 +1221,18 @@ export default function AnalyticsTab({ earningAnalytics, novels, recentTransacti
             <TrendingUp className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-primary flex-shrink-0" />
           </div>
           
-          {earningAnalytics.length > 0 ? (
+          {earningAnalytics.length > 0 || totalEarnings > 0 ? (
             <div className="w-full min-h-[200px] md:min-h-[250px] lg:min-h-[300px]">
-            <EarningsChart data={earningAnalytics} />
+              {earningAnalytics.length > 0 ? (
+                <EarningsChart data={earningAnalytics} />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-sm md:text-base text-muted-foreground">มีรายได้รวมทั้งสิ้น {totalEarnings.toLocaleString()} บาท</p>
+                    <p className="text-xs text-muted-foreground mt-2">ไม่มีข้อมูลแนวโน้มรายวัน</p>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-center h-32 md:h-48 lg:h-64 text-muted-foreground">
@@ -1282,7 +1316,7 @@ export default function AnalyticsTab({ earningAnalytics, novels, recentTransacti
           
           {novels.length > 0 ? (
             <div className="w-full min-h-[250px] md:min-h-[350px] lg:min-h-[400px]">
-              <Top30EarningsChart novels={novels} earningAnalytics={earningAnalytics} />
+              <Top30EarningsChart novels={novels} earningAnalytics={earningAnalytics} user={user} />
             </div>
           ) : (
             <div className="flex items-center justify-center h-32 md:h-48 lg:h-64 text-muted-foreground">

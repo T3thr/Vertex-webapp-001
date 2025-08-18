@@ -6,9 +6,13 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
 import EpisodeModel from '@/backend/models/Episode';
-import PurchaseModel from '@/backend/models/Purchase';
+import PurchaseModel, { PurchaseStatus, PurchaseItemType } from '@/backend/models/Purchase';
 import UserModel from '@/backend/models/User';
+import UserGamificationModel from '@/backend/models/UserGamification';
 import mongoose from 'mongoose';
+import EarningService from '@/backend/services/EarningService';
+import EarningAnalyticsService from '@/backend/services/EarningAnalyticsService';
+import { TransactionCurrency } from '@/backend/models/EarningTransaction';
 
 /**
  * @route   POST /api/novels/{slug}/episodes/{episodeId}/purchase
@@ -72,38 +76,50 @@ export async function POST(
         throw new Error('คุณได้ซื้อตอนนี้ไปแล้ว');
       }
 
-      // 8. ดึงข้อมูลผู้ใช้
+      // 8. ดึงข้อมูลผู้ใช้และข้อมูล Gamification
       const user = await UserModel.findById(session.user.id).session(dbSession);
       if (!user) {
         throw new Error('ไม่พบข้อมูลผู้ใช้');
+      }
+      
+      // 8.1 ดึงข้อมูล UserGamification สำหรับตรวจสอบยอดเหรียญ
+      const userGamification = await UserGamificationModel.findOne({ userId: user._id }).session(dbSession);
+      if (!userGamification) {
+        throw new Error('ไม่พบข้อมูลกระเป๋าเงินของผู้ใช้');
       }
 
       // 9. คำนวณราคาที่ต้องจ่ายจริง (Effective Price) โดยเรียก method จาก episode model
       const effectivePrice = await episode.getEffectivePrice();
 
       // 10. ตรวจสอบว่าผู้ใช้มีเหรียญเพียงพอหรือไม่
-      if (user.coinBalance < effectivePrice) {
-        throw new Error(`Coins ไม่เพียงพอ คุณมี ${user.coinBalance} Coins แต่ต้องใช้ ${effectivePrice} Coins`);
+      if (userGamification.wallet.coinBalance < effectivePrice) {
+        throw new Error(`Coins ไม่เพียงพอ คุณมี ${userGamification.wallet.coinBalance} Coins แต่ต้องใช้ ${effectivePrice} Coins`);
       }
 
       // 11. สร้างรายการสั่งซื้อ (Purchase Record)
       const purchase = new PurchaseModel({
         purchaseReadableId: `PUR-EP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         userId: user._id,
-        status: 'completed',
+        status: PurchaseStatus.COMPLETED,
         totalAmount: effectivePrice,
-        currency: 'coin',
+        totalDiscountAmount: 0,
+        finalAmount: effectivePrice,
+        finalCurrency: 'COIN',
         items: [{
           itemId: episode._id,
-          itemType: 'novel_episode',
-          priceAtPurchase: effectivePrice,
-          originalPrice: await episode.getOriginalPrice(), // เรียกใช้ getOriginalPrice เพื่อความถูกต้อง
-          quantity: 1
+          itemType: PurchaseItemType.NOVEL_EPISODE,
+          title: episode.title,
+          description: `ตอนที่ ${episode.episodeOrder}: ${episode.title} (${novel.title})`,
+          quantity: 1,
+          unitPrice: effectivePrice,
+          currency: 'COIN',
+          subtotal: effectivePrice,
+          sellerId: novel.author // เพิ่ม sellerId เพื่อระบุผู้เขียนที่จะได้รับรายได้
         }],
         paymentDetails: {
           method: 'coin_balance',
-          coinBalanceBefore: user.coinBalance,
-          coinBalanceAfter: user.coinBalance - effectivePrice
+          coinBalanceBefore: userGamification.wallet.coinBalance,
+          coinBalanceAfter: userGamification.wallet.coinBalance - effectivePrice
         },
         metadata: {
           novelId: novel._id.toString(),
@@ -116,30 +132,64 @@ export async function POST(
 
       await purchase.save({ session: dbSession });
 
-      // 12. หักเหรียญจากบัญชีผู้ใช้
-      user.coinBalance -= effectivePrice;
-      await user.save({ session: dbSession });
+      // 12. หักเหรียญจากกระเป๋าเงินของผู้ใช้
+      userGamification.wallet.coinBalance -= effectivePrice;
+      userGamification.wallet.lastCoinTransactionAt = new Date();
+      await userGamification.save({ session: dbSession });
 
-      // 13. อัปเดตสถิติของตอน
-      episode.stats.purchasesCount += 1;
-      await episode.save({ session: dbSession });
+      // 13. อัปเดตสถิติของตอน (ไม่เรียกใช้ firstSceneId)
+      episode.stats.purchasesCount = (episode.stats.purchasesCount || 0) + 1;
+      await EpisodeModel.findByIdAndUpdate(
+        episode._id,
+        { $inc: { 'stats.purchasesCount': 1 } },
+        { session: dbSession }
+      );
 
       // 14. อัปเดตสถิติของนิยาย (เพิ่มรายรับรวม)
       // [FIXED] แก้ไขจาก totalRevenue เป็น totalRevenueCoins เพื่อให้ตรงกับ Model
-      novel.stats.totalRevenueCoins += effectivePrice;
-      await novel.save({ session: dbSession });
+      // ใช้ findByIdAndUpdate แทนการเรียก save เพื่อหลีกเลี่ยงการเรียกใช้ middleware ที่อาจมีปัญหา
+      await NovelModel.findByIdAndUpdate(
+        novel._id,
+        { $inc: { 'stats.totalRevenueCoins': effectivePrice, 'stats.purchasesCount': 1 } },
+        { session: dbSession }
+      );
 
-      // 15. Commit Transaction เมื่อทุกอย่างสำเร็จ
+      // 15. สร้างธุรกรรมรายได้สำหรับนักเขียน
+      await EarningService.createEpisodePurchaseEarningTransaction(
+        purchase._id.toString(),
+        user._id.toString(),
+        novel.author.toString(),
+        novel._id.toString(),
+        episode._id.toString(),
+        effectivePrice,
+        30, // ค่าธรรมเนียมแพลตฟอร์ม 30%
+        dbSession
+      );
+      
+      // 15.1 อัปเดตข้อมูลวิเคราะห์รายได้
+      const platformFee = Math.round(effectivePrice * 0.3); // 30% ของราคา
+      await EarningAnalyticsService.updateAnalyticsAfterEpisodePurchase(
+        purchase._id.toString(),
+        user._id.toString(),
+        novel.author.toString(),
+        novel._id.toString(),
+        episode._id.toString(),
+        effectivePrice,
+        platformFee,
+        dbSession
+      );
+
+      // 16. Commit Transaction เมื่อทุกอย่างสำเร็จ
       await dbSession.commitTransaction();
 
-      // 16. ส่งผลลัพธ์การซื้อสำเร็จกลับไป
+      // 17. ส่งผลลัพธ์การซื้อสำเร็จกลับไป
       return NextResponse.json({
         success: true,
         purchase: {
           id: purchase._id,
           purchaseReadableId: purchase.purchaseReadableId,
           amount: effectivePrice,
-          newBalance: user.coinBalance
+          newBalance: userGamification.wallet.coinBalance
         }
       });
 

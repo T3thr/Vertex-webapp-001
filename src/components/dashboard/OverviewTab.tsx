@@ -288,8 +288,8 @@ export default function OverviewTab({
                 </div>
                 <div className="h-12 w-px bg-border" />
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-green-500">+{totalStats.totalFollowers}</div>
-                  <div className="text-sm text-muted-foreground">ผู้ติดตามใหม่</div>
+                  <div className="text-3xl font-bold text-green-500">+{Math.floor(totalStats.totalEarnings / 100)}</div>
+                  <div className="text-sm text-muted-foreground">รายได้วันนี้ (บาท)</div>
                 </div>
               </div>
             </div>

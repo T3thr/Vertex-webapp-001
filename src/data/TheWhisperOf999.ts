@@ -9,10 +9,10 @@ import ChoiceModel, { ChoiceActionType } from '@/backend/models/Choice';
 import UserModel, { IUser } from '@/backend/models/User';
 import UserProfileModel, { IUserProfile } from '@/backend/models/UserProfile';
 import CategoryModel, { CategoryType } from '@/backend/models/Category';
-import StoryMapModel, { 
-  StoryMapNodeType, 
-  IStoryMapNode, 
-  IStoryMapEdge, 
+import StoryMapModel, {
+  StoryMapNodeType,
+  IStoryMapNode,
+  IStoryMapEdge,
   IStoryVariableDefinition,
   StoryVariableDataType
 } from '@/backend/models/StoryMap';
@@ -34,12 +34,12 @@ const AUTHOR_USERNAME = process.env.AUTHOR_USERNAME || 'whisper_author';
 const findOrCreateCategory = async (name: string, type: CategoryType, slug: string): Promise<mongoose.Types.ObjectId> => {
   // ค้นหาหมวดหมู่ที่มีอยู่แล้วด้วย slug และ type
   let category = await CategoryModel.findOne({ slug, categoryType: type });
-  
+
   // หากไม่พบ ให้ลองค้นหาด้วยชื่อและประเภท
   if (!category) {
     category = await CategoryModel.findOne({ name, categoryType: type });
   }
-  
+
   if (!category) {
     console.log(`- สร้างหมวดหมู่ใหม่: "${name}" (ประเภท: ${type})`);
     category = new CategoryModel({
@@ -83,22 +83,22 @@ const createWhisper999Characters = async (novelId: mongoose.Types.ObjectId, auth
       isArchived: false,
     },
     {
-        novelId,
-        authorId,
-        characterCode: 'agent',
-        name: 'นายหน้า',
-        fullName: 'นายหน้าอสังหาริมทรัพย์',
-        description: 'นายหน้าที่ดูมีลับลมคมใน ผู้ขายบ้านให้กับนิรา',
-        age: '45',
-        gender: 'male',
-        roleInStory: 'supporting_character',
-        colorTheme: '#71717A',
-        expressions: [
-          { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
-        ],
-        defaultExpressionId: 'normal',
-        isArchived: false,
-      }
+      novelId,
+      authorId,
+      characterCode: 'agent',
+      name: 'นายหน้า',
+      fullName: 'นายหน้าอสังหาริมทรัพย์',
+      description: 'นายหน้าที่ดูมีลับลมคมใน ผู้ขายบ้านให้กับนิรา',
+      age: '45',
+      gender: 'male',
+      roleInStory: 'supporting_character',
+      colorTheme: '#71717A',
+      expressions: [
+        { expressionId: 'normal', name: 'ปกติ', mediaId: new mongoose.Types.ObjectId(), mediaSourceType: 'OfficialMedia' },
+      ],
+      defaultExpressionId: 'normal',
+      isArchived: false,
+    }
   ];
 
   const savedCharacters = [];
@@ -107,7 +107,7 @@ const createWhisper999Characters = async (novelId: mongoose.Types.ObjectId, auth
     await character.save();
     savedCharacters.push(character);
   }
-  
+
   return savedCharacters;
 };
 
@@ -119,10 +119,10 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_EXPLORE',
       text: 'เดินสำรวจบ้านชั้นล่างทันที',
-      actions: [{ 
-        actionId: uuidv4(), 
-        type: ChoiceActionType.GO_TO_NODE, 
-        parameters: { targetNodeId: 'scene_explore_downstairs_1' } 
+      actions: [{
+        actionId: uuidv4(),
+        type: ChoiceActionType.GO_TO_NODE,
+        parameters: { targetNodeId: 'scene_explore_downstairs_1' }
       }],
       isMajorChoice: true,
       isArchived: false,
@@ -175,10 +175,10 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_LISTEN_NOW',
       text: 'กดฟังเทปทันที',
-      actions: [{ 
-        actionId: uuidv4(), 
-        type: ChoiceActionType.GO_TO_NODE, 
-        parameters: { targetNodeId: 'scene_listen_tape_1' } 
+      actions: [{
+        actionId: uuidv4(),
+        type: ChoiceActionType.GO_TO_NODE,
+        parameters: { targetNodeId: 'scene_listen_tape_1' }
       }],
       isMajorChoice: false,
       isArchived: false,
@@ -189,7 +189,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
       version: 1,
       choiceCode: 'CHOICE_LISTEN_LATER',
       text: 'รอให้ถึงตีสาม แล้วฟังตามที่เขียน',
-       actions: [
+      actions: [
         {
           actionId: uuidv4(),
           type: ChoiceActionType.END_NOVEL_BRANCH,
@@ -292,7 +292,7 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
     await choiceDoc.save();
     savedChoices.push(choiceDoc);
   }
-  
+
   return savedChoices;
 };
 
@@ -305,8 +305,8 @@ const createWhisper999Choices = async (novelId: mongoose.Types.ObjectId, authorI
  * @returns Array ของ Scene documents ที่สร้างเสร็จแล้ว
  */
 const createWhisper999Scenes = async (
-  novelId: mongoose.Types.ObjectId, 
-  episodeId: mongoose.Types.ObjectId, 
+  novelId: mongoose.Types.ObjectId,
+  episodeId: mongoose.Types.ObjectId,
   characters: any[],
   choices: any[]
 ) => {
@@ -924,37 +924,37 @@ const createWhisper999Scenes = async (
     { from: 'scene_agent_warning', to: 'scene_enter_house' },
     // จากเข้าบ้านไปตัดสินใจแรก
     { from: 'scene_enter_house', to: 'scene_first_choice' },
-    
+
     // จาก explore ไปหาของ
     { from: 'scene_explore_downstairs_1', to: 'scene_found_box' },
     { from: 'scene_found_box', to: 'scene_found_tape' },
     { from: 'scene_found_tape', to: 'scene_tape_choice' },
-    
+
     // จากฟังเทปไปเจอประตูลับ
     { from: 'scene_listen_tape_1', to: 'scene_secret_door' },
     { from: 'scene_secret_door', to: 'scene_secret_door_choice' },
-    
+
     // จากเปิดประตูลับไปห้องใต้ดิน
     { from: 'scene_enter_basement_1', to: 'scene_basement_encounter' },
     { from: 'scene_basement_encounter', to: 'scene_bad_ending_1' },
-    
+
     // จากส่งรูปไปประตูอื่น
     { from: 'scene_send_photo_1', to: 'scene_other_doors' },
     { from: 'scene_other_doors', to: 'scene_bad_ending_2' },
-    
+
     // จากล็อกประตูไปเฝ้าระวัง
     { from: 'scene_lock_door_1', to: 'scene_vigil' },
     { from: 'scene_vigil', to: 'scene_lock_door_choice' },
-    
+
     // จากเสริมประตูไปจบเลว
     { from: 'scene_reinforce_door_1', to: 'scene_bad_ending_3' },
-    
+
     // จากติดกล้องไปจบเลว
     { from: 'scene_setup_camera_1', to: 'scene_bad_ending_4' },
-    
+
     // จากทำลายไปจบจริง
     { from: 'scene_destroy_door_1', to: 'scene_bad_ending_5' },
-    
+
     // 🎭 MULTIPLE ENDINGS: ending scenes ไม่มีการเชื่อมต่อไปยังฉากอื่น
     // เมื่อถึง ending scene จะแสดง ending screen และหยุดการเล่น
     // ไม่ต้องเพิ่ม defaultNextSceneId สำหรับ ending scenes
@@ -965,14 +965,14 @@ const createWhisper999Scenes = async (
   for (const update of sceneUpdates) {
     const fromSceneId = sceneNodeIdMap[update.from];
     const toSceneId = sceneNodeIdMap[update.to];
-    
+
     if (fromSceneId && toSceneId) {
-      await SceneModel.findByIdAndUpdate(fromSceneId, { 
-        defaultNextSceneId: new mongoose.Types.ObjectId(toSceneId) 
+      await SceneModel.findByIdAndUpdate(fromSceneId, {
+        defaultNextSceneId: new mongoose.Types.ObjectId(toSceneId)
       });
     }
   }
-  
+
   console.log(`✅ สร้าง scenes เสร็จสิ้น: ${savedScenes.length} scenes`);
   return savedScenes;
 };
@@ -1724,7 +1724,7 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
 };
 
 export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
-  
+
   // Find or create necessary categories before creating the novel
   console.log('🔍 Finding or creating necessary categories...');
   const langCatId = await findOrCreateCategory('ภาษาไทย', CategoryType.LANGUAGE, 'th');
@@ -1763,14 +1763,14 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
       customTags: ['สยองขวัญ', 'จิตวิทยา', 'ปริศนา', 'บ้านผีสิง', 'ยอดนิยม', 'แนะนำ']
     },
     narrativeFocus: {
-        narrativePerspective: narrativePerspectiveCatId,
-        artStyle: artStyleCatId,
-        interactivityLevel: interactivityLevelCatId,
-        lengthTag: lengthTagCatId,
+      narrativePerspective: narrativePerspectiveCatId,
+      artStyle: artStyleCatId,
+      interactivityLevel: interactivityLevelCatId,
+      lengthTag: lengthTagCatId,
     },
     worldBuildingDetails: {
-        loreSummary: 'อพาร์ตเมนท์เก่าแก่ที่มีประวัติศาสตร์ดำมืดซ่อนอยู่ ทุกห้องมีเรื่องราวของตัวเอง และไม่ใช่ทุกเรื่องที่จะจบลงด้วยดี',
-        technologyPrinciples: 'เรื่องราวเกิดขึ้นในยุคปัจจุบัน ไม่มีเทคโนโลยีล้ำยุค แต่เน้นบรรยากาศและความเชื่อเหนือธรรมชาติ'
+      loreSummary: 'อพาร์ตเมนท์เก่าแก่ที่มีประวัติศาสตร์ดำมืดซ่อนอยู่ ทุกห้องมีเรื่องราวของตัวเอง และไม่ใช่ทุกเรื่องที่จะจบลงด้วยดี',
+      technologyPrinciples: 'เรื่องราวเกิดขึ้นในยุคปัจจุบัน ไม่มีเทคโนโลยีล้ำยุค แต่เน้นบรรยากาศและความเชื่อเหนือธรรมชาติ'
     },
     ageRatingCategoryId: ageRatingCatId,
     language: langCatId,
@@ -1827,12 +1827,12 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
       },
     },
     psychologicalAnalysisConfig: {
-        allowsPsychologicalAnalysis: false,
-        sensitiveChoiceCategoriesBlocked: []
+      allowsPsychologicalAnalysis: false,
+      sensitiveChoiceCategoriesBlocked: []
     },
     collaborationSettings: {
-        allowCoAuthorRequests: false,
-        pendingCoAuthors: []
+      allowCoAuthorRequests: false,
+      pendingCoAuthors: []
     },
   });
 
@@ -1847,10 +1847,11 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
     novelId: novel._id,
     authorId,
     title: 'บทที่ 1: ย้ายเข้า',
-    slug: 'chapter-1-moving-in',
+    slug: 'บทที่-1-ย้ายเข้า',
     episodeOrder: 1,
     status: EpisodeStatus.PUBLISHED,
-    accessType: EpisodeAccessType.FREE,
+    accessType: EpisodeAccessType.PAID_UNLOCK,
+    priceCoins: 10,
     teaserText: 'การมาถึงบ้านหลังใหม่ที่ดูเหมือนจะสมบูรณ์แบบ... ยกเว้นก็แต่ข่าวลือและราคาที่ถูกจนน่าสงสัย',
     publishedAt: new Date(),
     isPreviewAllowed: true,
@@ -1913,14 +1914,15 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
 
   console.log('✅ เชื่อมโยง scenes กับ StoryMap เสร็จสิ้น');
 
-  return { 
-    novel, 
-    episodes: updatedEpisodes, 
-    characters, 
-    choices, 
+  return {
+    novel,
+    episodes: updatedEpisodes,
+    characters,
+    choices,
     scenes: episode1Scenes, // scenes ของ episode 1 เท่านั้น
-    storyMap 
+    storyMap
   };
 };
+
 
 

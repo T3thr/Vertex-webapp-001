@@ -14,7 +14,7 @@ import CategoryModel, { CategoryType } from '@/backend/models/Category';
 config({ path: '.env' });
 
 const AUTHOR_USERNAME = 'whisper_author';
-const NOVEL_SLUG = 'the-whisper-of-apartment-999';
+const NOVEL_SLUG = 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999';
 const NOVEL_TITLE = 'เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999';
 
 // --- DATA DEFINITIONS ---
@@ -221,11 +221,12 @@ const seedWhisperNovel = async () => {
         const newEpisode = await EpisodeModel.create({
             novelId: newNovel._id,
             authorId: author._id,
-            title: 'บทที่ 1: เสียงกระซิบแรก',
-            slug: 'chapter-1-first-whisper',
+            title: 'บทที่ 1: ย้ายเข้า',
+            slug: 'บทที่-1-ย้ายเข้า',
             episodeOrder: 1,
             status: EpisodeStatus.PUBLISHED,
-            accessType: EpisodeAccessType.FREE,
+            accessType: EpisodeAccessType.PAID_UNLOCK,
+            priceCoins: 10,
             publishedAt: new Date(),
         });
 
@@ -296,3 +297,4 @@ const seedWhisperNovel = async () => {
 };
 
 seedWhisperNovel();
+
