@@ -14,6 +14,10 @@
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
+  /* ✅ [เพิ่ม] Touch-specific properties */
+  touch-action: pan-y pinch-zoom; /* Allow vertical scrolling but handle horizontal ourselves */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   /* ✅ [เพิ่ม] เพิ่ม margin ด้านล่างเพื่อเว้นที่ให้ component อื่น */
   /* margin-bottom: 32px; 
   /* ✅ [เพิ่ม fixed height] ป้องกัน layout shift */

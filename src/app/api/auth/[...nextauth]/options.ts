@@ -451,32 +451,108 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
       allowDangerousEmailAccountLinking: true,
-      authorization: { params: { prompt: "consent", access_type: "offline", response_type: "code", scope: "openid email profile" } },
+      authorization: { 
+        params: { 
+          prompt: "consent", 
+          access_type: "offline", 
+          response_type: "code", 
+          scope: "openid email profile" 
+        } 
+      },
+      profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture, // Ensure picture is mapped
+        }
+      },
     }),
     TwitterProvider({
         clientId: process.env.TWITTER_CLIENT_ID as string,
         clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
         version: "2.0",
         allowDangerousEmailAccountLinking: true,
-        authorization: { params: { scope: "users.read tweet.read offline.access" } },
+        authorization: { 
+          params: { 
+            scope: "users.read tweet.read offline.access" 
+          } 
+        },
+        userinfo: {
+          url: "https://api.twitter.com/2/users/me",
+          params: {
+            "user.fields": "id,name,username,profile_image_url,public_metrics",
+          },
+        },
+        profile(profile) {
+          return {
+            id: profile.data.id,
+            name: profile.data.name,
+            email: profile.data.email,
+            image: profile.data.profile_image_url?.replace('_normal', '_400x400'), // Higher resolution
+          }
+        },
     }),
     FacebookProvider({
         clientId: process.env.FACEBOOK_CLIENT_ID as string,
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET as string,
         allowDangerousEmailAccountLinking: true,
-        authorization: { params: { scope: "public_profile email" } },
+        authorization: { 
+          params: { 
+            scope: "public_profile email" 
+          } 
+        },
+        userinfo: {
+          url: "https://graph.facebook.com/me",
+          params: {
+            fields: "id,name,email,picture.type(large)",
+          },
+        },
+        profile(profile) {
+          return {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            image: profile.picture?.data?.url, // Facebook picture URL
+          }
+        },
     }),
     AppleProvider({
         clientId: process.env.APPLE_CLIENT_ID as string,
         clientSecret: process.env.APPLE_CLIENT_SECRET as string,
         allowDangerousEmailAccountLinking: true,
-        authorization: { params: { scope: "name email", response_mode: "form_post" } },
+        authorization: { 
+          params: { 
+            scope: "name email", 
+            response_mode: "form_post" 
+          } 
+        },
+        profile(profile) {
+          return {
+            id: profile.sub,
+            name: profile.name ? `${profile.name.firstName || ""} ${profile.name.lastName || ""}`.trim() : profile.email?.split('@')[0] || 'Apple User',
+            email: profile.email,
+            image: profile.picture || null, // Apple rarely provides profile pictures
+          }
+        },
     }),
     LineProvider({
         clientId: process.env.LINE_CLIENT_ID as string,
         clientSecret: process.env.LINE_CLIENT_SECRET as string,
         allowDangerousEmailAccountLinking: true,
-        authorization: { params: { scope: "profile openid email" } },
+        authorization: { 
+          params: { 
+            scope: "profile openid email" 
+          } 
+        },
+        profile(profile) {
+          return {
+            id: profile.userId,
+            name: profile.displayName,
+            email: profile.email,
+            image: profile.pictureUrl, // Line profile picture
+          }
+        },
     }),
   ],
 
@@ -505,55 +581,35 @@ export const authOptions: NextAuthOptions = {
             token.username = sessionUserCredentials.username;
             token.roles = sessionUserCredentials.roles;
         } else { // OAuth sign-in
-            // Logic การดึงข้อมูลจาก OAuth profile และเรียก API ของคุณ (คงเดิมจากโค้ดผู้ใช้)
-            let apiEmailFromProfile: string | undefined = (profile as any)?.email || undefined;
-            let apiDisplayNameFromProfile: string = "";
+            // Use the standardized user object that was processed by provider profile functions
+            const apiEmailFromProfile: string | undefined = user.email ?? undefined;
+            const apiDisplayNameFromProfile: string = user.name ?? "";
+            const apiAvatarUrlFromProfile: string | undefined = user.image ?? undefined;
+            
+            // Generate username suggestion from available data
             let apiUsernameSuggestionFromProfile: string = "";
-
-            switch (account.provider) {
-                case "google":
-                    const googleProfile = profile as GoogleProfile;
-                    apiEmailFromProfile = googleProfile.email || undefined;
-                    apiDisplayNameFromProfile = googleProfile.name || googleProfile.given_name || "";
-                    if (googleProfile.given_name && googleProfile.family_name) { apiDisplayNameFromProfile = `${googleProfile.given_name} ${googleProfile.family_name}`.trim(); }
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    break;
-                case "twitter":
-                    const twitterProfile = profile as TwitterProfile;
-                    apiEmailFromProfile = twitterProfile.email || undefined;
-                    apiDisplayNameFromProfile = twitterProfile.data?.name || twitterProfile.name || "";
-                    apiUsernameSuggestionFromProfile = twitterProfile.data?.username || twitterProfile.username || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    break;
-                case "facebook":
-                    const facebookProfile = profile as FacebookProfile;
-                    apiEmailFromProfile = facebookProfile.email || undefined;
-                    apiDisplayNameFromProfile = facebookProfile.name || `${facebookProfile.first_name || ""} ${facebookProfile.last_name || ""}`.trim() || "";
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    break;
-                case "apple":
-                    const appleProfile = profile as AppleProfile;
-                    apiEmailFromProfile = appleProfile.email || undefined;
-                    apiDisplayNameFromProfile = appleProfile.name ? `${appleProfile.name.firstName || ""} ${appleProfile.name.lastName || ""}`.trim() : "";
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    break;
-                case "line":
-                    const lineProfile = profile as LineProfile;
-                    apiEmailFromProfile = lineProfile.email || undefined;
-                    apiDisplayNameFromProfile = lineProfile.displayName || "";
-                    apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
-                    break;
+            if (account.provider === "twitter" && profile) {
+                // Twitter provides username in profile data
+                const twitterProfile = profile as TwitterProfile;
+                apiUsernameSuggestionFromProfile = twitterProfile.data?.username || twitterProfile.username || "";
             }
+            if (!apiUsernameSuggestionFromProfile) {
+                apiUsernameSuggestionFromProfile = apiEmailFromProfile?.split("@")[0] || apiDisplayNameFromProfile.replace(/\s+/g, "").toLowerCase() || `user_${Date.now().toString().slice(-6)}`;
+            }
+
+
+
             if (!apiEmailFromProfile && account.provider !== "twitter" && account.provider !== "apple") {
-                console.error(`❌ [AuthOptions JWT] ไม่มีอีเมลจาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayNameFromProfile}`);
-                throw new Error(`ไม่ได้รับอีเมลจาก ${account.provider}.`);
+                console.error(`❌ [AuthOptions JWT] Email not received from ${account.provider} for user ${apiDisplayNameFromProfile}`);
+                throw new Error(`Email not received from ${account.provider}.`);
             }
             if ((account.provider === "twitter" || account.provider === "apple") && !apiEmailFromProfile && !apiUsernameSuggestionFromProfile) {
-                console.error(`❌ [AuthOptions JWT] ไม่มีทั้งอีเมลและชื่อผู้ใช้จาก ${account.provider} provider สำหรับผู้ใช้ ${apiDisplayNameFromProfile}`);
-                throw new Error(`ไม่ได้รับข้อมูลที่เพียงพอจาก ${account.provider}.`);
+                console.error(`❌ [AuthOptions JWT] Insufficient data from ${account.provider} for user ${apiDisplayNameFromProfile}`);
+                throw new Error(`Insufficient data from ${account.provider}.`);
             }
 
             try {
-                console.log(`⏳ [AuthOptions JWT] OAuth: เรียก /api/auth/signin/oauth สำหรับ provider=${account.provider}, accountId=${account.providerAccountId}`);
+                console.log(`⏳ [AuthOptions JWT] OAuth: Calling /api/auth/signin/oauth for provider=${account.provider}, accountId=${account.providerAccountId}`);
                 const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin/oauth`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -563,7 +619,7 @@ export const authOptions: NextAuthOptions = {
                         email: apiEmailFromProfile || null,
                         name: apiDisplayNameFromProfile,
                         usernameSuggestion: apiUsernameSuggestionFromProfile,
-                        picture: (profile as any).picture || (profile as GoogleProfile).picture || (profile as FacebookProfile).picture?.data?.url || (profile as TwitterProfile).data?.profile_image_url || (profile as LineProfile).pictureUrl || null,
+                        picture: apiAvatarUrlFromProfile || null, // Use the clean variable
                     }),
                 });
                 const responseData = await response.json();

@@ -478,7 +478,6 @@ BoardSchema.pre<HydratedDocument<IBoard>>("save", async function (next) {
     let count = 0;
     const BoardModelInstance = models.Board as mongoose.Model<IBoard> || model<IBoard>("Board", BoardSchema);
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         const existingBoard = await BoardModelInstance.findOne({ slug: finalSlug, _id: { $ne: this._id } });
         if (!existingBoard) break;

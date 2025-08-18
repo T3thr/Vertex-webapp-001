@@ -8,7 +8,7 @@ import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
 // สถานะของการยืนยันอีเมล
 interface VerificationState {
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: 'idle' | 'loading' | 'success' | 'error' | 'already-verified';
   message: string;
 }
 
@@ -47,7 +47,7 @@ function VerifyEmailContent() {
             status: 'success',
             message: `ยืนยันอีเมลสำเร็จสำหรับ ${redirectedEmail || 'บัญชีของคุณ'}! คุณสามารถเข้าสู่ระบบได้แล้ว`,
           });
-          setTimeout(() => router.push('/auth/signin'), 3000);
+          setTimeout(() => router.push('/'), 3000);
         } else {
           setState({
             status: 'error',
@@ -74,7 +74,13 @@ function VerifyEmailContent() {
         status: 'success',
         message: `ยืนยันอีเมลสำเร็จสำหรับ ${email}! คุณสามารถเข้าสู่ระบบได้แล้ว`,
       });
-      setTimeout(() => router.push('/auth/signin'), 3000);
+      setTimeout(() => router.push('/'), 3000);
+    } else if (status === 'already-verified' && email) {
+      setState({
+        status: 'already-verified',
+        message: `อีเมล ${email} ได้รับการยืนยันแล้ว! คุณสามารถใช้งานระบบได้ปกติ`,
+      });
+      setTimeout(() => router.push('/'), 3000);
     } else if (status === 'error' && message) {
       setState({ status: 'error', message });
     } else {
@@ -98,13 +104,29 @@ function VerifyEmailContent() {
             <CheckCircle className="w-16 h-16 text-green-500" />
             <p className="text-xl font-semibold text-foreground">{state.message}</p>
             <p className="text-sm text-muted-foreground">
-              กำลังนำคุณไปยังหน้าหลัก...
+              กำลังนำคุณไปยังหน้าหลักเพื่อเข้าสู่ระบบ...
             </p>
             <Link
               href="/"
               className="text-primary hover:underline transition-colors"
             >
-              ไปที่หน้าเข้าสู่ระบบตอนนี้เลย!
+              ไปที่หน้าหลักตอนนี้เลย!
+            </Link>
+          </div>
+        );
+      case 'already-verified':
+        return (
+          <div className="flex flex-col items-center gap-4 animate-fadeIn">
+            <CheckCircle className="w-16 h-16 text-blue-500" />
+            <p className="text-xl font-semibold text-foreground">{state.message}</p>
+            <p className="text-sm text-muted-foreground">
+              กำลังนำคุณกลับไปยังหน้าหลัก...
+            </p>
+            <Link
+              href="/"
+              className="text-primary hover:underline transition-colors"
+            >
+              ไปที่หน้าหลักตอนนี้เลย!
             </Link>
           </div>
         );
@@ -117,7 +139,7 @@ function VerifyEmailContent() {
               กรุณาตรวจสอบลิงก์ยืนยันหรือขออีเมลยืนยันใหม่
             </p>
             <Link
-              href="/auth/resend-verification"
+              href="/resend-verification"
               className="text-primary hover:underline transition-colors"
             >
               ขออีเมลยืนยันใหม่

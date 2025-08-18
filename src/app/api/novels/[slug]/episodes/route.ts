@@ -36,7 +36,7 @@ export async function GET(
       novelId: novel._id,
       status: 'published'
     })
-      .select('_id title slug episodeOrder publishedAt teaserText accessType priceCoins originalPriceCoins stats firstSceneId authorNotesBefore')
+      .select('_id title slug episodeOrder publishedAt teaserText accessType priceCoins originalPriceCoins stats firstSceneId authorNotesBefore novelId')
       .sort({ episodeOrder: 1 })
       .lean();
 

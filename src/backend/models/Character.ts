@@ -336,7 +336,6 @@ const CharacterSchema = new Schema<ICharacter>(
       type: String,
       required: [true, "กรุณาระบุรหัสตัวละคร (Character Code is required)"],
       trim: true,
-      unique: true,
       index: true,
       maxlength: [50, "รหัสตัวละครยาวเกินไป (Character Code is too long)"],
       validate: {
@@ -498,7 +497,17 @@ CharacterSchema.post<mongoose.Query<ICharacter, ICharacter>>("findOneAndDelete",
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-const CharacterModel = (models.Character as mongoose.Model<ICharacter>) || model<ICharacter>("Character", CharacterSchema);
+
+// Guard against client-side execution
+let CharacterModel: mongoose.Model<ICharacter>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  CharacterModel = (models.Character as mongoose.Model<ICharacter>) || model<ICharacter>("Character", CharacterSchema);
+} else {
+  // Client-side - throw error if accessed
+  CharacterModel = {} as mongoose.Model<ICharacter>;
+}
 
 export default CharacterModel;
 

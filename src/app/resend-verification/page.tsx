@@ -54,8 +54,8 @@ function ResendVerificationContent() {
         if (emailInputRef.current) {
           emailInputRef.current.value = '';
         }
-        // Redirect ไปยังหน้า signin หลังจาก 5 วินาที
-        setTimeout(() => router.push('/auth/signin'), 5000);
+        // Redirect ไปยังหน้าหลักหลังจาก 3 วินาที
+        setTimeout(() => router.push('/'), 3000);
       } else {
         setState({
           status: 'error',
@@ -83,9 +83,14 @@ function ResendVerificationContent() {
         );
       case 'success':
         return (
-          <div className="flex items-center gap-2 text-green-500">
-            <CheckCircle className="w-6 h-6" />
-            <span>{state.message}</span>
+          <div className="flex flex-col items-center gap-3 text-green-500">
+            <CheckCircle className="w-8 h-8" />
+            <div className="text-center">
+              <p className="font-medium">{state.message}</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                กำลังนำคุณกลับไปยังหน้าหลัก...
+              </p>
+            </div>
           </div>
         );
       case 'error':
@@ -106,7 +111,8 @@ function ResendVerificationContent() {
         ส่งอีเมลยืนยันใหม่
       </h1>
       <p className="text-center text-muted-foreground mb-6">
-        กรุณาระบุอีเมลที่คุณใช้สมัครเพื่อรับลิงก์ยืนยันใหม่
+        กรุณาระบุอีเมลที่คุณใช้สมัครเพื่อรับลิงก์ยืนยันใหม่<br/>
+        ระบบจะรีเฟรชโทเค็นยืนยันและส่งอีเมลใหม่ให้คุณ
       </p>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
@@ -135,7 +141,7 @@ function ResendVerificationContent() {
           disabled={state.status === 'loading'}
           className="w-full bg-primary text-primary-foreground py-2 px-4 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          ส่งอีเมลยืนยันใหม่
+          🔄 รีเฟรชโทเค็นและส่งอีเมลยืนยัน
         </button>
       </form>
       {state.status !== 'idle' && (

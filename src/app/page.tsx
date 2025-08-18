@@ -7,6 +7,7 @@ import { Suspense } from 'react';
 import { NovelCard, NovelCardData } from "@/components/NovelCard";
 import { ImageSlider, SlideData as SliderSlideData } from "@/components/ImageSlider";
 import { NovelRowNavButton } from "@/components/NovelRowNavigation";
+import JulyBonusBanner from "@/components/JulyBonusBanner";
 import {
   TrendingUp,
   CheckCircle,
@@ -19,8 +20,14 @@ import { Metadata } from 'next';
 import Link from "next/link";
 import { CacheManager, CacheKeys, CacheTTL } from "@/backend/lib/redis";
 
-// Force ISR revalidation ทุก 5 นาที
-export const revalidate = 300; // 5 minutes
+// Aggressive ISR revalidation for maximum performance
+export const revalidate = 60; // 1 minute for critical content
+
+// Enable static generation with ISR
+export const dynamic = 'force-static';
+export const fetchCache = 'default-cache';
+export const runtime = 'nodejs';
+export const preferredRegion = 'auto';
 
 export const metadata: Metadata = {
   title: 'DivWy | คลังเรื่องราววิชวลโนเวลที่จะทำให้คุณติดงอมแงม',
@@ -401,7 +408,7 @@ async function StreamingSectionRenderer({
 }
 
 export default async function HomePage() {
-  console.log('🎯 [Homepage] Starting optimized homepage render with ISR');
+  console.log('🎯 [Homepage] Starting ultra-optimized homepage render with aggressive caching');
 
   const sectionsConfig: SectionConfig[] = [
     {
@@ -440,34 +447,45 @@ export default async function HomePage() {
     },
   ];
 
-  // Start fetching all section data in parallel
-  const sectionDataPromises = getSectionsData(sectionsConfig).then(data => {
-      // Once all data is fetched, we can map it to promises for individual sections
-      return data.map(section => Promise.resolve(section));
-  });
+  // Parallel data fetching with aggressive caching
+  const allSectionsData = await getSectionsData(sectionsConfig);
   
-  console.log('✅ [Homepage] Homepage setup complete with ISR and streaming');
+  console.log('✅ [Homepage] All data fetched, rendering optimized homepage');
 
   return (
     <div className="bg-background text-foreground min-h-screen pt-5">
       <main className="pb-10 md:pb-16">
-        {/* แสดง ImageSlider ทันทีโดยไม่ต้องรอ API */}
+        {/* Critical path: Show ImageSlider immediately */}
         <section className="w-full mb-8 md:mb-12 relative">
           <ImageSlider slides={imageSlideData} autoPlayInterval={7000} />
           <div className="h-4 md:h-6 bg-background mt-1 border-b border-border"></div>
         </section>
 
         <div className="container-custom space-y-8 md:space-y-12">
-          {/* Section แรก (ผลงานยอดนิยม) ใช้ Asymmetrical Grid */}
-          <Suspense key="trending-featured" fallback={<OptimizedSectionSkeleton />}>
-            <StreamingSectionRenderer dataPromise={sectionDataPromises.then(p => p[0])} isFeatured={true} />
-          </Suspense>
+          {/* July 2025 Bonus Banner - Show for eligible users */}
+          <JulyBonusBanner className="mb-8" />
+          
+          {/* Featured section (trending) - render immediately */}
+          {allSectionsData[0] && (
+            <FeaturedSection 
+              novels={allSectionsData[0].novels}
+              viewAllLink={allSectionsData[0].config.viewAllLink}
+              showViewAllButton={allSectionsData[0].showViewAllButton}
+            />
+          )}
 
-          {/* Sections อื่นๆ ใช้ NovelRow ปกติพร้อมปุ่มเลื่อน */}
-          {(await sectionDataPromises).slice(1).map((promise, index) => (
-            <Suspense key={sectionsConfig[index + 1].key} fallback={<OptimizedSectionSkeleton />}>
-              <StreamingSectionRenderer dataPromise={promise} isFeatured={false} />
-            </Suspense>
+          {/* Other sections - render immediately without suspense */}
+          {allSectionsData.slice(1).map((sectionData, index) => (
+            <section key={sectionData.config.key} className="mb-6 md:mb-10">
+              <SectionHeader config={sectionData.config} />
+              <NovelRow
+                novels={sectionData.novels}
+                filterKey={sectionData.config.filter}
+                viewAllLink={sectionData.config.viewAllLink}
+                showViewAllButton={sectionData.showViewAllButton}
+                showNavigation={true}
+              />
+            </section>
           ))}
         </div>
       </main>

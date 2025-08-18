@@ -279,7 +279,6 @@ UserSchema.pre<IUser>("save", async function (next) {
     let potentialUsername = baseUsername.substring(0, 40);
     let count = 0;
     const UserModelInstance = models.User || model<IUser>("User");
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const existingUser = await UserModelInstance.findOne({ username: potentialUsername });
       if (!existingUser) break;
@@ -354,6 +353,37 @@ UserSchema.methods.generatePasswordResetToken = function (): string {
   this.passwordResetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
   return token;
 };
+
+// ==================================================================================================
+// SECTION: Cascade Delete Middleware
+// ==================================================================================================
+
+// เมื่อมีการลบบัญชีผู้ใช้ ให้ลบเอกสารทั้งหมดที่เชื่อมโยงกับ userId ในคอลเลกชันอื่น ๆ
+UserSchema.pre("deleteOne", { document: true, query: false }, async function (next) {
+  try {
+    const userId = this._id;
+    const collections = [
+      "UserProfile",
+      "UserSettings",
+      "UserAchievement",
+      "UserGamification",
+      "UserLibraryItem",
+      "UserSecurity",
+      "UserTracking",
+    ];
+
+    await Promise.all(
+      collections.map((name) => {
+        const Model = mongoose.models[name] || mongoose.model(name);
+        return Model.deleteMany({ userId });
+      })
+    );
+
+    next();
+  } catch (err) {
+    next(err as Error);
+  }
+});
 
 // ==================================================================================================
 // SECTION: Virtuals (ฟิลด์เสมือน)

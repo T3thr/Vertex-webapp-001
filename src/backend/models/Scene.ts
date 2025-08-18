@@ -160,6 +160,7 @@ export enum TimelineEventType {
   CAMERA_SHAKE = "camera_shake",
   CAMERA_FOCUS_ON_TARGET = "camera_focus_on_target", // << เพิ่มใหม่ (Optional)
   CAMERA_RESET = "camera_reset",                 // << เพิ่มใหม่ (Optional)
+  END_NOVEL = "end_novel",
 }
 
 /**
@@ -971,7 +972,43 @@ const SceneTransitionSchema = new Schema<ISceneTransition>({
     parameters: { type: Schema.Types.Mixed, comment: "พารามิเตอร์เพิ่มเติมสำหรับ transition ที่ซับซ้อน" },
 }, { _id: false });
 
+// SECTION: อินเทอร์เฟซสำหรับฉากจบ (Ending)
+/**
+ * @interface ISceneEnding
+ * @description ข้อมูลสำหรับฉากจบ (Ending)
+ */
+export interface ISceneEnding {
+  endingType: "TRUE" | "GOOD" | "NORMAL" | "BAD" | "SECRET" | "ALTERNATE" | "JOKE";
+  title: string;
+  description: string;
+  imageUrl?: string;
+  endingId: string;
+}
 
+const SceneEndingSchema = new Schema<ISceneEnding>(
+  {
+    endingType: { 
+      type: String, 
+      enum: ["TRUE", "GOOD", "NORMAL", "BAD", "SECRET" , "ALTERNATE", "JOKE"], 
+      required: true 
+    },
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    imageUrl: { type: String, required: false },
+    endingId: { type: String, required: true, unique: true },
+  },
+  { _id: false, timestamps: false }
+);
+
+export enum EndingType {
+  TRUE = "TRUE",
+  GOOD = "GOOD",
+  NORMAL = "NORMAL",
+  BAD = "BAD",
+  SECRET = "SECRET",
+  ALTERNATE = "ALTERNATE",
+  JOKE = "JOKE",
+}
 
 // ==================================================================================================
 // SECTION: อินเทอร์เฟซหลักสำหรับเอกสาร Scene (IScene Document Interface)
@@ -985,6 +1022,8 @@ export interface IScene extends Document {
   _id: Types.ObjectId; novelId: Types.ObjectId; episodeId: Types.ObjectId; sceneOrder: number;
   /** @description (ใหม่) Node ID สำหรับการอ้างอิงจาก Choice/Script (ควร unique ภายใน Novel) */
   nodeId?: string;
+  /** @description (ใหม่) StoryMap Node ID ที่เชื่อมโยงกับฉากนี้ */
+  storyMapNodeId?: string;
   title?: string; background: IBackgroundSetting;
   version: number;
   layers: Types.DocumentArray<ISceneLayer>;
@@ -1017,6 +1056,9 @@ export interface IScene extends Document {
   criticalAssets?: { mediaId: Types.ObjectId, mediaSourceType: "Media" | "OfficialMedia" }[];
   createdAt: Date; updatedAt: Date;
   estimatedTimelineDurationMs?: number;
+
+  // ฟิลด์สำหรับฉากจบ (Ending)
+  ending?: ISceneEnding; // หากมีข้อมูลใน field นี้ หมายความว่าฉากนี้คือฉากจบ
 }
 
 // ==================================================================================================
@@ -1025,6 +1067,21 @@ export interface IScene extends Document {
 const SceneSchema = new Schema<IScene>(
   {
     novelId: { type: Schema.Types.ObjectId, ref: "Novel", required: [true, "Novel ID is required"], index: true },
+    episodeId: { type: Schema.Types.ObjectId, ref: "Episode", required: [true, "Episode ID is required"], index: true },
+    sceneOrder: { type: Number, required: [true, "Scene order is required"], min: [0, "Scene order must be non-negative"] },
+    nodeId: { 
+      type: String, 
+      trim: true,
+      sparse: true, // Allows multiple docs without this field, but if it exists, the index applies.
+    },
+    storyMapNodeId: { 
+      type: String, 
+      trim: true, 
+      maxlength: [100, "StoryMap Node ID is too long"],
+      comment: "Reference to StoryMap Node that represents this scene"
+    },
+    title: { type: String, trim: true, maxlength: [255, "Scene title is too long"] },
+    background: { type: BackgroundSettingSchema, required: [true, "Background settings are required"] },
     version: { 
       type: Number,
       required: [true, "Scene version is required"],
@@ -1032,15 +1089,6 @@ const SceneSchema = new Schema<IScene>(
       min: [1, "Scene version must be at least 1"],
       comment: "Version number of this scene document, incremented on each significant change.",
     },
-    episodeId: { type: Schema.Types.ObjectId, ref: "Episode", required: [true, "Episode ID is required"], index: true },
-    nodeId: { 
-      type: String, 
-      trim: true,
-      sparse: true, // Allows multiple docs without this field, but if it exists, the index applies.
-    },
-    sceneOrder: { type: Number, required: [true, "Scene order is required"], min: [0, "Scene order must be non-negative"] },
-    title: { type: String, trim: true, maxlength: [255, "Scene title is too long"] },
-    background: { type: BackgroundSettingSchema, required: [true, "Background settings are required"] },
     layers: { type: [SceneLayerSchema], default: () => ([{ layerId: "default_layer", layerName: "Default Layer", zIndex: 0, blendingMode: "normal" }])},
     characters: [CharacterInSceneSchema],
     textContents: [TextContentSchema],
@@ -1078,6 +1126,8 @@ const SceneSchema = new Schema<IScene>(
         mediaId: { type: Schema.Types.ObjectId, required: true, refPath: "criticalAssetsMediaSourceType" },
         mediaSourceType: { type: String, enum: ["Media", "OfficialMedia"], required: true, alias: "criticalAssetsMediaSourceType" },
     }],
+    // ฟิลด์สำหรับฉากจบ
+    ending: { type: SceneEndingSchema, required: false },
   },
   {
     timestamps: true,
@@ -1248,11 +1298,20 @@ SceneSchema.post<mongoose.Query<IScene | null, IScene>>("findOneAndDelete", asyn
   next();
 });
 
-
 // ==================================================================================================
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
-const SceneModel = (mongoose.models.Scene as mongoose.Model<IScene>) || mongoose.model<IScene>("Scene", SceneSchema);
+
+// Guard against client-side execution
+let SceneModel: mongoose.Model<IScene>;
+
+if (typeof window === 'undefined') {
+  // Server-side only
+  SceneModel = (mongoose.models.Scene as mongoose.Model<IScene>) || mongoose.model<IScene>("Scene", SceneSchema);
+} else {
+  // Client-side - throw error if accessed
+  SceneModel = {} as mongoose.Model<IScene>;
+}
 
 export default SceneModel;
 

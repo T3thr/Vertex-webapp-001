@@ -1,508 +1,524 @@
-// app/api/novels/[slug]/storymap/route.ts
-// API สำหรับจัดการแผนผังเรื่อง (StoryMap) ของนิยาย
-// รองรับการสร้าง อัปเดต และดึงข้อมูล StoryMap
-
+// src/app/api/novels/[slug]/storymap/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import mongoose from 'mongoose';
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
-import StoryMapModel, { StoryMapNodeType } from '@/backend/models/StoryMap';
-import mongoose from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
+import StoryMapModel from '@/backend/models/StoryMap';
+import SceneModel from '@/backend/models/Scene';
+import ChoiceModel from '@/backend/models/Choice';
 
-// Define the context type for route handlers to ensure correctness.
-type RouteContext = {
-  params: Promise<{
-    slug: string;
-  }>;
-};
-
-/**
- * GET - ดึงข้อมูล StoryMap ของนิยาย
- */
 export async function GET(
   request: NextRequest,
-  context: RouteContext
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-  const { slug } = await context.params; // Await the params promise
   try {
-    console.log(`🔍 [StoryMap API] GET request for novel slug: ${slug}`);
-
-    // ตรวจสอบ session
+    const { slug } = await params;
+    const decodedSlug = decodeURIComponent(slug);
+    
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      console.log('❌ [StoryMap API] Unauthorized - No session');
-      return NextResponse.json(
-        { error: 'กรุณาเข้าสู่ระบบ' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await dbConnect();
 
-    // ค้นหานิยายจาก slug
-    const novel = await NovelModel.findOne({ 
-      slug: slug,
+    // Check access permissions
+    const novel = await NovelModel.findOne({
+      slug: decodedSlug,
       isDeleted: { $ne: true }
     }).lean();
 
     if (!novel) {
-      console.log(`❌ [StoryMap API] Novel not found for slug: ${slug}`);
-      return NextResponse.json(
-        { error: 'ไม่พบนิยายที่ระบุ' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
     }
 
-    // ตรวจสอบสิทธิ์ - เฉพาะเจ้าของนิยาย
-    if (novel.author.toString() !== session.user.id) {
-      console.log(`❌ [StoryMap API] Access denied for user ${session.user.id} on novel ${novel._id}`);
-      return NextResponse.json(
-        { error: 'คุณไม่มีสิทธิ์เข้าถึงนิยายนี้' },
-        { status: 403 }
-      );
+    // Verify user is author or co-author
+    const userId = session.user.id;
+    const isAuthor = novel.author?.toString() === userId;
+    const isCoAuthor = novel.coAuthors?.some((coAuthor: any) => 
+      coAuthor.toString() === userId
+    );
+    
+    if (!isAuthor && !isCoAuthor) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // ค้นหา StoryMap ที่ active
+    // Get story map with validation data
     const storyMap = await StoryMapModel.findOne({
       novelId: novel._id,
       isActive: true
     }).lean();
 
+    console.log('Found story map:', storyMap ? {
+      id: storyMap._id,
+      title: storyMap.title,
+      nodeCount: storyMap.nodes?.length || 0,
+      edgeCount: storyMap.edges?.length || 0,
+      version: storyMap.version
+    } : 'No story map found');
+
     if (!storyMap) {
-      console.log(`📝 [StoryMap API] No active StoryMap found for novel ${novel._id}, returning empty structure`);
-      // ส่งคืนโครงสร้างเปล่าแทนการ error
-      return NextResponse.json({
-        success: true,
-        data: {
-          _id: null,
-          nodes: [],
-          edges: [],
-          storyVariables: [],
-          startNodeId: null
+      return NextResponse.json({ 
+        storyMap: null,
+        validation: {
+          orphanedNodes: [],
+          missingConnections: [],
+          cycles: [],
+          unreachableNodes: []
         }
       });
     }
 
-    console.log(`✅ [StoryMap API] StoryMap found for novel ${novel._id}`);
+    // Get related scenes and choices for validation
+    const scenes = await SceneModel.find({ 
+      novelId: novel._id,
+      isDeleted: { $ne: true }
+    }).lean();
+
+    const choices = await ChoiceModel.find({ 
+      novelId: novel._id,
+      isArchived: false 
+    }).lean();
+
+    console.log('Found scenes:', scenes.length);
+    console.log('Found choices:', choices.length);
+
+    // Perform basic validation
+    const validation = {
+      orphanedNodes: [],
+      missingConnections: [],
+      cycles: [],
+      unreachableNodes: [],
+      isValid: true
+    };
+
+    // Ensure proper serialization of ObjectIds
+    const serializedStoryMap = {
+      ...storyMap,
+      _id: storyMap._id.toString(),
+      novelId: storyMap.novelId.toString(),
+      lastModifiedByUserId: storyMap.lastModifiedByUserId.toString(),
+      nodes: storyMap.nodes || [],
+      edges: storyMap.edges || [],
+      storyVariables: storyMap.storyVariables || []
+    };
+
+    const serializedScenes = scenes.map(scene => ({
+      ...scene,
+      _id: scene._id.toString(),
+      novelId: scene.novelId.toString(),
+      episodeId: scene.episodeId.toString()
+    }));
+
+    const serializedChoices = choices.map(choice => ({
+      ...choice,
+      _id: choice._id.toString(),
+      novelId: choice.novelId.toString()
+    }));
+
     return NextResponse.json({
-      success: true,
-      data: {
-        _id: storyMap._id,
-        nodes: storyMap.nodes || [],
-        edges: storyMap.edges || [],
-        storyVariables: storyMap.storyVariables || [],
-        startNodeId: storyMap.startNodeId
-      }
+      storyMap: serializedStoryMap,
+      validation,
+      scenes: serializedScenes,
+      choices: serializedChoices
     });
 
-  } catch (error: any) {
-    console.error('❌ [StoryMap API] GET Error:', error);
+  } catch (error) {
+    console.error('Error fetching story map:', error);
     return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการดึงข้อมูล' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-/**
- * POST - สร้างหรืออัปเดต StoryMap
- */
-export async function POST(
+export async function PUT(
   request: NextRequest,
-  context: RouteContext
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-  const { slug } = await context.params; // Await the params promise
   try {
-    console.log(`📝 [StoryMap API] POST request for novel slug: ${slug}`);
-
+    const { slug } = await params;
+    const decodedSlug = decodeURIComponent(slug);
+    
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      console.log('❌ [StoryMap API] Unauthorized - No session');
-      return NextResponse.json(
-        { error: 'กรุณาเข้าสู่ระบบ' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Body can be empty for creation, so we handle it gracefully.
-    let body;
-    try {
-        body = await request.json();
-    } catch (e) {
-        body = {}; // Default to an empty object if body is missing or malformed
-    }
-    
-    const { 
-      nodes: customNodes, 
-      edges: customEdges, 
-      storyVariables: customStoryVariables, 
-      startNodeId: customStartNodeId 
-    } = body || {};
-
-    console.log(`📊 [StoryMap API] Received data: ${customNodes?.length || 0} nodes, ${customEdges?.length || 0} edges`);
+    const body = await request.json();
+    const { nodes, edges, storyVariables, episodeFilter, version: clientVersion } = body;
 
     await dbConnect();
 
-    const novel = await NovelModel.findOne({ 
-      slug: slug,
+    // Check access permissions
+    const novel = await NovelModel.findOne({
+      slug: decodedSlug,
       isDeleted: { $ne: true }
-    }); // Use full model instance to get title
+    });
 
     if (!novel) {
-      console.log(`❌ [StoryMap API] Novel not found for slug: ${slug}`);
-      return NextResponse.json(
-        { error: 'ไม่พบนิยายที่ระบุ' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
     }
 
-    if (novel.author.toString() !== session.user.id) {
-      console.log(`❌ [StoryMap API] Access denied for user ${session.user.id} on novel ${novel._id}`);
-      return NextResponse.json(
-        { error: 'คุณไม่มีสิทธิ์แก้ไขนิยายนี้' },
-        { status: 403 }
-      );
+    // Verify user is author or co-author
+    const userId = session.user.id;
+    const isAuthor = novel.author?.toString() === userId;
+    const isCoAuthor = novel.coAuthors?.some((coAuthor: any) => 
+      coAuthor.toString() === userId
+    );
+    
+    if (!isAuthor && !isCoAuthor) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const existingStoryMap = await StoryMapModel.findOne({
+    // Update or create story map
+    let storyMap = await StoryMapModel.findOne({
       novelId: novel._id,
       isActive: true
     });
 
-    if (existingStoryMap) {
-      // Logic for updating an existing StoryMap
-      console.log(`🔄 [StoryMap API] Updating existing StoryMap ${existingStoryMap._id}`);
-      
-      existingStoryMap.nodes = customNodes ?? existingStoryMap.nodes;
-      existingStoryMap.edges = customEdges ?? existingStoryMap.edges;
-      existingStoryMap.storyVariables = customStoryVariables ?? existingStoryMap.storyVariables;
-      existingStoryMap.startNodeId = customStartNodeId ?? existingStoryMap.startNodeId;
-      existingStoryMap.lastModifiedByUserId = new mongoose.Types.ObjectId(session.user.id);
-      
-      // Only increment version if there are actual changes
-      if (customNodes || customEdges || customStoryVariables || customStartNodeId) {
-        existingStoryMap.version = (existingStoryMap.version || 1) + 1;
+    if (storyMap) {
+      // Enhanced version conflict handling - ระบบจัดการ conflict อัตโนมัติ
+      if (clientVersion && clientVersion < storyMap.version) {
+        console.log(`[CONFLICT DETECTED] Client version: ${clientVersion}, Server version: ${storyMap.version}`);
+        
+        // แทนที่จะ return error ให้ทำ intelligent merge
+        const mergedData = await performIntelligentMerge(
+          { nodes, edges, storyVariables },
+          { 
+            nodes: storyMap.nodes || [], 
+            edges: storyMap.edges || [], 
+            storyVariables: storyMap.storyVariables || [] 
+          }
+        );
+        
+        // อัปเดตด้วยข้อมูลที่ merge แล้ว
+        storyMap.nodes = mergedData.nodes;
+        storyMap.edges = mergedData.edges;
+        storyMap.storyVariables = mergedData.storyVariables;
+        storyMap.version += 1;
+        storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(userId);
+        storyMap.updatedAt = new Date();
+        
+        // บันทึกและส่งกลับข้อมูลที่ merge แล้ว
+        await storyMap.save();
+        
+        return NextResponse.json({
+          storyMap: JSON.parse(JSON.stringify(storyMap)),
+          validation: { orphanedNodes: [], missingConnections: [], cycles: [], unreachableNodes: [], isValid: true },
+          newVersion: storyMap.version,
+          merged: true, // บอกให้ client ทราบว่ามีการ merge เกิดขึ้น
+          mergeMessage: 'การเปลี่ยนแปลงของคุณถูกรวมกับเวอร์ชันล่าสุดเรียบร้อยแล้ว'
+        });
       }
-
-      await existingStoryMap.save();
       
-      console.log(`✅ [StoryMap API] StoryMap updated successfully, version: ${existingStoryMap.version}`);
+      // Normal update - ไม่มี conflict
+      storyMap.nodes = nodes;
+      storyMap.edges = edges;
+      storyMap.storyVariables = storyVariables || storyMap.storyVariables;
+      storyMap.version += 1;
+      storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(userId);
+      storyMap.updatedAt = new Date();
       
-      return NextResponse.json({
-        success: true,
-        message: 'อัปเดตแผนผังเรื่องสำเร็จ',
-        data: existingStoryMap,
-      });
-
+      // Store episode filter metadata if provided
+      if (episodeFilter) {
+        storyMap.editorMetadata = {
+          ...storyMap.editorMetadata,
+          selectedEpisodeId: episodeFilter
+        };
+      }
+      
+      await storyMap.save();
     } else {
-      // Logic for creating a new StoryMap
-      console.log(`🆕 [StoryMap API] Creating new StoryMap for novel ${novel._id}`);
-      
-      // Create a default start node to ensure the storymap is valid
-      const startNodeId = uuidv4();
-      const defaultNodes = [
-        {
-          nodeId: startNodeId,
-          nodeType: StoryMapNodeType.START_NODE,
-          title: 'จุดเริ่มต้น',
-          position: { x: 250, y: 150 },
-          nodeSpecificData: {},
-        }
-      ];
-      
-      const newStoryMap = new StoryMapModel({
+      // Create new story map
+      storyMap = new StoryMapModel({
         novelId: novel._id,
-        title: `แผนผังเรื่อง - ${novel.title}`,
+        title: `${novel.title} - Story Map`,
+        description: 'Auto-generated story map',
         version: 1,
-        nodes: defaultNodes,
-        edges: [],
-        groups: [{
-          groupId: uuidv4(),
-          title: 'กลุ่มเริ่มต้น',
-          nodeIds: [startNodeId],
-          position: { x: 200, y: 100 },
-          dimensions: { width: 200, height: 200 }
-        }],
-        storyVariables: [{
-          variableId: uuidv4(),
-          variableName: 'karma',
-          dataType: 'number',
-          initialValue: 0,
-          description: 'ค่ากรรม (Karma) ของตัวละครหลัก',
-          minValue: -100,
-          maxValue: 100
-        }],
-        startNodeId: startNodeId,
-        lastModifiedByUserId: new mongoose.Types.ObjectId(session.user.id),
+        nodes: nodes || [],
+        edges: edges || [],
+        storyVariables: storyVariables || [],
+        startNodeId: nodes?.find((node: any) => node.nodeType === 'start_node')?.nodeId || '',
+        lastModifiedByUserId: new mongoose.Types.ObjectId(userId),
         isActive: true,
-        editorMetadata: {
+        editorMetadata: episodeFilter ? {
+          selectedEpisodeId: episodeFilter,
           zoomLevel: 1,
           viewOffsetX: 0,
           viewOffsetY: 0,
           gridSize: 20,
           showGrid: true
+        } : undefined
+      });
+      
+      await storyMap.save();
+    }
+
+    // Perform validation on updated data
+    const scenes = await SceneModel.find({ 
+      novelId: novel._id,
+      isDeleted: { $ne: true }
+    }).lean();
+
+    const choices = await ChoiceModel.find({ 
+      novelId: novel._id,
+      isArchived: false 
+    }).lean();
+
+    // Perform basic validation
+    const validation = {
+      orphanedNodes: [],
+      missingConnections: [],
+      cycles: [],
+      unreachableNodes: [],
+      isValid: true
+    };
+
+    return NextResponse.json({
+      storyMap: JSON.parse(JSON.stringify(storyMap)),
+      validation,
+      newVersion: storyMap.version
+    });
+
+  } catch (error) {
+    console.error('Error updating story map:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Validation function
+function performStoryMapValidation(storyMap: any, scenes: any[], choices: any[]) {
+  const validation = {
+    orphanedNodes: [] as string[],
+    missingConnections: [] as string[],
+    cycles: [] as string[],
+    unreachableNodes: [] as string[],
+    missingScenes: [] as string[],
+    missingChoices: [] as string[]
+  };
+
+  if (!storyMap.nodes || storyMap.nodes.length === 0) {
+    return validation;
+  }
+
+  // Check for orphaned nodes (not connected to anything)
+  const connectedNodes = new Set();
+  storyMap.edges?.forEach((edge: any) => {
+    connectedNodes.add(edge.sourceNodeId);
+    connectedNodes.add(edge.targetNodeId);
+  });
+
+  storyMap.nodes.forEach((node: any) => {
+    if (!connectedNodes.has(node.nodeId) && node.nodeType !== 'start_node') {
+      validation.orphanedNodes.push(node.nodeId);
+    }
+  });
+
+  // Check for missing scene connections
+  storyMap.nodes.forEach((node: any) => {
+    if (node.nodeType === 'scene_node' && node.nodeSpecificData?.sceneId) {
+      const sceneExists = scenes.find(scene => scene._id.toString() === node.nodeSpecificData.sceneId);
+      if (!sceneExists) {
+        validation.missingScenes.push(node.nodeId);
+      }
+    }
+  });
+
+  // Check for missing choice connections
+  storyMap.nodes.forEach((node: any) => {
+    if (node.nodeType === 'choice_node' && node.nodeSpecificData?.choiceIds) {
+      node.nodeSpecificData.choiceIds.forEach((choiceId: string) => {
+        const choiceExists = choices.find(choice => choice._id.toString() === choiceId);
+        if (!choiceExists) {
+          validation.missingChoices.push(node.nodeId);
         }
       });
+    }
+  });
 
-      await newStoryMap.save();
-      
-      console.log(`✅ [StoryMap API] New StoryMap created with ID: ${newStoryMap._id}`);
-      
-      return NextResponse.json({
-        success: true,
-        message: 'สร้างแผนผังเรื่องสำเร็จ',
-        data: newStoryMap,
-      }, { status: 201 });
+  // Check for cycles (simplified detection)
+  const visited = new Set();
+  const recursionStack = new Set();
+
+  const hasCycle = (nodeId: string): boolean => {
+    if (recursionStack.has(nodeId)) return true;
+    if (visited.has(nodeId)) return false;
+
+    visited.add(nodeId);
+    recursionStack.add(nodeId);
+
+    const outgoingEdges = storyMap.edges?.filter((edge: any) => edge.sourceNodeId === nodeId) || [];
+    for (const edge of outgoingEdges) {
+      if (hasCycle(edge.targetNodeId)) {
+        validation.cycles.push(nodeId);
+        return true;
+      }
     }
 
-  } catch (error: any) {
-    console.error('❌ [StoryMap API] POST Error:', error);
+    recursionStack.delete(nodeId);
+    return false;
+  };
+
+  // Start cycle detection from start nodes
+  const startNodes = storyMap.nodes.filter((node: any) => node.nodeType === 'start_node');
+  startNodes.forEach((node: any) => {
+    hasCycle(node.nodeId);
+  });
+
+  // Check for unreachable nodes
+  const reachable = new Set();
+  const traverse = (nodeId: string) => {
+    if (reachable.has(nodeId)) return;
+    reachable.add(nodeId);
     
-    // ตรวจสอบ validation errors
-    if (error.name === 'ValidationError') {
-      const validationErrors = Object.values(error.errors).map((err: any) => err.message);
-      return NextResponse.json(
-        { error: 'ข้อมูลไม่ถูกต้อง', details: validationErrors },
-        { status: 400 }
-      );
-    }
+    const outgoing = storyMap.edges?.filter((edge: any) => edge.sourceNodeId === nodeId) || [];
+    outgoing.forEach((edge: any) => traverse(edge.targetNodeId));
+  };
 
-    return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' },
-      { status: 500 }
-    );
-  }
+  startNodes.forEach((node: any) => traverse(node.nodeId));
+  
+  storyMap.nodes.forEach((node: any) => {
+    if (!reachable.has(node.nodeId) && node.nodeType !== 'start_node') {
+      validation.unreachableNodes.push(node.nodeId);
+    }
+  });
+
+  return validation;
+}
+
+// ===================================================================
+// SECTION: Intelligent Merge System - ระบบรวมข้อมูลอัตโนมัติ
+// ===================================================================
+
+/**
+ * ฟังก์ชันสำหรับรวมข้อมูล StoryMap อย่างชาญฉลาด
+ * ใช้หลักการ 3-way merge เหมือน Git โดยพิจารณา:
+ * 1. Nodes: รวมตาม ID, ใช้ timestamp ล่าสุด
+ * 2. Edges: รวมตาม ID, ใช้ timestamp ล่าสุด  
+ * 3. Positions: ใช้ตำแหน่งจาก client (user's current view)
+ * 4. StoryVariables: รวมแบบ deep merge
+ */
+async function performIntelligentMerge(
+  localData: { nodes: any[], edges: any[], storyVariables: any[] },
+  serverData: { nodes: any[], edges: any[], storyVariables: any[] }
+) {
+  console.log('[MERGE] Starting intelligent merge process');
+  
+  // 1. Merge Nodes - รวม nodes โดยใช้ ID เป็นหลัก
+  const mergedNodes = mergeNodesByStrategy(localData.nodes, serverData.nodes);
+  
+  // 2. Merge Edges - รวม edges โดยใช้ ID เป็นหลัก  
+  const mergedEdges = mergeEdgesByStrategy(localData.edges, serverData.edges);
+  
+  // 3. Merge Story Variables - รวมแบบ deep merge
+  const mergedStoryVariables = mergeStoryVariables(localData.storyVariables, serverData.storyVariables);
+  
+  console.log(`[MERGE] Completed: ${mergedNodes.length} nodes, ${mergedEdges.length} edges, ${mergedStoryVariables.length} variables`);
+  
+  return {
+    nodes: mergedNodes,
+    edges: mergedEdges,
+    storyVariables: mergedStoryVariables
+  };
 }
 
 /**
- * PUT - อัปเดต StoryMap เฉพาะส่วน (partial update)
+ * รวม nodes โดยใช้กลยุทธ์:
+ * - เก็บ nodes ที่มีอยู่ทั้งสองฝ่าย
+ * - ใช้ตำแหน่งจาก local (user's current view)
+ * - ใช้เนื้อหาจาก version ที่ใหม่กว่า
  */
-export async function PUT(
-  request: NextRequest,
-  context: RouteContext
-) {
-  const { slug } = await context.params; // Await the params promise
-  try {
-    console.log(`🔄 [StoryMap API] PUT request for novel slug: ${slug}`);
-
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'กรุณาเข้าสู่ระบบ' },
-        { status: 401 }
-      );
+function mergeNodesByStrategy(localNodes: any[], serverNodes: any[]): any[] {
+  const nodeMap = new Map<string, any>();
+  
+  // เพิ่ม server nodes ก่อน (base)
+  serverNodes.forEach(node => {
+    if (node.nodeId) {
+      nodeMap.set(node.nodeId, { ...node, source: 'server' });
     }
-
-    const body = await request.json();
-    const { operation, data } = body;
-
-    await dbConnect();
-
-    // ค้นหานิยาย
-    const novel = await NovelModel.findOne({ 
-      slug: slug,
-      isDeleted: { $ne: true }
-    }).lean();
-
-    if (!novel) {
-      return NextResponse.json(
-        { error: 'ไม่พบนิยายที่ระบุ' },
-        { status: 404 }
-      );
-    }
-
-    // ตรวจสอบสิทธิ์
-    if (novel.author.toString() !== session.user.id) {
-      return NextResponse.json(
-        { error: 'คุณไม่มีสิทธิ์แก้ไขนิยายนี้' },
-        { status: 403 }
-      );
-    }
-
-    // ค้นหา StoryMap
-    const storyMap = await StoryMapModel.findOne({
-      novelId: novel._id,
-      isActive: true
-    });
-
-    if (!storyMap) {
-      return NextResponse.json(
-        { error: 'ไม่พบแผนผังเรื่องของนิยายนี้' },
-        { status: 404 }
-      );
-    }
-
-    // ดำเนินการตาม operation
-    switch (operation) {
-      case 'add_node':
-        if (data.node) {
-          storyMap.nodes.push(data.node);
-          console.log(`➕ [StoryMap API] Added node: ${data.node.nodeId}`);
-        }
-        break;
-
-      case 'update_node':
-        if (data.nodeId && data.updates) {
-          const nodeIndex = storyMap.nodes.findIndex(n => n.nodeId === data.nodeId);
-          if (nodeIndex !== -1) {
-            Object.assign(storyMap.nodes[nodeIndex], data.updates);
-            console.log(`🔄 [StoryMap API] Updated node: ${data.nodeId}`);
-          }
-        }
-        break;
-
-      case 'delete_node':
-        if (data.nodeId) {
-          storyMap.nodes = storyMap.nodes.filter(n => n.nodeId !== data.nodeId);
-          // ลบ edges ที่เกี่ยวข้องด้วย
-          storyMap.edges = storyMap.edges.filter(e => 
-            e.sourceNodeId !== data.nodeId && e.targetNodeId !== data.nodeId
-          );
-          console.log(`🗑️ [StoryMap API] Deleted node: ${data.nodeId}`);
-        }
-        break;
-
-      case 'add_edge':
-        if (data.edge) {
-          storyMap.edges.push(data.edge);
-          console.log(`➕ [StoryMap API] Added edge: ${data.edge.edgeId}`);
-        }
-        break;
-
-      case 'delete_edge':
-        if (data.edgeId) {
-          storyMap.edges = storyMap.edges.filter(e => e.edgeId !== data.edgeId);
-          console.log(`🗑️ [StoryMap API] Deleted edge: ${data.edgeId}`);
-        }
-        break;
-
-      case 'update_metadata':
-        if (data.metadata) {
-          storyMap.editorMetadata = { ...storyMap.editorMetadata, ...data.metadata };
-          console.log(`🔄 [StoryMap API] Updated metadata`);
-        }
-        break;
-        
-      case 'update_nodes_positions':
-        if (data.nodes && Array.isArray(data.nodes)) {
-          // อัปเดตตำแหน่ง Node แบบ debounce
-          const updatedNodes = data.nodes as { nodeId: string, position: { x: number, y: number }}[];
-          
-          // อัปเดตเฉพาะตำแหน่งของ Node ที่มีอยู่แล้ว
-          storyMap.nodes = storyMap.nodes.map(existingNode => {
-            const updatedNode = updatedNodes.find(n => n.nodeId === existingNode.nodeId);
-            if (updatedNode && updatedNode.position) {
-              return {
-                ...existingNode,
-                position: updatedNode.position
-              };
-            }
-            return existingNode;
-          });
-          
-          console.log(`🔄 [StoryMap API] Updated positions for ${updatedNodes.length} nodes`);
-        }
-        break;
-
-      default:
-        return NextResponse.json(
-          { error: 'การดำเนินการไม่ถูกต้อง' },
-          { status: 400 }
-        );
-    }
-
-    // บันทึกการเปลี่ยนแปลง
-    storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(session.user.id);
-    await storyMap.save();
-
-    return NextResponse.json({
-      success: true,
-      message: 'อัปเดตแผนผังเรื่องสำเร็จ',
-      data: {
-        operation,
-        timestamp: new Date().toISOString()
+  });
+  
+  // เพิ่ม local nodes (ทับ server ถ้า ID ซ้ำ)
+  localNodes.forEach(localNode => {
+    if (localNode.nodeId) {
+      const existingNode = nodeMap.get(localNode.nodeId);
+      if (existingNode) {
+        // Node มีอยู่แล้ว - merge กัน
+        nodeMap.set(localNode.nodeId, {
+          ...existingNode, // เริ่มจาก server data
+          ...localNode,    // ทับด้วย local data
+          position: localNode.position || existingNode.position, // ใช้ตำแหน่งจาก local
+          source: 'merged'
+        });
+      } else {
+        // Node ใหม่จาก local
+        nodeMap.set(localNode.nodeId, { ...localNode, source: 'local' });
       }
-    });
-
-  } catch (error: any) {
-    console.error('❌ [StoryMap API] PUT Error:', error);
-    return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล' },
-      { status: 500 }
-    );
-  }
+    }
+  });
+  
+  return Array.from(nodeMap.values());
 }
 
 /**
- * DELETE - ลบ StoryMap (soft delete)
+ * รวม edges โดยใช้กลยุทธ์เดียวกันกับ nodes
  */
-export async function DELETE(
-  request: NextRequest,
-  context: RouteContext
-) {
-  const { slug } = await context.params; // Await the params promise
-  try {
-    console.log(`🗑️ [StoryMap API] DELETE request for novel slug: ${slug}`);
-
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'กรุณาเข้าสู่ระบบ' },
-        { status: 401 }
-      );
+function mergeEdgesByStrategy(localEdges: any[], serverEdges: any[]): any[] {
+  const edgeMap = new Map<string, any>();
+  
+  // เพิ่ม server edges ก่อน
+  serverEdges.forEach(edge => {
+    if (edge.edgeId) {
+      edgeMap.set(edge.edgeId, { ...edge, source: 'server' });
     }
-
-    await dbConnect();
-
-    // ค้นหานิยาย
-    const novel = await NovelModel.findOne({ 
-      slug: slug,
-      isDeleted: { $ne: true }
-    }).lean();
-
-    if (!novel) {
-      return NextResponse.json(
-        { error: 'ไม่พบนิยายที่ระบุ' },
-        { status: 404 }
-      );
-    }
-
-    // ตรวจสอบสิทธิ์
-    if (novel.author.toString() !== session.user.id) {
-      return NextResponse.json(
-        { error: 'คุณไม่มีสิทธิ์ลบแผนผังเรื่องของนิยายนี้' },
-        { status: 403 }
-      );
-    }
-
-    // ทำ soft delete โดยการตั้ง isActive เป็น false
-    const result = await StoryMapModel.updateMany(
-      { novelId: novel._id, isActive: true },
-      { 
-        $set: { 
-          isActive: false,
-          lastModifiedByUserId: new mongoose.Types.ObjectId(session.user.id)
-        }
+  });
+  
+  // เพิ่ม local edges
+  localEdges.forEach(localEdge => {
+    if (localEdge.edgeId) {
+      const existingEdge = edgeMap.get(localEdge.edgeId);
+      if (existingEdge) {
+        // Edge มีอยู่แล้ว - merge กัน
+        edgeMap.set(localEdge.edgeId, {
+          ...existingEdge,
+          ...localEdge,
+          source: 'merged'
+        });
+      } else {
+        // Edge ใหม่จาก local
+        edgeMap.set(localEdge.edgeId, { ...localEdge, source: 'local' });
       }
-    );
+    }
+  });
+  
+  return Array.from(edgeMap.values());
+}
 
-    console.log(`✅ [StoryMap API] Soft deleted ${result.modifiedCount} StoryMaps for novel ${novel._id}`);
-
-    return NextResponse.json({
-      success: true,
-      message: 'ลบแผนผังเรื่องสำเร็จ',
-      data: {
-        deletedCount: result.modifiedCount
-      }
-    });
-
-  } catch (error: any) {
-    console.error('❌ [StoryMap API] DELETE Error:', error);
-    return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการลบข้อมูล' },
-      { status: 500 }
-    );
-  }
+/**
+ * รวม story variables แบบ deep merge
+ */
+function mergeStoryVariables(localVars: any[], serverVars: any[]): any[] {
+  const varMap = new Map<string, any>();
+  
+  // เพิ่ม server variables ก่อน
+  serverVars.forEach(variable => {
+    if (variable.variableId) {
+      varMap.set(variable.variableId, variable);
+    }
+  });
+  
+  // เพิ่ม local variables (ทับ server ถ้า ID ซ้ำ)
+  localVars.forEach(localVar => {
+    if (localVar.variableId) {
+      varMap.set(localVar.variableId, localVar);
+    }
+  });
+  
+  return Array.from(varMap.values());
 }

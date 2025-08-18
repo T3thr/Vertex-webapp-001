@@ -331,6 +331,43 @@ export interface IVisualNovelGameplayPreferences {
   saveLoad: IVNSaveLoadPreferences;
   decisions: IVNDecisionWarningPreferences;
   routeManagement: IVNRouteManagementPreferences;
+  
+  // Blueprint Editor preferences สำหรับ professional storytelling tools
+  blueprintEditor?: {
+    // Auto-save configuration
+    autoSaveEnabled?: boolean; // Default: false (ไม่บังคับผู้ใช้)
+    autoSaveIntervalSec?: 15 | 30; // Default: 30
+    
+    // Visual preferences
+    showSceneThumbnails?: boolean; // Default: true
+    showNodeLabels?: boolean; // Default: true
+    showConnectionLines?: boolean; // Default: true
+    showGrid?: boolean; // Default: true
+    
+    // Layout and behavior
+    autoLayout?: boolean; // Default: false
+    enableAnimations?: boolean; // Default: true (Professional mode = minimal animations)
+    snapToGrid?: boolean; // Default: false
+    gridSize?: number; // Default: 20
+    nodeOrientation?: 'horizontal' | 'vertical'; // Default: 'vertical' - การวางแนว node และเส้นเชื่อม
+    
+    // Canvas state
+    zoomLevel?: number; // Default: 1.0
+    viewOffset?: { x: number; y: number }; // Default: { x: 0, y: 0 }
+    
+    // Styling
+    nodeDefaultColor?: string; // Default: "#3b82f6"
+    edgeDefaultColor?: string; // Default: "#64748b"
+    connectionLineStyle?: "solid" | "dashed" | "dotted"; // Default: "solid"
+    
+    // Advanced features
+    collaborationEnabled?: boolean; // Default: false
+    showOtherCursors?: boolean; // Default: true
+    performanceMode?: boolean; // Default: false (For large story maps)
+    
+    // Version control
+    conflictResolutionStrategy?: 'last_write_wins' | 'merge' | 'manual'; // Default: 'merge'
+  };
 }
 
 // ==================================================================================================
@@ -618,6 +655,46 @@ const VNRouteManagementPreferencesSchema = new Schema<IVNRouteManagementPreferen
   secretHints: { type: Boolean, default: false }
 }, { _id: false });
 
+// Blueprint Editor Schema สำหรับ professional storytelling tools
+const BlueprintEditorPreferencesSchema = new Schema({
+  // Auto-save configuration
+  autoSaveEnabled: { type: Boolean, default: false }, // ไม่บังคับผู้ใช้
+  autoSaveIntervalSec: { type: Number, enum: [15, 30], default: 30 },
+  
+  // Visual preferences
+  showSceneThumbnails: { type: Boolean, default: true },
+  showNodeLabels: { type: Boolean, default: true },
+  showConnectionLines: { type: Boolean, default: true },
+  showGrid: { type: Boolean, default: true },
+  
+  // Layout and behavior
+  autoLayout: { type: Boolean, default: false },
+  enableAnimations: { type: Boolean, default: true }, // Professional mode = minimal animations
+  snapToGrid: { type: Boolean, default: false },
+  gridSize: { type: Number, default: 20, min: 10, max: 50 },
+  nodeOrientation: { type: String, enum: ['horizontal', 'vertical'], default: 'vertical' }, // การวางแนว node และเส้นเชื่อม
+  
+  // Canvas state
+  zoomLevel: { type: Number, default: 1.0, min: 0.1, max: 3.0 },
+  viewOffset: {
+    x: { type: Number, default: 0 },
+    y: { type: Number, default: 0 }
+  },
+  
+  // Styling
+  nodeDefaultColor: { type: String, default: "#3b82f6" },
+  edgeDefaultColor: { type: String, default: "#64748b" },
+  connectionLineStyle: { type: String, enum: ["solid", "dashed", "dotted"], default: "solid" },
+  
+  // Advanced features
+  collaborationEnabled: { type: Boolean, default: false },
+  showOtherCursors: { type: Boolean, default: true },
+  performanceMode: { type: Boolean, default: false }, // For large story maps
+  
+  // Version control
+  conflictResolutionStrategy: { type: String, enum: ['last_write_wins', 'merge', 'manual'], default: 'merge' }
+}, { _id: false });
+
 const VisualNovelGameplayPreferencesSchema = new Schema<IVisualNovelGameplayPreferences>({
   // Text Control (ใช้ค่าเดียว ไม่ซ้ำซ้อน)
   textSpeedValue: { type: Number, min: 0, max: 100, default: DEFAULT_VALUES.TEXT_SPEED_VALUE },
@@ -666,6 +743,9 @@ const VisualNovelGameplayPreferencesSchema = new Schema<IVisualNovelGameplayPref
   saveLoad: { type: VNSaveLoadPreferencesSchema, default: () => ({}), required: true },
   decisions: { type: VNDecisionWarningPreferencesSchema, default: () => ({}), required: true },
   routeManagement: { type: VNRouteManagementPreferencesSchema, default: () => ({}), required: true },
+  
+  // Blueprint Editor preferences สำหรับ professional storytelling tools
+  blueprintEditor: { type: BlueprintEditorPreferencesSchema, default: () => ({}), required: false }
 }, { _id: false });
 
 

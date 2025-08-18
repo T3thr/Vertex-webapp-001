@@ -1,9 +1,10 @@
 'use client';
 
-import { DEFAULT_USER_SETTINGS, getInitialSettings } from '@/lib/user-settings';
-import { useDebouncedCallback } from '@/lib/utils';
-import { AnimatePresence, motion } from 'framer-motion';
-import {
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Settings, 
   ArrowLeft,
   Eye,
   EyeOff,
@@ -23,17 +24,17 @@ import DialogueHistory from './DialogueHistory';
 import EpisodeNavigation from './EpisodeNavigation';
 import ReaderSettings, { IReaderSettings } from './ReaderSettings';
 import StoryStatusPanel from './StoryStatusPanel';
-import type { DetailedEpisode } from './VisualNovelContent';
-import VisualNovelContent, { DialogueHistoryItem } from './VisualNovelContent';
+import { DEFAULT_USER_SETTINGS, getInitialSettings } from '@/lib/user-settings';
+import { useDebouncedCallback } from 'use-debounce';
+import { saveReadingProgress } from '@/lib/actions/user.actions';
 
 // Refactored to import from models
 import type { IEpisode, IEpisodeStats } from '@/backend/models/Episode';
-import type { INovel } from '@/backend/models/Novel';
-import type { IScene } from '@/backend/models/Scene';
+import type { IScene, ISceneEnding } from '@/backend/models/Scene';
 
 // The page provides a serialized version of INovel.
 // This type should reflect the actual data shape passed from page.tsx
-type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis'> & {
+type DisplayNovel = Pick<INovel, 'slug' | 'title' | 'coverImageUrl' | 'synopsis' | 'endingType' | 'isCompleted' | 'totalEpisodesCount'> & {
   _id: string;
   author: {
     _id: string;
@@ -86,7 +87,7 @@ export default function VisualNovelFrameReader({
   const router = useRouter();
 
   // Core Reader State
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying] = useState(true); // Always true since we removed play/pause functionality
   const [activeEpisode, setActiveEpisode] = useState<FullEpisode>(episode);
   const [currentSceneId, setCurrentSceneId] = useState(initialSceneId || episode.firstSceneId?.toString());
   const [currentSceneData, setCurrentSceneData] = useState<SerializedScene | null>(null);
@@ -99,6 +100,7 @@ export default function VisualNovelFrameReader({
   const [showEpisodeNav, setShowEpisodeNav] = useState(false);
   const [showStoryStatus, setShowStoryStatus] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [endingDetails, setEndingDetails] = useState<ISceneEnding | null>(null);
 
   // Settings State
   const [settings, setSettings] = useState<IReaderSettings>(DEFAULT_USER_SETTINGS);
@@ -112,7 +114,54 @@ export default function VisualNovelFrameReader({
   
   // Advance Trigger
   const [advanceTrigger, setAdvanceTrigger] = useState(0);
-  const handleAdvance = () => setAdvanceTrigger(t => t + 1);
+  const [handleAdvanceRef, setHandleAdvanceRef] = useState<(() => void) | null>(null);
+  
+  const handleAdvance = useCallback(() => {
+    // Always use the ref function if available for consistency with click behavior
+    if (handleAdvanceRef) {
+      handleAdvanceRef();
+    } else {
+      // Fallback to trigger method if ref is not available
+      setAdvanceTrigger(t => t + 1);
+    }
+  }, [handleAdvanceRef]);
+
+  // Safely set the advance function reference
+  const setAdvanceFunction = useCallback((fn: () => void) => {
+    setHandleAdvanceRef(() => fn);
+  }, []);
+
+  // Add keyboard event listener for spacebar
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Only handle spacebar when no panels are open and no choices are available
+      if (e.key === ' ' && !showSettings && !showHistory && !showEpisodeNav && !showStoryStatus) {
+        e.preventDefault(); // Prevent default spacebar behavior (page scroll)
+        // Use the same advance function that click uses for consistency
+        if (handleAdvanceRef) {
+          handleAdvanceRef();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [handleAdvanceRef, showSettings, showHistory, showEpisodeNav, showStoryStatus]);
+
+  // Prevent body scroll when any panel is open
+  useEffect(() => {
+    const isAnyPanelOpen = showSettings || showHistory || showEpisodeNav || showStoryStatus;
+    
+    if (isAnyPanelOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showSettings, showHistory, showEpisodeNav, showStoryStatus]);
 
   // Fetch initial settings from API or localStorage
   useEffect(() => {
@@ -235,47 +284,63 @@ export default function VisualNovelFrameReader({
     });
   }, []);
 
-  const handleEpisodeEnd = useCallback(async () => {
-    const currentEpisodeIndex = allEpisodes.findIndex(ep => ep._id === activeEpisode._id);
-
-    if (currentEpisodeIndex !== -1 && currentEpisodeIndex < allEpisodes.length - 1) {
-      const nextEpisode = allEpisodes[currentEpisodeIndex + 1];
-
-      if (!nextEpisode.hasAccess) {
-        router.push(`/novels/${novel.slug}`);
-        return;
-      }
-
-      const performTransition = (nextEp: FullEpisode, nextEpData: DetailedEpisode) => {
-        setDialogueHistory([]);
-        setActiveEpisode(nextEp);
-        setCurrentSceneId(nextEpData.firstSceneId);
+  const handleEpisodeEnd = useCallback((ending?: ISceneEnding) => {
+    console.log("Episode has ended.", ending);
+    
+    // ✅ แก้ไข: ตรวจสอบ novel type และ episode order สำหรับ single_ending
+    const isSingleEnding = novel.endingType === 'single_ending';
+    const isLastEpisode = activeEpisode.episodeOrder === novel.totalEpisodesCount;
+    
+    console.log(`🎯 Episode End Check - Novel: "${novel.title}", Type: "${novel.endingType}", Episode: ${activeEpisode.episodeOrder}/${novel.totalEpisodesCount}`);
+    console.log(`📊 Single Ending: ${isSingleEnding}, Last Episode: ${isLastEpisode}, Has Ending: ${!!ending}`);
+    
+    if (isSingleEnding && !isLastEpisode) {
+      // ✅ สำหรับ single_ending ที่ไม่ใช่ตอนสุดท้าย: ไม่แสดง ending screen
+      console.log(`⏭️ Single ending novel - skipping ending screen for non-final episode`);
+      
+      // หา episode ถัดไป
+      const nextEpisodeOrder = activeEpisode.episodeOrder + 1;
+      const nextEpisode = Object.values(loadedEpisodesData).find(ep => ep.episodeOrder === nextEpisodeOrder);
+      
+      if (nextEpisode) {
+        console.log(`📖 Moving to next episode: ${nextEpisode.title} (${nextEpisode.episodeOrder})`);
+        setActiveEpisode({
+          _id: nextEpisode._id,
+          title: nextEpisode.title,
+          slug: nextEpisode.slug,
+          episodeOrder: nextEpisode.episodeOrder,
+          accessType: nextEpisode.accessType,
+          priceCoins: nextEpisode.priceCoins || 0,
+          originalPriceCoins: nextEpisode.originalPriceCoins || 0,
+          teaserText: nextEpisode.teaserText || '',
+          firstSceneId: nextEpisode.firstSceneId,
+          stats: nextEpisode.stats,
+          hasAccess: (nextEpisode as any).hasAccess || true
+        });
+        setCurrentSceneId(nextEpisode.firstSceneId?.toString());
         
-        const newUrl = `/read/${novel.slug}/${nextEp.episodeOrder}-${nextEp.slug}`;
-        window.history.pushState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
-        setIsTransitioning(false);
-      };
-
-      if (loadedEpisodesData[nextEpisode._id]) {
-        performTransition(nextEpisode, loadedEpisodesData[nextEpisode._id]);
-      } else {
-        setIsTransitioning(true);
-        const nextEpisodeData = await fetchEpisodeDetails(nextEpisode._id);
-        if (nextEpisodeData) {
-          setLoadedEpisodesData(prev => ({ ...prev, [nextEpisode._id]: nextEpisodeData }));
-          performTransition(nextEpisode, nextEpisodeData);
-        } else {
-          console.error("Failed to load next episode, returning to novel page.");
-          setIsTransitioning(false);
-          router.push(`/novels/${novel.slug}`);
+        // Save progress for current episode
+        if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
+          saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
         }
+        return;
+      } else {
+        console.warn(`⚠️ Next episode not found for order ${nextEpisodeOrder}`);
       }
-    } else if (currentEpisodeIndex !== -1 && currentEpisodeIndex === allEpisodes.length - 1) {
-      setShowSummary(true);
-    } else {
-      router.push(`/novels/${novel.slug}`);
     }
-  }, [allEpisodes, activeEpisode, novel.slug, router, loadedEpisodesData, fetchEpisodeDetails]);
+    
+    // ✅ แสดง ending screen เฉพาะเมื่อ:
+    // 1. ไม่ใช่ single_ending (multiple_endings, ongoing, etc.)
+    // 2. หรือเป็น single_ending แต่เป็นตอนสุดท้าย
+    console.log(`🎊 Showing ending screen`);
+    setEndingDetails(ending || null);
+    setShowSummary(true);
+    
+    // Save progress
+    if (userId && novel?._id && activeEpisode?._id && currentSceneId) {
+      saveReadingProgress(userId, novel._id, activeEpisode._id, currentSceneId, true);
+    }
+  }, [userId, activeEpisode, novel, currentSceneId, loadedEpisodesData]);
 
   const handleToggleDialogue = () => {
     const newSettings: IReaderSettings = {
@@ -294,7 +359,27 @@ export default function VisualNovelFrameReader({
     handleSettingsChange(newSettings);
   };
 
-  const activeEpisodeData = loadedEpisodesData[activeEpisode._id];
+  // ✅ เพิ่ม novelMeta จากข้อมูล novel ที่มาจาก page.tsx
+  const activeEpisodeData = loadedEpisodesData[activeEpisode._id] ? {
+    ...loadedEpisodesData[activeEpisode._id],
+    novelMeta: {
+      endingType: novel.endingType,
+      isCompleted: novel.isCompleted,
+      totalEpisodesCount: novel.totalEpisodesCount
+    }
+  } : null;
+
+  const getEndingTypeText = (type: ISceneEnding['endingType']) => {
+    switch (type) {
+      case 'TRUE': return 'TRUE ENDING';
+      case 'GOOD': return 'GOOD ENDING';
+      case 'BAD': return 'BAD ENDING';
+      case 'NORMAL': return 'NORMAL ENDING';
+      case 'ALTERNATE': return 'ALTERNATE ENDING';
+      case 'JOKE': return 'JOKE ENDING';
+      default: return 'ENDING';
+    }
+  };
 
   return (
     <div className="w-full h-full bg-black text-white flex flex-col relative">
@@ -314,6 +399,7 @@ export default function VisualNovelFrameReader({
                 onDialogueEntry={handleDialogueEntry}
                 onEpisodeEnd={handleEpisodeEnd}
                 advanceTrigger={advanceTrigger}
+                onAdvance={setAdvanceFunction} // Pass the setAdvanceFunction to VisualNovelContent
             />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -333,14 +419,14 @@ export default function VisualNovelFrameReader({
         </motion.button>
 
         {/* Main UI (Header and Footer) */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
             {isUiVisible && (
                 <motion.div 
                     className='absolute inset-0 pointer-events-none'
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
                 >
                     {/* Header */}
                     <header className="absolute top-0 left-0 right-0 z-40 bg-gradient-to-b from-black/60 to-transparent p-4 text-white pointer-events-auto">
@@ -361,7 +447,6 @@ export default function VisualNovelFrameReader({
                                 <motion.button whileTap={{ scale: 0.95 }} onClick={handleToggleDialogue} className="p-2 rounded-full hover:bg-white/20 transition-colors" aria-label="Toggle Dialogue">
                                   {(settings.display.uiVisibility?.isDialogueBoxVisible ?? true) ? <MessageSquareOff size={18} /> : <MessageSquare size={18} />}
                                 </motion.button>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowStoryStatus(true)} className="p-2 rounded-full hover:bg-white/20 transition-colors"><Swords size={18} /></motion.button>
                             </div>
                         </div>
                     </header>
@@ -371,10 +456,8 @@ export default function VisualNovelFrameReader({
                         <div className="max-w-xl mx-auto bg-black/30 backdrop-blur-md rounded-full flex items-center justify-evenly text-white p-2 border border-white/20 shadow-lg">
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowEpisodeNav(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Episode List"><List size={20} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowHistory(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Dialogue History"><MessageSquareText size={20} /></motion.button>
-                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => setIsPlaying(!isPlaying)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
-                             {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                           </motion.button>
-                           <motion.button whileTap={{ scale: 0.9 }} onClick={handleAdvance} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Skip"><SkipForward size={20} /></motion.button>
+                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleAdvanceRef && handleAdvanceRef()} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Skip"><SkipForward size={24} /></motion.button>
+                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowStoryStatus(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Story Status"><Swords size={20} /></motion.button>
                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowSettings(true)} className="p-3 rounded-full hover:bg-white/20 transition-colors" aria-label="Settings"><Settings size={20} /></motion.button>
                         </div>
                     </footer>
@@ -392,6 +475,8 @@ export default function VisualNovelFrameReader({
                 <EndSummaryScreen 
                     novel={novel} 
                     backgroundUrl={currentSceneData?.background?.value}
+                    ending={endingDetails}
+                    getEndingTypeText={getEndingTypeText}
                 />
             )}
         </AnimatePresence>
@@ -412,7 +497,17 @@ export default function VisualNovelFrameReader({
 }
 
 // A new component for the end summary screen
-function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backgroundUrl?: string }) {
+function EndSummaryScreen({ 
+  novel, 
+  backgroundUrl, 
+  ending, 
+  getEndingTypeText
+}: { 
+  novel: DisplayNovel, 
+  backgroundUrl?: string,
+  ending: ISceneEnding | null,
+  getEndingTypeText: (type: ISceneEnding['endingType']) => string
+}) {
     const router = useRouter();
 
     return (
@@ -429,29 +524,62 @@ function EndSummaryScreen({ novel, backgroundUrl }: { novel: DisplayNovel, backg
                     className="absolute inset-0 w-full h-full object-cover"
                 />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent" />
             
-            <div className="relative z-10 text-center text-white p-8 rounded-lg max-w-2xl">
-                <motion.h1 
-                    className="text-4xl md:text-5xl font-bold mb-4"
-                    style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
-                    initial={{ y: -20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
-                >
-                    บทสรุปการเดินทาง
-                </motion.h1>
-                <motion.p 
-                    className="text-lg md:text-xl text-white/80 mb-8"
-                    style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
-                    initial={{ y: -20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
-                >
-                    และนี่คือผลลัพธ์อุปนิสัยของคุณแบบคร่าวๆ ขอบคุณที่ร่วมเล่นสนุกกับพวกเรา DIVWY!
-                </motion.p>
+            <div className="relative z-10 text-center text-white p-8 rounded-lg max-w-3xl">
+                {ending ? (
+                  <>
+                    <motion.p 
+                      className="text-lg md:text-xl font-bold text-primary-400 tracking-widest"
+                      style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
+                      initial={{ y: -20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
+                    >
+                      {getEndingTypeText(ending.endingType)}
+                    </motion.p>
+                    <motion.h1 
+                        className="text-4xl md:text-5xl font-bold mb-2 mt-2"
+                        style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
+                    >
+                        {ending.title}
+                    </motion.h1>
+                    {ending.description && (
+                      <motion.p 
+                        className="text-md md:text-lg text-white/80 mb-8 max-w-xl mx-auto"
+                        style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.6 } }}
+                      >
+                        {ending.description}
+                      </motion.p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <motion.h1 
+                        className="text-4xl md:text-5xl font-bold mb-4"
+                        style={{ textShadow: '2px 2px 8px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.2 } }}
+                    >
+                        บทสรุปการเดินทาง
+                    </motion.h1>
+                    <motion.p 
+                        className="text-lg md:text-xl text-white/80 mb-8"
+                        style={{ textShadow: '1px 1px 6px rgba(0, 0, 0, 0.8)' }}
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1, transition: { delay: 0.4 } }}
+                    >
+                        ขอบคุณที่ร่วมสนุกกับพวกเรา DIVWY!
+                    </motion.p>
+                  </>
+                )}
                 <motion.div 
-                    className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                    className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12"
                     initial={{ y: -20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1, transition: { delay: 0.6 } }}
+                    animate={{ y: 0, opacity: 1, transition: { delay: 0.8 } }}
                 >
                     <button
                         onClick={() => router.push(`/novels/${novel.slug}`)}

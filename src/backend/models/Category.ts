@@ -312,7 +312,6 @@ CategorySchema.pre<ICategory>("save", async function (next) {
     const CategoryModelConst = models.Category || model<ICategory>("Category");
 
     // ตรวจสอบความ unique ของ slug ภายใน categoryType เดียวกัน
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const existingCategory = await CategoryModelConst.findOne({
         slug: finalSlug,

@@ -7,6 +7,7 @@
 // รองรับ global.css theme system และมี interactive elements ที่สวยงาม
 
 import { motion, useScroll, useTransform } from 'framer-motion';
+import Image from 'next/image';
 import { 
   User, 
   PenTool, 
@@ -394,10 +395,12 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
               <div className="relative">
                 <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl bg-white/20 backdrop-blur-sm border-2 border-white/30 flex items-center justify-center overflow-hidden shadow-2xl">
                   {user.profile?.avatarUrl ? (
-                    <img 
+                    <Image 
                       src={user.profile.avatarUrl} 
                       alt={user.profile.displayName || user.username}
                       className="w-full h-full object-cover"
+                      width={112}
+                      height={112}
                     />
                   ) : (
                     <User className="w-12 h-12 md:w-14 md:h-14 text-foreground" />

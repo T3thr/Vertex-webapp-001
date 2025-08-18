@@ -4,15 +4,16 @@ import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 
+// Professional Refresh Protection Component
+import RefreshProtectionWrapper from './components/RefreshProtectionWrapper';
+
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
 import EpisodeModel from '@/backend/models/Episode';
 import StoryMapModel from '@/backend/models/StoryMap';
-import { ICategory } from '@/backend/models/Category'; // Import interface สำหรับ type checking
+import CategoryModel, { ICategory } from '@/backend/models/Category'; // Import both model and interface
 
-import NovelWorkspace from './components/NovelWorkspace';
-import CreateStoryMapPrompt from './components/CreateStoryMapPrompt';
-import NovelHeader from './components/NovelHeader';
+import NovelEditor from './components/NovelEditor';
 
 // SECTION: Interfaces สำหรับข้อมูลที่ Serialize แล้ว (ปรับปรุงให้สมบูรณ์)
 // =================================================================
@@ -125,6 +126,7 @@ export interface StoryMapData {
   _id: string;
   novelId: string;
   title: string;
+  description?: string;
   version: number;
   nodes: any[];
   edges: any[];
@@ -132,6 +134,13 @@ export interface StoryMapData {
   startNodeId: string;
   lastModifiedByUserId: string;
   isActive: boolean;
+  editorMetadata?: {
+    zoomLevel: number;
+    viewOffsetX: number;
+    viewOffsetY: number;
+    gridSize: number;
+    showGrid: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -188,21 +197,24 @@ export default async function NovelOverviewPage({ params }: PageProps) {
 
   // SECTION: แก้ไขการ Query และ Populate ให้ครอบคลุมทุก Fields
   // =================================================================
+  // Ensure CategoryModel is loaded before populate operations
+  void CategoryModel; // This ensures the model is registered
+  
+  // Access Control: Check if user is author or co-author
   const novel = await NovelModel.findOne({
     slug: decodedSlug,
-    author: session.user.id,
     isDeleted: { $ne: true }
   })
-  .populate<{ author: AuthorData }>('author', 'profile') // Populate profile ของผู้เขียน
-  // Populate themeAssignment ทั้งหมด
-  .populate<{ themeAssignment: { mainTheme: { categoryId: ICategory }, subThemes: { categoryId: ICategory }[], moodAndTone: ICategory[], contentWarnings: ICategory[] } }>([
+  .populate('author', 'profile') // Populate profile ของผู้เขียน
+  // Populate themeAssignment ทั้งหมด - simplified without complex type annotations
+  .populate([
     { path: 'themeAssignment.mainTheme.categoryId' },
     { path: 'themeAssignment.subThemes.categoryId' },
     { path: 'themeAssignment.moodAndTone' },
     { path: 'themeAssignment.contentWarnings' },
   ])
   // Populate narrativeFocus ทั้งหมด (นี่คือส่วนสำคัญที่ขาดไป)
-  .populate<{ narrativeFocus: NarrativeFocusData }>([
+  .populate([
     { path: 'narrativeFocus.narrativePacingTags' },
     { path: 'narrativeFocus.primaryConflictTypes' },
     { path: 'narrativeFocus.narrativePerspective' },
@@ -217,20 +229,57 @@ export default async function NovelOverviewPage({ params }: PageProps) {
     { path: 'narrativeFocus.avoidIfYouDislikeTags' },
   ])
   // Populate fields ที่เหลือ
-  .populate<{ ageRatingCategoryId: ICategory }>('ageRatingCategoryId')
-  .populate<{ language: ICategory }>('language')
+  .populate('ageRatingCategoryId')
+  .populate('language')
+  .populate('coAuthors', 'profile') // Populate co-authors
   .lean({ virtuals: true }); // ใช้ .lean() เพื่อประสิทธิภาพ
 
   if (!novel) {
-    console.log(`[DEBUG] ไม่พบนิยายสำหรับ slug: ${decodedSlug} และ author: ${session.user.id}`);
+    console.log(`[DEBUG] ไม่พบนิยายสำหรับ slug: ${decodedSlug}`);
+    redirect('/novels');
+  }
+
+  // Access Control: Verify user is author or co-author
+  const userId = session.user!.id; // We already checked for session.user.id above
+  const isAuthor = novel.author?._id?.toString() === userId;
+  const isCoAuthor = novel.coAuthors?.some((coAuthor: any) => 
+    coAuthor._id?.toString() === userId || coAuthor.toString() === userId
+  );
+  
+  if (!isAuthor && !isCoAuthor) {
+    console.log(`[DEBUG] ผู้ใช้ ${userId} ไม่มีสิทธิ์เข้าถึงนิยาย ${novel.title}`);
     redirect('/novels');
   }
 
   console.log(`[DEBUG] พบนิยาย: ${novel.title} (ID: ${novel._id})`);
 
-  // ดึงข้อมูล Episodes และ StoryMap (เหมือนเดิม)
+  // ดึงข้อมูล Episodes, StoryMap, Characters, Scenes, และ Media
   const episodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 }).lean();
   const storyMap = await StoryMapModel.findOne({ novelId: novel._id, isActive: true }).lean();
+  
+  // Import additional models
+  const CharacterModel = (await import('@/backend/models/Character')).default;
+  const SceneModel = (await import('@/backend/models/Scene')).default;
+  const MediaModel = (await import('@/backend/models/Media')).default;
+  const OfficialMediaModel = (await import('@/backend/models/OfficialMedia')).default;
+  
+  const characters = await CharacterModel.find({ novelId: novel._id, isArchived: false }).lean();
+  const scenes = await SceneModel.find({ novelId: novel._id }).sort({ episodeId: 1, sceneOrder: 1 }).lean();
+  const userMedia = await MediaModel.find({ userId: userId, status: 'available', isDeleted: { $ne: true } }).lean();
+  const officialMedia = await OfficialMediaModel.find({ status: 'approved_for_library', isDeleted: { $ne: true } }).lean();
+  
+  // Debug logging
+  console.log(`[DEBUG] StoryMap raw data:`, storyMap ? {
+    id: storyMap._id,
+    title: storyMap.title,
+    nodeCount: storyMap.nodes?.length || 0,
+    edgeCount: storyMap.edges?.length || 0,
+    version: storyMap.version,
+    isActive: storyMap.isActive
+  } : 'No story map found');
+  
+  console.log(`[DEBUG] Scenes found:`, scenes.length);
+  console.log(`[DEBUG] Characters found:`, characters.length);
   
   // SECTION: วิธีที่ง่ายและปลอดภัยที่สุดในการ Serialize คือใช้ JSON.stringify และ JSON.parse
   // วิธีนี้จะแปลง ObjectId, Date, และ BSON types อื่นๆ เป็น string โดยอัตโนมัติ
@@ -238,28 +287,48 @@ export default async function NovelOverviewPage({ params }: PageProps) {
   const serializedNovel: NovelData = JSON.parse(JSON.stringify(novel, null, 2));
   const serializedEpisodes: EpisodeData[] = JSON.parse(JSON.stringify(episodes, null, 2));
   const serializedStoryMap: StoryMapData | null = storyMap ? JSON.parse(JSON.stringify(storyMap, null, 2)) : null;
+  const serializedCharacters = JSON.parse(JSON.stringify(characters, null, 2));
+  const serializedScenes = JSON.parse(JSON.stringify(scenes, null, 2));
+  const serializedUserMedia = JSON.parse(JSON.stringify(userMedia, null, 2));
+  const serializedOfficialMedia = JSON.parse(JSON.stringify(officialMedia, null, 2));
 
   console.log(`[DEBUG] จำนวนตอนที่พบ: ${serializedEpisodes.length}`);
   console.log(`[DEBUG] สถานะ StoryMap: ${serializedStoryMap ? 'พบ StoryMap' : 'ไม่พบ StoryMap'}`);
+  if (serializedStoryMap) {
+    console.log(`[DEBUG] StoryMap details:`, {
+      id: serializedStoryMap._id,
+      title: serializedStoryMap.title,
+      nodeCount: serializedStoryMap.nodes?.length || 0,
+      edgeCount: serializedStoryMap.edges?.length || 0,
+      version: serializedStoryMap.version
+    });
+  }
+  console.log(`[DEBUG] จำนวนตัวละคร: ${serializedCharacters.length}`);
+  console.log(`[DEBUG] จำนวนฉาก: ${serializedScenes.length}`);
 
   return (
-    <div className="min-h-screen bg-background">
-      <Suspense fallback={<div className="h-screen flex items-center justify-center"><p>กำลังโหลด...</p></div>}>
-        {serializedStoryMap ? (
-          <NovelWorkspace 
-            novel={serializedNovel} 
-            episodes={serializedEpisodes} 
-            storyMap={serializedStoryMap}
-          />
-        ) : (
-          <div className="container-custom py-6">
-            <NovelHeader novel={serializedNovel} />
-            <div className="mt-6 bg-card border border-border rounded-xl p-6 flex items-center justify-center">
-              <CreateStoryMapPrompt novelSlug={serializedNovel.slug} />
+    <RefreshProtectionWrapper>
+      <div className="min-h-screen bg-background text-foreground">
+        <Suspense fallback={
+          <div className="h-screen flex items-center justify-center bg-background">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">กำลังโหลด...</p>
             </div>
           </div>
-        )}
-      </Suspense>
-    </div>
+        }>
+          <NovelEditor
+            novel={serializedNovel}
+            episodes={serializedEpisodes}
+            storyMap={serializedStoryMap}
+            characters={serializedCharacters}
+            scenes={serializedScenes}
+            userMedia={serializedUserMedia}
+            officialMedia={serializedOfficialMedia}
+          />
+        </Suspense>
+      </div>
+    </RefreshProtectionWrapper>
   );
 }
+

@@ -6,6 +6,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 // CODE-MOD: เพิ่มการ import คอมโพเนนต์ Link จาก next/link สำหรับการทำ internal navigation
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Plus,
   BookOpen,
@@ -58,23 +59,23 @@ interface NovelTabProps {
   novels: SerializedNovel[];
   totalStats: {
     totalNovels: number;
-    totalEpisodes: number;
     totalViews: number;
     totalEarnings: number;
-    averageRating: number;
     totalFollowers: number;
   };
   user: SerializedUser;
   initialCreateModal?: boolean;
+  setActiveTab?: (tab: string) => void;
 }
 
 interface NovelCardProps {
   novel: SerializedNovel;
   index: number;
   viewMode: 'grid' | 'list';
+  setActiveTab?: (tab: string) => void;
 }
 
-function NovelCard({ novel, index, viewMode }: NovelCardProps) {
+function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -115,7 +116,8 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
   if (viewMode === 'list') {
     return (
       <motion.div
-        className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500 group"
+        className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500 group cursor-pointer"
+        onClick={() => window.open(`/novels/${novel.slug}`, '_blank')}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.05, duration: 0.4 }}
@@ -130,16 +132,18 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
               className="relative flex-shrink-0 w-24 h-32 rounded-xl overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 border border-border/50"
             whileHover={{ scale: 1.05 }}
           >
-              {novel.coverImageUrl && !imageError ? (
-              <img
+                            {novel.coverImageUrl && !imageError ? (
+              <Image
                 src={novel.coverImageUrl}
                 alt={novel.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  width={96}
+                  height={128}
                   onError={() => setImageError(true)}
-              />
-            ) : (
+                />
+              ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-accent/10">
-                  <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                  <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
                 </div>
               )}
               
@@ -231,24 +235,27 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
   // Grid View
   return (
     <motion.div
-      className="group bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500"
+      className="group bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500 cursor-pointer"
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.1, duration: 0.4 }}
       whileHover={{ scale: 1.03, y: -8 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
+      onClick={() => window.open(`/novels/${novel.slug}`, '_blank')}
     >
       {/* Cover Image */}
       <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
-        {novel.coverImageUrl && !imageError ? (
-          <img
+                {novel.coverImageUrl && !imageError ? (
+          <Image
               src={novel.coverImageUrl}
               alt={novel.title}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            width={240}
+            height={320}
             onError={() => setImageError(true)}
-            />
-          ) : (
+          />
+        ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-accent/10">
             <ImageIcon className="w-12 h-12 text-muted-foreground" />
             </div>
@@ -282,23 +289,30 @@ function NovelCard({ novel, index, viewMode }: NovelCardProps) {
                 className="p-2 bg-white/20 backdrop-blur-md rounded-lg text-white hover:bg-white/30 transition-colors"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Use the setActiveTab function if provided
+                if (setActiveTab) {
+                  setActiveTab('analytics');
+                } else {
+                  // Fallback to console log if setActiveTab is not provided
+                  console.log('View analytics for novel:', novel.title);
+                }
+              }}
             >
-              <Edit className="w-4 h-4" />
+              <BarChart className="w-4 h-4" />
             </motion.button>
               <motion.button
                 className="p-2 bg-white/20 backdrop-blur-md rounded-lg text-white hover:bg-white/30 transition-colors"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.href = `/novels/${novel.slug}/overview`;
+                }}
               >
-                <BarChart className="w-4 h-4" />
+                <Edit className="w-4 h-4" />
               </motion.button>
-          <motion.button
-                className="p-2 bg-white/20 backdrop-blur-md rounded-lg text-white hover:bg-white/30 transition-colors"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-          >
-                <MoreVertical className="w-4 h-4" />
-          </motion.button>
         </motion.div>
           )}
         </AnimatePresence>
@@ -542,6 +556,10 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
 
   const itemsPerPageOptions = [6, 12, 24, 48];
 
+  function setActiveTab(tab: string): void {
+    throw new Error('Function not implemented.');
+  }
+
   return (
     <div className="space-y-4 md:space-y-6 px-2 sm:px-4 md:px-6">
       {/* Header Section */}
@@ -558,16 +576,6 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
             </h3>
             <p className="text-xs md:text-sm text-muted-foreground">จัดการและติดตามผลงานของคุณ</p>
           </div>
-          
-          <motion.button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="bg-primary text-primary-foreground px-3 md:px-4 lg:px-6 py-2 md:py-3 rounded-lg font-medium hover:bg-primary-hover transition-colors flex items-center gap-2 md:gap-3 shadow-lg"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Plus className="w-4 h-4 md:w-5 md:h-5" />
-            <span className="text-sm md:text-base">เขียนใหม่</span>
-          </motion.button>
         </div>
       </motion.div>
 
@@ -734,9 +742,9 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
         {filteredAndSortedNovels.length > 0 ? (
           <motion.div
             key={`${viewMode}-${currentPage}`}
-            className={`grid gap-4 md:gap-6 ${
+            className={`grid gap-4 md:gap-6 transition-all duration-300 ${
               viewMode === 'grid' 
-                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4' 
                 : 'grid-cols-1'
             }`}
             initial={{ opacity: 0, y: 20 }}
@@ -750,6 +758,7 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
                 novel={novel} 
                 index={index} 
                 viewMode={viewMode}
+                setActiveTab={setActiveTab}
               />
             ))}
           </motion.div>
