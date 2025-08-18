@@ -4,6 +4,9 @@ import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 
+// Professional Refresh Protection Component
+import RefreshProtectionWrapper from './components/RefreshProtectionWrapper';
+
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
 import EpisodeModel from '@/backend/models/Episode';
@@ -304,25 +307,28 @@ export default async function NovelOverviewPage({ params }: PageProps) {
   console.log(`[DEBUG] จำนวนฉาก: ${serializedScenes.length}`);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Suspense fallback={
-        <div className="h-screen flex items-center justify-center bg-background">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">กำลังโหลด...</p>
+    <RefreshProtectionWrapper>
+      <div className="min-h-screen bg-background text-foreground">
+        <Suspense fallback={
+          <div className="h-screen flex items-center justify-center bg-background">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">กำลังโหลด...</p>
+            </div>
           </div>
-        </div>
-      }>
-        <NovelEditor
-          novel={serializedNovel}
-          episodes={serializedEpisodes}
-          storyMap={serializedStoryMap}
-          characters={serializedCharacters}
-          scenes={serializedScenes}
-          userMedia={serializedUserMedia}
-          officialMedia={serializedOfficialMedia}
-        />
-      </Suspense>
-    </div>
+        }>
+          <NovelEditor
+            novel={serializedNovel}
+            episodes={serializedEpisodes}
+            storyMap={serializedStoryMap}
+            characters={serializedCharacters}
+            scenes={serializedScenes}
+            userMedia={serializedUserMedia}
+            officialMedia={serializedOfficialMedia}
+          />
+        </Suspense>
+      </div>
+    </RefreshProtectionWrapper>
   );
 }
+

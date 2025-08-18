@@ -31,10 +31,11 @@ interface ChoiceNodeData {
  * แสดงข้อมูลตัวเลือกในนิยายแบบภาพ (Visual Novel)
  * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const ChoiceNode: React.FC<NodeProps> = ({ 
+const ChoiceNode: React.FC<NodeProps & { nodeOrientation?: 'horizontal' | 'vertical' }> = ({ 
   data, 
   selected, 
-  dragging 
+  dragging,
+  nodeOrientation = 'vertical'
 }) => {
   const nodeData = data as unknown as ChoiceNodeData;
   const nodeColor = nodeData.editorVisuals?.color || '#10b981';
@@ -80,7 +81,7 @@ const ChoiceNode: React.FC<NodeProps> = ({
       {/* จุดเชื่อมต่อสำหรับรับข้อมูล (Input Handle) */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={nodeOrientation === 'vertical' ? Position.Top : Position.Left}
         id="input"
         className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
         style={{
@@ -184,7 +185,7 @@ const ChoiceNode: React.FC<NodeProps> = ({
         <Handle
           key={index}
           type="source"
-          position={Position.Bottom}
+          position={nodeOrientation === 'vertical' ? Position.Bottom : Position.Right}
           id={`choice-${index}`}
           className="!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"
           style={{ 

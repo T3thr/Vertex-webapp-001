@@ -28,10 +28,11 @@ interface CommentNodeData {
  * แสดงข้อมูลความคิดเห็นและหมายเหตุในนิยายแบบภาพ (Visual Novel)
  * รองรับการลากเส้นเชื่อมต่อแบบ no-code
  */
-const CommentNode: React.FC<NodeProps> = ({ 
+const CommentNode: React.FC<NodeProps & { nodeOrientation?: 'horizontal' | 'vertical' }> = ({ 
   data, 
   selected, 
-  dragging 
+  dragging,
+  nodeOrientation = 'vertical'
 }) => {
   const nodeData = data as unknown as CommentNodeData;
   const nodeColor = nodeData.editorVisuals?.color || '#6b7280';
@@ -74,7 +75,7 @@ const CommentNode: React.FC<NodeProps> = ({
       {/* Optional Input Handle (comments can be connected to show context) */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={nodeOrientation === 'vertical' ? Position.Top : Position.Left}
         id="input"
         className="!bg-blue-100 !border-blue-500 dark:!bg-blue-900 dark:!border-blue-400"
         style={{
@@ -170,7 +171,7 @@ const CommentNode: React.FC<NodeProps> = ({
       {/* Optional Output Handle (for connecting to related nodes) */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={nodeOrientation === 'vertical' ? Position.Bottom : Position.Right}
         id="output"
         className="!bg-green-100 !border-green-500 dark:!bg-green-900 dark:!border-green-400"
         style={{

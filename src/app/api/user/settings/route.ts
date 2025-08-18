@@ -197,6 +197,7 @@ const vnBlueprintEditorPreferencesSchema = z.object({
   enableAnimations: z.boolean().optional(),
   snapToGrid: z.boolean().optional(),
   gridSize: z.number().min(10).max(50).optional(),
+  nodeOrientation: z.enum(['horizontal', 'vertical']).optional(),
   zoomLevel: z.number().min(0.1).max(3).optional(),
   viewOffset: z.object({
     x: z.number(),
@@ -481,16 +482,83 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ message: 'No fields to update' }, { status: 200 });
     }
 
-    const updatedSettings = await UserSettingsModel.findOneAndUpdate(
-      { userId: userId },
-      { $set: updateFields, $inc: { settingsVersion: 1 } },
-      { 
-        new: true, // Return the modified document
-        upsert: true, // Create it if it doesn't exist
-        runValidators: true,
-        lean: true
+    // Check if the user already has settings
+    const existingSettings = await UserSettingsModel.findOne({ userId: userId }).lean();
+    
+    let updatedSettings;
+    if (existingSettings) {
+      // Update existing settings (partial update)
+      updatedSettings = await UserSettingsModel.findOneAndUpdate(
+        { userId: userId },
+        { $set: updateFields, $inc: { settingsVersion: 1 } },
+        { 
+          new: true, // Return the modified document
+          runValidators: false, // Disable validation for partial updates
+          lean: true
+        }
+      );
+    } else {
+      // Create new settings with default values for required fields
+      const defaultSettings = {
+        userId: userId,
+        settingsVersion: 1,
+        display: {
+          uiVisibility: {
+            theme: 'system_default', // Required field default
+            textBoxOpacity: 85,
+            backgroundBrightness: 50,
+            textBoxBorder: true,
+            isDialogueBoxVisible: true
+          }
+        },
+        visualNovelGameplay: {
+          blueprintEditor: {
+            autoSaveEnabled: false,
+            autoSaveIntervalSec: 30,
+            showSceneThumbnails: true,
+            showNodeLabels: true,
+            showConnectionLines: true,
+            showGrid: true,
+            autoLayout: false,
+            enableAnimations: true,
+            snapToGrid: false,
+            gridSize: 20,
+            nodeOrientation: 'vertical',
+            zoomLevel: 1.0,
+            viewOffset: { x: 0, y: 0 },
+            nodeDefaultColor: "#3b82f6",
+            edgeDefaultColor: "#64748b",
+            connectionLineStyle: "solid",
+            collaborationEnabled: false,
+            showOtherCursors: true,
+            performanceMode: false,
+            conflictResolutionStrategy: 'merge'
+          }
+        },
+        preferences: {}
+      };
+      
+      // Apply the updates using proper nested object merging
+      const mergedSettings: any = { ...defaultSettings };
+      for (const [key, value] of Object.entries(updateFields)) {
+        const keyParts = key.split('.');
+        let current: any = mergedSettings;
+        
+        // Navigate to the correct nested object
+        for (let i = 0; i < keyParts.length - 1; i++) {
+          const part = keyParts[i];
+          if (!current[part]) {
+            current[part] = {};
+          }
+          current = current[part];
+        }
+        
+        // Set the final value
+        current[keyParts[keyParts.length - 1]] = value;
       }
-    );
+      
+      updatedSettings = await UserSettingsModel.create(mergedSettings);
+    }
 
     return NextResponse.json({
       success: true,
@@ -521,34 +589,40 @@ export async function GET(request: NextRequest) {
     // เชื่อมต่อฐานข้อมูล
     await dbConnect();
 
-    // ดึงการตั้งค่าผู้ใช้
-    const user = await UserModel.findById(session.user.id)
-      .select('settings.readerSettings')
+    // 🎯 ดึงการตั้งค่าผู้ใช้จาก UserSettings collection (ใหม่)
+    const userSettings = await UserSettingsModel.findOne({ userId: session.user.id })
       .lean();
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'ไม่พบผู้ใช้' },
-        { status: 404 }
-      );
+    console.log('[API GET Settings] 📖 Retrieved user settings:', {
+      userId: session.user.id,
+      hasSettings: !!userSettings,
+      hasBlueprintEditor: !!userSettings?.visualNovelGameplay?.blueprintEditor
+    });
+
+    if (!userSettings) {
+      console.log('[API GET Settings] ⚠️ No settings found, returning empty structure');
+      return NextResponse.json({
+        success: true,
+        settings: null,
+        message: 'No user settings found'
+      });
     }
 
-    // ส่งกลับการตั้งค่า หรือค่าเริ่มต้นหากไม่มี
-    const defaultSettings = {
-      textSpeed: 2,
-      fontSize: 16,
-      bgOpacity: 0.8,
-      autoPlay: false
-    };
-
+    // ส่งกลับการตั้งค่าจริงจาก database (ไม่มี default fallback)
     return NextResponse.json({
-      readerSettings: user.settings?.readerSettings || defaultSettings
+      success: true,
+      settings: userSettings,
+      message: 'Settings retrieved successfully'
     });
 
   } catch (error) {
-    console.error('Error fetching user settings:', error);
+    console.error('[API GET Settings] ❌ Error fetching user settings:', error);
     return NextResponse.json(
-      { error: 'เกิดข้อผิดพลาดในการดึงข้อมูลการตั้งค่า' },
+      { 
+        success: false,
+        error: 'เกิดข้อผิดพลาดในการดึงข้อมูลการตั้งค่า',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

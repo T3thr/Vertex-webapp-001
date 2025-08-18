@@ -8,7 +8,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Check, 
@@ -19,14 +19,52 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { UnifiedSaveState } from './SaveManager';
+import { SingleUserState } from './SingleUserEventManager';
+import { EventManagerState } from './EventManager';
 
 // ===================================================================
 // SECTION: Type Definitions & Props
 // ===================================================================
 
+// ConnectionStatus Component เพื่อป้องกัน hydration mismatch
+const ConnectionStatus = ({ size }: { size: string }) => {
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    // ตั้งค่าเริ่มต้นหลังจาก component mount
+    setIsOnline(navigator.onLine);
+    
+    // ฟังการเปลี่ยนแปลงสถานะการเชื่อมต่อ
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  // ไม่แสดงอะไรจนกว่าจะโหลดเสร็จ เพื่อป้องกัน hydration mismatch
+  if (isOnline === null) {
+    return null;
+  }
+  
+  return (
+    <div className={`${size} flex-shrink-0 opacity-60`}>
+      {isOnline ? (
+        <Wifi className="text-green-500" />
+      ) : (
+        <WifiOff className="text-red-500" />
+      )}
+    </div>
+  );
+};
+
 interface SaveStatusIndicatorProps {
-  saveState: UnifiedSaveState;
+  saveState: SingleUserState;
   className?: string;
   showDetails?: boolean;
   size?: 'sm' | 'md' | 'lg';
@@ -52,7 +90,17 @@ export default function SaveStatusIndicator({
 }: SaveStatusIndicatorProps) {
   
   const getStatusConfig = (): StatusConfig => {
-    const { status, lastSaved, isSaving, pendingOperations } = saveState;
+    // Map SingleUserState to status for compatibility
+    const { isSaving, lastSaved, lastError, pendingCommands } = saveState;
+    
+    let status: string;
+    if (isSaving) {
+      status = 'saving';
+    } else if (lastError) {
+      status = 'error';
+    } else {
+      status = 'idle';
+    }
     
     switch (status) {
       case 'saving':
@@ -61,8 +109,8 @@ export default function SaveStatusIndicator({
           color: 'text-blue-600',
           bgColor: 'bg-blue-50 dark:bg-blue-900/20',
           text: 'กำลังบันทึก...',
-          description: pendingOperations.length > 0 
-            ? `กำลังประมวลผล ${pendingOperations.length} การเปลี่ยนแปลง`
+          description: pendingCommands > 0 
+            ? `กำลังประมวลผล ${pendingCommands} การเปลี่ยนแปลง`
             : undefined
         };
       
@@ -73,9 +121,7 @@ export default function SaveStatusIndicator({
             color: 'text-green-600',
             bgColor: 'bg-green-50 dark:bg-green-900/20',
             text: 'บันทึกแล้ว',
-            description: typeof window !== 'undefined' 
-              ? `บันทึกล่าสุด ${formatRelativeTime(lastSaved)}`
-              : 'บันทึกล่าสุดเมื่อสักครู่'
+            description: `บันทึกล่าสุด ${formatRelativeTime(lastSaved)}`
           };
         } else {
           return {
@@ -162,30 +208,22 @@ export default function SaveStatusIndicator({
         {statusConfig.text}
       </span>
 
-      {/* Pending Operations Counter */}
+      {/* Pending Commands Counter */}
       <AnimatePresence>
-        {saveState.pendingOperations.length > 0 && (
+        {saveState.pendingCommands > 0 && (
           <motion.span
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0 }}
             className="inline-flex items-center justify-center h-5 w-5 text-xs font-bold text-white bg-blue-500 rounded-full"
           >
-            {saveState.pendingOperations.length}
+            {saveState.pendingCommands}
           </motion.span>
         )}
       </AnimatePresence>
 
-      {/* Connection Status */}
-      {navigator.onLine !== undefined && (
-        <div className={`${sizeClasses.icon} flex-shrink-0 opacity-60`}>
-          {navigator.onLine ? (
-            <Wifi className="text-green-500" />
-          ) : (
-            <WifiOff className="text-red-500" />
-          )}
-        </div>
-      )}
+      {/* Connection Status - ใช้ useEffect เพื่อป้องกัน hydration error */}
+      <ConnectionStatus size={sizeClasses.icon} />
     </motion.div>
   );
 }
@@ -195,7 +233,7 @@ export default function SaveStatusIndicator({
 // ===================================================================
 
 interface DetailedStatusPanelProps {
-  saveState: UnifiedSaveState;
+  saveState: EventManagerState;
   className?: string;
 }
 
@@ -244,7 +282,7 @@ export function DetailedStatusPanel({
         </div>
         <div>
           <span className="text-muted-foreground">รอดำเนินการ:</span>
-          <span className="ml-2 font-mono">{saveState.pendingOperations.length}</span>
+          <span className="ml-2 font-mono">{saveState.pendingCommands}</span>
         </div>
         {saveState.lastSaved && (
           <div className="col-span-2">
@@ -255,7 +293,7 @@ export function DetailedStatusPanel({
       </div>
 
       {/* Error Details */}
-      {saveState.status === 'error' && saveState.lastError && (
+      {saveState.lastError && (
         <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs">
           <strong className="text-red-700 dark:text-red-400">ข้อผิดพลาด:</strong>
           <br />
@@ -263,26 +301,14 @@ export function DetailedStatusPanel({
         </div>
       )}
 
-      {/* Pending Operations List */}
-      {saveState.pendingOperations.length > 0 && (
+      {/* Command History Summary */}
+      {saveState.pendingCommands > 0 && (
         <div className="mt-3">
           <h4 className="text-xs font-semibold mb-2 text-muted-foreground">
-            การดำเนินการที่รอคิว:
+            คำสั่งที่รอดำเนินการ:
           </h4>
-          <div className="space-y-1 max-h-20 overflow-y-auto">
-            {saveState.pendingOperations.slice(-5).map((op) => (
-              <div key={op.id} className="flex items-center justify-between text-xs">
-                <span className="truncate">{getOperationDisplayName(op.type)}</span>
-                <span className="text-muted-foreground ml-2">
-                  {formatRelativeTime(new Date(op.timestamp))}
-                </span>
-              </div>
-            ))}
-            {saveState.pendingOperations.length > 5 && (
-              <div className="text-xs text-muted-foreground text-center">
-                และอีก {saveState.pendingOperations.length - 5} รายการ...
-              </div>
-            )}
+          <div className="text-xs text-muted-foreground">
+            มี {saveState.pendingCommands} คำสั่งที่รอการประมวลผล
           </div>
         </div>
       )}
@@ -294,9 +320,20 @@ export function DetailedStatusPanel({
 // SECTION: Helper Functions
 // ===================================================================
 
-function getStatusConfig(saveState: UnifiedSaveState): StatusConfig {
-  // Same logic as in main component but extracted for reuse
-  const { status, lastSaved, pendingOperations } = saveState;
+function getStatusConfig(saveState: EventManagerState): StatusConfig {
+  // Map EventManagerState to status for compatibility
+  const { isSaving, lastSaved, isConflicted, lastError, pendingCommands } = saveState;
+  
+  let status: string;
+  if (isSaving) {
+    status = 'saving';
+  } else if (isConflicted) {
+    status = 'conflict';
+  } else if (lastError) {
+    status = 'error';
+  } else {
+    status = 'idle';
+  }
   
   switch (status) {
     case 'saving':
@@ -305,8 +342,8 @@ function getStatusConfig(saveState: UnifiedSaveState): StatusConfig {
         color: 'text-blue-600',
         bgColor: 'bg-blue-50 dark:bg-blue-900/20',
         text: 'กำลังบันทึก...',
-        description: pendingOperations.length > 0 
-          ? `กำลังประมวลผล ${pendingOperations.length} การเปลี่ยนแปลง`
+        description: pendingCommands > 0 
+          ? `กำลังประมวลผล ${pendingCommands} การเปลี่ยนแปลง`
           : undefined
       };
     
@@ -359,32 +396,42 @@ function getStatusConfig(saveState: UnifiedSaveState): StatusConfig {
 }
 
 function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
+  try {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
 
-  if (diffSecs < 60) {
-    return `${diffSecs} วินาทีที่แล้ว`;
-  } else if (diffMins < 60) {
-    return `${diffMins} นาทีที่แล้ว`;
-  } else if (diffHours < 24) {
-    return `${diffHours} ชั่วโมงที่แล้ว`;
-  } else {
-    return date.toLocaleDateString('th-TH');
+    if (diffSecs < 60) {
+      return `${diffSecs} วินาทีที่แล้ว`;
+    } else if (diffMins < 60) {
+      return `${diffMins} นาทีที่แล้ว`;
+    } else if (diffHours < 24) {
+      return `${diffHours} ชั่วโมงที่แล้ว`;
+    } else {
+      return date.toLocaleDateString('th-TH');
+    }
+  } catch (error) {
+    // Fallback สำหรับกรณี hydration mismatch
+    return 'เมื่อสักครู่';
   }
 }
 
 function formatAbsoluteTime(date: Date): string {
-  return date.toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+  try {
+    return date.toLocaleString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch (error) {
+    // Fallback สำหรับกรณี hydration mismatch
+    return date.toString();
+  }
 }
 
 function getOperationDisplayName(type: string): string {

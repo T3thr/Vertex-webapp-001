@@ -886,7 +886,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
 
         {/* Main Content */}
         <div className="flex-1 overflow-auto">
-          <ScrollArea className="h-full">
+          <div className="h-full">
             <div className="p-6">
               {activeTab === 'overview' && (
                 <div className="space-y-6">
@@ -1102,7 +1102,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </div>
 

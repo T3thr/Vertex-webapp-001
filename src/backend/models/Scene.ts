@@ -1022,6 +1022,8 @@ export interface IScene extends Document {
   _id: Types.ObjectId; novelId: Types.ObjectId; episodeId: Types.ObjectId; sceneOrder: number;
   /** @description (ใหม่) Node ID สำหรับการอ้างอิงจาก Choice/Script (ควร unique ภายใน Novel) */
   nodeId?: string;
+  /** @description (ใหม่) StoryMap Node ID ที่เชื่อมโยงกับฉากนี้ */
+  storyMapNodeId?: string;
   title?: string; background: IBackgroundSetting;
   version: number;
   layers: Types.DocumentArray<ISceneLayer>;
@@ -1071,6 +1073,12 @@ const SceneSchema = new Schema<IScene>(
       type: String, 
       trim: true,
       sparse: true, // Allows multiple docs without this field, but if it exists, the index applies.
+    },
+    storyMapNodeId: { 
+      type: String, 
+      trim: true, 
+      maxlength: [100, "StoryMap Node ID is too long"],
+      comment: "Reference to StoryMap Node that represents this scene"
     },
     title: { type: String, trim: true, maxlength: [255, "Scene title is too long"] },
     background: { type: BackgroundSettingSchema, required: [true, "Background settings are required"] },

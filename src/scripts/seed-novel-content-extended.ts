@@ -603,4 +603,6 @@ export const characterArcs = {
   }
 };
 
-export default { createExtendedScenesAndChoices, storyBranches, characterArcs }; 
+const seedNovelContentExtended = { createExtendedScenesAndChoices, storyBranches, characterArcs };
+
+export default seedNovelContentExtended; 
