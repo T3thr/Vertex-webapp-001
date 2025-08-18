@@ -6,7 +6,7 @@
 // แหงภาพรวมข้อมูลและสร้างสรรค์สำหรับนักเขียน - อัพเกรดแล้ว
 // รองรับ global.css theme system และมี interactive elements ที่สวยงาม
 
-import { motion, useSpring, useTransform } from 'framer-motion';
+import { motion, useSpring, useTransform, Variants } from 'framer-motion';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -416,7 +416,7 @@ export default function StatsOverview({ stats, recentTransactions, earningAnalyt
     visible: { opacity: 1, y: 0 }
   };
 
-  const headerVariants = {
+  const headerVariants: Variants = {
     hidden: { opacity: 0, y: -20 },
     visible: { 
       opacity: 1, 
