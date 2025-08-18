@@ -10,12 +10,12 @@ import { NextRequest, NextResponse } from "next/server";
 // ดึงข้อมูลกระทู้ตาม slug
 export async function GET(
   req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
     await dbConnect();
     
-    const slug = params.slug;
+    const { slug } = await params;
     if (!slug) {
       return NextResponse.json(
         { success: false, error: "ไม่พบ slug ของกระทู้" },

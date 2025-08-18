@@ -13,6 +13,8 @@ interface RedisClientType {
   del(keys: string | string[]): Promise<number>;
   exists(key: string): Promise<number>;
   keys(pattern: string): Promise<string[]>;
+  quit(): Promise<void>;
+  flushAll(): Promise<string>;
 }
 
 // กำหนดค่า Redis configuration สำหรับ production performance optimization
@@ -143,6 +145,18 @@ class MockRedisClient implements RedisClientType {
     }
     
     return result;
+  }
+
+  async quit(): Promise<void> {
+    console.log('🔌 [MockRedis] Mock client quit.');
+    this.isOpen = false;
+    this.isReady = false;
+  }
+
+  async flushAll(): Promise<string> {
+    console.log('🗑️ [MockRedis] Mock client flushed all keys.');
+    this.store.clear();
+    return 'OK';
   }
 }
 

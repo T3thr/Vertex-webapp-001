@@ -19,7 +19,7 @@ const clearCache = async () => {
         if (!pattern) {
           console.error('❌ Pattern cannot be empty.');
           rl.close();
-          await redis.quit();
+          await (redis as any).quit();
           return;
         }
         try {
@@ -35,7 +35,7 @@ const clearCache = async () => {
           console.error('❌ Error invalidating pattern:', e);
         } finally {
           rl.close();
-          await redis.quit();
+          await (redis as any).quit();
         }
       });
     } else if (option === '2') {
@@ -43,7 +43,7 @@ const clearCache = async () => {
         if (confirmation.toLowerCase() === 'yes') {
           try {
             console.log('🗑️  Flushing all databases...');
-            await redis.flushAll();
+            await (redis as any).flushAll();
             console.log('✅ Success! All keys have been deleted.');
           } catch (e) {
             console.error('❌ Error flushing database:', e);
@@ -52,12 +52,12 @@ const clearCache = async () => {
           console.log('👍 Operation cancelled.');
         }
         rl.close();
-        await redis.quit();
+        await (redis as any).quit();
       });
     } else {
       console.log('Invalid option. Exiting.');
       rl.close();
-      await redis.quit();
+      await (redis as any).quit();
     }
   });
 };
@@ -65,7 +65,7 @@ const clearCache = async () => {
 clearCache().catch(async (e) => {
   console.error('An unexpected error occurred:', e);
   if (redis.isOpen) {
-    await redis.quit();
+    await (redis as any).quit();
   }
   process.exit(1);
 });

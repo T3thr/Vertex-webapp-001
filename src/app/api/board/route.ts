@@ -14,15 +14,15 @@ export async function GET(req: NextRequest) {
     await dbConnect();
     
     const { searchParams } = new URL(req.url);
-    const type = searchParams.get("type") as BoardType | null;
+    const type = searchParams.get("type");
     const limit = Number(searchParams.get("limit")) || 10;
     const skip = Number(searchParams.get("skip")) || 0;
     
     let posts;
     if (type === "popular") {
       posts = await CommunityBoardService.getPopularPosts(limit);
-    } else if (type && Object.values(BoardType).includes(type)) {
-      posts = await CommunityBoardService.getPostsByType(type, limit, skip);
+    } else if (type && Object.values(BoardType).includes(type as BoardType)) {
+      posts = await CommunityBoardService.getPostsByType(type as BoardType, limit, skip);
     } else {
       posts = await CommunityBoardService.getLatestPosts(limit, skip);
     }

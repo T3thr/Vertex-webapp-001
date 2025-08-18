@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // ดึงพารามิเตอร์จาก URL
-    const targetId = searchParams.get("targetId");
-    const targetType = searchParams.get("targetType") as RateableType | null;
-    const userId = searchParams.get("userId");
-    const novelIdContext = searchParams.get("novelIdContext");
+    const targetId = searchParams.get("targetId") || undefined;
+    const targetType = (searchParams.get("targetType") as RateableType) || undefined;
+    const userId = searchParams.get("userId") || undefined;
+    const novelIdContext = searchParams.get("novelIdContext") || undefined;
     const minScore = searchParams.get("minScore") ? Number(searchParams.get("minScore")) : undefined;
     const maxScore = searchParams.get("maxScore") ? Number(searchParams.get("maxScore")) : undefined;
     const containsSpoilers = searchParams.has("containsSpoilers") ? 

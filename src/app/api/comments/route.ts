@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       mentionedUserIds: Array.isArray(mentionedUserIds) ? mentionedUserIds : undefined,
       context,
       meta: {
-        ip: request.headers.get("x-forwarded-for") || request.ip || undefined,
+        ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || undefined,
         userAgent: request.headers.get("user-agent") || undefined,
       },
     });

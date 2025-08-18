@@ -9,7 +9,7 @@ import type { IReaderSettings } from "@/components/read/ReaderSettings";
 function deepMerge<T extends object = object>(...objects: Partial<T>[]): T {
   const isObject = (obj: any): obj is object => obj && typeof obj === 'object' && !Array.isArray(obj);
 
-  return objects.reduce((prev, obj) => {
+  return objects.reduce((prev: Partial<T>, obj) => {
     if (!obj) return prev;
     
     Object.keys(obj).forEach(key => {
@@ -17,14 +17,14 @@ function deepMerge<T extends object = object>(...objects: Partial<T>[]): T {
       const oVal = obj[key as keyof typeof obj];
 
       if (isObject(pVal) && isObject(oVal)) {
-        prev[key as keyof typeof prev] = deepMerge(pVal, oVal) as any;
+        (prev as any)[key] = deepMerge(pVal as any, oVal as any);
       } else {
-        prev[key as keyof typeof prev] = oVal as any;
+        (prev as any)[key] = oVal as any;
       }
     });
 
     return prev;
-  }, {} as T);
+  }, {} as Partial<T>) as T;
 }
 
 /**
