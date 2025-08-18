@@ -5,13 +5,13 @@ import React from 'react';
 import Image from 'next/image';
 import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import { UserCircle, Zap, ShieldQuestion, Users } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 
 interface NovelCharactersTabProps {
   novel: PopulatedNovelForDetailPage;
 }
 
-const characterCardVariants = {
+const characterCardVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95 },
   visible: (i: number) => ({
     opacity: 1,
