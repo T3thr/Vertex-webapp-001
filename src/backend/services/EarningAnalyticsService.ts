@@ -20,8 +20,8 @@ export class EarningAnalyticsService {
   public static async createOrUpdateDailyWriterAnalytics(
     writerId: string,
     date: Date = new Date(),
-    session?: mongoose.ClientSession
-  ): Promise<IEarningAnalytic> {
+    session?: mongoose.ClientSession | null
+  ): Promise<IEarningAnalytic | null> {
     try {
       // กำหนดวันที่เริ่มต้นและสิ้นสุดของวัน
       const startOfDay = new Date(date);
@@ -105,7 +105,7 @@ export class EarningAnalyticsService {
         setDefaultsOnInsert: true
       };
 
-      return await EarningAnalyticModel.findOneAndUpdate(filter, update, options);
+      return await EarningAnalyticModel.findOneAndUpdate(filter, update, options) as IEarningAnalytic;
     } catch (error) {
       console.error('Error creating/updating daily writer analytics:', error);
       throw error;
@@ -121,8 +121,8 @@ export class EarningAnalyticsService {
   public static async createOrUpdateDailyNovelAnalytics(
     novelId: string,
     date: Date = new Date(),
-    session?: mongoose.ClientSession
-  ): Promise<IEarningAnalytic> {
+    session?: mongoose.ClientSession | null
+  ): Promise<IEarningAnalytic | null> {
     try {
       // กำหนดวันที่เริ่มต้นและสิ้นสุดของวัน
       const startOfDay = new Date(date);
@@ -198,7 +198,7 @@ export class EarningAnalyticsService {
         setDefaultsOnInsert: true
       };
 
-      return await EarningAnalyticModel.findOneAndUpdate(filter, update, options);
+      return await EarningAnalyticModel.findOneAndUpdate(filter, update, options) as IEarningAnalytic;
     } catch (error) {
       console.error('Error creating/updating daily novel analytics:', error);
       throw error;
@@ -224,7 +224,7 @@ export class EarningAnalyticsService {
     episodeId: string,
     amount: number,
     platformFee: number,
-    session?: mongoose.ClientSession
+    session?: mongoose.ClientSession | null
   ): Promise<void> {
     try {
       // 1. อัปเดตข้อมูลวิเคราะห์รายได้ของนักเขียนรายวัน
@@ -234,13 +234,13 @@ export class EarningAnalyticsService {
       await this.createOrUpdateDailyNovelAnalytics(novelId, new Date(), session);
       
       // 3. อัปเดตข้อมูลสรุปผลงานนิยายใน WriterStats
-      const novel = await NovelModel.findById(novelId).select('title').session(session || null);
+      const novel = await NovelModel.findById(novelId).select('title').session(session ?? null);
       if (novel) {
         // ค้นหา novelPerformanceSummary ที่มีอยู่แล้ว
         const writerStats = await WriterStatsModel.findOne({ 
           userId: new Types.ObjectId(writerId),
           'novelPerformanceSummaries.novelId': new Types.ObjectId(novelId)
-        }).session(session || null);
+        }).session(session ?? null);
 
         if (writerStats) {
           // อัปเดต novelPerformanceSummary ที่มีอยู่แล้ว
@@ -254,7 +254,7 @@ export class EarningAnalyticsService {
                 'novelPerformanceSummaries.$.totalEarningsFromNovel': amount - platformFee
               }
             },
-            { session: session || null }
+            { session: session ?? undefined }
           );
         } else {
           // เพิ่ม novelPerformanceSummary ใหม่
@@ -274,7 +274,7 @@ export class EarningAnalyticsService {
                 }
               }
             },
-            { upsert: true, session: session || null }
+            { upsert: true, session: session ?? undefined }
           );
         }
       }
