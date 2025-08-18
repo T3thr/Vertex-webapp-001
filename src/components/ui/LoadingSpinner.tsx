@@ -3,7 +3,7 @@
 // รองรับหลายขนาดและสไตล์ตาม global.css theme system
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { Loader2, BookOpen, PenTool } from 'lucide-react';
 
 interface LoadingSpinnerProps {
@@ -38,7 +38,7 @@ export default function LoadingSpinner({
   };
 
   // Animation variants สำหรับแต่ละ variant
-  const spinVariants = {
+  const spinVariants: Variants = {
     animate: {
       rotate: 360,
       transition: {
@@ -49,7 +49,7 @@ export default function LoadingSpinner({
     }
   };
 
-  const pulseVariants = {
+  const pulseVariants: Variants = {
     animate: {
       scale: [1, 1.2, 1],
       opacity: [0.7, 1, 0.7],
@@ -61,7 +61,7 @@ export default function LoadingSpinner({
     }
   };
 
-  const dotsVariants = {
+  const dotsVariants: Variants = {
     animate: {
       transition: {
         staggerChildren: 0.2,
@@ -71,7 +71,7 @@ export default function LoadingSpinner({
     }
   };
 
-  const dotVariants = {
+  const dotVariants: Variants = {
     animate: {
       y: [-3, -6, -3],
       transition: {
