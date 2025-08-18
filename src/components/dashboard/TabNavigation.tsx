@@ -4,7 +4,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import {
   BookOpen,
   BarChart3,
@@ -282,7 +282,7 @@ export default function TabNavigation({ children, novels, totalStats, earningAna
     visible: { opacity: 1, y: 0 }
   };
 
-  const tabVariants = {
+  const tabVariants: Variants = {
     inactive: {
       backgroundColor: 'transparent',
       color: 'var(--muted-foreground)',
@@ -301,7 +301,7 @@ export default function TabNavigation({ children, novels, totalStats, earningAna
     }
   };
 
-  const contentVariants = {
+  const contentVariants: Variants = {
     hidden: {
       opacity: 0,
       x: -30,
