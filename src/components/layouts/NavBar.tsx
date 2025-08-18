@@ -527,6 +527,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
 
             {/* Right Section: Search, Auth, Mobile Menu Toggle */}
             <div className="flex items-center space-x-2 sm:space-x-3">
+
               {/* Desktop Search */}
               <div className="hidden md:block relative" ref={searchRef}>
                 <button

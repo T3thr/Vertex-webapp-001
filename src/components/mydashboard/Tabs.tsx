@@ -9,7 +9,13 @@ import { Thread } from "./Thread";
 
 type Tab = "writing" | "trophy" | "penname" | "thread";
 
-export const Tabs = () => {
+interface TabsProps {
+  achievements: any[]; // A more specific type should be used here
+  level: number;
+  experiencePoints: number;
+}
+
+export const Tabs = ({ achievements, level, experiencePoints }: TabsProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("writing");
 
   return (
@@ -25,7 +31,7 @@ export const Tabs = () => {
       {/* Tab Content */}
       <div className="border-t border-gray-300">
         {activeTab === "writing" && <Writing />}
-        {activeTab === "trophy" && <Trophy />}
+        {activeTab === "trophy" && <Trophy achievements={achievements} />}
         {activeTab === "penname" && <Penname />}
         {activeTab === "thread" && <Thread />}
       </div>

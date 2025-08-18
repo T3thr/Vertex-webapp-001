@@ -9,6 +9,7 @@ import { useEffect, useState, ReactNode } from "react";
 import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { useGamification } from "@/hooks/useGamification"; // Import our hook
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +28,9 @@ interface GlobalProviderProps {
 const AppContent = ({ children }: { children: ReactNode }) => {
   const { mounted: themeContextMounted, resolvedTheme } = useTheme(); // renamed mounted to themeContextMounted
   const [isAppContentReady, setIsAppContentReady] = useState(false);
+  
+  // Initialize gamification polling as soon as the app content is considered for rendering
+  useGamification();
 
   useEffect(() => {
     // Wait for the theme context itself to be mounted and ready

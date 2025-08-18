@@ -456,7 +456,9 @@ export const authOptions: NextAuthOptions = {
           prompt: "consent", 
           access_type: "offline", 
           response_type: "code", 
-          scope: "openid email profile" 
+          scope: "openid email profile",
+          // Harden local dev callback to avoid 404 due to mismatched redirect
+          redirect_uri: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/auth/callback/google`
         } 
       },
       profile(profile) {
@@ -555,6 +557,8 @@ export const authOptions: NextAuthOptions = {
         },
     }),
   ],
+
+  trustHost: true,
 
   session: {
     strategy: "jwt", // ใช้ JWT strategy

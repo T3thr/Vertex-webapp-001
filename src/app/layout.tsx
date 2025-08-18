@@ -12,6 +12,7 @@ import UserModel from "@/backend/models/User";
 import UserSettingsModel from "@/backend/models/UserSettings";
 import { Toaster } from 'sonner';
 import DisableContextMenu from "@/components/layouts/DisableContextMenu";
+import { registerAppListeners } from "@/backend/listeners"; // Import our listener registrar
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
@@ -139,6 +140,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   await dbConnect(); // เชื่อมต่อ DB
+  registerAppListeners(); // Register all application listeners
 
   const session = await getServerSession(authOptions);
   let userDbTheme: Theme | null = null;
