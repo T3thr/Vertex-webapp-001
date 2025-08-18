@@ -46,7 +46,21 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
           console.warn('[RefreshProtection] Failed to parse EventManager state:', error)
         }
         
-        // ✅ ADOBE/FIGMA STYLE: Multi-layer verification
+        // 🔥 CRITICAL FIX: Use EventManager-compatible detection (same as save button)
+        // Instead of relying on localStorage flags that can be incorrect, use the save state
+        let eventManagerHasChanges = false;
+        try {
+          const saveStateString = localStorage.getItem('divwy-save-state');
+          if (saveStateString) {
+            const saveState = JSON.parse(saveStateString);
+            // Use the same logic as save button: only content commands count
+            eventManagerHasChanges = saveState.isDirty || saveState.hasUnsavedChanges;
+          }
+        } catch (error) {
+          console.warn('[RefreshProtection] Failed to parse save state, falling back to localStorage flags:', error);
+        }
+        
+        // ✅ FALLBACK: Multi-layer verification with localStorage (but less reliable)
         const commandChanges = localStorage.getItem('divwy-command-has-changes') === 'true' 
         const lastSaved = localStorage.getItem('divwy-last-saved')
         const lastChange = localStorage.getItem('divwy-last-change')
@@ -66,23 +80,58 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
         const timeSinceLastSettingsChange = lastSettingsChange ? Date.now() - parseInt(lastSettingsChange) : Infinity
         const isRecentSettingsChange = settingsOnlyChanges && timeSinceLastSettingsChange < 30000 // 30 seconds buffer for settings
         
-        // ✅ ADOBE/FIGMA STYLE: Only trigger refresh protection for actual content changes
-        const hasRecentUnsavedChanges = commandChanges && // ✅ CRITICAL: Only command-based detection
-                                       !settingsOnlyChanges && // ✅ Ignore settings-only changes
-                                       !isRecentSettingsChange && // ✅ Extra protection for recent settings changes
-                                       timeSinceLastChange > timeSinceLastSave &&
-                                       timeSinceLastSave > 10000 && // 10 seconds tolerance
-                                       !autoSaveActive && // Don't warn if auto-save is currently running
-                                       timeSinceAutoSave > 15000 && // Allow 15 seconds after successful auto-save
-                                       timeSinceAutoSaveStarted > 30000 // Allow 30 seconds from last auto-save attempt
+        // 🔥 CRITICAL FIX: PRIMARY detection uses EventManager state (same as save button)
+        // EventManager is AUTHORITATIVE - if it says no changes, we trust it completely
+        const primaryHasChanges = eventManagerHasChanges && // ✅ PRIMARY: EventManager-based detection
+                                 !settingsOnlyChanges && // ✅ Ignore settings-only changes
+                                 !isRecentSettingsChange && // ✅ Extra protection for recent settings changes
+                                 !autoSaveActive; // Don't warn if auto-save is currently running
+        
+        // 🔥 CRITICAL FIX: If EventManager says no changes, DON'T use fallback
+        // This prevents false positives from stale localStorage flags
+        let fallbackHasChanges = false;
+        if (!eventManagerHasChanges) {
+          // Only use fallback if EventManager state is unavailable (not just false)
+          const saveStateString = localStorage.getItem('divwy-save-state');
+          if (!saveStateString) {
+            // EventManager state unavailable, use fallback with extreme caution
+            fallbackHasChanges = commandChanges && // ✅ FALLBACK: localStorage-based detection
+                                !settingsOnlyChanges && // ✅ Ignore settings-only changes
+                                !isRecentSettingsChange && // ✅ Extra protection for recent settings changes
+                                timeSinceLastChange > timeSinceLastSave &&
+                                timeSinceLastSave > 10000 && // 10 seconds tolerance
+                                !autoSaveActive && // Don't warn if auto-save is currently running
+                                timeSinceAutoSave > 15000 && // Allow 15 seconds after successful auto-save
+                                timeSinceAutoSaveStarted > 30000; // Allow 30 seconds from last auto-save attempt
+          }
+          // If EventManager state exists but says no changes, trust it completely
+        }
+                                  
+        const hasRecentUnsavedChanges = primaryHasChanges || fallbackHasChanges;
         
         const shouldShowWarning = hasRecentUnsavedChanges; // ✅ Time-verified detection
 
-        // Enterprise logging สำหรับ debugging - enhanced with auto-save awareness
+        // Enterprise logging สำหรับ debugging - enhanced with EventManager detection
         if (process.env.NODE_ENV === 'development') {
-          console.log('[RefreshProtection] 🔍 Enhanced Settings-Aware Detection (100% consistent with Save Button):', {
-            commandChanges, // ✅ PRIMARY: Only source of truth
-            contentChanges: `${contentChanges} (IGNORED - using commandChanges only)`,
+          console.log('[RefreshProtection] 🔍 AUTHORITATIVE EventManager Detection (BLOCKS false positives):', {
+            // 🔥 PRIMARY DETECTION (same as save button) - AUTHORITATIVE
+            eventManagerHasChanges,
+            primaryHasChanges,
+            primaryMethod: 'EventManager save state (divwy-save-state) - AUTHORITATIVE',
+            eventManagerStateAvailable: !!localStorage.getItem('divwy-save-state'),
+            // 🔥 FALLBACK DETECTION (only if EventManager unavailable)
+            commandChanges,
+            fallbackHasChanges,
+            fallbackMethod: fallbackHasChanges ? 'localStorage flags (EventManager unavailable)' : 'BLOCKED by EventManager authority',
+            fallbackBlocked: eventManagerHasChanges === false && !!localStorage.getItem('divwy-save-state'),
+            // 🔥 FINAL RESULT
+            hasRecentUnsavedChanges,
+            shouldWarn: hasRecentUnsavedChanges,
+            detectionMethod: primaryHasChanges ? 'PRIMARY: EventManager (authoritative)' : 
+                           fallbackHasChanges ? 'FALLBACK: localStorage (EventManager unavailable)' : 
+                           'EventManager says NO CHANGES - trusted completely',
+            // Settings and timing data
+            contentChanges: `${contentChanges} (IGNORED - using EventManager state)`,
             settingsOnlyChanges,
             isRecentSettingsChange,
             timeSinceLastSettingsChange,
@@ -91,19 +140,24 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
             timeSinceLastChange,
             timeSinceAutoSave,
             timeSinceAutoSaveStarted,
-            hasRecentUnsavedChanges,
-            shouldWarn: hasRecentUnsavedChanges,
+            // EventManager state details
             eventManagerState: eventManagerState ? {
               isDirty: eventManagerState.isDirty,
               hasUnsavedChanges: eventManagerState.hasUnsavedChanges,
               lastSaved: eventManagerState.lastSaved,
               changeType: eventManagerState.changeType
             } : null,
-            detectionMethod: 'COMMAND-BASED-ONLY (matches Save Button logic exactly)',
+            // Consistency verification
             consistencyCheck: {
-              saveButtonLogic: 'commandChanges only',
-              refreshProtectionLogic: 'commandChanges only',
-              status: '✅ PERFECTLY CONSISTENT'
+              saveButtonLogic: 'EventManager.hasChanges() -> content commands only',
+              refreshProtectionLogic: 'EventManager save state -> content commands only',
+              status: '✅ PERFECTLY CONSISTENT - Uses same EventManager state'
+            },
+            deselectionProtection: {
+              uiOnlyCommands: 'Filtered out by EventManager.hasChanges()',
+              selectionCommands: 'Not counted in undo stack',
+              authoritativeBlocking: 'EventManager authority prevents fallback false positives',
+              result: 'Deselect operations will NOT trigger refresh protection (GUARANTEED)'
             },
             tolerances: {
               baseSave: '10 seconds',
@@ -154,7 +208,10 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
         } else if (!shouldShowWarning) {
           // ✅ PROFESSIONAL: Clean refresh detected
           if (process.env.NODE_ENV === 'development') {
-            console.log('[RefreshProtection] 🧹 Clean refresh detected - no recent unsaved changes', {
+            console.log('[RefreshProtection] 🧹 Clean refresh detected - no recent unsaved changes (EventManager-based)', {
+              eventManagerHasChanges,
+              primaryHasChanges,
+              fallbackHasChanges,
               contentChanges,
               commandChanges,
               settingsOnlyChanges,
@@ -164,10 +221,13 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
               timeSinceLastSave,
               timeSinceLastChange,
               timeSinceAutoSave,
-              explanation: 'No recent unsaved changes detected using enhanced settings-aware method',
+              explanation: 'No recent unsaved changes detected using EventManager state (same as save button)',
+              primaryReason: eventManagerHasChanges ? 'EventManager reports changes' : 'EventManager reports no changes (AUTHORITATIVE)',
+              fallbackReason: fallbackHasChanges ? 'localStorage fallback used (EventManager unavailable)' : 'Fallback BLOCKED by EventManager authority',
               settingsReason: settingsOnlyChanges ? 'Settings-only changes ignored' : 'No settings changes',
               settingsBufferReason: isRecentSettingsChange ? 'Recent settings change blocked warning' : 'No recent settings buffer',
-              autoSaveReason: autoSaveActive ? 'Auto-save is active - skip warning' : 'Auto-save completed recently'
+              autoSaveReason: autoSaveActive ? 'Auto-save is active - skip warning' : 'Auto-save completed recently',
+              deselectionNote: 'Deselect operations correctly filtered out by EventManager.hasChanges()'
             })
           }
         }
@@ -202,8 +262,32 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
     // ===============================
     
     const handleStorageChange = (event: StorageEvent) => {
-      // 🔥 ADOBE/FIGMA STYLE: ตรวจสอบ CONTENT changes จาก tab อื่น (ไม่รวม settings)
-      if (event.key === 'divwy-content-changes' && event.newValue === 'true') {
+      // 🔥 EVENTMANAGER-BASED: ตรวจสอบ CONTENT changes จาก tab อื่น (same logic as save button)
+      if (event.key === 'divwy-save-state' && event.newValue) {
+        try {
+          const saveState = JSON.parse(event.newValue);
+          const hasContentChanges = saveState.isDirty || saveState.hasUnsavedChanges;
+          
+          // 🔥 ตรวจสอบว่าเป็น content changes จริง ไม่ใช่ settings
+          const isSettingsOnly = localStorage.getItem('divwy-settings-only-changes') === 'true';
+          
+          if (hasContentChanges && !isSettingsOnly) {
+            // มีการเปลี่ยนแปลงเนื้อหาจาก tab อื่น - Professional notification
+            toast.info(
+              '📂 ตรวจพบการแก้ไขเนื้อหาจากแท็บอื่น\n\n' +
+              '💡 เพื่อป้องกันการขัดแย้งของข้อมูล แนะนำให้ใช้แท็บเดียว\n\n' +
+              '🎯 EventManager Detection: ใช้โลจิกเดียวกับปุ่ม Save (เฉพาะเนื้อหา)\n' +
+              '✅ การ deselect จะไม่ trigger การเตือนนี้',
+              { duration: 6000 }
+            )
+          }
+        } catch (error) {
+          console.warn('[RefreshProtection] Failed to parse cross-tab save state:', error);
+        }
+      }
+      
+      // 🔥 FALLBACK: Legacy detection for backward compatibility
+      else if (event.key === 'divwy-content-changes' && event.newValue === 'true') {
         // 🔥 ตรวจสอบว่าเป็น content changes จริง ไม่ใช่ settings
         const isSettingsOnly = localStorage.getItem('divwy-settings-only-changes') === 'true' || 
                               localStorage.getItem('divwy-content-changes') !== 'true'
@@ -211,10 +295,10 @@ const RefreshProtectionWrapper: React.FC<RefreshProtectionWrapperProps> = ({ chi
         if (!isSettingsOnly) {
           // มีการเปลี่ยนแปลงเนื้อหาจาก tab อื่น - Professional notification
           toast.info(
-            '📂 ตรวจพบการแก้ไขเนื้อหาจากแท็บอื่น\n\n' +
+            '📂 ตรวจพบการแก้ไขเนื้อหาจากแท็บอื่น (Legacy Detection)\n\n' +
             '💡 เพื่อป้องกันการขัดแย้งของข้อมูล แนะนำให้ใช้แท็บเดียว\n\n' +
-            '🎯 Smart Detection: ตรวจจับเฉพาะเนื้อหา (ไม่รวมการตั้งค่า)\n' +
-            '✅ การตั้งค่าบันทึกอัตโนมัติ - ไม่ต้องเตือน',
+            '🎯 Fallback Detection: ใช้ localStorage flags\n' +
+            '✅ การ deselect ควรจะไม่ trigger การเตือนนี้',
             { duration: 6000 }
           )
         }

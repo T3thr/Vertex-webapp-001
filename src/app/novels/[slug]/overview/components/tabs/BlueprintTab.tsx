@@ -1771,6 +1771,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     if (change.type === 'select') return false;
     if (change.type === 'dimensions') return false;
     
+    // 🔥 CRITICAL FIX: Skip command creation during deselect operations
+    if (isDeselectOperation.current) {
+      console.log(`[BlueprintTab] 🚫 Skipping command creation during deselect operation: ${change.type}`);
+      return false;
+    }
+    
+    // 🔥 ADOBE/FIGMA STYLE: Detect selection-only changes that shouldn't create commands
+    // These are typically node/edge updates that only change selection state
+    if (change.type === 'replace' && 'item' in change) {
+      const item = change.item as any;
+      // Check if this is only a selection state change
+      if (item.hasOwnProperty('selected') && Object.keys(item).length <= 3) {
+        // Only changing selection, position, or id - this is UI-only
+        console.log(`[BlueprintTab] 👆 Selection-only replace change detected, skipping command`);
+        return false;
+      }
+    }
+    
     // สำหรับ position changes: ต้องเป็นการลากที่เสร็จสิ้นแล้ว (dragging: false)
     if (change.type === 'position') {
       return 'dragging' in change && change.dragging === false && 'id' in change && 
@@ -1985,8 +2003,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       });
       }
       
-      // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
-      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+      // 🔥 CRITICAL FIX: ป้องกันการอัปเดต snapshot ระหว่าง deselect operations เพื่อไม่ให้เกิด false dirty state
+      // การแก้ไขนี้แก้ปัญหาหลัก: deselect operations ไม่ควร trigger refresh protection warning
+      if (!isDeselectOperation.current) {
+        // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
+        professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+        console.log(`[BlueprintTab] ✅ อัปเดต snapshot หลังจากเปลี่ยนแปลง nodes (${changes.length} changes)`);
+      } else {
+        console.log(`[BlueprintTab] 🚫 ข้าม snapshot sync ระหว่างการ deselect - ป้องกัน false dirty state และ refresh protection warning`);
+      }
     }
 
     // Clear drag positions หลัง position change เสร็จ
@@ -2013,8 +2038,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }
       });
       
-      // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
-      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+      // 🔥 CRITICAL FIX: ป้องกันการอัปเดต snapshot ระหว่าง deselect operations เพื่อไม่ให้เกิด false dirty state
+      // การแก้ไขนี้แก้ปัญหาหลัก: deselect operations ไม่ควร trigger refresh protection warning
+      if (!isDeselectOperation.current) {
+        // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
+        professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+        console.log(`[BlueprintTab] ✅ อัปเดต snapshot หลังจากเปลี่ยนแปลง edges (${changes.length} changes)`);
+      } else {
+        console.log(`[BlueprintTab] 🚫 ข้าม snapshot sync ระหว่างการ deselect - ป้องกัน false dirty state และ refresh protection warning`);
+      }
     }
   }, [onEdgesChange, shouldCreateCommand, createCommandFromChange, professionalEventManager, nodes, edges, storyMap]);
   
@@ -2088,6 +2120,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Drag tracking for Command Pattern
   const dragStartPositions = useRef<Record<string, { x: number; y: number }>>({});
   const isDragging = useRef(false);
+
+  // 🔥 CRITICAL FIX: Track deselect operations to prevent them from creating commands
+  const isDeselectOperation = useRef(false);
 
 
   const multiSelectDragStart = useRef<Record<string, { x: number; y: number }>>({});
@@ -4763,6 +4798,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // 🔧 FIGMA STYLE: Clear all selections with ULTRA-aggressive UI sync
   const clearAllSelections = useCallback(() => {
+    // 🔥 CRITICAL FIX: Set deselect flag to prevent command creation
+    isDeselectOperation.current = true;
+    
+    console.log(`[BlueprintTab] 🧹 Starting deselect operation - commands will be blocked`);
+    
+    // 🔥 DEFENSIVE: Immediately clear any stale localStorage flags
+    if (typeof window !== 'undefined' && professionalEventManager) {
+      try {
+        professionalEventManager.clearIncorrectLocalStorageFlags();
+        console.log(`[BlueprintTab] 🧹 Cleared stale localStorage flags before deselect`);
+      } catch (error) {
+        console.error(`[BlueprintTab] ❌ Failed to clear localStorage flags:`, error);
+      }
+    }
+    
     // 🚨 EMERGENCY: Force immediate ReactFlow clear BEFORE any state updates
     if (reactFlowInstance) {
       try {
@@ -4968,6 +5018,23 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     console.log(`[BlueprintTab] 🧹 ULTRA-aggressive clear all selections completed - Figma style with emergency fallback`);
     
+    // 🔥 CRITICAL FIX: Reset deselect flag and perform final cleanup
+    setTimeout(() => {
+      isDeselectOperation.current = false;
+      
+      // 🔥 DEFENSIVE: Final localStorage cleanup after deselect operation
+      if (typeof window !== 'undefined' && professionalEventManager) {
+        try {
+          professionalEventManager.clearIncorrectLocalStorageFlags();
+          console.log(`[BlueprintTab] 🧹 Final localStorage cleanup after deselect completed`);
+        } catch (error) {
+          console.error(`[BlueprintTab] ❌ Final cleanup failed:`, error);
+        }
+      }
+      
+      console.log(`[BlueprintTab] ✅ Deselect operation completed - command creation re-enabled`);
+    }, 100);
+    
     // 🔥 FIGMA STYLE: Immediate verification
     if (reactFlowInstance) {
       const immediateCheck = {
@@ -4993,7 +5060,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           reactFlowInstance.getEdges().filter(e => e.selected).length : 'N/A'
       });
     }, 300);
-  }, [reactFlowInstance, selection]);
+  }, [reactFlowInstance, selection, professionalEventManager]);
 
   // Cancel multi-selection
   const cancelMultiSelection = useCallback(() => {
@@ -5234,6 +5301,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
           // 🔥 FIGMA STYLE: Clear all selections with ESC key - SINGLE PRESS CLEAR ALL
           console.log(`[BlueprintTab] ⌨️ ESC pressed - ULTRA-aggressive clearing ALL selections in single press (Figma-style)`);
+          
+          // 🔥 CRITICAL FIX: Set deselect flag for ESC key operations
+          isDeselectOperation.current = true;
           
           // 🚨 PRIORITY: Force clear visual selection IMMEDIATELY
           if (reactFlowInstance) {
@@ -5692,6 +5762,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         
         console.log(`[BlueprintTab] 🚨 HIGH-PRIORITY ESC handler - clearing all selections`);
         
+        // 🔥 CRITICAL FIX: Set deselect flag for high-priority ESC
+        isDeselectOperation.current = true;
+        
         // Force immediate visual clear
         if (reactFlowInstance) {
           try {
@@ -5879,6 +5952,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
     // 🔥 FIGMA STYLE: Clear all selections when clicking on empty canvas
     console.log(`[BlueprintTab] 🎯 Canvas clicked - clearing all selections (Figma-style)`);
+    
+    // 🔥 CRITICAL FIX: Set deselect flag for canvas click operations
+    isDeselectOperation.current = true;
+    
     clearAllSelections();
   }, [clearAllSelections]);
 
