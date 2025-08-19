@@ -282,13 +282,10 @@ export class SingleUserEventManager {
   // ตรวจสอบว่า command เป็นการเลือกเท่านั้น (ไม่ใช่การแก้ไขข้อมูล)
   private isSelectionOnlyCommand(command: Command): boolean {
     const selectionTypes = [
-      // Selection Commands - Core selection operations
+      // Selection Commands
       'MULTI_SELECT', 'SELECT_NODES', 'SELECT_EDGES', 'CLEAR_SELECTION',
       'SELECTION_CHANGE', 'UI_SELECT', 'VISUAL_SELECT', 'SELECT_ALL',
       'DESELECT_ALL', 'TOGGLE_SELECTION', 'SINGLE_SELECT',
-      // 🔥 CRITICAL FIX: Enhanced deselection detection
-      'DESELECT', 'UNSELECT', 'CLEAR_SELECT', 'CANCEL_SELECTION',
-      'ESC_DESELECT', 'CANVAS_DESELECT', 'BACKGROUND_CLICK_DESELECT',
       // UI-only Commands
       'UPDATE_VIEWPORT', 'UPDATE_CANVAS_POSITION', 'UPDATE_ZOOM',
       'UPDATE_UI_SETTINGS', 'TOGGLE_PANEL', 'CHANGE_VIEW_MODE',
@@ -296,46 +293,17 @@ export class SingleUserEventManager {
       'FOCUS_NODE', 'HIGHLIGHT_NODE', 'UNHIGHLIGHT_NODE', 'SET_FOCUS',
       'CLEAR_FOCUS', 'HOVER_NODE', 'UNHOVER_NODE',
       // Canvas State Commands (UI-only)
-      'SET_CANVAS_MODE', 'TOGGLE_GRID', 'UPDATE_MINIMAP', 'SET_VIEW_MODE',
-      // 🔥 FIGMA/CANVA STYLE: Additional UI-only operations
-      'CANVAS_CLICK', 'BACKGROUND_CLICK', 'EMPTY_SPACE_CLICK',
-      'KEYBOARD_DESELECT', 'ESCAPE_KEY', 'CLEAR_ALL_SELECTIONS'
+      'SET_CANVAS_MODE', 'TOGGLE_GRID', 'UPDATE_MINIMAP', 'SET_VIEW_MODE'
     ];
     
-    // ✅ PROFESSIONAL: Enhanced pattern matching for selection commands
-    const isUIOnly = selectionTypes.some(type => 
-      command.type.includes(type) || 
-      command.type.toLowerCase().includes('select') ||
-      command.type.toLowerCase().includes('deselect') ||
-      command.type.toLowerCase().includes('clear') ||
-      command.type.toLowerCase().includes('ui_') ||
-      command.type.toLowerCase().includes('visual_')
-    );
+    // ✅ PROFESSIONAL: Explicit check for UI-only commands
+    const isUIOnly = selectionTypes.some(type => command.type.includes(type));
     
-    // 🔥 ADDITIONAL CHECK: Command description analysis for deselection
-    const hasDeselectionDescription = Boolean(command.description && (
-      command.description.toLowerCase().includes('deselect') ||
-      command.description.toLowerCase().includes('clear selection') ||
-      command.description.toLowerCase().includes('unselect') ||
-      command.description.toLowerCase().includes('cancel selection') ||
-      command.description.toLowerCase().includes('esc') ||
-      command.description.toLowerCase().includes('background click') ||
-      command.description.toLowerCase().includes('canvas click')
-    ));
-    
-    const finalUIOnly = isUIOnly || hasDeselectionDescription;
-    
-    if (finalUIOnly) {
-      console.log(`[SingleUserEventManager] 👆 UI-only command detected: ${command.type}`, {
-        reason: isUIOnly ? 'type-match' : 'description-match',
-        description: command.description
-      });
-      
-      // 🔥 DEFENSIVE: Immediately clear any incorrect flags that might have been set
-      this.clearIncorrectLocalStorageFlags();
+    if (isUIOnly) {
+      console.log(`[SingleUserEventManager] 👆 UI-only command detected: ${command.type}`);
     }
     
-    return finalUIOnly;
+    return isUIOnly;
   }
 
   // 🔥 CRITICAL FIX: ตรวจสอบว่า command เป็น content change จริงๆ (ไม่รวม Selection)
@@ -838,40 +806,6 @@ export class SingleUserEventManager {
     }
   }
 
-  // 🔥 ADOBE/FIGMA STYLE: Clear incorrect localStorage flags from UI-only operations
-  clearIncorrectLocalStorageFlags(): void {
-    if (typeof window === 'undefined') return;
-    
-    // ✅ DEFENSIVE: Clear stale flags that might have been set by UI-only operations
-    const flagsToCheck = [
-      'divwy-command-has-changes',
-      'divwy-content-changes',
-      'divwy-has-unsaved-changes',
-      'divwy-last-change',
-      'divwy-last-content-change'
-    ];
-    
-    let clearedFlags = 0;
-    
-    flagsToCheck.forEach(flag => {
-      const currentValue = localStorage.getItem(flag);
-      if (currentValue === 'true' || (currentValue !== null && currentValue !== 'false')) {
-        localStorage.removeItem(flag);
-        clearedFlags++;
-        console.log(`[SingleUserEventManager] 🧹 Cleared incorrect flag: ${flag} (was: ${currentValue})`);
-      }
-    });
-    
-    // ✅ PROFESSIONAL: Set clean state flags
-    localStorage.setItem('divwy-command-has-changes', 'false');
-    localStorage.setItem('divwy-content-changes', 'false');
-    localStorage.setItem('divwy-has-unsaved-changes', 'false');
-    
-    if (clearedFlags > 0) {
-      console.log(`[SingleUserEventManager] 🧹 Cleared ${clearedFlags} incorrect localStorage flags from UI-only operations`);
-    }
-  }
-
   destroy(): void {
     this.stopAutoSave();
     if (this.debounceTimer) {
@@ -1044,37 +978,6 @@ export class SingleUserEventManager {
       });
     }
     
-    // 🔥 DEFENSIVE CLEANUP: Ensure localStorage flags match our command-based detection
-    if (typeof window !== 'undefined') {
-      const currentCommandFlag = localStorage.getItem('divwy-command-has-changes') === 'true';
-      const currentContentFlag = localStorage.getItem('divwy-content-changes') === 'true';
-      
-      // If our command-based detection says no changes, but localStorage flags say yes, clear them
-      if (!commandBasedHasChanges && (currentCommandFlag || currentContentFlag)) {
-        console.log('[SingleUserEventManager] 🧹 Defensive cleanup - clearing stale localStorage flags', {
-          commandBasedHasChanges,
-          currentCommandFlag,
-          currentContentFlag,
-          reason: 'Command-based detection is authoritative'
-        });
-        
-        localStorage.setItem('divwy-command-has-changes', 'false');
-        localStorage.setItem('divwy-content-changes', 'false');
-        localStorage.setItem('divwy-has-unsaved-changes', 'false');
-        localStorage.removeItem('divwy-last-change');
-        localStorage.removeItem('divwy-last-content-change');
-      }
-      
-      // If we have changes, ensure flags are set correctly
-      if (commandBasedHasChanges) {
-        localStorage.setItem('divwy-command-has-changes', 'true');
-        localStorage.setItem('divwy-content-changes', 'true');
-        localStorage.setItem('divwy-has-unsaved-changes', 'true');
-        localStorage.setItem('divwy-last-change', Date.now().toString());
-        localStorage.setItem('divwy-last-content-change', Date.now().toString());
-      }
-    }
-    
     this.config.onStateChange?.(this.state);
   }
 
@@ -1099,11 +1002,11 @@ export class SingleUserEventManager {
       affectedItems: [] as string[]
     };
 
-    // 🔥 CRITICAL FIX: สร้าง Maps สำหรับการเปรียบเทียบที่รวดเร็ว พร้อม normalization
-    const oldNodes = new Map((oldSnapshot.nodes || []).map(n => [n.id, this.normalizeNodeForComparison(n)]));
-    const newNodes = new Map((newSnapshot.nodes || []).map(n => [n.id, this.normalizeNodeForComparison(n)]));
-    const oldEdges = new Map((oldSnapshot.edges || []).map(e => [e.id, this.normalizeEdgeForComparison(e)]));
-    const newEdges = new Map((newSnapshot.edges || []).map(e => [e.id, this.normalizeEdgeForComparison(e)]));
+    // สร้าง Maps สำหรับการเปรียบเทียบที่รวดเร็ว
+    const oldNodes = new Map((oldSnapshot.nodes || []).map(n => [n.id, n]));
+    const newNodes = new Map((newSnapshot.nodes || []).map(n => [n.id, n]));
+    const oldEdges = new Map((oldSnapshot.edges || []).map(e => [e.id, e]));
+    const newEdges = new Map((newSnapshot.edges || []).map(e => [e.id, e]));
     const oldVars = new Map((oldSnapshot.storyVariables || []).map(v => [v.variableId || v.id, v]));
     const newVars = new Map((newSnapshot.storyVariables || []).map(v => [v.variableId || v.id, v]));
 
@@ -1115,19 +1018,14 @@ export class SingleUserEventManager {
       } else {
         const oldNode = oldNodes.get(nodeId)!;
         
-        // 🔥 CRITICAL FIX: ใช้ original nodes สำหรับ position check (ยังต้องการ position changes)
-        const originalOldNode = (oldSnapshot.nodes || []).find(n => n.id === nodeId);
-        const originalNewNode = (newSnapshot.nodes || []).find(n => n.id === nodeId);
-        
-        // ตรวจสอบการเคลื่อนที่ (Position changes) - ใช้ original nodes
-        if (originalOldNode && originalNewNode && 
-            this.hasPositionChanged(originalOldNode.position, originalNewNode.position)) {
+        // ตรวจสอบการเคลื่อนที่ (Position changes)
+        if (this.hasPositionChanged(oldNode.position, newNode.position)) {
           changes.nodeChanges.moved++;
           changes.affectedItems.push(`node:${nodeId}:moved`);
         }
         
-        // ตรวจสอบการแก้ไขข้อมูล (Data changes) - ใช้ normalized nodes
-        if (this.hasNodeDataChanged(originalOldNode, originalNewNode)) {
+        // ตรวจสอบการแก้ไขข้อมูล (Data changes)
+        if (this.hasNodeDataChanged(oldNode, newNode)) {
           changes.nodeChanges.modified++;
           changes.affectedItems.push(`node:${nodeId}:modified`);
         }
@@ -1148,12 +1046,8 @@ export class SingleUserEventManager {
         changes.edgeChanges.added++;
         changes.affectedItems.push(`edge:${edgeId}:added`);
       } else {
-        // 🔥 CRITICAL FIX: ใช้ original edges สำหรับการเปรียบเทียบ
-        const originalOldEdge = (oldSnapshot.edges || []).find(e => e.id === edgeId);
-        const originalNewEdge = (newSnapshot.edges || []).find(e => e.id === edgeId);
-        
-        if (originalOldEdge && originalNewEdge && 
-            this.hasEdgeDataChanged(originalOldEdge, originalNewEdge)) {
+        const oldEdge = oldEdges.get(edgeId)!;
+        if (this.hasEdgeDataChanged(oldEdge, newEdge)) {
           changes.edgeChanges.modified++;
           changes.affectedItems.push(`edge:${edgeId}:modified`);
         }
@@ -1198,17 +1092,6 @@ export class SingleUserEventManager {
 
     changes.hasChanges = totalChanges > 0;
 
-    // 🔥 PROFESSIONAL LOGGING: ติดตามการทำงานของ UI-only filter
-    if (totalChanges === 0 && ((oldSnapshot.nodes || []).length > 0 || (newSnapshot.nodes || []).length > 0)) {
-      console.log('[SingleUserEventManager] 🎯 UI-only changes filtered out successfully', {
-        oldNodeCount: (oldSnapshot.nodes || []).length,
-        newNodeCount: (newSnapshot.nodes || []).length,
-        oldEdgeCount: (oldSnapshot.edges || []).length,
-        newEdgeCount: (newSnapshot.edges || []).length,
-        message: 'Selection changes ignored, no dirty state triggered'
-      });
-    }
-
     // กำหนดประเภทการเปลี่ยนแปลง
     if (totalChanges === 0) {
       changes.changeType = 'none';
@@ -1239,94 +1122,12 @@ export class SingleUserEventManager {
            Math.abs((oldPos.y || 0) - (newPos.y || 0)) > threshold;
   }
 
-  // 🔥 NEW: Helper method to filter out UI-only properties
-  private filterUIOnlyProperties(obj: any): any {
-    if (!obj || typeof obj !== 'object') return obj;
-    
-    const filtered = { ...obj };
-    
-    // Remove UI-only properties that shouldn't trigger save
-    delete filtered.selected;
-    delete filtered._selected;
-    delete filtered._clearTimestamp;
-    delete filtered.dragging;
-    delete filtered.resizing;
-    delete filtered.focus;
-    delete filtered.hover;
-    delete filtered.highlighted;
-    delete filtered._reactFlowInternal;
-    
-    // Recursively filter nested objects
-    Object.keys(filtered).forEach(key => {
-      if (filtered[key] && typeof filtered[key] === 'object') {
-        filtered[key] = this.filterUIOnlyProperties(filtered[key]);
-      }
-    });
-    
-    return filtered;
-  }
-
-  // 🔥 NEW: Normalize node for comparison by removing UI-only properties
-  private normalizeNodeForComparison(node: any): any {
-    if (!node) return node;
-    
-    const normalized = this.filterUIOnlyProperties(node);
-    
-    // Additional node-specific normalization
-    if (normalized.data) {
-      normalized.data = this.filterUIOnlyProperties(normalized.data);
-    }
-    
-    // 🔥 CRITICAL FIX: ลบ selection-related properties ที่อาจทำให้เกิด false positives
-    // การแก้ไขนี้ป้องกันไม่ให้ deselect operations ถูกตรวจจับเป็น content changes
-    delete normalized.selected;      // สถานะการเลือก
-    delete normalized._selected;     // สถานะการเลือกภายใน
-    delete normalized.dragging;      // สถานะการลาก
-    delete normalized.resizing;      // สถานะการปรับขนาด
-    delete normalized.focus;         // สถานะโฟกัส
-    delete normalized.hover;         // สถานะ hover
-    delete normalized.highlighted;   // สถานะไฮไลท์
-    
-    return normalized;
-  }
-
-  // 🔥 NEW: Normalize edge for comparison by removing UI-only properties
-  private normalizeEdgeForComparison(edge: any): any {
-    if (!edge) return edge;
-    
-    const normalized = this.filterUIOnlyProperties(edge);
-    
-    // Additional edge-specific normalization
-    if (normalized.data) {
-      normalized.data = this.filterUIOnlyProperties(normalized.data);
-    }
-    
-    // 🔥 CRITICAL FIX: ลบ selection-related properties ที่อาจทำให้เกิด false positives
-    // การแก้ไขนี้ป้องกันไม่ให้ deselect operations ถูกตรวจจับเป็น content changes
-    delete normalized.selected;      // สถานะการเลือก edge
-    delete normalized._selected;     // สถานะการเลือกภายใน
-    delete normalized.focus;         // สถานะโฟกัส
-    delete normalized.hover;         // สถานะ hover
-    delete normalized.highlighted;   // สถานะไฮไลท์
-    
-    return normalized;
-  }
-
   private hasNodeDataChanged(oldNode: any, newNode: any): boolean {
-    // 🔥 CRITICAL FIX: Normalize both nodes before comparison
-    const normalizedOldNode = this.normalizeNodeForComparison(oldNode);
-    const normalizedNewNode = this.normalizeNodeForComparison(newNode);
-    
-    // ตรวจสอบการเปลี่ยนแปลงของข้อมูลที่สำคัญ (ไม่รวม UI-only properties)
+    // ตรวจสอบการเปลี่ยนแปลงของข้อมูลที่สำคัญ
     const importantFields = ['type', 'data', 'style'];
     
     for (const field of importantFields) {
-      if (JSON.stringify(normalizedOldNode[field]) !== JSON.stringify(normalizedNewNode[field])) {
-        console.log(`[SingleUserEventManager] 📝 Node data change detected in field: ${field}`, {
-          nodeId: oldNode.id,
-          oldValue: normalizedOldNode[field],
-          newValue: normalizedNewNode[field]
-        });
+      if (JSON.stringify(oldNode[field]) !== JSON.stringify(newNode[field])) {
         return true;
       }
     }
@@ -1334,20 +1135,11 @@ export class SingleUserEventManager {
   }
 
   private hasEdgeDataChanged(oldEdge: any, newEdge: any): boolean {
-    // 🔥 CRITICAL FIX: Normalize both edges before comparison
-    const normalizedOldEdge = this.normalizeEdgeForComparison(oldEdge);
-    const normalizedNewEdge = this.normalizeEdgeForComparison(newEdge);
-    
-    // ตรวจสอบการเปลี่ยนแปลงของ edge (ไม่รวม UI-only properties)
+    // ตรวจสอบการเปลี่ยนแปลงของ edge
     const importantFields = ['source', 'target', 'sourceHandle', 'targetHandle', 'data', 'style', 'label'];
     
     for (const field of importantFields) {
-      if (JSON.stringify(normalizedOldEdge[field]) !== JSON.stringify(normalizedNewEdge[field])) {
-        console.log(`[SingleUserEventManager] 📝 Edge data change detected in field: ${field}`, {
-          edgeId: oldEdge.id,
-          oldValue: normalizedOldEdge[field],
-          newValue: normalizedNewEdge[field]
-        });
+      if (JSON.stringify(oldEdge[field]) !== JSON.stringify(newEdge[field])) {
         return true;
       }
     }

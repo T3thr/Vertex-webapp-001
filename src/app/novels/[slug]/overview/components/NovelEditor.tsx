@@ -83,12 +83,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       // ✅ PROFESSIONAL FIX: Use command-based detection for perfect consistency with debounce
       const commandBasedHasChanges = eventManager.hasChanges();
       
-      console.log('[NovelEditor] 📊 StateChange Callback:', {
-        eventManagerState: state,
-        commandBasedHasChanges,
-        note: 'Using command-based detection with UI-only protection'
-      });
-      
       const enhancedState = {
         ...state,
         isDirty: commandBasedHasChanges,
@@ -104,7 +98,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       });
       
       // ✅ CRITICAL: Immediate localStorage sync for refresh protection
-      // SingleUserEventManager.hasChanges() already handles UI-only protection
       if (typeof window !== 'undefined') {
         localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
         localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString());
@@ -140,17 +133,10 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       // ✅ CRITICAL: Immediate localStorage sync with command-based state
       if (typeof window !== 'undefined') {
         localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString());
-        localStorage.setItem('divwy-command-has-changes', commandBasedHasChanges.toString()); // ✅ Sync command flag
         if (commandBasedHasChanges) {
           localStorage.setItem('divwy-last-change', Date.now().toString());
-          localStorage.setItem('divwy-last-content-change', Date.now().toString());
         } else {
-          // ✅ CRITICAL: Clear ALL change-related flags when no changes
-          localStorage.removeItem('divwy-last-change');
-          localStorage.removeItem('divwy-last-content-change');
-          localStorage.setItem('divwy-has-unsaved-changes', 'false'); // ✅ Explicit false
-          
-          console.log('[NovelEditor] 🧹 Cleared all change flags - EventManager says no changes');
+          localStorage.removeItem('divwy-last-change'); // ✅ Clear when no changes
         }
       }
       
@@ -813,40 +799,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       // 🔥 ADOBE/FIGMA STYLE: Use command-based detection for Status Indicator consistency
       const commandBasedHasChanges = eventManager.hasChanges();
       
-      console.log('[NovelEditor] 🔍 Dirty Change Handler Called:', {
-        inputIsDirty: isDirty,
+      console.log('[NovelEditor] 🔍 Status Indicator Sync Check:', {
+        eventManagerIsDirty: isDirty,
         commandBasedHasChanges,
-        willUseCommandBased: true,
-        note: 'Using SingleUserEventManager.hasChanges() with UI-only protection'
+        willUseCommandBased: true
       });
-      
-      // 🔥 CRITICAL FIX: ป้องกัน UI-only operations ที่หลากหลาย
-      if (!commandBasedHasChanges && isDirty) {
-        console.log('[NovelEditor] 🎨 UI-only operation detected (isDirty but no command changes) - skipping localStorage update');
-        
-        // ล้าง localStorage flags ที่อาจจะถูก set ผิดพลาด
-        if (eventManager && typeof eventManager.clearIncorrectLocalStorageFlags === 'function') {
-          eventManager.clearIncorrectLocalStorageFlags();
-        }
-        
-        return;
-      }
-      
-      // 🔥 ADDITIONAL PROTECTION: ถ้า commandBasedHasChanges เป็น false แต่ isDirty เป็น false
-      // แต่ localStorage ยังมี flags ที่เป็น true อยู่ ให้ล้างออก
-      if (!commandBasedHasChanges && !isDirty && typeof window !== 'undefined') {
-        const hasStaleFlags = localStorage.getItem('divwy-command-has-changes') === 'true' ||
-                             localStorage.getItem('divwy-content-changes') === 'true';
-        
-        if (hasStaleFlags) {
-          console.log('[NovelEditor] 🧹 Clearing stale localStorage flags from previous UI-only operations');
-          localStorage.setItem('divwy-command-has-changes', 'false');
-          localStorage.setItem('divwy-content-changes', 'false');
-          localStorage.setItem('divwy-has-unsaved-changes', 'false'); // ✅ Explicit false
-          localStorage.removeItem('divwy-last-change');
-          localStorage.removeItem('divwy-last-content-change');
-        }
-      }
       
       // Professional dirty state management - ใช้ command-based detection
       setSaveState(prev => {
@@ -858,7 +815,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
             
             // 🔥 CRITICAL: Store command-based state for Refresh Protection
-            // Note: SingleUserEventManager should handle UI-only protection
             localStorage.setItem('divwy-command-has-changes', commandBasedHasChanges.toString());
             
             // 🔥 ADOBE/FIGMA STYLE: Update change timestamp เฉพาะ content commands
