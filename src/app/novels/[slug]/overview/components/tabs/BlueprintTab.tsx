@@ -3230,6 +3230,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // ✅ FIGMA/ADOBE STYLE: Content change tracking refs สำหรับป้องกัน selection-triggered auto-save
   const prevNodesContent = useRef<string>('');
   const prevEdgesContent = useRef<string>('');
+  const isInitialRender = useRef<boolean>(true);
 
   // ✅ ENHANCED: Trigger auto-save เมื่อมีการเปลี่ยนแปลง content จริงๆ (ไม่รวม selection changes)
   useEffect(() => {
@@ -3250,6 +3251,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         data: edge.data
         // ✅ NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
       })));
+      
+      // ✅ CRITICAL FIX: Initialize refs on first render to prevent false positive
+      if (isInitialRender.current) {
+        prevNodesContent.current = currentNodesContent;
+        prevEdgesContent.current = currentEdgesContent;
+        isInitialRender.current = false;
+        console.log('[BlueprintTab] 🔄 Initial content refs initialized, skipping auto-save');
+        return;
+      }
       
       // ✅ FIGMA/ADOBE STYLE: Only trigger auto-save for real content changes
       if (currentNodesContent !== prevNodesContent.current || 
@@ -4939,16 +4949,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           reactFlowInstance.setNodes(
             reactFlowInstance.getNodes().map(node => ({
               ...node,
-              selected: false,
-              data: { ...node.data, _immediateUnselect: Date.now() + i }
+              selected: false
+              // ✅ CRITICAL FIX: ไม่แก้ไข node.data เพื่อป้องกัน false positive change detection
             }))
           );
           
           reactFlowInstance.setEdges(
             reactFlowInstance.getEdges().map(edge => ({
               ...edge,
-              selected: false,
-              data: { ...edge.data, _immediateUnselect: Date.now() + i }
+              selected: false
+              // ✅ CRITICAL FIX: ไม่แก้ไข edge.data เพื่อป้องกัน false positive change detection
             }))
           );
         }
@@ -5006,18 +5016,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         reactFlowInstance.setNodes(
           allNodes.map(node => ({
             ...node,
-            selected: false,
-            // Force visual update
-            data: { ...node.data, _clearTimestamp: Date.now() }
+            selected: false
+            // ✅ CRITICAL FIX: ไม่แก้ไข node.data เพื่อป้องกัน false positive change detection
           }))
         );
         
         reactFlowInstance.setEdges(
           allEdges.map(edge => ({
             ...edge,
-            selected: false,
-            // Force visual update
-            data: { ...edge.data, _clearTimestamp: Date.now() }
+            selected: false
+            // ✅ CRITICAL FIX: ไม่แก้ไข edge.data เพื่อป้องกัน false positive change detection
           }))
         );
         
