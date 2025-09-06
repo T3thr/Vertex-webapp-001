@@ -507,6 +507,20 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     }
   }
 
+  // ✨ Handle episode creation from BlueprintTab
+  const handleEpisodeCreate = (newEpisode: any, updatedEpisodes: any[]) => {
+    // Update current episodes state with the new episode list
+    setCurrentEpisodes(updatedEpisodes)
+    
+    // Update novel episode count
+    setCurrentNovel(prev => ({
+      ...prev,
+      totalEpisodesCount: updatedEpisodes.length
+    }))
+    
+    console.log('[NovelEditor] Episode created successfully:', newEpisode.title)
+  }
+
   const handleNovelUpdate = async (novelData: any) => {
     try {
       const response = await fetch(`/api/novels/${novel.slug}`, {
@@ -1494,6 +1508,8 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 }} // ส่ง dirty state callback
                 // ✨ Professional Event Management Integration (Adobe/Canva/Figma style)
                 eventManager={eventManager}
+                // ✨ Episode creation callback
+                onEpisodeCreate={handleEpisodeCreate}
                 // ✅ PROFESSIONAL SOLUTION 3: ส่ง auto-save config ไปยัง BlueprintTab
                 autoSaveConfig={{
                   enabled: isAutoSaveEnabled,

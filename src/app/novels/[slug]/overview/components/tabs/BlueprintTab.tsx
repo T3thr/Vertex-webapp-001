@@ -85,19 +85,20 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 // import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Icons
 import { 
   Plus, 
+  PlusCircle,
   RefreshCw, 
   ZoomIn, 
   ZoomOut, 
@@ -159,7 +160,11 @@ import {
   Clapperboard,
   MonitorPlay,
   Scissors,
-  FileText
+  FileText,
+  Calendar,
+  Type,
+  Hash,
+  Loader2
 } from 'lucide-react';
 
 // Types from backend models
@@ -199,6 +204,8 @@ interface BlueprintTabProps {
     snapToGrid: boolean;
     nodeOrientation: 'horizontal' | 'vertical';
   };
+  // ✨ Add Episode callback for parent component integration
+  onEpisodeCreate?: (newEpisode: any, updatedEpisodes: any[]) => void;
 }
 
 // Command Pattern interfaces for proper undo/redo
@@ -1684,7 +1691,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   onNavigateToDirector,
   eventManager, // Professional Event Management Integration
   autoSaveConfig, // ✅ PROFESSIONAL SOLUTION 5: รับ autoSaveConfig prop
-  blueprintSettings
+  blueprintSettings,
+  onEpisodeCreate // ✨ Add Episode callback
 }, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -2022,6 +2030,98 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [selectedEpisode, setSelectedEpisode] = useState<string>(episodes[0]?._id || '');
+  
+  // ✨ Episode creation state
+  const [isEpisodeCreatorOpen, setIsEpisodeCreatorOpen] = useState(false);
+  const [episodeCreationForm, setEpisodeCreationForm] = useState({
+    title: '',
+    episodeOrder: episodes.length + 1,
+    teaserText: '',
+    accessType: 'free',
+    priceCoins: 0,
+    status: 'draft'
+  });
+  const [isCreatingEpisode, setIsCreatingEpisode] = useState(false);
+
+  // ✨ Episode creation handler
+  const handleCreateEpisode = useCallback(async () => {
+    if (!novel?.slug || !episodeCreationForm.title.trim()) {
+      toast.error('กรุณาระบุชื่อตอน');
+      return;
+    }
+
+    setIsCreatingEpisode(true);
+    
+    try {
+      // Create episode data
+      const episodeData = {
+        title: episodeCreationForm.title.trim(),
+        episodeOrder: episodeCreationForm.episodeOrder,
+        teaserText: episodeCreationForm.teaserText.trim(),
+        accessType: episodeCreationForm.accessType,
+        priceCoins: episodeCreationForm.accessType === 'paid_unlock' ? episodeCreationForm.priceCoins : 0,
+        status: episodeCreationForm.status,
+        sceneIds: [], // เริ่มต้นด้วย array ว่าง
+        stats: {
+          viewsCount: 0,
+          uniqueViewersCount: 0,
+          likesCount: 0,
+          commentsCount: 0,
+          totalWords: 0,
+          estimatedReadingTimeMinutes: 0,
+          purchasesCount: 0
+        },
+        isPreviewAllowed: true,
+        lastContentUpdatedAt: new Date()
+      };
+
+      // Call API to create episode directly
+      const response = await fetch(`/api/novels/${novel.slug}/episodes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(episodeData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create episode');
+      }
+
+      const result = await response.json();
+      const newEpisode = result.episode;
+
+      // Update episodes list and select the new episode
+      const updatedEpisodes = [...episodes, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
+      
+      // Call parent callback if provided
+      if (onEpisodeCreate) {
+        onEpisodeCreate(newEpisode, updatedEpisodes);
+      }
+
+      setSelectedEpisode(newEpisode._id);
+      
+      // Reset form
+      setEpisodeCreationForm({
+        title: '',
+        episodeOrder: updatedEpisodes.length + 1,
+        teaserText: '',
+        accessType: 'free',
+        priceCoins: 0,
+        status: 'draft'
+      });
+      
+      setIsEpisodeCreatorOpen(false);
+      toast.success(`เพิ่มตอน "${newEpisode.title}" สำเร็จ`);
+
+    } catch (error) {
+      console.error('Error creating episode:', error);
+      toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการสร้างตอน');
+    } finally {
+      setIsCreatingEpisode(false);
+    }
+  }, [novel?.slug, episodeCreationForm, episodes, onEpisodeCreate]);
   
   // Mobile/Desktop UI state with localStorage persistence
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -3127,25 +3227,58 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [isSnapshotReady, initialSnapshot, createStateSnapshot, deepCompareSnapshots, onManualSave, commandAdapter, edges, executeCommand, nodes, professionalEventManager]);
 
-  // Trigger auto-save เมื่อมีการเปลี่ยนแปลง nodes/edges
+  // ✅ FIGMA/ADOBE STYLE: Content change tracking refs สำหรับป้องกัน selection-triggered auto-save
+  const prevNodesContent = useRef<string>('');
+  const prevEdgesContent = useRef<string>('');
+
+  // ✅ ENHANCED: Trigger auto-save เมื่อมีการเปลี่ยนแปลง content จริงๆ (ไม่รวม selection changes)
   useEffect(() => {
     if (nodes.length > 0 || edges.length > 0) {
-      const commandData = {
-        type: 'UPDATE_CANVAS',
-        nodes: nodes.map(node => ({
-          id: node.id,
-          position: node.position,
-          data: node.data
-        })),
-        edges: edges.map(edge => ({
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          data: edge.data
-        }))
-      };
+      // ✅ CRITICAL: ตรวจสอบเฉพาะ content changes (ไม่รวม selection state)
+      const currentNodesContent = JSON.stringify(nodes.map(node => ({
+        id: node.id,
+        position: node.position,
+        data: node.data,
+        type: node.type
+        // ✅ NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
+      })));
       
-      debouncedAutoSave(commandData);
+      const currentEdgesContent = JSON.stringify(edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        data: edge.data
+        // ✅ NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
+      })));
+      
+      // ✅ FIGMA/ADOBE STYLE: Only trigger auto-save for real content changes
+      if (currentNodesContent !== prevNodesContent.current || 
+          currentEdgesContent !== prevEdgesContent.current) {
+        
+        const commandData = {
+          type: 'UPDATE_CANVAS',
+          nodes: nodes.map(node => ({
+            id: node.id,
+            position: node.position,
+            data: node.data
+          })),
+          edges: edges.map(edge => ({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            data: edge.data
+          }))
+        };
+        
+        console.log('[BlueprintTab] 🔄 Real content changes detected, triggering auto-save');
+        debouncedAutoSave(commandData);
+        
+        // ✅ Update refs for next comparison
+        prevNodesContent.current = currentNodesContent;
+        prevEdgesContent.current = currentEdgesContent;
+      } else {
+        console.log('[BlueprintTab] 👆 Selection-only changes detected, skipping auto-save trigger');
+      }
     }
   }, [nodes, edges, debouncedAutoSave]);
   
@@ -4763,6 +4896,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // 🔧 FIGMA STYLE: Clear all selections with ULTRA-aggressive UI sync
   const clearAllSelections = useCallback(() => {
+    console.log(`[BlueprintTab] 🧹 Starting clear all selections - should NOT trigger refresh protection`);
+    
     // 🚨 EMERGENCY: Force immediate ReactFlow clear BEFORE any state updates
     if (reactFlowInstance) {
       try {
@@ -4992,6 +5127,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           reactFlowInstance.getNodes().filter(n => n.selected).length + 
           reactFlowInstance.getEdges().filter(e => e.selected).length : 'N/A'
       });
+      
+      console.log(`[BlueprintTab] ✅ Clear all selections completed - should NOT cause refresh protection warning`);
     }, 300);
   }, [reactFlowInstance, selection]);
 
@@ -5658,17 +5795,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       
     // Set single selection states only if single selection
     if (selectedNodeIds.length === 1 && selectedEdgeIds.length === 0) {
+      console.log(`[BlueprintTab] 👆 Single node selection - should NOT trigger refresh protection`);
       setSelectedNode(selectedNodes[0]);
       setSelectedEdge(null);
     } else if (selectedEdgeIds.length === 1 && selectedNodeIds.length === 0) {
+      console.log(`[BlueprintTab] 👆 Single edge selection - should NOT trigger refresh protection`);
       setSelectedNode(null);
       setSelectedEdge(selectedEdges[0]);
     } else if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 0) {
       // No selection
+      console.log(`[BlueprintTab] 👆 Deselection (clear) - should NOT trigger refresh protection`);
       setSelectedNode(null);
       setSelectedEdge(null);
     } else {
       // Multiple selection - clear single selection states
+      console.log(`[BlueprintTab] 👆 Multiple selection - should NOT trigger refresh protection`);
       setSelectedNode(null);
       setSelectedEdge(null);
     }
@@ -6267,23 +6408,36 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   style={{ top: isMobile ? 56 : undefined, left: isMobile ? 0 : undefined }}
                 >
                   <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}`}>
-                    {/* Episode Selector - Desktop & Tablet (non-mobile) */}
+                    {/* Enhanced Episode Selector with Add Episode - Desktop & Tablet (non-mobile) */}
                     <div className="hidden md:block">
-                      <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
-                        <SelectTrigger className="w-48 h-8 text-xs bg-background/50">
-                          <SelectValue placeholder="Select Episode" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {episodes.map((episode) => (
-                            <SelectItem key={episode._id} value={episode._id} className="text-xs">
-                              <div className="flex items-center gap-2">
-                                <BookOpen className="w-3 h-3" />
-                                <span>Ep {episode.episodeOrder}: {episode.title}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
+                          <SelectTrigger className="w-48 h-8 text-xs bg-background/50">
+                            <SelectValue placeholder="Select Episode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {episodes.map((episode) => (
+                              <SelectItem key={episode._id} value={episode._id} className="text-xs">
+                                <div className="flex items-center gap-2">
+                                  <BookOpen className="w-3 h-3" />
+                                  <span>Ep {episode.episodeOrder}: {episode.title}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        {/* Add Episode Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsEpisodeCreatorOpen(true)}
+                          className="h-8 w-8 p-0"
+                          title="เพิ่มตอนใหม่"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Enhanced Mobile Controls - Mobile Only */}
@@ -6357,23 +6511,36 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   </div>
                 </Panel>
 
-                {/* Episode Selector - Mobile Only */}
+                {/* Enhanced Episode Selector with Add Episode - Mobile Only */}
                 <Panel position="top-left" className="md:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg" style={{ top: 8, left: 0 }}>
-                  <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
-                    <SelectTrigger className="w-32 h-8 text-xs bg-background/50">
-                      <SelectValue placeholder="Select Episode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {episodes.map((episode) => (
-                        <SelectItem key={episode._id} value={episode._id} className="text-xs">
-                          <div className="flex items-center gap-2">
-                            <BookOpen className="w-3 h-3" />
-                            <span>Ep {episode.episodeOrder}: {episode.title}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
+                      <SelectTrigger className="w-32 h-8 text-xs bg-background/50">
+                        <SelectValue placeholder="Select Episode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {episodes.map((episode) => (
+                          <SelectItem key={episode._id} value={episode._id} className="text-xs">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="w-3 h-3" />
+                              <span>Ep {episode.episodeOrder}: {episode.title}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {/* Add Episode Button - Mobile */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEpisodeCreatorOpen(true)}
+                      className="h-8 w-8 p-0"
+                      title="เพิ่มตอนใหม่"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </Panel>
 
 
@@ -7020,6 +7187,195 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             </Button>
             <Button variant="default" onClick={() => setIsTrashHistoryOpen(false)}>
               Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✨ Professional Episode Creator Dialog */}
+      <Dialog open={isEpisodeCreatorOpen} onOpenChange={setIsEpisodeCreatorOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-background/95 backdrop-blur-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PlusCircle className="w-5 h-5 text-primary" />
+              เพิ่มตอนใหม่
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Episode Title */}
+            <div className="space-y-2">
+              <Label htmlFor="episode-title" className="text-sm font-medium flex items-center gap-2">
+                <Type className="w-4 h-4" />
+                ชื่อตอน
+              </Label>
+              <Input
+                id="episode-title"
+                placeholder="เช่น บทที่ 1: การเริ่มต้น"
+                value={episodeCreationForm.title}
+                onChange={(e) => setEpisodeCreationForm(prev => ({ ...prev, title: e.target.value }))}
+                className="w-full"
+                disabled={isCreatingEpisode}
+              />
+            </div>
+
+            {/* Episode Order */}
+            <div className="space-y-2">
+              <Label htmlFor="episode-order" className="text-sm font-medium flex items-center gap-2">
+                <Hash className="w-4 h-4" />
+                ลำดับตอน
+              </Label>
+              <Input
+                id="episode-order"
+                type="number"
+                min="1"
+                step="0.1"
+                value={episodeCreationForm.episodeOrder}
+                onChange={(e) => setEpisodeCreationForm(prev => ({ ...prev, episodeOrder: parseFloat(e.target.value) || 1 }))}
+                className="w-full"
+                disabled={isCreatingEpisode}
+              />
+              <p className="text-xs text-muted-foreground">
+                ใช้ทศนิยมสำหรับตอนพิเศษ เช่น 1.5 สำหรับตอนระหว่าง 1 และ 2
+              </p>
+            </div>
+
+            {/* Teaser Text */}
+            <div className="space-y-2">
+              <Label htmlFor="teaser-text" className="text-sm font-medium flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                เนื้อหาเกริ่นนำ (ไม่บังคับ)
+              </Label>
+              <Textarea
+                id="teaser-text"
+                placeholder="คำอธิบายสั้นๆ เกี่ยวกับตอนนี้..."
+                value={episodeCreationForm.teaserText}
+                onChange={(e) => setEpisodeCreationForm(prev => ({ ...prev, teaserText: e.target.value }))}
+                className="w-full min-h-[80px] resize-none"
+                disabled={isCreatingEpisode}
+              />
+            </div>
+
+            {/* Access Type */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                ประเภทการเข้าถึง
+              </Label>
+              <Select
+                value={episodeCreationForm.accessType}
+                onValueChange={(value) => setEpisodeCreationForm(prev => ({ ...prev, accessType: value }))}
+                disabled={isCreatingEpisode}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      อ่านฟรี
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="paid_unlock">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                      ต้องใช้เหรียญ
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="premium_access">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      สมาชิกพรีเมียม
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Price Coins (only if paid_unlock) */}
+            {episodeCreationForm.accessType === 'paid_unlock' && (
+              <div className="space-y-2">
+                <Label htmlFor="price-coins" className="text-sm font-medium flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  ราคา (เหรียญ)
+                </Label>
+                <Input
+                  id="price-coins"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={episodeCreationForm.priceCoins}
+                  onChange={(e) => setEpisodeCreationForm(prev => ({ ...prev, priceCoins: parseInt(e.target.value) || 0 }))}
+                  className="w-full"
+                  disabled={isCreatingEpisode}
+                />
+              </div>
+            )}
+
+            {/* Status */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                สถานะ
+              </Label>
+              <Select
+                value={episodeCreationForm.status}
+                onValueChange={(value) => setEpisodeCreationForm(prev => ({ ...prev, status: value }))}
+                disabled={isCreatingEpisode}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                      ฉบับร่าง
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="published">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      เผยแพร่แล้ว
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="scheduled">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      ตั้งเวลาเผยแพร่
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setIsEpisodeCreatorOpen(false)}
+              disabled={isCreatingEpisode}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleCreateEpisode}
+              disabled={isCreatingEpisode || !episodeCreationForm.title.trim()}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {isCreatingEpisode ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  กำลังสร้าง...
+                </>
+              ) : (
+                <>
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  สร้างตอน
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
