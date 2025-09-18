@@ -123,6 +123,7 @@ export interface IGatewayDetails {
   qrCodeData?: string; // สำหรับ QR payment
   bankAccountNumber?: string; // สำหรับ bank transfer
   bankName?: string; // สำหรับ bank transfer
+  sessionId?: string; // เพิ่มฟิลด์ sessionId เข้าไป
 }
 const GatewayDetailsSchema = new Schema<IGatewayDetails>(
   {
@@ -137,9 +138,10 @@ const GatewayDetailsSchema = new Schema<IGatewayDetails>(
     cardExpiryMonth: { type: String, trim: true, match: [/^(0[1-9]|1[0-2])$/, "รูปแบบเดือนหมดอายุไม่ถูกต้อง (MM)"] },
     cardExpiryYear: { type: String, trim: true, match: [/^[0-9]{4}$/, "รูปแบบปีหมดอายุไม่ถูกต้อง (YYYY)"] },
     paymentMethodDetails: { type: String, trim: true, maxlength: [100, "รายละเอียดวิธีการชำระเงินยาวเกินไป"] },
-    qrCodeData: { type: String, trim: true, maxlength: [2048, "QR Code Data ยาวเกินไป"] },
+    qrCodeData: { type: String, trim: true, maxlength: [10000, "QR Code Data ยาวเกินไป"] },
     bankAccountNumber: { type: String, trim: true, maxlength: [50, "เลขบัญชีธนาคารยาวเกินไป"] }, // ควรมีการ masking หรือ hashing
     bankName: { type: String, trim: true, maxlength: [100, "ชื่อธนาคารยาวเกินไป"] },
+    sessionId: { type: String, trim: true, index: true, sparse: true, maxlength: [255, "Gateway Session ID ยาวเกินไป"] }, // เพิ่มฟิลด์ sessionId เข้าไป
   },
   { _id: false } // ไม่สร้าง _id สำหรับ subdocument นี้
 );
@@ -270,7 +272,7 @@ const PaymentSchema = new Schema<IPayment>(
       required: [true, "กรุณาระบุช่องทางการชำระเงิน (Payment gateway is required)"],
       index: true,
     },
-    gatewayDetails: { type: GatewayDetailsSchema, default: () => ({}) },
+    gatewayDetails: { type: GatewayDetailsSchema },
     status: {
       type: String,
       enum: Object.values(PaymentStatus),
