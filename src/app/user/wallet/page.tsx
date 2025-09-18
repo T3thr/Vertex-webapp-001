@@ -106,45 +106,78 @@ export default function WalletPage() {
       return;
     }
     
+    setIsProcessing(true);
+
     try {
-      setIsProcessing(true);
-      
-      // เรียก API เพื่อสร้าง QR Code สำหรับการชำระเงิน
-      const response = await fetch('/api/user/wallet/topup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: selectedPackage.amount,
-          paymentAmount: selectedPackage.price,
-          description: `เติม ${selectedPackage.amount} เหรียญ`
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'ไม่สามารถสร้างรายการชำระเงินได้');
+      const successUrl = `${window.location.origin}/user/wallet?payment_status=success`;
+      const cancelUrl = `${window.location.origin}/user/wallet?payment_status=cancelled`;
+
+      // ถ้าเป็นแพ็คเกจเหรียญมาตรฐาน (ไม่ใช่กำหนดเอง) ให้ใช้ Stripe Checkout Session
+      if (!selectedPackage.isCustom) {
+        console.log('Initiating Stripe Checkout Session...');
+        const response = await fetch('/api/user/wallet/topup/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: selectedPackage.price,
+            description: `เติม ${selectedPackage.amount} เหรียญ`,
+            metadata: {
+              coinAmount: selectedPackage.amount,
+            },
+            successUrl,
+            cancelUrl,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'ไม่สามารถสร้างรายการ Stripe Checkout ได้');
+        }
+
+        // Redirect ไปยัง Stripe Checkout Page
+        window.location.href = data.url;
+        return; // ออกจากฟังก์ชันหลังจาก redirect
+      } else {
+        // สำหรับแพ็คเกจกำหนดเอง: ใช้ QR Code Payment Flow เดิม
+        console.log('Initiating QR Code Payment Flow...');
+        const response = await fetch('/api/user/wallet/topup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: selectedPackage.amount,
+            paymentAmount: selectedPackage.price,
+            description: `เติม ${selectedPackage.amount} เหรียญ`
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'ไม่สามารถสร้างรายการชำระเงินได้');
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.error || 'ไม่สามารถสร้างรายการชำระเงินได้');
+        }
+        
+        // เก็บข้อมูลการชำระเงินและแสดง QR Code
+        setPaymentData({
+          paymentId: data.paymentId,
+          qrData: data.qrData,
+          reference: data.reference,
+          expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined
+        });
+        
+        setShowQRDialog(true);
       }
-      
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.error || 'ไม่สามารถสร้างรายการชำระเงินได้');
-      }
-      
-      // เก็บข้อมูลการชำระเงินและแสดง QR Code
-      setPaymentData({
-        paymentId: data.paymentId,
-        qrData: data.qrData,
-        reference: data.reference,
-        expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined
-      });
-      
-      setShowQRDialog(true);
     } catch (error: any) {
-      console.error('Error creating payment:', error);
-      toast.error(error.message || 'เกิดข้อผิดพลาดในการสร้างรายการชำระเงิน');
+      console.error('Error processing payment:', error);
+      toast.error(error.message || 'เกิดข้อผิดพลาดในการดำเนินการชำระเงิน');
     } finally {
       setIsProcessing(false);
     }
