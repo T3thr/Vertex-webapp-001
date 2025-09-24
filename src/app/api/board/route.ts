@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     
     // ตรวจสอบข้อมูลที่จำเป็น
-    if (!data.title || !data.content || !data.categoryAssociatedId) {
+    if (!data.title || !data.content) {
       return NextResponse.json(
         { success: false, error: "กรุณากรอกข้อมูลให้ครบถ้วน" },
         { status: 400 }

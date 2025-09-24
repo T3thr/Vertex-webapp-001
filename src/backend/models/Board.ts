@@ -3,14 +3,14 @@
 // จัดการกระทู้และการสนทนาของผู้ใช้ เกี่ยวกับนิยาย, ตัวละคร, หรือหัวข้อทั่วไปในชุมชน
 // เวอร์ชันปรับปรุง: เพิ่มความสามารถด้าน Q&A, Review, Edit History, และการเชื่อมโยงกับระบบ Gamification และ Moderation ขั้นสูง
 
-import mongoose, { Schema, model, models, Types, Document, HydratedDocument } from "mongoose";
-import { IUser } from "./User"; // สำหรับ authorId, lastReplyUserId, และผู้ดูแล
-import { INovel } from "./Novel"; // สำหรับ novelAssociated
+import mongoose, { Document, HydratedDocument, model, models, Schema, Types } from "mongoose";
+import { IActivityHistory } from "./ActivityHistory"; // สำหรับการสร้าง Activity Log
 import { ICategory } from "./Category"; // สำหรับ categoryAssociated
 import { IComment } from "./Comment"; // สำหรับ bestAnswer.commentId
-import { ILike } from "./Like"; // สำหรับการลบ Likes ที่เกี่ยวข้อง
 import { IContentReport } from "./ContentReport"; // สำหรับการอัปเดต Reports
-import { IActivityHistory } from "./ActivityHistory"; // สำหรับการสร้าง Activity Log
+import { ILike } from "./Like"; // สำหรับการลบ Likes ที่เกี่ยวข้อง
+import { INovel } from "./Novel"; // สำหรับ novelAssociated
+import { IUser } from "./User"; // สำหรับ authorId, lastReplyUserId, และผู้ดูแล
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Board
@@ -267,8 +267,10 @@ export interface IBoard extends Document {
   authorAvatarUrl?: string;
   authorRoles: string[]; // Denormalized roles e.g., ['Writer', 'Admin']
   boardType: BoardType;
+  sourceType?: string; // เพิ่ม sourceType เพื่อระบุที่มาของกระทู้ (review, problem, etc.)
   status: BoardStatus;
   novelAssociated?: Types.ObjectId | INovel; // นิยายที่เกี่ยวข้อง
+  novelTitle?: string; // ชื่อนิยายที่รีวิว (กรณีไม่มีในระบบ)
   categoryAssociated: Types.ObjectId | ICategory; // หมวดหมู่ของบอร์ด (เช่น "พูดคุยทั่วไป", "สปอยล์", "ทฤษฎี")
   tags: string[];
   containsSpoilers: boolean; // (ใหม่) กระทู้นี้มีสปอยล์หรือไม่ (สำหรับเบลอเนื้อหา)
@@ -345,6 +347,7 @@ const BoardSchema = new Schema<IBoard>(
       required: true,
       index: true,
     },
+    sourceType: { type: String, trim: true }, // เพิ่ม sourceType เพื่อระบุที่มาของกระทู้
     authorUsername: { type: String, required: true, trim: true },
     authorAvatarUrl: { type: String, trim: true },
     authorRoles: [{ type: String }],
@@ -368,6 +371,13 @@ const BoardSchema = new Schema<IBoard>(
       index: true,
       sparse: true,
     },
+    novelTitle: {
+      type: String,
+      trim: true,
+      maxlength: 255,
+      index: true,
+      sparse: true,
+    },
     categoryAssociated: {
       type: Schema.Types.ObjectId,
       ref: "Category",
@@ -383,7 +393,8 @@ const BoardSchema = new Schema<IBoard>(
     },
     reviewDetails: {
         type: ReviewDetailsSchema,
-        required: function(this: IBoard) { return this.boardType === BoardType.REVIEW; },
+        required: false,
+        default: undefined,
     },
     bestAnswer: { type: BestAnswerSchema },
     stats: {

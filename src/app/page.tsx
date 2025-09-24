@@ -3,23 +3,22 @@
 // Next.js App Router ทำให้ Server Components เป็น SSR โดยอัตโนมัติ
 // ปรับปรุงเพื่อความเร็วสูงสุดและไม่มี loading flickering พร้อม ISR และ streaming
 
-import { Suspense } from 'react';
-import { NovelCard, NovelCardData } from "@/components/NovelCard";
+import { CacheKeys, CacheManager, CacheTTL } from "@/backend/lib/redis";
 import { ImageSlider, SlideData as SliderSlideData } from "@/components/ImageSlider";
-import { NovelRowNavButton } from "@/components/NovelRowNavigation";
 import JulyBonusBanner from "@/components/JulyBonusBanner";
+import { NovelCard, NovelCardData } from "@/components/NovelCard";
+import { NovelRowNavButton } from "@/components/NovelRowNavigation";
 import {
-  TrendingUp,
+  ArrowRightCircle,
+  BadgePercent,
+  BookOpen,
   CheckCircle,
   Clock,
-  BookOpen,
-  BadgePercent,
-  ArrowRightCircle,
   Coins,
+  TrendingUp,
 } from "lucide-react";
 import { Metadata } from 'next';
 import Link from "next/link";
-import { CacheManager, CacheKeys, CacheTTL } from "@/backend/lib/redis";
 
 // Aggressive ISR revalidation for maximum performance
 export const revalidate = 60; // 1 minute for critical content

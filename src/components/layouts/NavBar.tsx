@@ -1,6 +1,10 @@
 // src/components/layouts/NavBar.tsx
 "use client";
 
+import { SessionUser as AppSessionUser } from "@/app/api/auth/[...nextauth]/options";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Bookmark,
   // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
@@ -12,7 +16,11 @@ import {
   Layout,
   LogOut,
   Menu,
+<<<<<<< HEAD
   MessageCircle,
+=======
+  MessageSquare, // สำหรับกระทู้
+>>>>>>> f223326e (finish)
   Moon,
   Search, // สำหรับ Dashboard
   Settings,
@@ -20,16 +28,12 @@ import {
   User,
   X,
 } from "lucide-react"; // ตรวจสอบว่า Laptop icon จำเป็นหรือไม่
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React, { useEffect, useRef, useState, useCallback, useMemo, JSX } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthModal from "./AuthModal";
-import { useAuth } from "@/context/AuthContext";
-import { useTheme, ResolvedTheme } from "@/context/ThemeContext";
-import Image from "next/image";
 import SearchBar from "./SearchBar";
-import { SessionUser as AppSessionUser } from "@/app/api/auth/[...nextauth]/options";
 
 // Interface สำหรับ UserAvatarProps (คงเดิม)
 interface UserAvatarProps {
@@ -238,8 +242,13 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
     () => [
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
       { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
+<<<<<<< HEAD
       { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
       { href: "/board", label: "กระทู้", icon: <MessageCircle size={18} /> },
+=======
+      { href: "/board", label: "กระทู้", icon: <MessageSquare size={18} /> },
+      { href: "/dashboard", label: "งานเขียนของฉัน", icon: <Layout size={18} /> },
+>>>>>>> f223326e (finish)
     ],
     []
   );

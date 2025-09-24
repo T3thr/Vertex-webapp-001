@@ -4,45 +4,43 @@
 // อัปเดต: ลดขนาด JWT, ดึงข้อมูล session เต็มจาก DB ใน session callback
 // แก้ไข: จัดการ Type Mismatch สำหรับ Lean Documents และ Populated Fields ใน Session/JWT
 
+import { Types } from "mongoose";
 import { NextAuthOptions, Profile } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
-import TwitterProvider from "next-auth/providers/twitter";
-import FacebookProvider from "next-auth/providers/facebook";
-import AppleProvider from "next-auth/providers/apple";
-import LineProvider from "next-auth/providers/line";
 import { JWT } from "next-auth/jwt";
-import mongoose, { Types } from "mongoose";
+import AppleProvider from "next-auth/providers/apple";
+import CredentialsProvider from "next-auth/providers/credentials";
+import FacebookProvider from "next-auth/providers/facebook";
+import GoogleProvider from "next-auth/providers/google";
+import LineProvider from "next-auth/providers/line";
+import TwitterProvider from "next-auth/providers/twitter";
 
 // Import original interfaces from Mongoose models
-import UserModel, { IUser } from "@/backend/models/User";
-import { IUserProfile, IUserSocialStats } from "@/backend/models/UserProfile";
-import { IUserTrackingStats } from "@/backend/models/UserTracking";
-import { IUserSettings as IUserPreferences } from "@/backend/models/UserSettings";
-import {
-  IWriterStatsDoc as IWriterStats,
-  IUserDonationSettings,
-} from "@/backend/models/WriterStats";
-import {
-  IUserGamification as OriginalUserGamification,
-  IShowcasedGamificationItem as OriginalShowcasedItem,
-  IUserDisplayBadge as OriginalDisplayBadge,
-  IUserWallet,
-} from "@/backend/models/UserGamification";
-import { IUserVerification } from "@/backend/models/UserSecurity";
-import {
-  ILevelReward,
-  ILevel as OriginalILevel,
-} from "@/backend/models/Level";
 import dbConnect from "@/backend/lib/mongodb";
+import {
+    ILevelReward,
+    ILevel as OriginalILevel,
+} from "@/backend/models/Level";
+import UserModel, { IUser } from "@/backend/models/User";
+import {
+    IUserWallet,
+    IUserGamification as OriginalUserGamification
+} from "@/backend/models/UserGamification";
+import { IUserProfile, IUserSocialStats } from "@/backend/models/UserProfile";
+import { IUserVerification } from "@/backend/models/UserSecurity";
+import { IUserSettings as IUserPreferences } from "@/backend/models/UserSettings";
+import { IUserTrackingStats } from "@/backend/models/UserTracking";
+import {
+    IUserDonationSettings,
+    IWriterStatsDoc as IWriterStats,
+} from "@/backend/models/WriterStats";
 
 // Import Models for session population
-import UserProfileModel from "@/backend/models/UserProfile";
-import UserTrackingModel from "@/backend/models/UserTracking";
 import UserGamificationModel from "@/backend/models/UserGamification";
+import UserProfileModel from "@/backend/models/UserProfile";
 import UserSecurityModel from "@/backend/models/UserSecurity";
-import WriterStatsModel from "@/backend/models/WriterStats";
 import UserSettingsModel from "@/backend/models/UserSettings";
+import UserTrackingModel from "@/backend/models/UserTracking";
+import WriterStatsModel from "@/backend/models/WriterStats";
 
 // SECTION: Session-Specific Plain Object Types (คงเดิมตามที่ผู้ใช้ให้มา)
 
@@ -404,15 +402,22 @@ export const authOptions: NextAuthOptions = {
             throw new Error("กรุณาระบุอีเมล/ชื่อผู้ใช้ และรหัสผ่าน");
           }
 
+          // ใช้ URL ที่แน่นอนแทนการใช้ process.env.NEXTAUTH_URL
+          const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
           const response = await fetch(
-            `${process.env.NEXTAUTH_URL}/api/auth/signin/credentials`,
+            `${baseUrl}/api/auth/signin/credentials`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Content-Type": "application/json",
+                "User-Agent": "NextAuth.js"
+              },
               body: JSON.stringify({
                 identifier: credentials.identifier,
                 password: credentials.password,
               }),
+              // เพิ่ม cache options
+              cache: 'no-store',
             }
           );
 
@@ -559,6 +564,7 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt", // ใช้ JWT strategy
     maxAge: 30 * 24 * 60 * 60, // 30 วัน
+    updateAge: 24 * 60 * 60, // อัปเดต session ทุก 24 ชั่วโมง
   },
 
   callbacks: {
@@ -610,17 +616,24 @@ export const authOptions: NextAuthOptions = {
 
             try {
                 console.log(`⏳ [AuthOptions JWT] OAuth: Calling /api/auth/signin/oauth for provider=${account.provider}, accountId=${account.providerAccountId}`);
-                const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/signin/oauth`, {
+                // ใช้ URL ที่แน่นอนแทนการใช้ process.env.NEXTAUTH_URL
+                const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+                const response = await fetch(`${baseUrl}/api/auth/signin/oauth`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "User-Agent": "NextAuth.js"
+                    },
                     body: JSON.stringify({
                         provider: account.provider,
                         providerAccountId: account.providerAccountId,
                         email: apiEmailFromProfile || null,
                         name: apiDisplayNameFromProfile,
                         usernameSuggestion: apiUsernameSuggestionFromProfile,
-                        picture: apiAvatarUrlFromProfile || null, // Use the clean variable
+                        picture: apiAvatarUrlFromProfile || null,
                     }),
+                    // เพิ่ม timeout และ cache options
+                    cache: 'no-store',
                 });
                 const responseData = await response.json();
                 if (!response.ok || !responseData.user) {
@@ -747,6 +760,17 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production"
+      }
+    }
+  },
 };
 
 // Augment NextAuth types
