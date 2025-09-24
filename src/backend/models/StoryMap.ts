@@ -35,6 +35,7 @@ import { IScene } from "./Scene"; // อ้างอิง IScene จาก Scen
 export enum StoryMapNodeType {
   START_NODE = "start_node",
   SCENE_NODE = "scene_node",
+  EPISODE_NODE = "episode_node", // 🎯 NEW: Node type สำหรับ Episode
   CHOICE_NODE = "choice_node",
   BRANCH_NODE = "branch_node", // เดิมคือ conditional_logic_node แต่ branch_node อาจจะสื่อความหมายได้กว้างกว่า
   MERGE_NODE = "merge_node", // เดิมคือ merge_point_node
@@ -121,6 +122,23 @@ const StoryVariableDefinitionSchema = new Schema<IStoryVariableDefinition>(
  */
 export interface ISceneNodeData {
   sceneId: Types.ObjectId;
+}
+
+/**
+ * @interface IEpisodeNodeData
+ * @description ข้อมูลเฉพาะสำหรับ `episode_node` - โหนดที่แทนตอนของนิยาย
+ * @property {Types.ObjectId} episodeId - ID ของ Episode ที่จะแสดง (อ้างอิง Episode model)
+ * @property {number} episodeOrder - ลำดับตอนในนิยาย
+ * @property {string} episodeTitle - ชื่อตอน (cache เพื่อการแสดงผลเร็วขึ้น)
+ * @property {string} episodeStatus - สถานะตอน (cache เพื่อการแสดงผลเร็วขึ้น)
+ * @property {boolean} autoGenerateScenes - สร้าง Scene nodes อัตโนมัติหรือไม่
+ */
+export interface IEpisodeNodeData {
+  episodeId: Types.ObjectId;
+  episodeOrder: number;
+  episodeTitle: string;
+  episodeStatus: string;
+  autoGenerateScenes?: boolean;
 }
 
 /**
@@ -282,6 +300,7 @@ export interface IStoryMapNode {
   dimensions?: { width: number; height: number };
   nodeSpecificData?:
     | ISceneNodeData
+    | IEpisodeNodeData // 🎯 NEW: Episode node data support
     | IChoiceNodeData
     | IBranchNodeData
     | IVariableModifierNodeData
@@ -581,6 +600,7 @@ const EditOperationSchema = new Schema<IEditOperation>(
 export interface IStoryMap extends Document {
   _id: Types.ObjectId;
   novelId: Types.ObjectId;
+  episodeId?: Types.ObjectId; // 🎯 NEW: เชื่อมโยงกับ Episode เฉพาะ (optional สำหรับ backward compatibility)
   title: string;
   version: number;
   description?: string;
@@ -687,6 +707,12 @@ const StoryMapSchema = new Schema<IStoryMap>(
       required: [true, "กรุณาระบุ ID ของนิยาย (Novel ID is required)"],
       index: true,
     },
+    episodeId: {
+      type: Schema.Types.ObjectId,
+      ref: "Episode", // 🎯 NEW: อ้างอิง Episode.ts
+      index: true,
+      comment: "ID ของตอนที่ StoryMap นี้เป็นของ (optional สำหรับ backward compatibility)"
+    },
     title: {
         type: String,
         required: [true, "กรุณาระบุชื่อ StoryMap (StoryMap title is required)"],
@@ -733,7 +759,24 @@ const StoryMapSchema = new Schema<IStoryMap>(
 
 // Compound index สำหรับการ query StoryMap ที่ active ของ novel หนึ่งๆ และเวอร์ชัน (สำคัญมาก)
 StoryMapSchema.index({ novelId: 1, isActive: 1, version: -1 }, { name: "NovelActiveVersionStoryMapIndex" });
-StoryMapSchema.index({ novelId: 1, version: 1 }, { unique: true, name: "NovelStoryMapVersionUniqueIndex", comment: "แต่ละ Novel ควรมี version ที่ไม่ซ้ำกัน" });
+
+// 🎯 NEW: Index สำหรับ Episode-specific StoryMaps (แต่ละ Episode มี StoryMap แยกต่างหาก)
+StoryMapSchema.index({ novelId: 1, episodeId: 1, version: 1 }, { 
+  unique: true, 
+  sparse: true, 
+  name: "NovelEpisodeStoryMapVersionUniqueIndex", 
+  comment: "แต่ละ Episode ควรมี version ที่ไม่ซ้ำกัน",
+  partialFilterExpression: { episodeId: { $exists: true } } // เฉพาะ StoryMap ที่มี episodeId
+});
+
+// 🔄 UPDATED: Index สำหรับ Novel-level StoryMaps (ไม่มี episodeId)
+StoryMapSchema.index({ novelId: 1, version: 1 }, { 
+  unique: true, 
+  sparse: true, 
+  name: "NovelStoryMapVersionUniqueIndex", 
+  comment: "แต่ละ Novel ควรมี version ที่ไม่ซ้ำกัน (สำหรับ Novel-level StoryMaps)",
+  partialFilterExpression: { episodeId: { $exists: false } } // เฉพาะ StoryMap ที่ไม่มี episodeId
+});
 StoryMapSchema.index({ "groups.groupId": 1 }, { unique: true, sparse: true });
 
 // ==================================================================================================

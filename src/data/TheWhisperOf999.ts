@@ -984,8 +984,13 @@ const createWhisper999Scenes = async (
  * @param choices - Array ของ choices ที่ถูกสร้างแล้ว
  * @returns StoryMap document ที่สร้างเสร็จแล้ว
  */
-const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, authorId: mongoose.Types.ObjectId, choices: any[]) => {
-  console.log('📊 กำลังสร้าง StoryMap สำหรับ "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"...');
+const createWhisper999Episode1StoryMap = async (
+  novelId: mongoose.Types.ObjectId, 
+  episodeId: mongoose.Types.ObjectId,
+  authorId: mongoose.Types.ObjectId, 
+  choices: any[]
+) => {
+  console.log('📊 กำลังสร้าง StoryMap สำหรับ Episode 1 ของ "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"...');
 
   // สร้าง choice lookup map สำหรับแปลง choiceCode เป็น ObjectId
   const choiceCodeToId = choices.reduce((acc, choice) => {
@@ -1663,12 +1668,13 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
     }
   ];
 
-  // สร้าง StoryMap
+  // สร้าง StoryMap สำหรับ Episode 1 เฉพาะ
   const storyMap = new StoryMapModel({
     novelId,
-    title: `แผนผังเรื่อง - เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999`,
-    version: 1,
-    description: 'แผนผังเรื่องราวของนิยายสยองขวัญจิตวิทยาที่เต็มไปด้วยทางเลือกและการตัดสินใจที่ส่งผลต่อชะตากรรม',
+    episodeId, // 🎯 เชื่อมโยงกับ Episode เฉพาะ
+    title: `Episode 1: ย้ายเข้า - โครงเรื่อง`,
+    version: 1, // Episode-specific version (แยกจาก Novel-level version)
+    description: 'แผนผังเรื่องราวสำหรับตอนที่ 1 ของนิยาย "เสียงกระซิบจากอพาร์ตเมนท์หมายเลข999"',
     nodes,
     edges,
     storyVariables,
@@ -1721,6 +1727,151 @@ const createWhisper999StoryMap = async (novelId: mongoose.Types.ObjectId, author
     storyMap: savedStoryMap,
     nodeIdMapping
   };
+};
+
+/**
+ * สร้าง StoryMap เปล่าสำหรับ Episode ใหม่
+ * @param novelId - ID ของนิยาย
+ * @param episodeId - ID ของตอน
+ * @param authorId - ID ของผู้แต่ง
+ * @param episodeTitle - ชื่อตอน
+ * @returns StoryMap document ที่สร้างเสร็จแล้ว (เปล่า)
+ */
+export const createEmptyStoryMapForEpisode = async (
+  novelId: mongoose.Types.ObjectId,
+  episodeId: mongoose.Types.ObjectId,
+  authorId: mongoose.Types.ObjectId,
+  episodeTitle: string
+) => {
+  console.log(`📊 กำลังสร้าง StoryMap เปล่าสำหรับ Episode: ${episodeTitle}...`);
+
+  // สร้าง start node เดียวสำหรับ episode ใหม่
+  const startNodeId = uuidv4();
+  
+  const nodes: IStoryMapNode[] = [
+    {
+      nodeId: startNodeId,
+      nodeType: StoryMapNodeType.START_NODE,
+      title: 'จุดเริ่มต้น',
+      position: { x: 400, y: 300 }, // ตำแหน่งกลางของ canvas
+      nodeSpecificData: {},
+      notesForAuthor: `จุดเริ่มต้นของ ${episodeTitle} - พร้อมสำหรับการพัฒนาเนื้อเรื่อง`,
+      authorDefinedEmotionTags: ['beginning', 'neutral'],
+      authorDefinedPsychologicalImpact: 0,
+      editorVisuals: {
+        color: '#10B981', // สีเขียวสำหรับ start node
+        icon: 'play-circle',
+        orientation: 'horizontal',
+        borderRadius: 12,
+        borderStyle: 'solid',
+        gradient: {
+          from: '#10B981',
+          to: '#059669',
+          direction: 'horizontal'
+        },
+        animation: {
+          enter: 'fadeIn',
+          exit: 'fadeOut'
+        }
+      },
+      layoutConfig: {
+        mode: 'manual',
+        tier: 0,
+        order: 0
+      },
+      lastEdited: new Date()
+    }
+  ];
+
+  // ไม่มี edges สำหรับ StoryMap เปล่า
+  const edges: IStoryMapEdge[] = [];
+
+  // ตัวแปรเรื่องราวพื้นฐาน (สามารถแก้ไขได้ภายหลัง)
+  const storyVariables: IStoryVariableDefinition[] = [
+    {
+      variableId: uuidv4(),
+      variableName: 'episode_progress',
+      dataType: StoryVariableDataType.NUMBER,
+      initialValue: 0,
+      description: 'ความคืบหน้าของตอนนี้ (0-100)',
+      allowedValues: [0, 100],
+      isGlobal: false,
+      isVisibleToPlayer: false
+    },
+    {
+      variableId: uuidv4(),
+      variableName: 'scene_count',
+      dataType: StoryVariableDataType.NUMBER,
+      initialValue: 0,
+      description: 'จำนวนฉากที่ผู้เล่นผ่านมาแล้วในตอนนี้',
+      isGlobal: false,
+      isVisibleToPlayer: false
+    }
+  ];
+
+  // สร้าง StoryMap document
+  const storyMap = new StoryMapModel({
+    novelId,
+    episodeId,
+    title: `${episodeTitle} - โครงเรื่อง`,
+    version: 1,
+    description: `แผนผังเรื่องราวสำหรับ ${episodeTitle}`,
+    nodes,
+    edges,
+    storyVariables,
+    startNodeId,
+    lastModifiedByUserId: authorId,
+    isActive: true,
+    editorMetadata: {
+      zoomLevel: 1,
+      viewOffsetX: -200, // เลื่อนมุมมองให้เห็น start node ตรงกลาง
+      viewOffsetY: -100,
+      gridSize: 20,
+      showGrid: true,
+      showSceneThumbnails: false, // เริ่มต้นไม่แสดง thumbnails สำหรับ StoryMap เปล่า
+      showNodeLabels: true,
+      autoLayoutAlgorithm: 'dagre',
+      layoutPreferences: {
+        defaultOrientation: 'horizontal',
+        nodeSpacing: { x: 200, y: 300 },
+        tierSpacing: 300,
+        autoAlign: false, // ให้ผู้ใช้จัดเรียงเอง
+        preserveManualPositions: true,
+        flowDirection: 'left-right'
+      },
+      uiPreferences: {
+        nodeDefaultColor: '#3B82F6',
+        edgeDefaultColor: '#6B7280',
+        connectionLineStyle: 'smooth',
+        showConnectionLines: true,
+        autoSaveEnabled: false, // ให้ผู้ใช้เลือกเปิดเอง
+        autoSaveIntervalSec: 30,
+        snapToGrid: true,
+        enableAnimations: true,
+        nodeDefaultOrientation: 'horizontal',
+        edgeDefaultPathType: 'smooth',
+        showMinimap: false, // ปิด minimap สำหรับ StoryMap เปล่า
+        enableNodeThumbnails: false
+      },
+      collaborationSettings: {
+        allowMultipleEditors: true,
+        showCursors: true,
+        showUserAvatars: true,
+        lockTimeout: 300 // 5 นาที
+      },
+      performanceSettings: {
+        virtualizeNodes: false, // ไม่จำเป็นสำหรับ StoryMap เปล่า
+        maxVisibleNodes: 100,
+        chunkSize: 50,
+        enableCaching: true
+      }
+    }
+  });
+
+  const savedStoryMap = await storyMap.save();
+  console.log(`✅ สร้าง StoryMap เปล่าสำเร็จ: ${savedStoryMap._id} สำหรับ ${episodeTitle}`);
+  
+  return savedStoryMap;
 };
 
 export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) => {
@@ -1886,10 +2037,10 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
   // ดึง episodes ที่อัปเดตแล้ว
   const updatedEpisodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 });
 
-  // สร้าง StoryMap สำหรับนิยาย
-  console.log('📊 กำลังสร้าง StoryMap...');
-  const storyMapResult = await createWhisper999StoryMap(novel._id, authorId, choices);
-  const { storyMap, nodeIdMapping } = storyMapResult;
+  // สร้าง StoryMap สำหรับ Episode 1
+  console.log('📊 กำลังสร้าง StoryMap สำหรับ Episode 1...');
+  const storyMapResult = await createWhisper999Episode1StoryMap(novel._id, episode1._id, authorId, choices);
+  const { storyMap: episode1StoryMap, nodeIdMapping } = storyMapResult;
 
   // อัปเดต scenes ให้มี storyMapNodeId
   console.log('🔗 กำลังเชื่อมโยง scenes กับ StoryMap nodes...');
@@ -1914,12 +2065,66 @@ export const createWhisper999Novel = async (authorId: mongoose.Types.ObjectId) =
 
   console.log('✅ เชื่อมโยง scenes กับ StoryMap เสร็จสิ้น');
 
+  // สร้าง Episodes เพิ่มเติม (2-5) พร้อม StoryMap เปล่า
+  console.log('📖 กำลังสร้าง Episodes เพิ่มเติม (2-5) พร้อม StoryMap เปล่า...');
+  const additionalEpisodes = [];
+  const allStoryMaps = [episode1StoryMap]; // เริ่มด้วย StoryMap ของ Episode 1
+  
+  for (let i = 2; i <= 5; i++) {
+    const episodeTitle = `บทที่ ${i}: ${i === 2 ? 'การสำรวจ' : i === 3 ? 'ความจริงเริ่มเผย' : i === 4 ? 'ใจกลางความมืด' : 'บทสรุป'}`;
+    const episodeSlug = `บทที่-${i}-${i === 2 ? 'การสำรวจ' : i === 3 ? 'ความจริงเริ่มเผย' : i === 4 ? 'ใจกลางความมืด' : 'บทสรุป'}`;
+    
+    const episode = new EpisodeModel({
+      novelId: novel._id,
+      authorId,
+      title: episodeTitle,
+      slug: episodeSlug,
+      episodeOrder: i,
+      status: EpisodeStatus.DRAFT,
+      accessType: EpisodeAccessType.PAID_UNLOCK,
+      priceCoins: 10,
+      teaserText: `ตอนที่ ${i} ของเรื่องราวสยองขวัญที่จะทำให้คุณลุ้นระทึก...`,
+      publishedAt: null,
+      isPreviewAllowed: true,
+      stats: {
+        viewsCount: 0,
+        uniqueViewersCount: 0,
+        likesCount: 0,
+        commentsCount: 0,
+        totalWords: 0,
+        estimatedReadingTimeMinutes: 0,
+        purchasesCount: 0,
+      }
+    });
+
+    await episode.save();
+    additionalEpisodes.push(episode);
+
+    // สร้าง StoryMap เปล่าสำหรับแต่ละ Episode
+    const emptyStoryMap = await createEmptyStoryMapForEpisode(novel._id, episode._id, authorId, episodeTitle);
+    allStoryMaps.push(emptyStoryMap);
+    console.log(`✅ สร้าง Episode ${i} และ StoryMap เปล่าสำเร็จ (Episode ID: ${episode._id}, StoryMap ID: ${emptyStoryMap._id})`);
+  }
+
+  // อัปเดต Novel ด้วยข้อมูลสถิติ
+  await NovelModel.findByIdAndUpdate(novel._id, {
+    totalEpisodesCount: 5,
+    publishedEpisodesCount: 1,
+    firstEpisodeId: episode1._id
+  });
+
+  // ดึง episodes ที่อัปเดตแล้วทั้งหมด
+  const allEpisodes = await EpisodeModel.find({ novelId: novel._id }).sort({ episodeOrder: 1 });
+
+  console.log(`✅ สร้างข้อมูลครบถ้วน: ${allEpisodes.length} Episodes, ${allStoryMaps.length} StoryMaps`);
+
   return {
     novel,
-    episodes: updatedEpisodes,
+    episodes: allEpisodes,
     characters,
     choices,
     scenes: episode1Scenes, // scenes ของ episode 1 เท่านั้น
-    storyMap
+    storyMap: episode1StoryMap, // StoryMap หลักของ Episode 1
+    storyMaps: allStoryMaps // StoryMaps ทั้งหมด
   };
 };

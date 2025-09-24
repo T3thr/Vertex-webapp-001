@@ -44,8 +44,26 @@ export interface SnapshotData {
   nodes: any[];
   edges: any[];
   storyVariables: any[];
+  episodes?: any[]; // 🆕 PHASE 3: Episode data
   timestamp: number;
   version: number;
+}
+
+// 🆕 PHASE 3: Episode Command Interfaces
+export interface EpisodeCommand extends Command {
+  type: 'EPISODE_CREATE' | 'EPISODE_UPDATE' | 'EPISODE_DELETE' | 'EPISODE_MOVE' | 'EPISODE_REORDER';
+  episodeId?: string;
+  episodeData?: any;
+  canvasPosition?: { x: number; y: number };
+  undoData?: any;
+  bulkData?: Array<{ episodeId: string; updates: any }>;
+}
+
+export interface EpisodeCommandResult extends CommandResult {
+  episode?: any;
+  episodes?: any[];
+  updatedNodes?: any[];
+  updatedEdges?: any[];
 }
 
 // ===================================================================
@@ -76,6 +94,43 @@ class SingleUserCommandContext implements CommandContext {
 
   getCurrentStoryVariables(): any[] {
     return this.eventManager.getCurrentSnapshot().storyVariables;
+  }
+
+  // 🆕 PHASE 3: Episode Management Methods
+  getCurrentEpisodes(): any[] {
+    return this.eventManager.getCurrentSnapshot().episodes || [];
+  }
+
+  setEpisodes(episodes: any[]): void {
+    this.eventManager.updateSnapshot({ 
+      ...this.eventManager.getCurrentSnapshot(), 
+      episodes,
+      timestamp: Date.now()
+    });
+  }
+
+  findEpisodeById(id: string): any | null {
+    return this.getCurrentEpisodes().find(episode => episode._id === id) || null;
+  }
+
+  addEpisode(episode: any): void {
+    const currentEpisodes = this.getCurrentEpisodes();
+    const updatedEpisodes = [...currentEpisodes, episode].sort((a, b) => a.episodeOrder - b.episodeOrder);
+    this.setEpisodes(updatedEpisodes);
+  }
+
+  updateEpisode(episodeId: string, updates: any): void {
+    const currentEpisodes = this.getCurrentEpisodes();
+    const updatedEpisodes = currentEpisodes.map(ep => 
+      ep._id === episodeId ? { ...ep, ...updates } : ep
+    );
+    this.setEpisodes(updatedEpisodes);
+  }
+
+  removeEpisode(episodeId: string): void {
+    const currentEpisodes = this.getCurrentEpisodes();
+    const updatedEpisodes = currentEpisodes.filter(ep => ep._id !== episodeId);
+    this.setEpisodes(updatedEpisodes);
   }
 
   setNodes(nodes: any[]): void {
@@ -211,6 +266,11 @@ export class SingleUserEventManager {
 
       console.log(`[SingleUserEventManager] Executing command: ${command.type} - ${command.description}`);
 
+      // 🆕 PHASE 3: Handle Episode Commands
+      if (this.isEpisodeCommand(command)) {
+        return await this.executeEpisodeCommand(command as EpisodeCommand);
+      }
+
       // Execute command
       if (command.execute) {
         await command.execute();
@@ -265,6 +325,241 @@ export class SingleUserEventManager {
     }
   }
 
+  // 🆕 PHASE 3: Episode Command Handlers
+  private isEpisodeCommand(command: Command): boolean {
+    return command.type.startsWith('EPISODE_');
+  }
+
+  private async executeEpisodeCommand(command: EpisodeCommand): Promise<EpisodeCommandResult> {
+    try {
+      console.log(`[SingleUserEventManager] 🎭 Executing Episode command: ${command.type}`);
+
+      let result: EpisodeCommandResult;
+
+      switch (command.type) {
+        case 'EPISODE_CREATE':
+          result = await this.handleEpisodeCreate(command);
+          break;
+        case 'EPISODE_UPDATE':
+          result = await this.handleEpisodeUpdate(command);
+          break;
+        case 'EPISODE_DELETE':
+          result = await this.handleEpisodeDelete(command);
+          break;
+        case 'EPISODE_MOVE':
+          result = await this.handleEpisodeMove(command);
+          break;
+        case 'EPISODE_REORDER':
+          result = await this.handleEpisodeReorder(command);
+          break;
+        default:
+          throw new Error(`Unknown episode command: ${command.type}`);
+      }
+
+      // Add to history if undoable
+      if (this.isUndoableCommand(command)) {
+        this.addToHistory(command);
+        this.state.redoStack = [];
+      }
+
+      // Mark as dirty for content commands
+      if (this.isContentCommand(command)) {
+        this.markAsDirty();
+      }
+
+      // Update state
+      this.updateState({
+        totalEvents: this.state.totalEvents + 1
+      });
+
+      console.log(`[SingleUserEventManager] ✅ Episode command completed: ${command.type}`);
+      return result;
+
+    } catch (error) {
+      console.error(`[SingleUserEventManager] ❌ Episode command failed: ${command.type}`, error);
+      throw error;
+    }
+  }
+
+  private async handleEpisodeCreate(command: EpisodeCommand): Promise<EpisodeCommandResult> {
+    const { episodeData, canvasPosition } = command;
+    
+    if (!episodeData) {
+      throw new Error('Episode data is required for create command');
+    }
+
+    // Add episode to snapshot
+    const context = this.commandContext as SingleUserCommandContext;
+    context.addEpisode(episodeData);
+
+    // Create corresponding node if canvas position provided
+    if (canvasPosition) {
+      const newNode = {
+        id: `episode_${episodeData._id}`,
+        type: 'episode',
+        position: canvasPosition,
+        data: {
+          ...episodeData,
+          episodeId: episodeData._id,
+          nodeType: 'episode_node',
+          title: episodeData.title,
+          status: episodeData.status
+        }
+      };
+
+      const currentNodes = context.getCurrentNodes();
+      context.setNodes([...currentNodes, newNode]);
+    }
+
+    return {
+      success: true,
+      command,
+      episode: episodeData,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleEpisodeUpdate(command: EpisodeCommand): Promise<EpisodeCommandResult> {
+    const { episodeId, episodeData } = command;
+    
+    if (!episodeId || !episodeData) {
+      throw new Error('Episode ID and data are required for update command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    
+    // Store undo data
+    const originalEpisode = context.findEpisodeById(episodeId);
+    command.undoData = originalEpisode;
+
+    // Update episode
+    context.updateEpisode(episodeId, episodeData);
+
+    // Update corresponding node
+    const currentNodes = context.getCurrentNodes();
+    const updatedNodes = currentNodes.map(node => 
+      node.data?.episodeId === episodeId 
+        ? { 
+            ...node, 
+            data: { ...node.data, ...episodeData },
+            position: episodeData.canvasPosition || node.position
+          }
+        : node
+    );
+    context.setNodes(updatedNodes);
+
+    return {
+      success: true,
+      command,
+      episode: { ...originalEpisode, ...episodeData },
+      updatedNodes,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleEpisodeDelete(command: EpisodeCommand): Promise<EpisodeCommandResult> {
+    const { episodeId } = command;
+    
+    if (!episodeId) {
+      throw new Error('Episode ID is required for delete command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    
+    // Store undo data
+    const episodeToDelete = context.findEpisodeById(episodeId);
+    command.undoData = episodeToDelete;
+
+    // Remove episode
+    context.removeEpisode(episodeId);
+
+    // Remove corresponding node and edges
+    const currentNodes = context.getCurrentNodes();
+    const currentEdges = context.getCurrentEdges();
+    
+    const updatedNodes = currentNodes.filter(node => node.data?.episodeId !== episodeId);
+    const updatedEdges = currentEdges.filter(edge => 
+      !currentNodes.some(node => 
+        node.data?.episodeId === episodeId && 
+        (edge.source === node.id || edge.target === node.id)
+      )
+    );
+
+    context.setNodes(updatedNodes);
+    context.setEdges(updatedEdges);
+
+    return {
+      success: true,
+      command,
+      episode: episodeToDelete,
+      updatedNodes,
+      updatedEdges,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleEpisodeMove(command: EpisodeCommand): Promise<EpisodeCommandResult> {
+    const { episodeId, canvasPosition } = command;
+    
+    if (!episodeId || !canvasPosition) {
+      throw new Error('Episode ID and canvas position are required for move command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    
+    // Update episode canvas position
+    context.updateEpisode(episodeId, { 
+      'blueprintMetadata.canvasPosition': canvasPosition,
+      'blueprintMetadata.lastCanvasUpdate': new Date(),
+      'blueprintMetadata.version': Date.now()
+    });
+
+    // Update corresponding node position
+    const currentNodes = context.getCurrentNodes();
+    const updatedNodes = currentNodes.map(node => 
+      node.data?.episodeId === episodeId 
+        ? { ...node, position: canvasPosition }
+        : node
+    );
+    context.setNodes(updatedNodes);
+
+    return {
+      success: true,
+      command,
+      updatedNodes,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleEpisodeReorder(command: EpisodeCommand): Promise<EpisodeCommandResult> {
+    const { bulkData } = command;
+    
+    if (!bulkData || bulkData.length === 0) {
+      throw new Error('Bulk data is required for reorder command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    const currentEpisodes = context.getCurrentEpisodes();
+    
+    // Store undo data
+    command.undoData = currentEpisodes.map(ep => ({ episodeId: ep._id, episodeOrder: ep.episodeOrder }));
+
+    // Update episode orders
+    const updatedEpisodes = currentEpisodes.map(episode => {
+      const updateData = bulkData.find(item => item.episodeId === episode._id);
+      return updateData ? { ...episode, ...updateData.updates } : episode;
+    }).sort((a, b) => a.episodeOrder - b.episodeOrder);
+
+    context.setEpisodes(updatedEpisodes);
+
+    return {
+      success: true,
+      command,
+      episodes: updatedEpisodes,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
   // ตรวจสอบว่า command สามารถ undo ได้หรือไม่ (เหมือน Canva/Figma)
   private isUndoableCommand(command: Command): boolean {
     const undoableTypes = [
@@ -272,6 +567,8 @@ export class SingleUserEventManager {
       'ADD_EDGE', 'DELETE_EDGE', 'UPDATE_EDGE',
       'ADD_VARIABLE', 'DELETE_VARIABLE', 'UPDATE_VARIABLE',
       'BATCH_OPERATION', 'COPY_NODES', 'PASTE_NODES',
+      // 🆕 PHASE 3: Episode commands
+      'EPISODE_CREATE', 'EPISODE_UPDATE', 'EPISODE_DELETE', 'EPISODE_MOVE', 'EPISODE_REORDER',
       // ✅ FIGMA/CANVA STYLE: Support for multiple selection operations
       'BATCH_MOVE', 'BATCH_DELETE', 'BATCH_COPY', 'BATCH_CUT', 'BATCH_PASTE', 'MULTI_SELECT'
     ];
@@ -322,10 +619,12 @@ export class SingleUserEventManager {
       'ADD_EDGE', 'DELETE_EDGE', 'UPDATE_EDGE',
       // Variable Content Changes (Database)
       'ADD_VARIABLE', 'DELETE_VARIABLE', 'UPDATE_VARIABLE',
+      // 🆕 PHASE 3: Episode Content Changes (Database)
+      'EPISODE_CREATE', 'EPISODE_UPDATE', 'EPISODE_DELETE', 'EPISODE_MOVE', 'EPISODE_REORDER',
       // Batch Operations (Database Changes Only)
       'BATCH_OPERATION', 'COPY_NODES', 'PASTE_NODES',
       'BATCH_MOVE', 'BATCH_DELETE', 'BATCH_COPY', 'BATCH_CUT', 'BATCH_PASTE',
-      // Story Structure Changes (Database)
+      // Story Structure Changes (Database) 
       'UPDATE_STORY_VARIABLE', 'MODIFY_NODE_DATA', 'CHANGE_NODE_TYPE',
       'UPDATE_NODE_PROPERTIES', 'MODIFY_EDGE_PROPERTIES'
     ];
@@ -696,9 +995,10 @@ export class SingleUserEventManager {
     }
   }
 
-  initializeWithData(data: { nodes: any[]; edges: any[]; storyVariables: any[] }): void {
+  initializeWithData(data: { nodes: any[]; edges: any[]; storyVariables: any[]; episodes?: any[] }): void {
     const snapshot: SnapshotData = {
       ...data,
+      episodes: data.episodes || [], // 🆕 PHASE 3: Initialize episodes
       timestamp: Date.now(),
       version: this.state.serverVersion
     };
@@ -839,6 +1139,7 @@ export class SingleUserEventManager {
       nodes: [],
       edges: [],
       storyVariables: [],
+      episodes: [], // 🆕 PHASE 3: Initialize episodes
       timestamp: Date.now(),
       version: 1
     };

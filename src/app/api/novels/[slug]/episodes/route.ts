@@ -1,210 +1,176 @@
+// src/app/api/novels/[slug]/episodes/route.ts
+// 🎯 API Routes สำหรับการจัดการ Episodes ใน Blueprint Tab
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import dbConnect from '@/backend/lib/mongodb';
 import NovelModel from '@/backend/models/Novel';
-import EpisodeModel from '@/backend/models/Episode';
-import PurchaseModel from '@/backend/models/Purchase';
+import EpisodeModel, { EpisodeStatus, EpisodeAccessType } from '@/backend/models/Episode';
+import StoryMapModel from '@/backend/models/StoryMap';
+import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-import mongoose from 'mongoose';
+import { Types } from 'mongoose';
 
+// 🔥 Type Definitions สำหรับ Request/Response
+interface CreateEpisodeRequest {
+  title: string;
+  episodeOrder: number;
+  volumeNumber?: number;
+  status?: EpisodeStatus;
+  accessType?: EpisodeAccessType;
+  priceCoins?: number;
+  teaserText?: string;
+  // Blueprint Integration
+  storyMapData?: {
+    nodeId: string;
+    position: { x: number; y: number };
+    editorVisuals?: any;
+  };
+}
+
+interface UpdateEpisodeRequest extends Partial<CreateEpisodeRequest> {
+  _id: string;
+}
+
+// 📝 GET /api/novels/[slug]/episodes - ดึงรายการ Episodes ทั้งหมดของนิยาย
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    await dbConnect();
     const { slug } = await params;
-    
-    // Get current user session
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-
-    // Find novel by slug
-    const novel = await NovelModel.findOne({ 
-      slug, 
-      isDeleted: { $ne: true },
-      status: { $in: ['published', 'completed'] }
-    })
-      .select('_id title author totalEpisodesCount publishedEpisodesCount monetizationSettings coverImageUrl synopsis')
-      .lean();
-
-    if (!novel) {
-      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
-    }
-
-    // Get episodes for this novel
-    const episodes = await EpisodeModel.find({ 
-      novelId: novel._id,
-      status: 'published'
-    })
-      .select('_id title slug episodeOrder publishedAt teaserText accessType priceCoins originalPriceCoins stats firstSceneId authorNotesBefore novelId')
-      .sort({ episodeOrder: 1 })
-      .lean();
-
-    // Check user purchases if logged in
-    let userPurchases: any[] = [];
-    if (userId) {
-      userPurchases = await PurchaseModel.find({
-        userId,
-        'items.itemType': 'novel_episode',
-        'items.itemId': { $in: episodes.map(ep => ep._id) },
-        status: 'completed'
-      })
-        .select('items.itemId')
-        .lean();
-    }
-
-    // Extract purchased episode IDs
-    const purchasedEpisodeIds = new Set(
-      userPurchases.flatMap(purchase => 
-        purchase.items
-          .filter((item: { itemType: string; }) => item.itemType === 'novel_episode')
-          .map((item: { itemId: { toString: () => any; }; }) => item.itemId.toString())
-      )
-    );
-
-    // Process episodes with access info
-    const episodeList = await Promise.all(episodes.map(async (episode) => {
-      const episodeDoc = await EpisodeModel.hydrate(episode);
-      const effectivePrice = await episodeDoc.getEffectivePrice();
-      const originalPrice = await episodeDoc.getOriginalPrice();
-      
-      const isOwned = userId && purchasedEpisodeIds.has(episode._id.toString());
-      const isFree = episode.accessType === 'free' || effectivePrice === 0;
-      const hasAccess = isFree || isOwned;
-
-      return {
-        _id: episode._id.toString(),
-        title: episode.title,
-        slug: episode.slug,
-        episodeOrder: episode.episodeOrder,
-        publishedAt: episode.publishedAt,
-        teaserText: episode.teaserText,
-        accessType: episode.accessType,
-        effectivePrice,
-        originalPrice,
-        priceCoins: episode.priceCoins || 0,
-        originalPriceCoins: episode.originalPriceCoins || episode.priceCoins || 0,
-        hasAccess,
-        isOwned,
-        isFree,
-        stats: {
-          viewsCount: episode.stats?.viewsCount || 0,
-          likesCount: episode.stats?.likesCount || 0,
-          commentsCount: episode.stats?.commentsCount || 0,
-          estimatedReadingTimeMinutes: episode.stats?.estimatedReadingTimeMinutes || 10,
-          totalWords: episode.stats?.totalWords || 0
-        },
-        firstSceneId: episode.firstSceneId?.toString(),
-        authorNotesBefore: episode.authorNotesBefore
-      };
-    }));
-
-    // Calculate novel progress for user
-    const totalEpisodes = episodeList.length;
-    const ownedEpisodes = episodeList.filter(ep => ep.isOwned).length;
-    const freeEpisodes = episodeList.filter(ep => ep.isFree).length;
-    const lockedEpisodes = episodeList.filter(ep => !ep.hasAccess).length;
-
-    return NextResponse.json({
-      novel: {
-        _id: novel._id.toString(),
-        title: novel.title,
-        coverImageUrl: novel.coverImageUrl,
-        synopsis: novel.synopsis,
-        totalEpisodes: novel.totalEpisodesCount,
-        publishedEpisodes: novel.publishedEpisodesCount,
-        monetizationSettings: novel.monetizationSettings,
-        author: novel.author?.toString() || ''
-      },
-      episodes: episodeList,
-      userProgress: {
-        totalEpisodes,
-        ownedEpisodes,
-        freeEpisodes,
-        lockedEpisodes,
-        isLoggedIn: !!userId
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching episodes:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch episodes' },
-      { status: 500 }
-    );
-  }
-}
-
-// ✨ POST method for creating new episodes
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
     await dbConnect();
-    const { slug } = await params;
     
-    // Get current user session
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find novel by slug and check author permission
+    // ค้นหา Novel จาก slug
     const novel = await NovelModel.findOne({ 
-      slug, 
-      isDeleted: { $ne: true },
-      $or: [
-        { author: session.user.id },
-        { coAuthors: session.user.id }
-      ]
-    }).select('_id title author coAuthors totalEpisodesCount');
+      slug: slug,
+      isDeleted: { $ne: true }
+    }).select('_id author coAuthors');
 
     if (!novel) {
-      return NextResponse.json({ error: 'Novel not found or you do not have permission' }, { status: 404 });
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    }
+
+    // ตรวจสอบสิทธิ์การเข้าถึง
+    const userId = new Types.ObjectId(session.user.id);
+    const hasAccess = (novel.author as Types.ObjectId).equals(userId) || 
+                     (novel.coAuthors && novel.coAuthors.some((coAuthor: any) => 
+                       coAuthor instanceof Types.ObjectId ? coAuthor.equals(userId) : coAuthor._id?.equals(userId)));
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // ดึงรายการ Episodes พร้อม populate ข้อมูลที่จำเป็น
+    const episodes = await EpisodeModel.find({ 
+      novelId: novel._id 
+    })
+    .select('_id title slug episodeOrder volumeNumber status accessType priceCoins publishedAt lastContentUpdatedAt storyMapNodeId storyMapData stats createdAt updatedAt')
+    .sort({ episodeOrder: 1, createdAt: 1 })
+    .lean();
+
+    return NextResponse.json({
+      success: true,
+      episodes: episodes || [],
+      count: episodes?.length || 0
+    });
+
+  } catch (error: any) {
+    console.error('[GET /api/novels/[slug]/episodes] Error:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to fetch episodes',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, 
+      { status: 500 }
+    );
+  }
+}
+
+// 📝 POST /api/novels/[slug]/episodes - สร้าง Episode ใหม่
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+    await dbConnect();
+    
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse request body
-    const episodeData = await request.json();
+    const body: CreateEpisodeRequest = await request.json();
+    const { 
+      title, 
+      episodeOrder, 
+      volumeNumber,
+      status = EpisodeStatus.DRAFT,
+      accessType = EpisodeAccessType.FREE,
+      priceCoins,
+      teaserText,
+      storyMapData
+    } = body;
 
-    // Validate required fields
-    if (!episodeData.title?.trim()) {
+    // Validation
+    if (!title?.trim()) {
       return NextResponse.json({ error: 'Episode title is required' }, { status: 400 });
     }
 
-    // Check if episode order already exists
+    if (typeof episodeOrder !== 'number' || episodeOrder < 0) {
+      return NextResponse.json({ error: 'Valid episode order is required' }, { status: 400 });
+    }
+
+    // ค้นหา Novel
+    const novel = await NovelModel.findOne({ 
+      slug: slug,
+      isDeleted: { $ne: true }
+    }).select('_id author coAuthors totalEpisodesCount');
+
+    if (!novel) {
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    }
+
+    // ตรวจสอบสิทธิ์
+    const userId = new Types.ObjectId(session.user.id);
+    const hasAccess = (novel.author as any).equals(userId) || 
+                     (novel.coAuthors && novel.coAuthors.some((coAuthor: any) => 
+                       (coAuthor._id || coAuthor).equals(userId)));
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // ตรวจสอบความซ้ำของ episodeOrder
     const existingEpisode = await EpisodeModel.findOne({
       novelId: novel._id,
-      episodeOrder: episodeData.episodeOrder
+      episodeOrder: episodeOrder
     });
 
     if (existingEpisode) {
-      return NextResponse.json({ error: 'Episode order already exists' }, { status: 400 });
+      return NextResponse.json({ 
+        error: `Episode order ${episodeOrder} already exists` 
+      }, { status: 400 });
     }
 
-    // Generate slug
-    const generateSlug = (title: string, order: number): string => {
-      const baseSlug = title
-        .toLowerCase()
-        .replace(/[^\u0E00-\u0E7Fa-z0-9\s-]/g, '') // Keep Thai, English, numbers, spaces, hyphens
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .trim();
-      return `episode-${order}-${baseSlug}`;
-    };
-
-    // Create new episode
+    // สร้าง Episode ใหม่
     const newEpisode = new EpisodeModel({
       novelId: novel._id,
-      authorId: new mongoose.Types.ObjectId(session.user.id),
-      title: episodeData.title.trim(),
-      slug: generateSlug(episodeData.title, episodeData.episodeOrder),
-      episodeOrder: episodeData.episodeOrder,
-      teaserText: episodeData.teaserText?.trim() || '',
-      accessType: episodeData.accessType || 'free',
-      priceCoins: episodeData.accessType === 'paid_unlock' ? (episodeData.priceCoins || 0) : 0,
-      status: episodeData.status || 'draft',
+      authorId: userId,
+      title: title.trim(),
+      slug: `${slug}-episode-${episodeOrder}`, // Generate episode slug
+      episodeOrder,
+      volumeNumber,
+      status,
+      accessType,
+      priceCoins,
+      teaserText: teaserText?.trim(),
       sceneIds: [],
       stats: {
         viewsCount: 0,
@@ -215,40 +181,381 @@ export async function POST(
         estimatedReadingTimeMinutes: 0,
         purchasesCount: 0
       },
-      isPreviewAllowed: true,
-      lastContentUpdatedAt: new Date()
+      // 🎯 StoryMap Integration
+      ...(storyMapData && {
+        storyMapNodeId: storyMapData.nodeId,
+        storyMapData: {
+          ...storyMapData,
+          lastSyncedAt: new Date()
+        }
+      })
     });
 
-    await newEpisode.save();
+    const savedEpisode = await newEpisode.save();
 
-    // Update novel's episode count
-    await NovelModel.findByIdAndUpdate(novel._id, {
-      $inc: { totalEpisodesCount: 1 },
-      lastContentUpdatedAt: new Date()
-    });
+    // 🎯 อัปเดต StoryMap ถ้ามี storyMapData
+    if (storyMapData && storyMapData.nodeId) {
+      try {
+        const storyMap = await StoryMapModel.findOne({
+          novelId: novel._id,
+          isActive: true
+        });
+
+        if (storyMap) {
+          // ค้นหา node ใน StoryMap และอัปเดตข้อมูล
+          const nodeIndex = storyMap.nodes.findIndex(
+            node => node.nodeId === storyMapData.nodeId
+          );
+
+          if (nodeIndex !== -1) {
+            // อัปเดต node ที่มีอยู่
+            storyMap.nodes[nodeIndex] = {
+              ...storyMap.nodes[nodeIndex],
+              nodeType: 'episode_node' as any,
+              nodeSpecificData: {
+                episodeId: savedEpisode._id,
+                episodeOrder: savedEpisode.episodeOrder,
+                episodeTitle: savedEpisode.title,
+                episodeStatus: savedEpisode.status,
+                autoGenerateScenes: false
+              }
+            };
+          } else {
+            // สร้าง node ใหม่
+            storyMap.nodes.push({
+              nodeId: storyMapData.nodeId,
+              nodeType: 'episode_node' as any,
+              title: savedEpisode.title,
+              position: storyMapData.position,
+              nodeSpecificData: {
+                episodeId: savedEpisode._id,
+                episodeOrder: savedEpisode.episodeOrder,
+                episodeTitle: savedEpisode.title,
+                episodeStatus: savedEpisode.status,
+                autoGenerateScenes: false
+              },
+              editorVisuals: storyMapData.editorVisuals || {},
+              lastEdited: new Date()
+            } as any);
+          }
+
+          storyMap.lastModifiedByUserId = userId;
+          await storyMap.save();
+        }
+      } catch (storyMapError) {
+        console.error('[POST Episode] StoryMap update error:', storyMapError);
+        // ไม่ throw error เพื่อไม่ให้กระทบการสร้าง Episode
+      }
+    }
 
     // Return created episode
     return NextResponse.json({
-      message: 'Episode created successfully',
+      success: true,
       episode: {
-        _id: newEpisode._id.toString(),
-        title: newEpisode.title,
-        slug: newEpisode.slug,
-        episodeOrder: newEpisode.episodeOrder,
-        teaserText: newEpisode.teaserText,
-        accessType: newEpisode.accessType,
-        priceCoins: newEpisode.priceCoins,
-        status: newEpisode.status,
-        stats: newEpisode.stats,
-        createdAt: newEpisode.createdAt
+        _id: savedEpisode._id,
+        title: savedEpisode.title,
+        slug: savedEpisode.slug,
+        episodeOrder: savedEpisode.episodeOrder,
+        volumeNumber: savedEpisode.volumeNumber,
+        status: savedEpisode.status,
+        accessType: savedEpisode.accessType,
+        priceCoins: savedEpisode.priceCoins,
+        teaserText: savedEpisode.teaserText,
+        storyMapNodeId: savedEpisode.storyMapNodeId,
+        storyMapData: savedEpisode.storyMapData,
+        stats: savedEpisode.stats,
+        createdAt: savedEpisode.createdAt,
+        updatedAt: savedEpisode.updatedAt
       }
     }, { status: 201 });
 
-  } catch (error) {
-    console.error('Error creating episode:', error);
+  } catch (error: any) {
+    console.error('[POST /api/novels/[slug]/episodes] Error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      return NextResponse.json({
+        error: 'Validation failed',
+        details: Object.values(error.errors).map((err: any) => err.message)
+      }, { status: 400 });
+    }
+
     return NextResponse.json(
-      { error: 'Failed to create episode' },
+      { 
+        error: 'Failed to create episode',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, 
       { status: 500 }
     );
   }
-} 
+}
+
+// 📝 PUT /api/novels/[slug]/episodes - อัปเดต Episode (Batch Update Support)
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+    await dbConnect();
+    
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body: UpdateEpisodeRequest | UpdateEpisodeRequest[] = await request.json();
+    const updates = Array.isArray(body) ? body : [body];
+
+    // ค้นหา Novel
+    const novel = await NovelModel.findOne({ 
+      slug: slug,
+      isDeleted: { $ne: true }
+    }).select('_id author coAuthors');
+
+    if (!novel) {
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    }
+
+    // ตรวจสอบสิทธิ์
+    const userId = new Types.ObjectId(session.user.id);
+    const hasAccess = (novel.author as any).equals(userId) || 
+                     (novel.coAuthors && novel.coAuthors.some((coAuthor: any) => 
+                       (coAuthor._id || coAuthor).equals(userId)));
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    const results = [];
+
+    for (const update of updates) {
+      try {
+        const { _id, ...updateData } = update;
+        
+        if (!_id || !Types.ObjectId.isValid(_id)) {
+          results.push({
+            success: false,
+            episodeId: _id,
+            error: 'Invalid episode ID'
+          });
+          continue;
+        }
+
+        // อัปเดต Episode
+        const updatedEpisode = await EpisodeModel.findOneAndUpdate(
+          { 
+            _id: new Types.ObjectId(_id),
+            novelId: novel._id 
+          },
+          {
+            ...updateData,
+            lastContentUpdatedAt: new Date()
+          },
+          { 
+            new: true, 
+            runValidators: true 
+          }
+        ).select('_id title slug episodeOrder volumeNumber status accessType priceCoins storyMapNodeId storyMapData stats updatedAt');
+
+        if (!updatedEpisode) {
+          results.push({
+            success: false,
+            episodeId: _id,
+            error: 'Episode not found'
+          });
+          continue;
+        }
+
+        // 🎯 Sync กับ StoryMap ถ้าจำเป็น
+        if (updateData.storyMapData || updateData.title || updateData.status) {
+          try {
+            const storyMap = await StoryMapModel.findOne({
+              novelId: novel._id,
+              isActive: true
+            });
+
+            if (storyMap && updatedEpisode.storyMapNodeId) {
+              const nodeIndex = storyMap.nodes.findIndex(
+                node => node.nodeId === updatedEpisode.storyMapNodeId
+              );
+
+              if (nodeIndex !== -1) {
+                storyMap.nodes[nodeIndex] = {
+                  ...storyMap.nodes[nodeIndex],
+                  ...(updateData.title && { title: updateData.title }),
+                  ...(updateData.storyMapData && {
+                    position: updateData.storyMapData.position,
+                    editorVisuals: updateData.storyMapData.editorVisuals
+                  }),
+                  nodeSpecificData: {
+                    ...storyMap.nodes[nodeIndex].nodeSpecificData,
+                    episodeTitle: updatedEpisode.title,
+                    episodeStatus: updatedEpisode.status
+                  },
+                  lastEdited: new Date()
+                };
+
+                storyMap.lastModifiedByUserId = userId;
+                await storyMap.save();
+              }
+            }
+          } catch (storyMapError) {
+            console.error('[PUT Episode] StoryMap sync error:', storyMapError);
+          }
+        }
+
+        results.push({
+          success: true,
+          episode: updatedEpisode
+        });
+
+      } catch (episodeError: any) {
+        results.push({
+          success: false,
+          episodeId: update._id,
+          error: episodeError.message
+        });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      results
+    });
+
+  } catch (error: any) {
+    console.error('[PUT /api/novels/[slug]/episodes] Error:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to update episodes',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, 
+      { status: 500 }
+    );
+  }
+}
+
+// 📝 DELETE /api/novels/[slug]/episodes - ลบ Episode (Batch Delete Support)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+    await dbConnect();
+    
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const episodeIds = searchParams.get('ids')?.split(',') || [];
+
+    if (episodeIds.length === 0) {
+      return NextResponse.json({ error: 'No episode IDs provided' }, { status: 400 });
+    }
+
+    // ค้นหา Novel
+    const novel = await NovelModel.findOne({ 
+      slug: slug,
+      isDeleted: { $ne: true }
+    }).select('_id author coAuthors');
+
+    if (!novel) {
+      return NextResponse.json({ error: 'Novel not found' }, { status: 404 });
+    }
+
+    // ตรวจสอบสิทธิ์
+    const userId = new Types.ObjectId(session.user.id);
+    const hasAccess = (novel.author as any).equals(userId) || 
+                     (novel.coAuthors && novel.coAuthors.some((coAuthor: any) => 
+                       (coAuthor._id || coAuthor).equals(userId)));
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    const validIds = episodeIds.filter(id => Types.ObjectId.isValid(id));
+    const results = [];
+
+    for (const episodeId of validIds) {
+      try {
+        // ค้นหา Episode ก่อนลบเพื่อเก็บข้อมูล storyMapNodeId
+        const episodeToDelete = await EpisodeModel.findOne({
+          _id: new Types.ObjectId(episodeId),
+          novelId: novel._id
+        }).select('_id storyMapNodeId title');
+
+        if (!episodeToDelete) {
+          results.push({
+            success: false,
+            episodeId,
+            error: 'Episode not found'
+          });
+          continue;
+        }
+
+        // ลบ Episode
+        await EpisodeModel.findByIdAndDelete(episodeToDelete._id);
+
+        // 🎯 ลบ node จาก StoryMap ถ้ามี
+        if (episodeToDelete.storyMapNodeId) {
+          try {
+            const storyMap = await StoryMapModel.findOne({
+              novelId: novel._id,
+              isActive: true
+            });
+
+            if (storyMap) {
+              // ลบ node และ edges ที่เกี่ยวข้อง
+              storyMap.nodes = storyMap.nodes.filter(
+                node => node.nodeId !== episodeToDelete.storyMapNodeId
+              );
+              
+              storyMap.edges = storyMap.edges.filter(
+                edge => edge.sourceNodeId !== episodeToDelete.storyMapNodeId && 
+                       edge.targetNodeId !== episodeToDelete.storyMapNodeId
+              );
+
+              storyMap.lastModifiedByUserId = userId;
+              await storyMap.save();
+            }
+          } catch (storyMapError) {
+            console.error('[DELETE Episode] StoryMap cleanup error:', storyMapError);
+          }
+        }
+
+        results.push({
+          success: true,
+          episodeId,
+          title: episodeToDelete.title
+        });
+
+      } catch (deleteError: any) {
+        results.push({
+          success: false,
+          episodeId,
+          error: deleteError.message
+        });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      results,
+      deletedCount: results.filter(r => r.success).length
+    });
+
+  } catch (error: any) {
+    console.error('[DELETE /api/novels/[slug]/episodes] Error:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to delete episodes',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, 
+      { status: 500 }
+    );
+  }
+}

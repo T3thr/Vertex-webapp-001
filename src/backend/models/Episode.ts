@@ -165,6 +165,36 @@ export interface IEpisode extends Document {
   status: EpisodeStatus;
   accessType: EpisodeAccessType;
   priceCoins?: number;
+  // 🎯 NEW: StoryMap Integration Fields
+  storyMapNodeId?: string; // เชื่อมโยงกับ StoryMap node
+  storyMapData?: {
+    nodeId: string;
+    position: { x: number; y: number };
+    editorVisuals?: any;
+    lastSyncedAt: Date;
+  };
+  // 🆕 PHASE 1: Blueprint Integration Fields
+  blueprintMetadata?: {
+    canvasPosition: { x: number; y: number };
+    visualStyle: {
+      color?: string;
+      icon?: string;
+      borderStyle?: 'solid' | 'dashed' | 'dotted';
+      borderRadius?: number;
+      opacity?: number;
+    };
+    connections: {
+      incomingEdges: string[];
+      outgoingEdges: string[];
+    };
+    displaySettings: {
+      showThumbnail?: boolean;
+      showLabel?: boolean;
+      labelPosition?: 'top' | 'bottom' | 'left' | 'right';
+    };
+    lastCanvasUpdate: Date;
+    version: number; // สำหรับ conflict resolution
+  };
   originalPriceCoins?: number; // เพิ่มราคาเดิมสำหรับแสดงส่วนลด
   promotions?: Array<{
     promotionId: Types.ObjectId;
@@ -373,6 +403,62 @@ const EpisodeSchema = new Schema<IEpisode>(
       date: { type: Date, required: true, default: Date.now },
       changes: { type: String, required: true, trim: true, maxlength: 1000 },
     }],
+    // 🎯 NEW: StoryMap Integration Schema
+    storyMapNodeId: { 
+      type: String, 
+      trim: true, 
+      index: true,
+      comment: "เชื่อมโยงกับ StoryMap node ID สำหรับ Blueprint visualization" 
+    },
+    storyMapData: {
+      nodeId: { type: String, trim: true },
+      position: {
+        x: { type: Number, default: 0 },
+        y: { type: Number, default: 0 },
+        _id: false,
+      },
+      editorVisuals: { type: Schema.Types.Mixed },
+      lastSyncedAt: { type: Date, default: Date.now },
+      _id: false,
+    },
+    // 🆕 PHASE 1: Blueprint Integration Schema
+    blueprintMetadata: {
+      canvasPosition: {
+        x: { type: Number, required: true, default: 0 },
+        y: { type: Number, required: true, default: 0 },
+        _id: false,
+      },
+      visualStyle: {
+        color: { type: String, default: '#3b82f6' }, // Default blue
+        icon: { type: String, default: 'episode' },
+        borderStyle: { 
+          type: String, 
+          enum: ['solid', 'dashed', 'dotted'], 
+          default: 'solid' 
+        },
+        borderRadius: { type: Number, default: 8, min: 0, max: 50 },
+        opacity: { type: Number, default: 1, min: 0, max: 1 },
+        _id: false,
+      },
+      connections: {
+        incomingEdges: [{ type: String, trim: true }],
+        outgoingEdges: [{ type: String, trim: true }],
+        _id: false,
+      },
+      displaySettings: {
+        showThumbnail: { type: Boolean, default: true },
+        showLabel: { type: Boolean, default: true },
+        labelPosition: { 
+          type: String, 
+          enum: ['top', 'bottom', 'left', 'right'], 
+          default: 'bottom' 
+        },
+        _id: false,
+      },
+      lastCanvasUpdate: { type: Date, default: Date.now },
+      version: { type: Number, default: 1, min: 1 },
+      _id: false,
+    },
   },
   {
     timestamps: true, // เพิ่ม createdAt และ updatedAt โดยอัตโนมัติ

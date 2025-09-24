@@ -95,6 +95,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 // import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
+// Utility imports
+import { cn } from '@/lib/utils';
+
+// Error handling
+import { EpisodeErrorBoundary } from '@/components/ErrorBoundary';
+
 // Icons
 import { 
   Plus, 
@@ -175,6 +181,11 @@ import { ICharacter } from '@/backend/models/Character';
 import { IMedia } from '@/backend/models/Media';
 import { IOfficialMedia } from '@/backend/models/OfficialMedia';
 import { IEpisode } from '@/backend/models/Episode';
+// 🎯 Additional UI Components for Episode Management (already imported above)
+// import { Plus, Trash2 } from 'lucide-react'; // Already imported
+// import { Input } from '@/components/ui/input'; // Already imported  
+// import { Label } from '@/components/ui/label'; // Already imported
+// import { Textarea } from '@/components/ui/textarea'; // Already imported
 
 // Props interface
 interface BlueprintTabProps {
@@ -204,8 +215,13 @@ interface BlueprintTabProps {
     snapToGrid: boolean;
     nodeOrientation: 'horizontal' | 'vertical';
   };
-  // ✨ Add Episode callback for parent component integration
+  // 🎯 Enhanced Episode Integration
   onEpisodeCreate?: (newEpisode: any, updatedEpisodes: any[]) => void;
+  onEpisodeUpdate?: (updatedEpisode: any, updatedEpisodes: any[]) => void;
+  onEpisodeDelete?: (deletedEpisodeId: string, updatedEpisodes: any[]) => void;
+  // URL State Management สำหรับ persistent episode selection
+  selectedEpisodeId?: string;
+  onEpisodeSelect?: (episodeId: string | null) => void;
 }
 
 // Command Pattern interfaces for proper undo/redo
@@ -510,6 +526,7 @@ const CustomNode = ({
     switch (type) {
       case StoryMapNodeType.START_NODE: return <Play className="w-5 h-5" />;
       case StoryMapNodeType.SCENE_NODE: return <Square className="w-5 h-5" />;
+      case StoryMapNodeType.EPISODE_NODE: return <BookOpen className="w-5 h-5" />;
       case StoryMapNodeType.CHOICE_NODE: return <GitBranch className="w-5 h-5" />;
       case StoryMapNodeType.BRANCH_NODE: return <GitBranch className="w-5 h-5" />;
       case StoryMapNodeType.MERGE_NODE: return <GitBranch className="w-5 h-5 rotate-180" />;
@@ -567,6 +584,16 @@ const CustomNode = ({
         handles: getHandlesForOrientation({ top: true, bottom: true, left: false, right: false }),
         sparkle: false,
         isSpecial: false
+      };
+      case StoryMapNodeType.EPISODE_NODE: return {
+        gradient: 'from-indigo-400 via-indigo-500 to-indigo-600',
+        shadow: 'shadow-indigo-500/30 shadow-lg',
+        glow: 'shadow-indigo-400/60 shadow-2xl',
+        ring: 'ring-indigo-300',
+        shape: 'rounded-2xl',
+        handles: getHandlesForOrientation({ top: true, bottom: true, left: false, right: false }),
+        sparkle: true,
+        isSpecial: true
       };
       case StoryMapNodeType.CHOICE_NODE: return {
         gradient: 'from-amber-400 via-amber-500 to-amber-600',
@@ -946,6 +973,320 @@ const CustomNode = ({
 };
 
 // Node Palette Component with collapse support
+// 🎯 Episode Management Panel Component
+const EpisodeManagementPanel = ({
+  episodes,
+  selectedEpisode,
+  isCreating,
+  formData,
+  onFormChange,
+  onEpisodeSelect,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onCancel
+}: {
+  episodes: any[];
+  selectedEpisode: any | null;
+  isCreating: boolean;
+  formData: any;
+  onFormChange: (data: any) => void;
+  onEpisodeSelect: (episodeId: string | null) => void;
+  onCreate: () => void;
+  onUpdate: (episodeId: string, data: any) => void;
+  onDelete: (episodeId: string) => void;
+  onCancel: () => void;
+}) => {
+  return (
+    <div className="p-4 border-b border-gray-200 bg-gray-50">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-700">จัดการตอน</h3>
+        <Button
+          size="sm"
+          onClick={() => {
+            onFormChange({ ...formData, title: '', episodeOrder: episodes.length + 1 });
+            // Set creating mode if not in the props, we'll handle this in parent
+          }}
+          className="flex items-center gap-1"
+        >
+          <Plus className="w-4 h-4" />
+          เพิ่มตอน
+        </Button>
+      </div>
+
+      {/* Episode Creation Form */}
+      {isCreating && (
+        <div className="mb-4 p-3 bg-white border border-gray-200 rounded-lg">
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="episode-title" className="text-xs">ชื่อตอน</Label>
+              <Input
+                id="episode-title"
+                value={formData.title}
+                onChange={(e) => onFormChange({ ...formData, title: e.target.value })}
+                placeholder="ระบุชื่อตอน..."
+                className="mt-1"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="episode-order" className="text-xs">ลำดับตอน</Label>
+                <Input
+                  id="episode-order"
+                  type="number"
+                  value={formData.episodeOrder}
+                  onChange={(e) => onFormChange({ ...formData, episodeOrder: parseInt(e.target.value) || 1 })}
+                  className="mt-1"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="episode-volume" className="text-xs">เล่ม (ถ้ามี)</Label>
+                <Input
+                  id="episode-volume"
+                  type="number"
+                  value={formData.volumeNumber || ''}
+                  onChange={(e) => onFormChange({ ...formData, volumeNumber: parseInt(e.target.value) || undefined })}
+                  placeholder="เล่ม"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="episode-teaser" className="text-xs">เรื่องย่อ (ถ้ามี)</Label>
+              <Textarea
+                id="episode-teaser"
+                value={formData.teaserText}
+                onChange={(e) => onFormChange({ ...formData, teaserText: e.target.value })}
+                placeholder="เรื่องย่อของตอน..."
+                className="mt-1 text-xs"
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button size="sm" onClick={onCreate} disabled={!formData.title.trim()}>
+                สร้างตอน
+              </Button>
+              <Button size="sm" variant="outline" onClick={onCancel}>
+                ยกเลิก
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Episodes List */}
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {episodes.map((episode) => (
+          <div
+            key={episode._id}
+            className={cn(
+              "p-2 border border-gray-200 rounded cursor-pointer transition-colors",
+              selectedEpisode?._id === episode._id
+                ? "bg-blue-50 border-blue-300"
+                : "bg-white hover:bg-gray-50"
+            )}
+            onClick={() => onEpisodeSelect(episode._id)}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900 truncate">
+                  ตอนที่ {episode.episodeOrder}: {episode.title}
+                </div>
+                <div className="text-xs text-gray-500">
+                  สถานะ: {episode.status === 'draft' ? 'ฉบับร่าง' : 
+                          episode.status === 'published' ? 'เผยแพร่แล้ว' : episode.status}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(episode._id);
+                  }}
+                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {episodes.length === 0 && (
+          <div className="text-center py-4 text-gray-500 text-sm">
+            ยังไม่มีตอน
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 🆕 PHASE 2: Professional Modal Management System
+interface ModalState {
+  type: 'episode_create' | 'episode_edit' | 'episode_delete' | 'episode_settings' | null;
+  isOpen: boolean;
+  data?: any;
+  context?: {
+    canvasPosition?: { x: number; y: number };
+    selectedEpisodes?: string[];
+    episodeId?: string;
+  };
+}
+
+// 🎯 Episode Create Modal Component - REMOVED
+// ใช้ Professional Episode Creator Dialog แทน (บรรทัด 8313)
+
+// 🎯 Episode Delete Modal Component
+const EpisodeDeleteModal = ({ 
+  isOpen, 
+  episodes, 
+  onClose, 
+  onConfirm 
+}: {
+  isOpen: boolean;
+  episodes: any[];
+  onClose: () => void;
+  onConfirm: (episodeIds: string[]) => Promise<void>;
+}) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      await onConfirm(episodes.map(ep => ep._id));
+      onClose();
+    } catch (error) {
+      console.error('Error deleting episodes:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  if (!isOpen || episodes.length === 0) return null;
+
+  const isMultiple = episodes.length > 1;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {isMultiple ? `ลบ ${episodes.length} ตอน` : 'ลบตอน'}
+              </h2>
+              <p className="text-sm text-gray-600">การดำเนินการนี้ไม่สามารถย้อนกลับได้</p>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <p className="text-sm text-gray-700 mb-3">
+              {isMultiple 
+                ? `คุณกำลังจะลบตอนทั้งหมด ${episodes.length} ตอน:` 
+                : 'คุณกำลังจะลบตอน:'}
+            </p>
+            <div className="max-h-32 overflow-y-auto bg-gray-50 rounded-lg p-3">
+              {episodes.map((episode, index) => (
+                <div key={episode._id} className="text-sm text-gray-700">
+                  {index + 1}. ตอนที่ {episode.episodeOrder}: {episode.title}
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" />
+                <div className="text-sm text-yellow-800">
+                  <strong>คำเตือน:</strong> การลบตอนจะส่งผลต่อ:
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Nodes และ Edges ที่เกี่ยวข้องใน StoryMap</li>
+                    <li>ฉากทั้งหมดในตอน</li>
+                    <li>ความคิดเห็นและการให้คะแนน</li>
+                    <li>สถิติการอ่าน</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={isDeleting}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleConfirm}
+              disabled={isDeleting}
+              className="min-w-[100px] bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  กำลังลบ...
+                </div>
+              ) : (
+                isMultiple ? `ลบ ${episodes.length} ตอน` : 'ลบตอน'
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 🎯 Modal Manager Hook
+const useModalManager = () => {
+  const [modalState, setModalState] = useState<ModalState>({
+    type: null,
+    isOpen: false,
+    data: undefined,
+    context: undefined
+  });
+
+  const openModal = useCallback((
+    type: ModalState['type'], 
+    data?: any, 
+    context?: ModalState['context']
+  ) => {
+    setModalState({
+      type,
+      isOpen: true,
+      data,
+      context
+    });
+  }, []);
+
+  const closeModal = useCallback(() => {
+    setModalState({
+      type: null,
+      isOpen: false,
+      data: undefined,
+      context: undefined
+    });
+  }, []);
+
+  return {
+    modalState,
+    openModal,
+    closeModal
+  };
+};
+
 const NodePalette = ({ 
   onAddNode, 
   onDragStart,
@@ -966,6 +1307,7 @@ const NodePalette = ({
       color: 'from-blue-500 to-blue-600',
       nodes: [
         { type: StoryMapNodeType.START_NODE, name: 'จุดเริ่มต้น', desc: 'เริ่มต้นเรื่อง', icon: Target },
+        { type: StoryMapNodeType.EPISODE_NODE, name: 'ตอน', desc: 'ตอนในนิยาย', icon: BookOpen },
         { type: StoryMapNodeType.SCENE_NODE, name: 'ฉาก', desc: 'ฉากในเรื่อง', icon: Square },
         { type: StoryMapNodeType.ENDING_NODE, name: 'จบเรื่อง', desc: 'จุดจบของเรื่อง', icon: Flag }
       ]
@@ -1692,7 +2034,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   eventManager, // Professional Event Management Integration
   autoSaveConfig, // ✅ PROFESSIONAL SOLUTION 5: รับ autoSaveConfig prop
   blueprintSettings,
-  onEpisodeCreate // ✨ Add Episode callback
+  // 🎯 Enhanced Episode Integration
+  onEpisodeCreate,
+  onEpisodeUpdate,
+  onEpisodeDelete,
+  selectedEpisodeId,
+  onEpisodeSelect
 }, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -1771,6 +2118,366 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       toast.error('การดำเนินการล้มเหลว กรุณาลองใหม่อีกครั้ง');
     }
   }, [commandAdapter, professionalEventManager, onDirtyChange]);
+
+  // ===============================
+  // 🎯 ENHANCED EPISODE MANAGEMENT
+  // ===============================
+  
+  // Episode state management
+  const [episodeList, setEpisodeList] = useState<any[]>(episodes || []);
+  const [selectedEpisodeFromBlueprint, setSelectedEpisodeFromBlueprint] = useState<any | null>(
+    selectedEpisodeId ? episodeList.find(ep => ep._id === selectedEpisodeId) || null : null
+  );
+  
+  // 🎯 StoryMap loading state
+  const [isLoadingStoryMap, setIsLoadingStoryMap] = useState(false);
+  const [currentEpisodeStoryMap, setCurrentEpisodeStoryMap] = useState<any>(null);
+  
+  // ReactFlow instance (ย้ายมาจากด้านล่าง)
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [isCreatingEpisodeInBlueprint, setIsCreatingEpisodeInBlueprint] = useState(false);
+  const [episodeFormData, setEpisodeFormData] = useState({
+    title: '',
+    episodeOrder: episodeList.length + 1,
+    volumeNumber: undefined,
+    status: 'draft',
+    accessType: 'free',
+    priceCoins: 0,
+    teaserText: ''
+  });
+
+  // 🆕 PHASE 2: Modal Management Integration
+  const { modalState, openModal, closeModal } = useModalManager();
+
+  // 🎯 API Functions สำหรับ Episode Management
+  const createEpisodeAPI = useCallback(async (episodeData: any, storyMapData?: any) => {
+    try {
+      // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          episodes: [episodeData]
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create episode');
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Unknown API error');
+      }
+
+      return result.episode;
+    } catch (error: any) {
+      console.error('[createEpisodeAPI] Error:', error);
+      
+      // Provide user-friendly error messages
+      let userMessage = 'ไม่สามารถสร้างตอนได้';
+      if (error.message.includes('Episode order')) {
+        userMessage = 'ลำดับตอนซ้ำกัน กรุณาเลือกลำดับใหม่';
+      } else if (error.message.includes('title')) {
+        userMessage = 'ชื่อตอนไม่ถูกต้อง กรุณาตรวจสอบ';
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        userMessage = 'เกิดข้อผิดพลาดเครือข่าย กรุณาลองใหม่';
+      }
+      
+      toast.error(userMessage);
+      throw error;
+    }
+  }, [novel.slug]);
+
+  const updateEpisodeAPI = useCallback(async (episodeId: string, updateData: any) => {
+    try {
+      const response = await fetch(`/api/novels/${novel.slug}/episodes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _id: episodeId, ...updateData })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update episode');
+      }
+
+      const result = await response.json();
+      return result.results[0]?.episode;
+    } catch (error: any) {
+      console.error('[updateEpisodeAPI] Error:', error);
+      toast.error(`ไม่สามารถอัปเดตตอนได้: ${error.message}`);
+      throw error;
+    }
+  }, [novel.slug]);
+
+  const deleteEpisodeAPI = useCallback(async (episodeId: string) => {
+    try {
+      const response = await fetch(`/api/novels/${novel.slug}/episodes?ids=${episodeId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete episode');
+      }
+
+      const result = await response.json();
+      return result.results[0];
+    } catch (error: any) {
+      console.error('[deleteEpisodeAPI] Error:', error);
+      toast.error(`ไม่สามารถลบตอนได้: ${error.message}`);
+      throw error;
+    }
+  }, [novel.slug]);
+
+  // 🎯 Episode Event Handlers
+  const handleCreateEpisodeInBlueprint = useCallback(async (nodePosition?: { x: number; y: number }) => {
+    if (!episodeFormData.title.trim()) {
+      toast.error('กรุณาระบุชื่อตอน');
+      return;
+    }
+
+    setIsCreatingEpisodeInBlueprint(true);
+    try {
+      // สร้าง nodeId สำหรับ StoryMap
+      const nodeId = `episode_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // เตรียม StoryMap data
+      const storyMapData = {
+        nodeId,
+        position: nodePosition || { 
+          x: 100 + (episodeList.length * 200), 
+          y: 100 + (episodeList.length * 150) 
+        },
+        editorVisuals: {
+          color: '#3B82F6', // Blue color for episode nodes
+          borderRadius: 8
+        }
+      };
+
+      // สร้าง Episode ใหม่
+      const newEpisode = await createEpisodeAPI(episodeFormData, storyMapData);
+
+      // อัปเดต local state
+      const updatedEpisodes = [...episodeList, newEpisode];
+      setEpisodeList(updatedEpisodes);
+
+      // เลือก Episode ใหม่
+      setSelectedEpisodeFromBlueprint(newEpisode);
+      if (onEpisodeSelect) {
+        onEpisodeSelect(newEpisode._id);
+      }
+
+      // สร้าง node ใน StoryMap
+      const newNode: Node = {
+        id: nodeId,
+        type: 'custom',
+        position: storyMapData.position,
+        data: {
+          nodeType: 'episode_node',
+          title: newEpisode.title,
+          episodeId: newEpisode._id,
+          episodeOrder: newEpisode.episodeOrder,
+          episodeStatus: newEpisode.status,
+          ...storyMapData.editorVisuals
+        }
+      };
+
+      // เพิ่ม node เข้า canvas
+      setNodes(prev => [...prev, newNode]);
+
+      // Reset form
+      setEpisodeFormData({
+        title: '',
+        episodeOrder: updatedEpisodes.length + 1,
+        volumeNumber: undefined,
+        status: 'draft',
+        accessType: 'free',
+        priceCoins: 0,
+        teaserText: ''
+      });
+
+      // Callback to parent
+      if (onEpisodeCreate) {
+        onEpisodeCreate(newEpisode, updatedEpisodes);
+      }
+
+      toast.success(`สร้างตอน "${newEpisode.title}" เรียบร้อยแล้ว`);
+
+    } catch (error) {
+      console.error('[handleCreateEpisode] Error:', error);
+    } finally {
+      setIsCreatingEpisode(false);
+    }
+  }, [episodeFormData, episodeList, createEpisodeAPI, onEpisodeCreate, onEpisodeSelect, setNodes]);
+
+  const handleUpdateEpisode = useCallback(async (episodeId: string, updateData: any) => {
+    try {
+      const updatedEpisode = await updateEpisodeAPI(episodeId, updateData);
+      
+      // อัปเดต local state
+      const updatedEpisodes = episodeList.map(ep => 
+        ep._id === episodeId ? { ...ep, ...updatedEpisode } : ep
+      );
+      setEpisodeList(updatedEpisodes);
+
+      // อัปเดต selected episode
+      if (selectedEpisodeFromBlueprint?._id === episodeId) {
+        setSelectedEpisodeFromBlueprint({ ...selectedEpisodeFromBlueprint, ...updatedEpisode });
+      }
+
+      // อัปเดต node ใน canvas
+      setNodes(prev => prev.map(node => {
+        if (node.data?.episodeId === episodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              title: updatedEpisode.title || node.data.title,
+              episodeStatus: updatedEpisode.status || node.data.episodeStatus
+            }
+          };
+        }
+        return node;
+      }));
+
+      // Callback to parent
+      if (onEpisodeUpdate) {
+        onEpisodeUpdate(updatedEpisode, updatedEpisodes);
+      }
+
+      toast.success(`อัปเดตตอน "${updatedEpisode.title}" เรียบร้อยแล้ว`);
+
+    } catch (error) {
+      console.error('[handleUpdateEpisode] Error:', error);
+    }
+  }, [episodeList, selectedEpisodeFromBlueprint, updateEpisodeAPI, onEpisodeUpdate, setNodes]);
+
+  // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode
+  const loadStoryMapForEpisode = useCallback(async (episodeId: string | null) => {
+    if (!episodeId || !novel?.slug) {
+      // ถ้าไม่มี episode ให้ล้าง canvas
+      setNodes([]);
+      setEdges([]);
+      setCurrentEpisodeStoryMap(null);
+      return;
+    }
+
+    setIsLoadingStoryMap(true);
+    try {
+      // โหลด StoryMap สำหรับ Episode นี้
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}/storymap`);
+      
+      if (response.ok) {
+        const episodeStoryMap = await response.json();
+        setCurrentEpisodeStoryMap(episodeStoryMap);
+        
+        // แปลง StoryMap nodes/edges เป็น ReactFlow format
+        const reactFlowNodes = (episodeStoryMap.nodes || []).map((node: any) => ({
+          id: node.nodeId,
+          type: getReactFlowNodeType(node.nodeType),
+          position: node.position || { x: 0, y: 0 },
+          data: {
+            ...node,
+            nodeType: node.nodeType,
+            title: node.title,
+            nodeSpecificData: node.nodeSpecificData,
+            editorVisuals: node.editorVisuals
+          }
+        }));
+
+        const reactFlowEdges = (episodeStoryMap.edges || []).map((edge: any) => ({
+          id: edge.edgeId,
+          source: edge.sourceNodeId,
+          target: edge.targetNodeId,
+          type: 'custom',
+          data: {
+            ...edge,
+            label: edge.label,
+            condition: edge.condition,
+            editorVisuals: edge.editorVisuals
+          },
+          style: {
+            stroke: edge.editorVisuals?.color || '#6B7280',
+            strokeWidth: edge.editorVisuals?.strokeWidth || 2
+          }
+        }));
+
+        setNodes(reactFlowNodes);
+        setEdges(reactFlowEdges);
+        
+        console.log(`✅ โหลด StoryMap สำหรับ Episode ${episodeId} สำเร็จ:`, {
+          nodes: reactFlowNodes.length,
+          edges: reactFlowEdges.length
+        });
+      } else {
+        // ถ้าไม่พบ StoryMap ให้สร้างเปล่า
+        console.log(`ℹ️ ไม่พบ StoryMap สำหรับ Episode ${episodeId} - แสดง canvas เปล่า`);
+        setNodes([]);
+        setEdges([]);
+        setCurrentEpisodeStoryMap(null);
+      }
+    } catch (error) {
+      console.error('[loadStoryMapForEpisode] Error:', error);
+      toast.error('ไม่สามารถโหลด StoryMap ได้');
+      setNodes([]);
+      setEdges([]);
+      setCurrentEpisodeStoryMap(null);
+    } finally {
+      setIsLoadingStoryMap(false);
+    }
+  }, [novel?.slug, setNodes, setEdges]);
+
+  const handleEpisodeSelect = useCallback((episodeId: string | null) => {
+    const episode = episodeId ? episodeList.find(ep => ep._id === episodeId) : null;
+    setSelectedEpisodeFromBlueprint(episode);
+    
+    // 🎯 โหลด StoryMap สำหรับ Episode ที่เลือก
+    loadStoryMapForEpisode(episodeId);
+    
+    if (onEpisodeSelect) {
+      onEpisodeSelect(episodeId);
+    }
+
+    // Focus บน node ที่เกี่ยวข้อง (หลังจากโหลด StoryMap แล้ว)
+    if (episode && episode.storyMapNodeId) {
+      // รอให้โหลด StoryMap เสร็จก่อน
+      setTimeout(() => {
+        const node = nodes.find(n => n.id === episode.storyMapNodeId);
+        if (node && reactFlowInstance) {
+          reactFlowInstance.fitView({
+            nodes: [node],
+            duration: 800,
+            padding: 0.3
+          });
+        }
+      }, 500);
+    }
+  }, [episodeList, loadStoryMapForEpisode, onEpisodeSelect, nodes, reactFlowInstance]);
+
+  // Sync episodes with nodes on canvas
+  useEffect(() => {
+    if (episodes && episodes !== episodeList) {
+      setEpisodeList(episodes);
+    }
+  }, [episodes, episodeList]);
+
+  // 🎯 โหลด StoryMap เมื่อเริ่มต้นหรือเมื่อ selectedEpisodeId เปลี่ยน
+  useEffect(() => {
+    if (selectedEpisodeId && selectedEpisodeId !== selectedEpisodeFromBlueprint?._id) {
+      // โหลด StoryMap สำหรับ Episode ที่เลือก
+      loadStoryMapForEpisode(selectedEpisodeId);
+    } else if (!selectedEpisodeId && episodeList.length > 0) {
+      // ถ้าไม่มี Episode ที่เลือก ให้เลือก Episode แรก
+      const firstEpisode = episodeList[0];
+      setSelectedEpisodeFromBlueprint(firstEpisode);
+      loadStoryMapForEpisode(firstEpisode._id);
+    }
+  }, [selectedEpisodeId, selectedEpisodeFromBlueprint, episodeList, loadStoryMapForEpisode]);
 
   // ฟังก์ชันตรวจสอบว่าควรสร้าง command หรือไม่
   const shouldCreateCommand = useCallback((change: NodeChange | EdgeChange): boolean => {
@@ -2029,7 +2736,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Selection and UI state
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
-  const [selectedEpisode, setSelectedEpisode] = useState<string>(episodes[0]?._id || '');
+  // selectedEpisode จะใช้ selectedEpisodeFromBlueprint แทน
   
   // ✨ Episode creation state
   const [isEpisodeCreatorOpen, setIsEpisodeCreatorOpen] = useState(false);
@@ -2044,7 +2751,165 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const [isCreatingEpisode, setIsCreatingEpisode] = useState(false);
 
   // ✨ Episode creation handler
+  // 🎯 Professional Episode Creation Handler (Modal-based)
+  const handleCreateEpisodeModal = useCallback(async (episodeData: any) => {
+    try {
+      // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          episodes: [episodeData]
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create episode');
+      }
+
+      const result = await response.json();
+      const newEpisode = result.data;
+
+      // 🎯 อัปเดต local state
+      const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
+      setEpisodeList(updatedEpisodes);
+      setSelectedEpisodeFromBlueprint(newEpisode);
+
+      // 🎯 สร้าง Node ใน Canvas ทันที
+      const newNode = {
+        id: `episode_${newEpisode._id}`,
+        type: 'episode',
+        position: episodeData.canvasPosition || { x: 100, y: 100 },
+        data: {
+          ...newEpisode,
+          episodeId: newEpisode._id,
+          nodeType: 'episode_node',
+          title: newEpisode.title,
+          status: newEpisode.status,
+          visualStyle: episodeData.visualStyle || {}
+        }
+      };
+
+      setNodes(prevNodes => [...prevNodes, newNode]);
+
+      // 🎯 Callback to parent
+      if (onEpisodeCreate) {
+        onEpisodeCreate(newEpisode, updatedEpisodes);
+      }
+
+      // 🎯 Select new episode in URL
+      if (onEpisodeSelect) {
+        onEpisodeSelect(newEpisode._id);
+      }
+
+      toast.success(`สร้างตอน "${newEpisode.title}" เรียบร้อยแล้ว`);
+
+    } catch (error: any) {
+      console.error('[handleCreateEpisodeModal] Error:', error);
+      toast.error(`การสร้างตอนล้มเหลว: ${error.message}`);
+      throw error;
+    }
+  }, [novel.slug, episodeList, setNodes, onEpisodeCreate, onEpisodeSelect]);
+
+  // 🎯 Legacy handler for backward compatibility
   const handleCreateEpisode = useCallback(async () => {
+    // 🔥 เปิด Professional Episode Creator Dialog
+    setIsEpisodeCreatorOpen(true);
+    
+    // ตั้งค่าฟอร์มเริ่มต้น
+    const nextOrder = Math.max(...episodeList.map(ep => ep.episodeOrder), 0) + 1;
+    setEpisodeCreationForm(prev => ({
+      ...prev,
+      episodeOrder: nextOrder
+    }));
+  }, [episodeList, setIsEpisodeCreatorOpen, setEpisodeCreationForm]);
+
+  // 🎯 Canvas-based Episode Creation (right-click context menu)
+  const handleCanvasCreateEpisode = useCallback((canvasPosition: { x: number; y: number }) => {
+    // 🔥 เปิด Professional Episode Creator Dialog
+    setIsEpisodeCreatorOpen(true);
+    
+    // ตั้งค่าฟอร์มเริ่มต้น
+    const nextOrder = Math.max(...episodeList.map(ep => ep.episodeOrder), 0) + 1;
+    setEpisodeCreationForm(prev => ({
+      ...prev,
+      episodeOrder: nextOrder
+    }));
+  }, [episodeList, setIsEpisodeCreatorOpen, setEpisodeCreationForm]);
+
+  // 🎯 Episode Deletion Handler (Modal-based)
+  const handleDeleteEpisodeModal = useCallback(async (episodeIds: string[]) => {
+    try {
+      // 🔥 ใช้ Blueprint API สำหรับการลบ Episode
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          episodeIds
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete episodes');
+      }
+
+      const result = await response.json();
+
+      // 🎯 อัปเดต local state
+      const updatedEpisodes = episodeList.filter(ep => !episodeIds.includes(ep._id));
+      setEpisodeList(updatedEpisodes);
+
+      // 🎯 ลบ nodes จาก canvas
+      setNodes(prevNodes => 
+        prevNodes.filter(node => 
+          !episodeIds.some(epId => node.data?.episodeId === epId)
+        )
+      );
+
+      // 🎯 Clear selection if deleted episode was selected
+      if (selectedEpisodeFromBlueprint && episodeIds.includes(selectedEpisodeFromBlueprint._id)) {
+        setSelectedEpisodeFromBlueprint(null);
+        if (onEpisodeSelect) {
+          onEpisodeSelect(null);
+        }
+      }
+
+      // 🎯 Callback to parent
+      if (onEpisodeDelete) {
+        episodeIds.forEach(epId => {
+          onEpisodeDelete(epId, updatedEpisodes);
+        });
+      }
+
+      const count = episodeIds.length;
+      toast.success(`ลบ${count > 1 ? ` ${count} ตอน` : 'ตอน'}เรียบร้อยแล้ว`);
+
+    } catch (error: any) {
+      console.error('[handleDeleteEpisodeModal] Error:', error);
+      toast.error(`การลบตอนล้มเหลว: ${error.message}`);
+      throw error;
+    }
+  }, [novel.slug, episodeList, selectedEpisodeFromBlueprint, setNodes, onEpisodeDelete, onEpisodeSelect]);
+
+  // 🎯 Legacy delete handler
+  const handleDeleteEpisode = useCallback((episodeId: string) => {
+    const episodeToDelete = episodeList.find(ep => ep._id === episodeId);
+    if (episodeToDelete) {
+      openModal('episode_delete', null, { selectedEpisodes: [episodeToDelete] });
+    }
+  }, [episodeList, openModal]);
+
+  // 🎯 Bulk delete handler
+  const handleBulkDeleteEpisodes = useCallback((episodes: any[]) => {
+    openModal('episode_delete', null, { selectedEpisodes: episodes });
+  }, [openModal]);
+
+  // 🎯 Professional Episode Creator Handler
+  const legacyHandleCreateEpisode = useCallback(async () => {
     if (!novel?.slug || !episodeCreationForm.title.trim()) {
       toast.error('กรุณาระบุชื่อตอน');
       return;
@@ -2053,59 +2918,73 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     setIsCreatingEpisode(true);
     
     try {
-      // Create episode data
-      const episodeData = {
-        title: episodeCreationForm.title.trim(),
-        episodeOrder: episodeCreationForm.episodeOrder,
-        teaserText: episodeCreationForm.teaserText.trim(),
-        accessType: episodeCreationForm.accessType,
-        priceCoins: episodeCreationForm.accessType === 'paid_unlock' ? episodeCreationForm.priceCoins : 0,
-        status: episodeCreationForm.status,
-        sceneIds: [], // เริ่มต้นด้วย array ว่าง
-        stats: {
-          viewsCount: 0,
-          uniqueViewersCount: 0,
-          likesCount: 0,
-          commentsCount: 0,
-          totalWords: 0,
-          estimatedReadingTimeMinutes: 0,
-          purchasesCount: 0
-        },
-        isPreviewAllowed: true,
-        lastContentUpdatedAt: new Date()
-      };
-
-      // Call API to create episode directly
-      const response = await fetch(`/api/novels/${novel.slug}/episodes`, {
+      // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode พร้อม StoryMap เปล่า
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(episodeData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          episodes: [{
+            title: episodeCreationForm.title.trim(),
+            episodeOrder: episodeCreationForm.episodeOrder,
+            teaserText: episodeCreationForm.teaserText?.trim() || '',
+            accessType: episodeCreationForm.accessType,
+            priceCoins: episodeCreationForm.accessType === 'paid_unlock' ? episodeCreationForm.priceCoins : 0,
+            status: episodeCreationForm.status,
+            // 🎯 สร้าง StoryMap เปล่าโดยไม่มี nodes/edges จากตอนเก่า
+            createEmptyStoryMap: true
+          }]
+        })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create episode');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create episode');
       }
 
       const result = await response.json();
-      const newEpisode = result.episode;
+      const newEpisode = result.data;
 
-      // Update episodes list and select the new episode
-      const updatedEpisodes = [...episodes, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
-      
-      // Call parent callback if provided
+      // 🎯 อัปเดต local state
+      const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
+      setEpisodeList(updatedEpisodes);
+      setSelectedEpisodeFromBlueprint(newEpisode);
+
+      // 🎯 สร้าง Node ใน Canvas ทันที
+      const newNode = {
+        id: `episode_${newEpisode._id}`,
+        type: 'episode',
+        position: { x: 100 + (episodeList.length * 200), y: 100 + (episodeList.length * 150) },
+        data: {
+          ...newEpisode,
+          episodeId: newEpisode._id,
+          nodeType: 'episode_node',
+          title: newEpisode.title,
+          status: newEpisode.status,
+          visualStyle: {
+            color: '#3b82f6',
+            borderStyle: 'solid',
+            borderRadius: 8
+          }
+        }
+      };
+
+      setNodes(prevNodes => [...prevNodes, newNode]);
+
+      // 🎯 Callback to parent
       if (onEpisodeCreate) {
         onEpisodeCreate(newEpisode, updatedEpisodes);
       }
 
-      setSelectedEpisode(newEpisode._id);
+      // 🎯 Select new episode in URL
+      if (onEpisodeSelect) {
+        onEpisodeSelect(newEpisode._id);
+      }
       
       // Reset form
       setEpisodeCreationForm({
         title: '',
-        episodeOrder: updatedEpisodes.length + 1,
+        episodeOrder: episodeList.length + 1,
         teaserText: '',
         accessType: 'free',
         priceCoins: 0,
@@ -2113,7 +2992,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       });
       
       setIsEpisodeCreatorOpen(false);
-      toast.success(`เพิ่มตอน "${newEpisode.title}" สำเร็จ`);
+      toast.success(`เพิ่มตอน "${episodeCreationForm.title}" สำเร็จ`);
 
     } catch (error) {
       console.error('Error creating episode:', error);
@@ -3451,7 +4330,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   
   // React Flow instance and refs
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  // reactFlowInstance ถูกย้ายไปด้านบนแล้ว
 
   // Responsive detection for mobile-only adjustments
   const [isMobile, setIsMobile] = useState(false);
@@ -3510,7 +4389,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           }
         })),
         storyVariables: storyMap?.storyVariables || [],
-        episodeFilter: selectedEpisode,
+        episodeFilter: selectedEpisodeFromBlueprint,
         version: saveState.version // Send current version for conflict detection
       };
 
@@ -3602,7 +4481,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
       throw error;
     }
-  }, [novel?.slug, storyMap?.storyVariables, selectedEpisode, onDirtyChange, blueprintSettings, saveState.version, setEdges, setNodes]);
+  }, [novel?.slug, storyMap?.storyVariables, selectedEpisodeFromBlueprint, onDirtyChange, blueprintSettings, saveState.version, setEdges, setNodes]);
 
   // Patch-based saves สำหรับประสิทธิภาพสูง (เหมือน Premiere Pro)
   const savePatchToDatabase = useCallback(async (command: AnyCommand | null, currentNodes: Node[], currentEdges: Edge[]) => {
@@ -4335,12 +5214,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [nodes, edges]);
 
   // 🔥 FIGMA/CANVA STYLE: Multi-select delete using CommandContext
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const { selectedNodes, selectedEdges } = selection;
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
     
     const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
+    
+    // 🎯 Check for Episode nodes that need database deletion
+    const episodeNodesToDelete = nodesToDelete.filter(node => 
+      node.data.nodeType === StoryMapNodeType.EPISODE_NODE && node.data.episodeId
+    );
     
     // ✅ CRITICAL FIX: Include edges connected to deleted nodes
     const allEdgesToDelete = [
@@ -4353,10 +5237,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     if (nodesToDelete.length > 0) {
       const totalItemsToDelete = nodesToDelete.length + allEdgesToDelete.length;
-      const ok = window.confirm(
-        `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`
-      );
+      let confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`;
+      
+      // 🚨 Special warning for episode nodes
+      if (episodeNodesToDelete.length > 0) {
+        confirmMessage += `\n\n⚠️ จะลบตอนออกจาก Database ด้วย: ${episodeNodesToDelete.map(n => n.data.title).join(', ')}`;
+      }
+      
+      const ok = window.confirm(confirmMessage);
       if (!ok) return;
+    }
+    
+    // 🎯 Delete episodes from database first
+    if (episodeNodesToDelete.length > 0) {
+      try {
+        for (const episodeNode of episodeNodesToDelete) {
+          await handleDeleteEpisode(episodeNode.data.episodeId as string);
+        }
+      } catch (error) {
+        console.error('Failed to delete episodes from database:', error);
+        toast.error('ไม่สามารถลบตอนจาก Database ได้');
+        return;
+      }
     }
     
     if (!professionalEventManager) {
@@ -4420,7 +5322,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     toast.success(
       `🗑️ Deleted ${nodesToDelete.length} nodes and ${allEdgesToDelete.length} connections. Use Ctrl+Z to undo.`
     );
-  }, [selection, nodes, edges, professionalEventManager]);
+  }, [selection, nodes, edges, professionalEventManager, handleDeleteEpisode]);
 
   // 🔥 FIGMA/CANVA STYLE: Multi-select copy using CommandContext
   const copySelected = useCallback(() => {
@@ -5481,6 +6383,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const titles: Record<StoryMapNodeType, string> = {
       [StoryMapNodeType.START_NODE]: 'จุดเริ่มต้น',
       [StoryMapNodeType.SCENE_NODE]: 'ฉากใหม่',
+      [StoryMapNodeType.EPISODE_NODE]: 'ตอน',
       [StoryMapNodeType.CHOICE_NODE]: 'ตัวเลือก',
       [StoryMapNodeType.ENDING_NODE]: 'จุดจบ',
       [StoryMapNodeType.BRANCH_NODE]: 'แยกเงื่อนไข',
@@ -5502,6 +6405,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const colors: Record<StoryMapNodeType, string> = {
       [StoryMapNodeType.START_NODE]: '#10b981',
       [StoryMapNodeType.SCENE_NODE]: '#3b82f6',
+      [StoryMapNodeType.EPISODE_NODE]: '#6366f1',
       [StoryMapNodeType.CHOICE_NODE]: '#f59e0b',
       [StoryMapNodeType.ENDING_NODE]: '#ef4444',
       [StoryMapNodeType.BRANCH_NODE]: '#8b5cf6',
@@ -5523,6 +6427,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     switch (nodeType) {
       case StoryMapNodeType.SCENE_NODE:
         return { sceneId: null };
+      case StoryMapNodeType.EPISODE_NODE:
+        return { 
+          episodeId: null,
+          episodeOrder: episodes.length + 1,
+          episodeTitle: `ตอนที่ ${episodes.length + 1}`,
+          episodeStatus: 'draft',
+          autoGenerateScenes: false
+        };
       case StoryMapNodeType.CHOICE_NODE:
         return { choices: [] };
       case StoryMapNodeType.VARIABLE_MODIFIER_NODE:
@@ -5543,7 +6455,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   };
 
   // Add new node with Command Pattern
-  const onAddNode = useCallback((nodeType: StoryMapNodeType) => {
+  const onAddNode = useCallback(async (nodeType: StoryMapNodeType) => {
     const timestamp = Date.now();
     const randomOffset = Math.floor(Math.random() * 50);
     
@@ -5559,7 +6471,73 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         });
       }
     }
+
+    // 🎯 SPECIAL HANDLING FOR EPISODE_NODE: Create database episode first
+    if (nodeType === StoryMapNodeType.EPISODE_NODE) {
+      try {
+        const episodeData = {
+          title: `ตอนที่ ${episodeList.length + 1}`,
+          episodeOrder: episodeList.length + 1,
+          storyMapData: {
+            nodeId: `node-${timestamp}-${randomOffset}`,
+            position: centerPosition,
+            editorVisuals: {
+              color: getDefaultNodeColor(nodeType)
+            }
+          }
+        };
+
+        const response = await createEpisodeAPI(episodeData);
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to create episode');
+        }
+
+        const newEpisode = response.episode;
+        
+        // สร้าง node ที่เชื่อมกับ database episode
+        const newNode: Node = {
+          id: `node-${timestamp}-${randomOffset}`,
+          type: getReactFlowNodeType(nodeType),
+          position: centerPosition,
+          data: {
+            nodeId: `node-${timestamp}-${randomOffset}`,
+            nodeType,
+            title: newEpisode.title,
+            episodeId: newEpisode._id,
+            episodeOrder: newEpisode.episodeOrder,
+            episodeStatus: newEpisode.status,
+            color: getDefaultNodeColor(nodeType),
+            nodeSpecificData: getDefaultNodeData(nodeType),
+            isFirstScene: false,
+            showThumbnails: currentBlueprintSettings.showSceneThumbnails,
+            showLabels: currentBlueprintSettings.showNodeLabels
+          }
+        };
+
+        // อัปเดต episode list
+        setEpisodeList(prev => [...prev, newEpisode]);
+        
+        // สร้างและ execute command
+        const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
+        executeCommand(command);
+        
+        toast.success(`สร้างตอน "${newEpisode.title}" สำเร็จ`);
+        
+        // Auto-select the new episode
+        setSelectedEpisodeFromBlueprint(newEpisode);
+        if (onEpisodeCreate) {
+          onEpisodeCreate(newEpisode, [...episodeList, newEpisode]);
+        }
+        
+        return;
+      } catch (error) {
+        console.error('Failed to create episode:', error);
+        toast.error('ไม่สามารถสร้างตอนได้');
+        return;
+      }
+    }
     
+    // Default node creation for non-episode nodes
     const newNode: Node = {
       id: `node-${timestamp}-${randomOffset}`,
       type: getReactFlowNodeType(nodeType),
@@ -5595,7 +6573,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         selectedEdges: []
       }));
     }, 100);
-  }, [nodes, reactFlowInstance, createNodeCommand, executeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails]);
+  }, [nodes, reactFlowInstance, createNodeCommand, executeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails, episodeList, createEpisodeAPI, setEpisodeList, setSelectedEpisodeFromBlueprint, onEpisodeCreate]);
 
   // Update node data
   const onNodeUpdate = useCallback((nodeId: string, newData: any) => {
@@ -6168,6 +7146,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlowProvider>
             <div className="h-full w-full">
+              {isLoadingStoryMap && (
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-50">
+                  <div className="flex items-center gap-3 bg-background border rounded-lg px-4 py-3 shadow-lg">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm font-medium">กำลังโหลด StoryMap...</span>
+                  </div>
+                </div>
+              )}
+              
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -6419,7 +7406,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     {/* Enhanced Episode Selector with Add Episode - Desktop & Tablet (non-mobile) */}
                     <div className="hidden md:block">
                       <div className="flex items-center gap-2">
-                        <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
+                        <Select value={selectedEpisodeFromBlueprint?._id || ''} onValueChange={(value) => handleEpisodeSelect(value || null)}>
                           <SelectTrigger className="w-48 h-8 text-xs bg-background/50">
                             <SelectValue placeholder="Select Episode" />
                           </SelectTrigger>
@@ -6522,7 +7509,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 {/* Enhanced Episode Selector with Add Episode - Mobile Only */}
                 <Panel position="top-left" className="md:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg" style={{ top: 8, left: 0 }}>
                   <div className="flex items-center gap-2">
-                    <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
+                    <Select value={selectedEpisodeFromBlueprint?._id || ''} onValueChange={(value) => handleEpisodeSelect(value || null)}>
                       <SelectTrigger className="w-32 h-8 text-xs bg-background/50">
                         <SelectValue placeholder="Select Episode" />
                       </SelectTrigger>
@@ -6868,11 +7855,42 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-hidden p-6 pt-4">
-              <Tabs defaultValue="palette" className="flex flex-col h-full">
-                <TabsList className="grid w-full grid-cols-2 rounded-lg mb-6 h-12 flex-shrink-0">
+                <Tabs defaultValue="episodes" className="flex flex-col h-full">
+                <TabsList className="grid w-full grid-cols-3 rounded-lg mb-6 h-12 flex-shrink-0">
+                  <TabsTrigger value="episodes" className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">ตอน</TabsTrigger>
                   <TabsTrigger value="palette" className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Nodes</TabsTrigger>
                   <TabsTrigger value="validation" className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
                 </TabsList>
+                <TabsContent value="episodes" className="overflow-y-auto flex-1 h-full">
+                  <div className="pr-2">
+                    <EpisodeManagementPanel
+                      episodes={episodeList}
+                      selectedEpisode={selectedEpisodeFromBlueprint}
+                      isCreating={isCreatingEpisode}
+                      formData={episodeFormData}
+                      onFormChange={(data) => {
+                        setEpisodeFormData(data);
+                        if (!isCreatingEpisode) setIsCreatingEpisode(true);
+                      }}
+                      onEpisodeSelect={handleEpisodeSelect}
+                      onCreate={() => handleCreateEpisode()}
+                      onUpdate={handleUpdateEpisode}
+                      onDelete={handleDeleteEpisode}
+                      onCancel={() => {
+                        setIsCreatingEpisode(false);
+                        setEpisodeFormData({
+                          title: '',
+                          episodeOrder: episodeList.length + 1,
+                          volumeNumber: undefined,
+                          status: 'draft',
+                          accessType: 'free',
+                          priceCoins: 0,
+                          teaserText: ''
+                        });
+                      }}
+                    />
+                  </div>
+                </TabsContent>
                 <TabsContent value="palette" className="overflow-y-auto flex-1 h-full">
                   <div className="pr-2">
                     <NodePalette 
@@ -6916,11 +7934,47 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </div>
               </SheetHeader>
               <div className="flex-1 overflow-hidden">
-                <Tabs defaultValue="palette" className="h-full flex flex-col">
-                  <TabsList className="grid w-full grid-cols-2 mx-4 mt-2 rounded-lg">
+                <Tabs defaultValue="episodes" className="h-full flex flex-col">
+                  <TabsList className="grid w-full grid-cols-3 mx-4 mt-2 rounded-lg">
+                    <TabsTrigger value="episodes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">ตอน</TabsTrigger>
                     <TabsTrigger value="palette" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Nodes</TabsTrigger>
                     <TabsTrigger value="validation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
                   </TabsList>
+                  <TabsContent value="episodes" className="flex-1 mt-2 overflow-hidden">
+                    <EpisodeErrorBoundary 
+                      onError={(error) => {
+                        console.error('[Episode Management Error]:', error);
+                        toast.error('เกิดข้อผิดพลาดในการจัดการตอน');
+                      }}
+                    >
+                      <EpisodeManagementPanel
+                        episodes={episodeList}
+                        selectedEpisode={selectedEpisodeFromBlueprint}
+                        isCreating={isCreatingEpisode}
+                        formData={episodeFormData}
+                        onFormChange={(data) => {
+                          setEpisodeFormData(data);
+                          if (!isCreatingEpisode) setIsCreatingEpisode(true);
+                        }}
+                        onEpisodeSelect={handleEpisodeSelect}
+                        onCreate={() => handleCreateEpisode()}
+                        onUpdate={handleUpdateEpisode}
+                        onDelete={handleDeleteEpisode}
+                        onCancel={() => {
+                          setIsCreatingEpisode(false);
+                          setEpisodeFormData({
+                            title: '',
+                            episodeOrder: episodeList.length + 1,
+                            volumeNumber: undefined,
+                            status: 'draft',
+                            accessType: 'free',
+                            priceCoins: 0,
+                            teaserText: ''
+                          });
+                        }}
+                      />
+                    </EpisodeErrorBoundary>
+                  </TabsContent>
                   <TabsContent value="palette" className="flex-1 mt-2 overflow-hidden">
                     <NodePalette 
                       onAddNode={onAddNode}
@@ -7388,6 +8442,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 🆕 PHASE 2: Professional Modal System */}
+      <EpisodeDeleteModal
+        isOpen={modalState.type === 'episode_delete' && modalState.isOpen}
+        episodes={modalState.context?.selectedEpisodes || []}
+        onClose={closeModal}
+        onConfirm={handleDeleteEpisodeModal}
+      />
+
       </div>
   );
 });

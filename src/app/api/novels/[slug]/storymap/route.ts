@@ -24,6 +24,10 @@ export async function GET(
 
     await dbConnect();
 
+    // Get episodeId from query parameters
+    const url = new URL(request.url);
+    const episodeId = url.searchParams.get('episodeId');
+
     // Check access permissions
     const novel = await NovelModel.findOne({
       slug: decodedSlug,
@@ -45,21 +49,55 @@ export async function GET(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get story map with validation data
-    const storyMap = await StoryMapModel.findOne({
+    // Get story map with episode-specific data
+    let storyMapQuery: any = {
       novelId: novel._id,
       isActive: true
-    }).lean();
+    };
+
+    // If episodeId is provided, get episode-specific storymap
+    if (episodeId) {
+      storyMapQuery.episodeId = episodeId;
+    }
+
+    const storyMap = await StoryMapModel.findOne(storyMapQuery).lean();
 
     console.log('Found story map:', storyMap ? {
       id: storyMap._id,
       title: storyMap.title,
       nodeCount: storyMap.nodes?.length || 0,
       edgeCount: storyMap.edges?.length || 0,
-      version: storyMap.version
+      version: storyMap.version,
+      episodeId: storyMap.episodeId || 'novel-level'
     } : 'No story map found');
 
     if (!storyMap) {
+      // If no episode-specific storymap found, create empty one
+      if (episodeId) {
+        console.log(`Creating empty storymap for episode: ${episodeId}`);
+        return NextResponse.json({ 
+          storyMap: {
+            _id: null,
+            novelId: novel._id.toString(),
+            episodeId: episodeId,
+            title: `Episode ${episodeId} - Story Map`,
+            version: 1,
+            nodes: [],
+            edges: [],
+            storyVariables: [],
+            startNodeId: '',
+            isActive: true,
+            lastModifiedByUserId: userId
+          },
+          validation: {
+            orphanedNodes: [],
+            missingConnections: [],
+            cycles: [],
+            unreachableNodes: []
+          }
+        });
+      }
+      
       return NextResponse.json({ 
         storyMap: null,
         validation: {
@@ -148,7 +186,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { nodes, edges, storyVariables, episodeFilter, version: clientVersion } = body;
+    const { nodes, edges, storyVariables, episodeId, version: clientVersion } = body;
 
     await dbConnect();
 
@@ -173,11 +211,18 @@ export async function PUT(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Update or create story map
-    let storyMap = await StoryMapModel.findOne({
+    // Update or create story map for specific episode
+    let storyMapQuery: any = {
       novelId: novel._id,
       isActive: true
-    });
+    };
+
+    // If episodeId is provided, work with episode-specific storymap
+    if (episodeId) {
+      storyMapQuery.episodeId = episodeId;
+    }
+
+    let storyMap = await StoryMapModel.findOne(storyMapQuery);
 
     if (storyMap) {
       // Enhanced version conflict handling - ระบบจัดการ conflict อัตโนมัติ
@@ -222,21 +267,27 @@ export async function PUT(
       storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(userId);
       storyMap.updatedAt = new Date();
       
-      // Store episode filter metadata if provided
-      if (episodeFilter) {
+      // Store episode metadata if provided
+      if (episodeId) {
+        storyMap.episodeId = episodeId;
         storyMap.editorMetadata = {
           ...storyMap.editorMetadata,
-          selectedEpisodeId: episodeFilter
+          selectedEpisodeId: episodeId
         };
       }
       
       await storyMap.save();
     } else {
       // Create new story map
+      const storyMapTitle = episodeId 
+        ? `Episode ${episodeId} - Story Map`
+        : `${novel.title} - Story Map`;
+        
       storyMap = new StoryMapModel({
         novelId: novel._id,
-        title: `${novel.title} - Story Map`,
-        description: 'Auto-generated story map',
+        episodeId: episodeId || null,
+        title: storyMapTitle,
+        description: episodeId ? `Story map for episode ${episodeId}` : 'Auto-generated story map',
         version: 1,
         nodes: nodes || [],
         edges: edges || [],
@@ -244,8 +295,8 @@ export async function PUT(
         startNodeId: nodes?.find((node: any) => node.nodeType === 'start_node')?.nodeId || '',
         lastModifiedByUserId: new mongoose.Types.ObjectId(userId),
         isActive: true,
-        editorMetadata: episodeFilter ? {
-          selectedEpisodeId: episodeFilter,
+        editorMetadata: episodeId ? {
+          selectedEpisodeId: episodeId,
           zoomLevel: 1,
           viewOffsetX: 0,
           viewOffsetY: 0,

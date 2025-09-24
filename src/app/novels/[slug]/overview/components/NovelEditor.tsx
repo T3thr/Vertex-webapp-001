@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -58,12 +59,21 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   officialMedia,
   userSettings
 }) => {
+  // URL state management
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
   // State สำหรับแท็บที่เลือก
   const [activeTab, setActiveTab] = useState<'blueprint' | 'director' | 'summary'>('blueprint')
   const [currentStoryMap, setCurrentStoryMap] = useState(storyMap)
   const [currentScenes, setCurrentScenes] = useState(scenes)
   const [currentEpisodes, setCurrentEpisodes] = useState(episodes)
   const [currentNovel, setCurrentNovel] = useState(novel)
+  
+  // 🎯 Episode selection state with URL persistence
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(
+    searchParams.get('episode') || null
+  )
   
   // State สำหรับ mobile menu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -481,45 +491,141 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     }
   }
 
-  const handleEpisodeUpdate = async (episodeId: string, episodeData: any) => {
+  // 🎯 Enhanced Episode Update Handler
+  const handleEpisodeUpdate = useCallback(async (episodeId: string, episodeData: any) => {
     try {
-      const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}`, {
-        method: 'PUT',
+      // 🔥 Use Blueprint API for consistent updates
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(episodeData),
+        body: JSON.stringify({
+          action: 'update',
+          episodeIds: [episodeId],
+          updateData: episodeData
+        })
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update episode')
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update episode')
       }
 
-      const updatedEpisode = await response.json()
-      setCurrentEpisodes(prev => prev.map(episode => 
-        episode._id === episodeId ? updatedEpisode.episode : episode
-      ))
-      toast.success('Episode updated successfully')
-    } catch (error) {
+      const result = await response.json()
+      const updatedEpisode = result.data
+
+      // 🎯 Update local state
+      const updatedEpisodes = currentEpisodes.map(episode => 
+        episode._id === episodeId ? updatedEpisode : episode
+      )
+      setCurrentEpisodes(updatedEpisodes)
+
+      // 🎯 Update EventManager
+      if (eventManager) {
+        await eventManager.executeCommand({
+          type: 'EPISODE_UPDATE',
+          id: `episode_update_${episodeId}_${Date.now()}`,
+          description: `Update episode: ${updatedEpisode.title}`,
+          execute: async () => {
+            // Command execution handled by EventManager
+          },
+          undo: async () => {
+            // Undo logic handled by EventManager
+          }
+        } as any) // 🔧 Type assertion for extended Command interface
+      }
+
+      toast.success(`อัปเดตตอน "${updatedEpisode.title}" เรียบร้อยแล้ว`)
+    } catch (error: any) {
       console.error('Error updating episode:', error)
-      toast.error('Failed to update episode')
+      toast.error(`การอัปเดตตอนล้มเหลว: ${error.message}`)
       throw error
     }
-  }
+  }, [novel.slug, currentEpisodes, eventManager])
+
+  // 🎯 URL state management for episode selection
+  const handleEpisodeSelect = useCallback((episodeId: string | null) => {
+    setSelectedEpisodeId(episodeId)
+    
+    // Update URL without page reload
+    const currentParams = new URLSearchParams(searchParams.toString())
+    if (episodeId) {
+      currentParams.set('episode', episodeId)
+    } else {
+      currentParams.delete('episode')
+    }
+    
+    const newUrl = `${window.location.pathname}?${currentParams.toString()}`
+    router.replace(newUrl, { scroll: false })
+  }, [router, searchParams])
 
   // ✨ Handle episode creation from BlueprintTab
-  const handleEpisodeCreate = (newEpisode: any, updatedEpisodes: any[]) => {
-    // Update current episodes state with the new episode list
+  const handleEpisodeCreate = useCallback((newEpisode: any, updatedEpisodes: any[]) => {
+    // 🎯 Update current episodes state with the new episode list
     setCurrentEpisodes(updatedEpisodes)
     
-    // Update novel episode count
+    // 🎯 Update novel episode count
     setCurrentNovel(prev => ({
       ...prev,
-      totalEpisodesCount: updatedEpisodes.length
+      totalEpisodesCount: updatedEpisodes.length,
+      publishedEpisodesCount: updatedEpisodes.filter(ep => ep.status === 'published').length
     }))
     
+    // 🎯 Update EventManager with new episodes data
+    if (eventManager) {
+      const context = eventManager.getCommandContext() as any;
+      if (context.setEpisodes) {
+        context.setEpisodes(updatedEpisodes);
+      }
+    }
+    
+    // 🎯 Auto-select the new episode with URL update
+    handleEpisodeSelect(newEpisode._id)
+    
     console.log('[NovelEditor] Episode created successfully:', newEpisode.title)
-  }
+    toast.success(`สร้างตอน "${newEpisode.title}" เรียบร้อยแล้ว`)
+  }, [eventManager, handleEpisodeSelect])
+
+  // 🎯 Enhanced Episode Delete Handler
+  const handleEpisodeDelete = useCallback(async (episodeId: string, updatedEpisodes: any[]) => {
+    try {
+      // 🎯 Update local state immediately for responsive UI
+      setCurrentEpisodes(updatedEpisodes)
+      
+      // 🎯 Update novel episode count
+      setCurrentNovel(prev => ({
+        ...prev,
+        totalEpisodesCount: updatedEpisodes.length,
+        publishedEpisodesCount: updatedEpisodes.filter(ep => ep.status === 'published').length
+      }))
+
+      // 🎯 Update EventManager
+      if (eventManager) {
+        await eventManager.executeCommand({
+          type: 'EPISODE_DELETE',
+          id: `episode_delete_${episodeId}_${Date.now()}`,
+          description: `Delete episode: ${episodeId}`,
+          execute: async () => {
+            // Command execution handled by EventManager
+          },
+          undo: async () => {
+            // Undo logic handled by EventManager
+          }
+        } as any) // 🔧 Type assertion for extended Command interface
+      }
+
+      // 🎯 Clear episode selection if deleted episode was selected
+      if (selectedEpisodeId === episodeId) {
+        handleEpisodeSelect(null)
+      }
+
+      console.log('[NovelEditor] Episode deleted successfully:', episodeId)
+    } catch (error: any) {
+      console.error('Error in episode delete handler:', error)
+      toast.error(`การลบตอนล้มเหลว: ${error.message}`)
+    }
+  }, [eventManager, selectedEpisodeId, handleEpisodeSelect])
 
   const handleNovelUpdate = async (novelData: any) => {
     try {
@@ -744,13 +850,17 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         try {
           const currentData = blueprintTabRef.current.getCurrentData();
           if (currentData && (currentData.nodes?.length >= 0 || currentStoryMap)) {
-            // Professional baseline sync with EventManager
-            eventManager.initializeWithData(currentData);
+            // 🆕 PHASE 5: Professional baseline sync with Episodes
+            eventManager.initializeWithData({
+              ...currentData,
+              episodes: currentEpisodes // 🎯 Include episodes in initial data
+            });
             setIsInitialSyncComplete(true);
             
             console.log('[NovelEditor] 🎯 Professional initial state synchronized:', {
               nodeCount: currentData.nodes?.length || 0,
               edgeCount: currentData.edges?.length || 0,
+              episodeCount: currentEpisodes?.length || 0, // 🎯 Log episode count
               saveButtonEnabled: false,
               timestamp: new Date().toISOString()
             });
@@ -1510,6 +1620,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 eventManager={eventManager}
                 // ✨ Episode creation callback
                 onEpisodeCreate={handleEpisodeCreate}
+                onEpisodeUpdate={handleEpisodeUpdate}
+                onEpisodeDelete={handleEpisodeDelete}
+                // 🎯 Episode selection with URL persistence
+                selectedEpisodeId={selectedEpisodeId || undefined}
+                onEpisodeSelect={handleEpisodeSelect}
                 // ✅ PROFESSIONAL SOLUTION 3: ส่ง auto-save config ไปยัง BlueprintTab
                 autoSaveConfig={{
                   enabled: isAutoSaveEnabled,

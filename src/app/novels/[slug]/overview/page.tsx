@@ -106,6 +106,7 @@ export interface EpisodeData {
   _id: string;
   novelId: string;
   title: string;
+  slug?: string;
   episodeOrder: number;
   status: string;
   publishedAt?: string;
@@ -175,12 +176,17 @@ interface PageProps {
   params: Promise<{
     slug: string;
   }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function NovelOverviewPage({ params }: PageProps) {
-  // รอให้ params resolve ก่อนใช้งาน (สำหรับ Next.js 15+)
+export default async function NovelOverviewPage({ params, searchParams }: PageProps) {
+  // รอให้ params และ searchParams resolve ก่อนใช้งาน (สำหรับ Next.js 15+)
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const decodedSlug = decodeURIComponent(slug);
+  
+  // 🎯 Extract episode selection from URL
+  const selectedEpisodeId = typeof resolvedSearchParams?.episodeId === 'string' ? resolvedSearchParams.episodeId : null;
 
   console.log(`[DEBUG] Slug ดั้งเดิม (URL-encoded): ${slug}`);
   console.log(`[DEBUG] Slug ที่ถอดรหัสแล้ว: ${decodedSlug}`);

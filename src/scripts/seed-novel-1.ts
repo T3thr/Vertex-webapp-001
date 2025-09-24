@@ -132,14 +132,27 @@ const main = async () => {
 
       // ลบข้อมูลที่เกี่ยวข้องแบบขนาน
       console.log('🗑️  กำลังลบข้อมูล Episodes, Scenes, Choices, Characters, StoryMaps เก่า...');
-      const [epRes, scRes, chRes, charRes, smRes] = await Promise.all([
+      
+      // ลบ StoryMaps ทั้งหมดที่เกี่ยวข้องกับ Novel นี้ (ทั้ง Novel-level และ Episode-level)
+      // ก่อนอื่นต้องหา Episodes ที่เกี่ยวข้องกับ Novel เหล่านี้
+      const episodesToDelete = await EpisodeModel.find({ novelId: { $in: novelIdsToDelete } }).select('_id');
+      const episodeIdsToDelete = episodesToDelete.map(ep => ep._id);
+      
+      const smRes = await StoryMapModel.deleteMany({ 
+        $or: [
+          { novelId: { $in: novelIdsToDelete } }, // Novel-level StoryMaps
+          { episodeId: { $in: episodeIdsToDelete } } // Episode-level StoryMaps
+        ]
+      });
+      console.log(`🗑️  ลบ StoryMaps: ${smRes.deletedCount} รายการ`);
+      
+      const [epRes, scRes, chRes, charRes] = await Promise.all([
         EpisodeModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
         SceneModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
         ChoiceModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
         CharacterModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
-        StoryMapModel.deleteMany({ novelId: { $in: novelIdsToDelete } }),
       ]);
-      console.log(`✅  ลบ episodes=${epRes.deletedCount}, scenes=${scRes.deletedCount}, choices=${chRes.deletedCount}, characters=${charRes.deletedCount}, storyMaps=${smRes.deletedCount}`);
+      console.log(`✅  ลบ episodes=${epRes.deletedCount}, scenes=${scRes.deletedCount}, choices=${chRes.deletedCount}, characters=${charRes.deletedCount}`);
 
       // ลบ Novels เอง
       const novelResult = await NovelModel.deleteMany({ _id: { $in: novelIdsToDelete } });
