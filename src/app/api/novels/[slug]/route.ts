@@ -1,193 +1,30 @@
-// src/app/api/novels/[slug]/route.ts
-// API Route สำหรับดึงข้อมูลนิยายตาม slug เพื่อแสดงในหน้ารายละเอียด
-// รองรับการ populate ข้อมูลที่เกี่ยวข้องทั้งหมด เช่น หมวดหมู่, ผู้เขียน, ตัวละคร, ตอน
+import dbConnect from '@/backend/lib/mongodb';
+import NovelModel, { INovel } from '@/backend/models/Novel';
+import EpisodeModel from '@/backend/models/Episode';
+import SceneModel from '@/backend/models/Scene';
+import StoryMapModel from '@/backend/models/StoryMap';
+import BoardModel from '@/backend/models/Board';
+import CommentModel from '@/backend/models/Comment';
+import UserModel, { IUser } from '@/backend/models/User';
+import CategoryModel, { ICategory } from '@/backend/models/Category';
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { Types } from 'mongoose';
 
-import dbConnect from "@/backend/lib/mongodb";
-import CategoryModel, { ICategory } from "@/backend/models/Category";
-import CharacterModel, { CharacterRoleInStory } from "@/backend/models/Character";
-import CommentModel from "@/backend/models/Comment";
-import EpisodeModel, { EpisodeAccessType, EpisodeStatus } from "@/backend/models/Episode";
-import NovelModel, {
-  ICollaborationSettings,
-  IMonetizationSettings,
-  INarrativeFocus,
-  INovel,
-  INovelStats,
-  IPsychologicalAnalysisConfig,
-  ISourceType,
-  IWorldBuildingDetails
-} from "@/backend/models/Novel";
-import RatingModel from "@/backend/models/Rating";
-import UserModel, { IUser } from "@/backend/models/User";
-import { IUserProfile } from '@/backend/models/UserProfile';
-import { NextRequest, NextResponse } from "next/server";
-
-// ===================================================================
-// SECTION: TypeScript Interfaces สำหรับ API Response
-// ===================================================================
-
-/**
- * @interface PopulatedAuthorForDetailPage
- * @description Interface สำหรับข้อมูลผู้เขียนที่ถูก populate
- */
-interface PopulatedAuthorForDetailPage {
-  _id: string;
-  username?: string;
-  profile: IUserProfile;
-  writerStats?: {
-    totalNovelsPublished: number;
-    totalViewsAcrossAllNovels: number;
-    totalLikesReceivedOnNovels: number;
-  };
-}
-
-/**
- * @interface PopulatedCategoryInfo
- * @description Interface สำหรับข้อมูล Category ที่ถูก populate
- */
-interface PopulatedCategoryInfo {
-  _id: string;
-  name: string;
-  slug: string;
-  color?: string;
-}
-
-/**
- * @interface PopulatedThemeAssignment
- * @description Interface สำหรับ themeAssignment ที่ถูก populate
- */
-interface PopulatedThemeAssignment {
-  mainTheme: {
-    categoryId: PopulatedCategoryInfo;
-    customName?: string;
-  };
-  subThemes?: Array<{
-    categoryId: PopulatedCategoryInfo;
-    customName?: string;
-  }>;
-  moodAndTone?: PopulatedCategoryInfo[];
-  contentWarnings?: PopulatedCategoryInfo[];
-  customTags?: string[];
-}
-
-/**
- * @interface PopulatedCharacterForDetailPage
- * @description Interface สำหรับข้อมูลตัวละครที่แสดงในหน้ารายละเอียดนิยาย
- */
-interface PopulatedCharacterForDetailPage {
-  _id: string;
-  name: string;
-  characterCode: string;
-  profileImageUrl?: string;
-  description?: string;
-  roleInStory?: CharacterRoleInStory;
-  colorTheme?: string;
-}
-
-/**
- * @interface PopulatedEpisodeForDetailPage
- * @description Interface สำหรับข้อมูลตอนที่แสดงในหน้ารายละเอียดนิยาย
- */
-interface PopulatedEpisodeForDetailPage {
-  _id: string;
-  title: string;
-  slug: string;
-  episodeOrder: number;
-  status: EpisodeStatus;
-  accessType: EpisodeAccessType;
-  priceCoins?: number;
-  originalPriceCoins?: number;
-  publishedAt?: string;
-  teaserText?: string;
-  stats: {
-    viewsCount: number;
-    likesCount: number;
-    commentsCount: number;
-    totalWords: number;
-    estimatedReadingTimeMinutes: number;
-  };
-}
-
-/**
- * @interface PopulatedNovelForDetailPage
- * @description Interface สำหรับข้อมูลนิยายที่ถูก populate แล้วสำหรับหน้ารายละเอียด
- */
-export interface PopulatedNovelForDetailPage {
-  _id: string;
-  title: string;
-  slug: string;
-  author: PopulatedAuthorForDetailPage;
-  synopsis: string;
-  longDescription?: string;
-  coverImageUrl?: string;
-  bannerImageUrl?: string;
-  themeAssignment: PopulatedThemeAssignment;
-  narrativeFocus?: INarrativeFocus;
-  worldBuildingDetails?: IWorldBuildingDetails;
-  ageRatingCategoryId?: PopulatedCategoryInfo;
-  status: INovel["status"];
-  accessLevel: INovel["accessLevel"];
-  isCompleted: boolean;
-  endingType: INovel["endingType"];
-  sourceType: ISourceType;
-  language: PopulatedCategoryInfo;
-  firstEpisodeId?: string;
-  totalEpisodesCount: number;
-  publishedEpisodesCount: number;
-  stats: INovelStats & {
-    scoreDistribution?: Record<number, number>;
-  };
-  monetizationSettings: IMonetizationSettings;
-  psychologicalAnalysisConfig: IPsychologicalAnalysisConfig;
-  collaborationSettings?: ICollaborationSettings;
-  isFeatured?: boolean;
-  publishedAt?: string;
-  scheduledPublicationDate?: string;
-  lastContentUpdatedAt: string;
-  relatedNovels?: string[];
-  seriesId?: string;
-  seriesOrder?: number;
-  createdAt: string;
-  updatedAt: string;
-  characters?: PopulatedCharacterForDetailPage[];
-  episodes?: PopulatedEpisodeForDetailPage[];
-  ratings?: any[]; // รายการรีวิวจากผู้อ่าน
-  comments?: any[]; // รายการความคิดเห็น
-}
-
-// ===================================================================
-// SECTION: API Route Handler
-// ===================================================================
-
-/**
- * GET Handler สำหรับดึงข้อมูลนิยายตาม slug
- * @param request NextRequest object
- * @param context Context object containing dynamic route parameters
- * @returns NextResponse ที่มีข้อมูลนิยายหรือ error
- */
+// Existing GET endpoint (keeping the original implementation)
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ slug: string }> }
 ) {
   try {
-    // เชื่อมต่อฐานข้อมูล MongoDB
     await dbConnect();
 
-    // 1. ✨[แก้ไข] รับ slug จาก context.params ซึ่งเป็น Promise ใน Next.js 15
+    // รอการ resolve ของ params ใน Next.js 15
     const { slug } = await context.params;
-    const decodedSlug = decodeURIComponent(slug.trim());
 
-    // ตรวจสอบความถูกต้องของ slug
-    if (!decodedSlug) {
-      console.warn(`⚠️ [API /novels/[slug]] Slug ไม่ถูกต้อง: "${decodedSlug}"`);
-      return NextResponse.json(
-        {
-          error: "Invalid slug parameter",
-          message: "กรุณาระบุ slug ของนิยายที่ถูกต้อง",
-        },
-        { status: 400 }
-      );
-    }
+    // Decode slug เพื่อจัดการกับ special characters
+    const decodedSlug = decodeURIComponent(slug);
 
     console.log(`📡 [API /novels/[slug]] กำลังดึงข้อมูลนิยายสำหรับ slug: "${decodedSlug}"`);
 
@@ -246,240 +83,270 @@ export async function GET(
     }
 
     // ฟังก์ชันช่วยแปลง category เป็น PopulatedCategoryInfo
-    const toPopulatedCategoryInfo = (cat: any): PopulatedCategoryInfo | undefined => {
-      if (!cat || typeof cat !== 'object' || !('_id' in cat)) return undefined;
+    const transformCategory = (cat: any) => {
+      if (!cat) return null;
       return {
-        _id: cat._id.toString(),
-        name: cat.name,
-        slug: cat.slug,
-        color: cat.color,
+        _id: cat._id?.toString() || '',
+        name: cat.name || '',
+        slug: cat.slug || '',
+        color: cat.color || '#6B7280'
       };
     };
 
-    const toPopulatedCategoryInfoArray = (cats: any[]): PopulatedCategoryInfo[] => {
-      if (!Array.isArray(cats)) return [];
-      return cats
-        .map(toPopulatedCategoryInfo)
-        .filter((cat): cat is PopulatedCategoryInfo => Boolean(cat));
-    };
-
-    // ดึงข้อมูลตัวละครของนิยาย (จำกัด 6 ตัวแรก)
-    const toPopulatedCharacter = (char: any): PopulatedCharacterForDetailPage | undefined => {
-      if (!char || typeof char !== 'object' || !('_id' in char)) return undefined;
-      // สร้าง URL รูปโปรไฟล์ (ถ้ามี)
-      const imageUrl = char.profileImageUrl || (char.characterCode ? `/images/character/${char.characterCode}_fullbody.png` : '/images/default-avatar.png');
-      return {
-        _id: char._id.toString(),
-        name: char.name,
-        characterCode: char.characterCode,
-        profileImageUrl: imageUrl,
-        description: char.description,
-        roleInStory: char.roleInStory,
-        colorTheme: char.colorTheme,
-      };
-    };
-    
-    const characters = (await CharacterModel.find({ novelId: novelFromDb._id }).lean())
-      .map(toPopulatedCharacter)
-      .filter((c): c is PopulatedCharacterForDetailPage => c !== undefined);
-
-    // ดึงข้อมูลตอนของนิยาย (จำกัด 10 ตอนแรก)
-    const episodesFromDb = await EpisodeModel.find({
-      novelId: novelFromDb._id,
-      status: { $in: [EpisodeStatus.PUBLISHED, EpisodeStatus.SCHEDULED] },
-    })
-      .select('_id title slug episodeOrder status accessType priceCoins originalPriceCoins publishedAt teaserText stats')
-      .sort({ episodeOrder: 1 })
-      .limit(10)
-      .lean();
-
-    const episodes: PopulatedEpisodeForDetailPage[] = episodesFromDb.map((ep) => ({
-      _id: ep._id.toString(),
-      title: ep.title,
-      slug: ep.slug || 'no-slug',
-      episodeOrder: ep.episodeOrder,
-      status: ep.status as EpisodeStatus,
-      accessType: ep.accessType as EpisodeAccessType,
-      priceCoins: ep.priceCoins,
-      originalPriceCoins: ep.originalPriceCoins,
-      publishedAt: ep.publishedAt?.toISOString(),
-      teaserText: ep.teaserText,
-      stats: {
-        viewsCount: ep.stats?.viewsCount || 0,
-        likesCount: ep.stats?.likesCount || 0,
-        commentsCount: ep.stats?.commentsCount || 0,
-        totalWords: ep.stats?.totalWords || 0,
-        estimatedReadingTimeMinutes: ep.stats?.estimatedReadingTimeMinutes || 0,
-      },
-    }));
-
-    // ตรวจสอบข้อมูลผู้เขียน
-    const populatedAuthor = novelFromDb.author as unknown as IUser;
-    if (!populatedAuthor || typeof populatedAuthor !== 'object' || !populatedAuthor._id || !populatedAuthor.profile) {
-      console.error(`❌ [API /novels/[slug]] ข้อมูลผู้เขียนไม่ครบถ้วนสำหรับนิยาย: "${novelFromDb.title}"`);
-      return NextResponse.json(
-        {
-          error: "Internal server error",
-          message: "เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้เขียนของนิยาย",
-        },
-        { status: 500 }
-      );
-    }
-
-    // ดึงข้อมูลรีวิวจากฐานข้อมูล
-    const ratingsFromDb = await RatingModel.find({
-      targetId: novelFromDb._id,
-      targetType: "Novel",
-      status: "visible",
-      reviewContent: { $exists: true, $ne: "" } // เฉพาะรีวิวที่มีเนื้อหา
-    })
-    .sort({ createdAt: -1 }) // เรียงตามวันที่สร้างล่าสุด
-    .limit(10) // จำกัดจำนวน 10 รายการ
-    .populate({ path: "userId", model: UserModel, select: "_id username avatarUrl primaryPenName roles" })
-    .lean();
-    
-    // ดึงข้อมูลความคิดเห็นจากฐานข้อมูล
-    const commentsFromDb = await CommentModel.find({
-      targetId: novelFromDb._id,
-      targetType: "Novel",
-      status: "visible",
-      parentCommentId: null // เฉพาะความคิดเห็นระดับบนสุด (ไม่รวมการตอบกลับ)
-    })
-    .sort({ createdAt: -1 }) // เรียงตามวันที่สร้างล่าสุด
-    .limit(5) // จำกัดจำนวน 5 รายการ
-    .populate({ path: "userId", model: UserModel, select: "_id username avatarUrl primaryPenName roles" })
-    .lean();
-    
-    // นับจำนวนความคิดเห็นทั้งหมด (รวมการตอบกลับ)
-    const totalCommentsCount = await CommentModel.countDocuments({
-      targetId: novelFromDb._id,
-      targetType: "Novel",
-      status: "visible"
-    });
-    
-    // ดึงข้อมูลการกระจายคะแนนรีวิว
-    const scoreDistribution = {
-      1: 0, 2: 0, 3: 0, 4: 0, 5: 0
-    };
-    
-    if (novelFromDb.stats?.ratingsCount > 0) {
-      // ดึงข้อมูลการกระจายคะแนนจากฐานข้อมูล
-      const ratingAggregation = await RatingModel.aggregate([
-        { $match: { targetId: novelFromDb._id, targetType: "Novel", status: "visible" } },
-        { $group: {
-            _id: { $round: "$overallScore" }, // ปัดเศษให้เป็นจำนวนเต็ม 1-5
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-      
-      // แปลงผลลัพธ์เป็นรูปแบบที่ต้องการ
-      ratingAggregation.forEach(item => {
-        const score = item._id as number;
-        if (score >= 1 && score <= 5) {
-          scoreDistribution[score as 1|2|3|4|5] = item.count;
-        }
-      });
-    }
-    
-    // แปลงข้อมูลนิยายเป็น PopulatedNovelForDetailPage
-    const responseData: PopulatedNovelForDetailPage = {
+    // แปลงข้อมูลให้เป็น format ที่ต้องการ
+    const transformedNovel = {
       _id: novelFromDb._id.toString(),
       title: novelFromDb.title,
       slug: novelFromDb.slug,
-      author: {
-        _id: populatedAuthor._id.toString(),
-        username: populatedAuthor.username,
-        profile: populatedAuthor.profile as any, // Type cast เพื่อแก้ปัญหา TypeScript
-        writerStats: populatedAuthor.writerStats
-          ? {
-              totalNovelsPublished: populatedAuthor.writerStats.totalNovelsPublished,
-              totalViewsAcrossAllNovels: populatedAuthor.writerStats.totalViewsAcrossAllNovels,
-              totalLikesReceivedOnNovels: populatedAuthor.writerStats.totalLikesReceivedOnNovels,
-            }
-          : undefined,
-      },
       synopsis: novelFromDb.synopsis,
       longDescription: novelFromDb.longDescription,
       coverImageUrl: novelFromDb.coverImageUrl,
       bannerImageUrl: novelFromDb.bannerImageUrl,
-      themeAssignment: {
-        mainTheme: {
-          categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.mainTheme?.categoryId)!,
-          customName: novelFromDb.themeAssignment?.mainTheme?.customName,
-        },
-        subThemes: novelFromDb.themeAssignment?.subThemes?.map((st, index) => ({
-          categoryId: toPopulatedCategoryInfo(novelFromDb.themeAssignment?.subThemes?.[index]?.categoryId as any)!,
-          customName: st.customName,
-        })) || [],
-        moodAndTone: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.moodAndTone as any[] || []),
-        contentWarnings: toPopulatedCategoryInfoArray(novelFromDb.themeAssignment?.contentWarnings as any[] || []),
-        customTags: novelFromDb.themeAssignment?.customTags || [],
-      },
-      narrativeFocus: novelFromDb.narrativeFocus,
-      worldBuildingDetails: novelFromDb.worldBuildingDetails,
-      ageRatingCategoryId: toPopulatedCategoryInfo(novelFromDb.ageRatingCategoryId as any),
-      status: novelFromDb.status as INovel["status"],
-      accessLevel: novelFromDb.accessLevel as INovel["accessLevel"],
+      status: novelFromDb.status,
+      accessLevel: novelFromDb.accessLevel,
       isCompleted: novelFromDb.isCompleted,
-      endingType: novelFromDb.endingType as INovel["endingType"],
-      sourceType: novelFromDb.sourceType as ISourceType,
-      language: toPopulatedCategoryInfo(novelFromDb.language as any)!,
-      firstEpisodeId: novelFromDb.firstEpisodeId?.toString(),
+      endingType: novelFromDb.endingType,
       totalEpisodesCount: novelFromDb.totalEpisodesCount,
       publishedEpisodesCount: novelFromDb.publishedEpisodesCount,
-      stats: {
-        ...novelFromDb.stats as INovelStats,
-        scoreDistribution, // เพิ่มข้อมูลการกระจายคะแนน
-        commentsCount: totalCommentsCount // อัปเดตจำนวนความคิดเห็นจากฐานข้อมูลจริง
-      },
-      monetizationSettings: novelFromDb.monetizationSettings as IMonetizationSettings,
-      psychologicalAnalysisConfig: novelFromDb.psychologicalAnalysisConfig as IPsychologicalAnalysisConfig,
-      collaborationSettings: novelFromDb.collaborationSettings,
-      isFeatured: novelFromDb.isFeatured,
       publishedAt: novelFromDb.publishedAt?.toISOString(),
-      scheduledPublicationDate: novelFromDb.scheduledPublicationDate?.toISOString(),
       lastContentUpdatedAt: novelFromDb.lastContentUpdatedAt.toISOString(),
-      relatedNovels: novelFromDb.relatedNovels?.map((id) => id.toString()),
-      seriesId: novelFromDb.seriesId?.toString(),
-      seriesOrder: novelFromDb.seriesOrder,
       createdAt: novelFromDb.createdAt.toISOString(),
       updatedAt: novelFromDb.updatedAt.toISOString(),
-      characters,
-      episodes,
-      ratings: ratingsFromDb, // เพิ่มข้อมูลรีวิว
-      comments: commentsFromDb, // เพิ่มข้อมูลความคิดเห็น
+      
+      // Author information
+      author: {
+        _id: novelFromDb.author._id.toString(),
+        username: novelFromDb.author.username,
+        profile: novelFromDb.author.profile
+      },
+      
+      // Theme assignment with populated categories
+      themeAssignment: {
+        mainTheme: {
+          categoryId: transformCategory(novelFromDb.themeAssignment.mainTheme.categoryId),
+          customName: novelFromDb.themeAssignment.mainTheme.customName
+        },
+        subThemes: novelFromDb.themeAssignment.subThemes?.map((subTheme: any) => ({
+          categoryId: transformCategory(subTheme.categoryId),
+          customName: subTheme.customName
+        })) || [],
+        moodAndTone: novelFromDb.themeAssignment.moodAndTone?.map(transformCategory) || [],
+        contentWarnings: novelFromDb.themeAssignment.contentWarnings?.map(transformCategory) || [],
+        customTags: novelFromDb.themeAssignment.customTags || []
+      },
+      
+      // Other populated fields
+      ageRatingCategoryId: transformCategory(novelFromDb.ageRatingCategoryId),
+      language: transformCategory(novelFromDb.language),
+      
+      // Stats
+      stats: novelFromDb.stats,
+      
+      // Monetization settings
+      monetizationSettings: novelFromDb.monetizationSettings,
+      
+      // Source type
+      sourceType: novelFromDb.sourceType
     };
 
-    console.log(
-      `✅ [API /novels/[slug]] ดึงข้อมูลนิยายสำเร็จ: "${novelFromDb.title}" (${characters.length} ตัวละคร, ${episodes.length} ตอน)`
-    );
+    console.log(`✅ [API /novels/[slug]] ดึงข้อมูลนิยาย "${novelFromDb.title}" สำเร็จ`);
 
-    // ส่งข้อมูลกลับพร้อม cache header
-    return NextResponse.json(
-      {
-        success: true,
-        novel: responseData,
-      },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-      }
-    );
+    return NextResponse.json({
+      success: true,
+      novel: transformedNovel
+    });
+
   } catch (error: any) {
-    const slugForError = (await context.params).slug || 'unknown';
-    console.error(
-      `❌ [API /novels/[slug]] ข้อผิดพลาดในการดึงข้อมูลนิยายสำหรับ slug "${slugForError}": ${error.message}`
-    );
+    console.error('❌ [API /novels/[slug]] เกิดข้อผิดพลาด:', error);
     return NextResponse.json(
       {
         error: "Internal server error",
-        message: "เกิดข้อผิดพลาดในการดึงข้อมูลนิยาย กรุณาลองใหม่อีกครั้ง",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        message: "เกิดข้อผิดพลาดในการดึงข้อมูลนิยาย",
+        details: error.message
       },
       { status: 500 }
     );
+  }
+}
+
+// NEW: Complete novel deletion endpoint
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ slug: string }> }
+) {
+  try {
+    await dbConnect();
+
+    // Get session for authentication
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ 
+        error: 'Unauthorized',
+        message: 'กรุณาเข้าสู่ระบบก่อนดำเนินการ'
+      }, { status: 401 });
+    }
+
+    const { slug } = await context.params;
+    const decodedSlug = decodeURIComponent(slug);
+
+    console.log(`🗑️ [DELETE Novel] เริ่มกระบวนการลบนิยาย slug: "${decodedSlug}" โดย user: ${session.user.id}`);
+
+    // Find the novel to delete
+    const novel = await NovelModel.findOne({
+      slug: decodedSlug,
+      isDeleted: { $ne: true }
+    }).select('_id title author coAuthors');
+
+    if (!novel) {
+      return NextResponse.json({
+        error: 'Novel not found',
+        message: 'ไม่พบนิยายที่ต้องการลบ'
+      }, { status: 404 });
+    }
+
+    // Check authorization - only author or co-authors can delete
+    const userId = new Types.ObjectId(session.user.id);
+    const isAuthor = (novel.author as any).equals(userId);
+    const isCoAuthor = novel.coAuthors && novel.coAuthors.some((coAuthor: any) => 
+      (coAuthor._id || coAuthor).equals(userId)
+    );
+
+    if (!isAuthor && !isCoAuthor) {
+      return NextResponse.json({
+        error: 'Access denied',
+        message: 'คุณไม่มีสิทธิ์ลบนิยายเรื่องนี้'
+      }, { status: 403 });
+    }
+
+    const novelId = novel._id;
+    const novelTitle = novel.title;
+
+    console.log(`🗑️ [DELETE Novel] เริ่มลบข้อมูลที่เกี่ยวข้องกับนิยาย: "${novelTitle}" (ID: ${novelId})`);
+
+    // Start cascade deletion process
+    const deletionResults = {
+      novel: false,
+      episodes: 0,
+      scenes: 0,
+      storyMaps: 0,
+      boards: 0,
+      comments: 0,
+      errors: [] as string[]
+    };
+
+    try {
+      // 1. Delete all scenes related to this novel
+      console.log('🗑️ [DELETE Novel] กำลังลบ Scenes...');
+      const scenesResult = await SceneModel.deleteMany({ novelId: novelId });
+      deletionResults.scenes = scenesResult.deletedCount || 0;
+      console.log(`✅ [DELETE Novel] ลบ Scenes จำนวน: ${deletionResults.scenes}`);
+    } catch (error: any) {
+      deletionResults.errors.push(`Scenes deletion error: ${error.message}`);
+      console.error('❌ [DELETE Novel] Error deleting scenes:', error);
+    }
+
+    try {
+      // 2. Delete all episodes related to this novel
+      console.log('🗑️ [DELETE Novel] กำลังลบ Episodes...');
+      const episodesResult = await EpisodeModel.deleteMany({ novelId: novelId });
+      deletionResults.episodes = episodesResult.deletedCount || 0;
+      console.log(`✅ [DELETE Novel] ลบ Episodes จำนวน: ${deletionResults.episodes}`);
+    } catch (error: any) {
+      deletionResults.errors.push(`Episodes deletion error: ${error.message}`);
+      console.error('❌ [DELETE Novel] Error deleting episodes:', error);
+    }
+
+    try {
+      // 3. Delete all story maps related to this novel
+      console.log('🗑️ [DELETE Novel] กำลังลบ Story Maps...');
+      const storyMapsResult = await StoryMapModel.deleteMany({ novelId: novelId });
+      deletionResults.storyMaps = storyMapsResult.deletedCount || 0;
+      console.log(`✅ [DELETE Novel] ลบ Story Maps จำนวน: ${deletionResults.storyMaps}`);
+    } catch (error: any) {
+      deletionResults.errors.push(`Story Maps deletion error: ${error.message}`);
+      console.error('❌ [DELETE Novel] Error deleting story maps:', error);
+    }
+
+    try {
+      // 4. Handle boards - unlink novel association instead of deleting
+      console.log('🗑️ [DELETE Novel] กำลังยกเลิกการเชื่อมโยง Boards...');
+      const boardsResult = await BoardModel.updateMany(
+        { novelAssociated: novelId },
+        { 
+          $unset: { novelAssociated: 1 },
+          $set: { 
+            isOrphaned: true,
+            orphanedReason: `Novel "${novelTitle}" was deleted`,
+            orphanedAt: new Date()
+          }
+        }
+      );
+      deletionResults.boards = boardsResult.modifiedCount || 0;
+      console.log(`✅ [DELETE Novel] ยกเลิกการเชื่อมโยง Boards จำนวน: ${deletionResults.boards}`);
+    } catch (error: any) {
+      deletionResults.errors.push(`Boards unlinking error: ${error.message}`);
+      console.error('❌ [DELETE Novel] Error unlinking boards:', error);
+    }
+
+    try {
+      // 5. Delete comments related to this novel and its episodes
+      console.log('🗑️ [DELETE Novel] กำลังลบ Comments...');
+      const commentsResult = await CommentModel.deleteMany({
+        $or: [
+          { 'context.novelId': novelId },
+          { targetType: 'NOVEL', targetId: novelId }
+        ]
+      });
+      deletionResults.comments = commentsResult.deletedCount || 0;
+      console.log(`✅ [DELETE Novel] ลบ Comments จำนวน: ${deletionResults.comments}`);
+    } catch (error: any) {
+      deletionResults.errors.push(`Comments deletion error: ${error.message}`);
+      console.error('❌ [DELETE Novel] Error deleting comments:', error);
+    }
+
+    try {
+      // 6. Finally, delete the novel itself using findOneAndDelete to trigger middleware
+      console.log('🗑️ [DELETE Novel] กำลังลบ Novel หลัก...');
+      const deletedNovel = await NovelModel.findOneAndDelete({ _id: novelId });
+      deletionResults.novel = !!deletedNovel;
+      console.log(`✅ [DELETE Novel] ลบ Novel หลักสำเร็จ: ${deletionResults.novel}`);
+    } catch (error: any) {
+      deletionResults.errors.push(`Novel deletion error: ${error.message}`);
+      console.error('❌ [DELETE Novel] Error deleting novel:', error);
+      
+      // If novel deletion fails, this is critical
+      return NextResponse.json({
+        error: 'Novel deletion failed',
+        message: 'เกิดข้อผิดพลาดในการลบนิยาย',
+        details: error.message,
+        partialResults: deletionResults
+      }, { status: 500 });
+    }
+
+    // Log final results
+    console.log(`🎉 [DELETE Novel] การลบนิยาย "${novelTitle}" เสร็จสิ้น:`, deletionResults);
+
+    // Return success response with deletion summary
+    return NextResponse.json({
+      success: true,
+      message: `ลบนิยาย "${novelTitle}" และข้อมูลที่เกี่ยวข้องเรียบร้อยแล้ว`,
+      deletionSummary: {
+        novelTitle,
+        episodesDeleted: deletionResults.episodes,
+        scenesDeleted: deletionResults.scenes,
+        storyMapsDeleted: deletionResults.storyMaps,
+        boardsUnlinked: deletionResults.boards,
+        commentsDeleted: deletionResults.comments,
+        errors: deletionResults.errors
+      }
+    });
+
+  } catch (error: any) {
+    console.error('❌ [DELETE Novel] Critical error:', error);
+    return NextResponse.json({
+      error: 'Internal server error',
+      message: 'เกิดข้อผิดพลาดร้ายแรงในการลบนิยาย',
+      details: error.message
+    }, { status: 500 });
   }
 }

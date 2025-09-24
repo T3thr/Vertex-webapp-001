@@ -48,11 +48,13 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { SerializedNovel, SerializedUser } from '@/app/dashboard/page';
 import { useState, useMemo, useEffect } from 'react';
 import CreateNovelModal from './CreateNovelModal';
+import DeleteNovelModal from './DeleteNovelModal';
 
 // Interfaces
 interface NovelTabProps {
@@ -73,9 +75,10 @@ interface NovelCardProps {
   index: number;
   viewMode: 'grid' | 'list';
   setActiveTab?: (tab: string) => void;
+  onDeleteNovel?: (novel: SerializedNovel) => void;
 }
 
-function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
+function NovelCard({ novel, index, viewMode, setActiveTab, onDeleteNovel }: NovelCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -116,8 +119,7 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
   if (viewMode === 'list') {
     return (
       <motion.div
-        className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500 group cursor-pointer"
-        onClick={() => window.open(`/novels/${novel.slug}`, '_blank')}
+        className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500 group"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.05, duration: 0.4 }}
@@ -125,12 +127,13 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
         onHoverStart={() => setIsHovered(true)}
         onHoverEnd={() => setIsHovered(false)}
       >
-        <div className="p-6">
-          <div className="flex items-start gap-6">
+        <div className="p-4 md:p-6">
+          <div className="flex items-start gap-3 md:gap-6">
             {/* Novel Cover */}
           <motion.div
-              className="relative flex-shrink-0 w-24 h-32 rounded-xl overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 border border-border/50"
+              className="relative flex-shrink-0 w-16 h-20 md:w-24 md:h-32 rounded-lg md:rounded-xl overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 border border-border/50 cursor-pointer"
             whileHover={{ scale: 1.05 }}
+            onClick={() => window.location.href = `/novels/${novel.slug}/overview`}
           >
                             {novel.coverImageUrl && !imageError ? (
               <Image
@@ -139,72 +142,83 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   width={96}
                   height={128}
+                  sizes="(max-width: 768px) 64px, 96px"
                   onError={() => setImageError(true)}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-accent/10">
-                  <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
+                  <ImageIcon className="w-4 h-4 md:w-8 md:h-8 text-muted-foreground/30" />
                 </div>
               )}
               
               {/* Status Badge */}
-              <div className={`absolute top-2 right-2 px-2 py-1 rounded-lg text-xs font-medium border ${statusConfig.color} backdrop-blur-sm`}>
-                <StatusIcon className="w-3 h-3 inline mr-1" />
-                {statusConfig.label}
+              <div className={`absolute top-1 right-1 md:top-2 md:right-2 px-1.5 py-0.5 md:px-2 md:py-1 rounded text-xs font-medium border ${statusConfig.color} backdrop-blur-sm`}>
+                <StatusIcon className="w-2 h-2 md:w-3 md:h-3 inline mr-0.5 md:mr-1" />
+                <span className="hidden sm:inline">{statusConfig.label}</span>
               </div>
           </motion.div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-bold text-card-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors">
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => window.location.href = `/novels/${novel.slug}/overview`}>
+                  <h3 className="text-sm md:text-lg font-bold text-card-foreground mb-1 md:mb-2 line-clamp-2 group-hover:text-primary transition-colors">
                   {novel.title}
                 </h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                  <p className="text-xs md:text-sm text-muted-foreground line-clamp-2 leading-relaxed">
                     {novel.synopsis || 'ไม่มีเรื่องย่อ'}
                 </p>
               </div>
 
                 {/* Actions */}
-              <div className="flex items-center gap-2 ml-4">
+              <div className="flex items-center gap-1 md:gap-2 ml-2 md:ml-4">
                   <motion.button
-                    className="p-2 bg-secondary hover:bg-accent rounded-lg text-muted-foreground hover:text-accent-foreground transition-colors"
+                    className="p-1.5 md:p-2 bg-secondary hover:bg-accent rounded-lg text-muted-foreground hover:text-accent-foreground transition-colors"
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.location.href = `/novels/${novel.slug}/overview`;
+                    }}
+                    title="แก้ไขนิยาย"
                   >
-                    <Edit className="w-4 h-4" />
+                    <Edit className="w-3 h-3 md:w-4 md:h-4" />
                   </motion.button>
                 <motion.button
-                    className="p-2 bg-secondary hover:bg-accent rounded-lg text-muted-foreground hover:text-accent-foreground transition-colors"
+                    className="p-1.5 md:p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-500 hover:text-red-600 transition-colors"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteNovel?.(novel);
+                  }}
+                  title="ลบนิยาย"
                 >
-                  <MoreVertical className="w-4 h-4" />
+                  <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
                 </motion.button>
               </div>
             </div>
 
             {/* Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <Eye className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-                  <div className="text-sm font-semibold">{novel.stats.viewsCount.toLocaleString()}</div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4">
+                <div className="text-center p-2 md:p-3 bg-secondary/50 rounded-lg">
+                  <Eye className="w-3 h-3 md:w-4 md:h-4 text-blue-500 mx-auto mb-1" />
+                  <div className="text-xs md:text-sm font-semibold">{novel.stats.viewsCount.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">ยอดชม</div>
                 </div>
-                <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <Heart className="w-4 h-4 text-red-500 mx-auto mb-1" />
-                  <div className="text-sm font-semibold">{novel.stats.likesCount.toLocaleString()}</div>
+                <div className="text-center p-2 md:p-3 bg-secondary/50 rounded-lg">
+                  <Heart className="w-3 h-3 md:w-4 md:h-4 text-red-500 mx-auto mb-1" />
+                  <div className="text-xs md:text-sm font-semibold">{novel.stats.likesCount.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">ไลค์</div>
                 </div>
-                <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <MessageCircle className="w-4 h-4 text-green-500 mx-auto mb-1" />
-                  <div className="text-sm font-semibold">{novel.stats.commentsCount.toLocaleString()}</div>
+                <div className="text-center p-2 md:p-3 bg-secondary/50 rounded-lg">
+                  <MessageCircle className="w-3 h-3 md:w-4 md:h-4 text-green-500 mx-auto mb-1" />
+                  <div className="text-xs md:text-sm font-semibold">{novel.stats.commentsCount.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">คอมเมนต์</div>
               </div>
-                <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                  <Star className="w-4 h-4 text-yellow-500 mx-auto mb-1" />
-                  <div className="text-sm font-semibold">{novel.stats.averageRating.toFixed(1)}</div>
+                <div className="text-center p-2 md:p-3 bg-secondary/50 rounded-lg">
+                  <Star className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 mx-auto mb-1" />
+                  <div className="text-xs md:text-sm font-semibold">{novel.stats.averageRating.toFixed(1)}</div>
                   <div className="text-xs text-muted-foreground">คะแนน</div>
                 </div>
               </div>
@@ -235,17 +249,16 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
   // Grid View
   return (
     <motion.div
-      className="group bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500 cursor-pointer"
+      className="group bg-card border border-border rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-500"
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.1, duration: 0.4 }}
       whileHover={{ scale: 1.03, y: -8 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      onClick={() => window.open(`/novels/${novel.slug}`, '_blank')}
     >
       {/* Cover Image */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
+      <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 cursor-pointer" onClick={() => window.location.href = `/novels/${novel.slug}/overview`}>
                 {novel.coverImageUrl && !imageError ? (
           <Image
               src={novel.coverImageUrl}
@@ -299,6 +312,7 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
                   console.log('View analytics for novel:', novel.title);
                 }
               }}
+              title="ดูสถิติ"
             >
               <BarChart className="w-4 h-4" />
             </motion.button>
@@ -310,15 +324,28 @@ function NovelCard({ novel, index, viewMode, setActiveTab }: NovelCardProps) {
                   e.stopPropagation();
                   window.location.href = `/novels/${novel.slug}/overview`;
                 }}
+                title="แก้ไขนิยาย"
               >
                 <Edit className="w-4 h-4" />
+              </motion.button>
+              <motion.button
+                className="p-2 bg-red-500/80 backdrop-blur-md rounded-lg text-white hover:bg-red-600/80 transition-colors"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteNovel?.(novel);
+                }}
+                title="ลบนิยาย"
+              >
+                <Trash2 className="w-4 h-4" />
               </motion.button>
         </motion.div>
           )}
         </AnimatePresence>
 
         {/* Bottom Info */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+        <div className="absolute bottom-0 left-0 right-0 p-4 text-white cursor-pointer" onClick={() => window.location.href = `/novels/${novel.slug}/overview`}>
           <h3 className="font-bold text-lg mb-2 line-clamp-2 group-hover:text-yellow-300 transition-colors">
             {novel.title}
           </h3>
@@ -421,6 +448,8 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(initialCreateModal);
   const [novelsList, setNovelsList] = useState(novels);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [novelToDelete, setNovelToDelete] = useState<SerializedNovel | null>(null);
   
   // Enhanced Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -466,6 +495,53 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
   const handleNovelCreated = (newNovel: any) => {
     setNovelsList(prev => [newNovel, ...prev]);
     setIsCreateModalOpen(false);
+  };
+
+  const handleDeleteNovel = (novel: SerializedNovel) => {
+    // Ensure we close any existing modal first
+    if (isDeleteModalOpen) {
+      setIsDeleteModalOpen(false);
+      setNovelToDelete(null);
+      // Small delay to ensure clean state transition
+      setTimeout(() => {
+        setNovelToDelete(novel);
+        setIsDeleteModalOpen(true);
+      }, 150);
+    } else {
+      setNovelToDelete(novel);
+      setIsDeleteModalOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = async (novelId: string) => {
+    try {
+      const response = await fetch(`/api/novels/${novelToDelete?.slug}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete novel');
+      }
+
+      const result = await response.json();
+      console.log('Novel deleted successfully:', result);
+
+      // Remove the novel from the local state
+      setNovelsList(prev => prev.filter(novel => novel._id !== novelId));
+      
+      // Show success message (you might want to add a toast notification here)
+      alert(`ลบนิยาย "${novelToDelete?.title}" เรียบร้อยแล้ว`);
+      
+      // Close the modal and reset states - this will be handled by the modal's onClose
+      setIsDeleteModalOpen(false);
+      setNovelToDelete(null);
+      
+    } catch (error: any) {
+      console.error('Error deleting novel:', error);
+      alert(`เกิดข้อผิดพลาดในการลบนิยาย: ${error.message}`);
+      // Don't close modal on error, let user try again
+    }
   };
 
   // Enhanced filtering and sorting
@@ -742,9 +818,9 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
         {filteredAndSortedNovels.length > 0 ? (
           <motion.div
             key={`${viewMode}-${currentPage}`}
-            className={`grid gap-4 md:gap-6 transition-all duration-300 ${
+            className={`grid gap-3 md:gap-4 lg:gap-6 transition-all duration-300 ${
               viewMode === 'grid' 
-                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4' 
+                ? 'grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' 
                 : 'grid-cols-1'
             }`}
             initial={{ opacity: 0, y: 20 }}
@@ -759,6 +835,7 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
                 index={index} 
                 viewMode={viewMode}
                 setActiveTab={setActiveTab}
+                onDeleteNovel={handleDeleteNovel}
               />
             ))}
           </motion.div>
@@ -902,6 +979,19 @@ export default function NovelTab({ novels, totalStats, user, initialCreateModal 
         onClose={() => setIsCreateModalOpen(false)}
         onNovelCreated={handleNovelCreated}
         user={user}
+      />
+
+      {/* Delete Novel Modal */}
+      <DeleteNovelModal
+        key={novelToDelete?._id || 'delete-modal'} // Force re-render when novel changes
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          // Always reset states when modal closes
+          setIsDeleteModalOpen(false);
+          setNovelToDelete(null);
+        }}
+        novel={novelToDelete}
+        onConfirmDelete={handleConfirmDelete}
       />
     </div>
   );

@@ -192,22 +192,22 @@ async function createEmptyStoryMapForEpisode(
       {
         nodeId: startNodeId,
         nodeType: StoryMapNodeType.START_NODE,
-        title: 'จุดเริ่มต้น',
-        position: { x: 400, y: 300 }, // ตำแหน่งกลางของ canvas
+        title: 'START',
+        position: { x: 400, y: 100 }, // ตำแหน่งด้านบนของ canvas
         nodeSpecificData: {},
-        notesForAuthor: `จุดเริ่มต้นของ ${episodeTitle} - พร้อมสำหรับการพัฒนาเนื้อเรื่อง`,
-        authorDefinedEmotionTags: ['beginning', 'neutral'],
+        notesForAuthor: `จุดเริ่มต้นของ ${episodeTitle} - เชื่อมต่อไปยัง Scene Node แรกของคุณ`,
+        authorDefinedEmotionTags: [],
         authorDefinedPsychologicalImpact: 0,
         editorVisuals: {
-          color: '#10B981', // สีเขียวสำหรับ start node
-          icon: 'play-circle',
-          orientation: 'horizontal',
-          borderRadius: 12,
+          color: '#10B981', // สีเขียว emerald สำหรับ start node
+          icon: 'play',
+          orientation: 'vertical',
+          borderRadius: 999, // วงกลมเต็ม
           borderStyle: 'solid',
           gradient: {
             from: '#10B981',
             to: '#059669',
-            direction: 'horizontal'
+            direction: 'vertical'
           },
           animation: {
             enter: 'fadeIn',
@@ -341,7 +341,7 @@ async function handleEpisodeCreate(
       };
     }
 
-    // สร้าง Episode ใหม่
+    // 🔥 สร้าง Episode ใหม่ (ไม่มี blueprintMetadata เพื่อไม่ให้สร้าง canvas nodes)
     const newEpisode = new EpisodeModel({
       novelId,
       authorId: userId,
@@ -363,29 +363,9 @@ async function handleEpisodeCreate(
         purchasesCount: 0
       },
       isPreviewAllowed: true,
-      lastContentUpdatedAt: new Date(),
-      // 🎯 Blueprint Integration
-      blueprintMetadata: {
-        canvasPosition: episodeData.canvasPosition,
-        visualStyle: {
-          color: episodeData.visualStyle?.color || '#3b82f6',
-          icon: episodeData.visualStyle?.icon || 'episode',
-          borderStyle: episodeData.visualStyle?.borderStyle || 'solid',
-          borderRadius: episodeData.visualStyle?.borderRadius || 8,
-          opacity: episodeData.visualStyle?.opacity || 1,
-        },
-        connections: {
-          incomingEdges: [],
-          outgoingEdges: []
-        },
-        displaySettings: {
-          showThumbnail: episodeData.displaySettings?.showThumbnail ?? true,
-          showLabel: episodeData.displaySettings?.showLabel ?? true,
-          labelPosition: episodeData.displaySettings?.labelPosition || 'bottom'
-        },
-        lastCanvasUpdate: new Date(),
-        version: 1
-      }
+      lastContentUpdatedAt: new Date()
+      // 🚫 ไม่ส่ง blueprintMetadata เพื่อไม่ให้สร้าง canvas nodes
+      // Episodes จะถูกจัดการผ่าน Episode Management Panel เท่านั้น
     });
 
     const savedEpisode = await newEpisode.save();
@@ -397,7 +377,7 @@ async function handleEpisodeCreate(
       success: true,
       action: 'create',
       data: savedEpisode,
-      message: 'Episode created successfully'
+      message: 'Episode created successfully with empty StoryMap (no canvas nodes)'
     };
 
   } catch (error: any) {
@@ -708,13 +688,25 @@ async function handleCanvasSync(
 
 // 🔧 Utility Functions
 
+// 🎯 Thai-friendly slug generation matching Episode model's pre-save hook
 function generateSlug(title: string): string {
-  return title
+  if (!title) return `episode-${new Types.ObjectId().toHexString().slice(-8)}`;
+
+  const slug = title
+    .toString()
+    .normalize('NFC') // รวมพยัญชนะกับสระ/วรรณยุกต์ให้เป็นอักขระเดียว
     .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 100);
+    .replace(/\s+/g, '-') // แทนที่ช่องว่างด้วยขีดกลาง
+    .replace(/[^\p{L}\p{N}\p{M}-]+/gu, '') // เก็บตัวอักษร, ตัวเลข, เครื่องหมาย (สระ/วรรณยุกต์), และขีดกลาง
+    .replace(/--+/g, '-') // ยุบขีดกลางซ้ำ
+    .replace(/^-+/, '') // ลบขีดกลางหน้าสุด
+    .replace(/-+$/, ''); // ลบขีดกลางท้ายสุด
+
+  if (!slug) {
+    return `episode-${new Types.ObjectId().toHexString().slice(-8)}`;
+  }
+
+  return slug.substring(0, 280); // จำกัดความยาว
 }
 
 async function createStoryMapNode(

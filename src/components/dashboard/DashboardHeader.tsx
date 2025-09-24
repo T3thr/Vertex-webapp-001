@@ -3,9 +3,6 @@
 // รองรับ global.css theme system และมี interactive elements ที่สวยงาม
 'use client';
 
-// Header สำหรับ Writer Dashboard พร้อม animation และ responsive design ที่อัพเกรดแล้ว
-// รองรับ global.css theme system และมี interactive elements ที่สวยงาม
-
 import { motion, useScroll, useTransform, Variants } from 'framer-motion';
 import Image from 'next/image';
 import { 
@@ -189,37 +186,19 @@ const formattedDate = (date: Date | string | undefined | null) => {
   }
 };
 
-// Helper function to safely create Date objects
-const safeDate = (date: Date | string | undefined) => {
-  if (!date) return new Date();
-  try {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    return isNaN(dateObj.getTime()) ? new Date() : dateObj;
-  } catch {
-    return new Date();
-  }
-};
-
-// สร้าง particles คงที่สำหรับ background เพื่อหลีกเลี่ยง hydration error
-const staticParticles = [
-  { id: 1, x: 10, y: 20, size: 80, opacity: 0.2, duration: 10 },
-  { id: 2, x: 30, y: 40, size: 100, opacity: 0.15, duration: 12 },
-  { id: 3, x: 50, y: 60, size: 90, opacity: 0.25, duration: 11 },
-  { id: 4, x: 70, y: 80, size: 110, opacity: 0.18, duration: 13 },
-  { id: 5, x: 90, y: 10, size: 95, opacity: 0.22, duration: 10.5 },
-  { id: 6, x: 20, y: 50, size: 85, opacity: 0.17, duration: 11.5 },
-  { id: 7, x: 40, y: 70, size: 105, opacity: 0.19, duration: 12.5 },
-  { id: 8, x: 60, y: 30, size: 100, opacity: 0.21, duration: 11 }
-];
-
 export default function DashboardHeader({ user, totalStats }: DashboardHeaderProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [isClientMounted, setIsClientMounted] = useState(false);
   const { scrollY } = useScroll();
   const headerOpacity = useTransform(scrollY, [0, 100], [1, 0.95]);
   const headerScale = useTransform(scrollY, [0, 100], [1, 0.98]);
 
-  // อัปเดตเวลาทุก ๆ นาที
+  // Initialize time only on client side to prevent hydration mismatch
   useEffect(() => {
+    setIsClientMounted(true);
+    setCurrentTime(new Date());
+    
+    // อัปเดตเวลาทุก ๆ นาที
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
@@ -236,10 +215,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
       });
     } catch (error) {
       console.warn('Error formatting time:', error);
-      return new Date().toLocaleTimeString('th-TH', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
+      return '--:--';
     }
   };
 
@@ -313,20 +289,13 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
     }
   ];
 
-  // State to track if the component is mounted
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Set the state to true only on the client
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
   const welcomeMessage = useMemo(() => {
-    const hour = new Date().getHours();
+    if (!isClientMounted || !currentTime) return "สวัสดี";
+    const hour = currentTime.getHours();
     if (hour < 12) return "สวัสดีตอนเช้า";
     if (hour < 18) return "สวัสดีตอนบ่าย";
     return "สวัสดีตอนเย็น";
-  }, []);
+  }, [isClientMounted, currentTime]);
 
   return (
     <motion.header 
@@ -354,7 +323,7 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  {formatTime(currentTime)}
+                  {isClientMounted && currentTime ? formatTime(currentTime) : '--:--'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -591,31 +560,6 @@ export default function DashboardHeader({ user, totalStats }: DashboardHeaderPro
               )}
             </motion.div>
           )}
-
-          {/* Welcome Message for New Users */}
-          {/*}
-          {!isWriter && (
-            <motion.div
-              className="mt-8 bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-              variants={itemVariants}
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-gradient-to-r from-blue-400 to-purple-400 rounded-xl">
-                  <Sparkles className="w-6 h-6 text-foreground" />
-                </div>
-                <div>
-                  <h3 className="text-foreground font-semibold text-lg mb-1">
-                    {welcomeMessage}, {user.profile?.displayName || user.username}!
-                  </h3>
-                  <p className="text-foreground/70 text-sm">
-                    เริ่มต้นการเดินทางในฐานะนักเขียนและสร้างสรรค์เรื่องราวที่น่าตื่นเต้น
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-            
-          )}
-          */}
         </div>
       </div>
     </motion.header>

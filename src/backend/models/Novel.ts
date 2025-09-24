@@ -431,6 +431,7 @@ export interface INovel extends Document {
   isFeatured?: boolean;
   adminNotes?: string;
   publishedAt?: Date;
+  unpublishedAt?: Date;
   scheduledPublicationDate?: Date;
   lastContentUpdatedAt: Date;
   relatedNovels?: (Types.ObjectId | INovel)[];
@@ -572,6 +573,7 @@ const NovelSchema = new Schema<INovel>(
     isFeatured: { type: Boolean, default: false, index: true },
     adminNotes: { type: String, trim: true, maxlength: [5000, "หมายเหตุจาก Admin ต้องไม่เกิน 5000 ตัวอักษร"], select: false },
     publishedAt: { type: Date, index: true },
+    unpublishedAt: { type: Date, index: true, sparse: true },
     scheduledPublicationDate: { type: Date, index: true },
     lastContentUpdatedAt: { type: Date, default: Date.now, index: true, required: true },
     relatedNovels: [{ type: Schema.Types.ObjectId, ref: "Novel" }],

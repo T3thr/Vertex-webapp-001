@@ -816,6 +816,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
   const [activeTab, setActiveTab] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
 
   // Mock revenue data - in real app, fetch from API
   const revenueData = useMemo(() => {
@@ -833,6 +834,179 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
     totalEpisodes: episodes.length,
     publishedEpisodes: episodes.filter(e => e.status === 'published').length
   }), [novel, episodes]);
+
+  // Check if novel can be published
+  const canPublish = useMemo(() => {
+    return novel.title?.trim() && 
+           novel.synopsis?.trim() && 
+           novel.coverImageUrl && 
+           stats.publishedEpisodes > 0;
+  }, [novel, stats]);
+
+  // Handle novel publishing
+  const handlePublishNovel = async () => {
+    if (!canPublish) {
+      toast.error('กรุณาตรวจสอบข้อมูลที่จำเป็นให้ครบถ้วน');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/novels/${encodeURIComponent(novel.slug)}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessLevel: novel.accessLevel === 'private' ? 'public' : novel.accessLevel
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการเผยแพร่');
+      }
+
+      // Update novel data
+      onNovelUpdate(data.novel);
+      toast.success('เผยแพร่นิยายสำเร็จ!');
+      
+      // Optional: Revalidate homepage to show the newly published novel
+      if (typeof window !== 'undefined') {
+        // Trigger a soft refresh of the homepage data
+        fetch('/api/revalidate?path=/', { method: 'POST' }).catch(() => {
+          // Ignore revalidation errors
+        });
+      }
+    } catch (error) {
+      console.error('Error publishing novel:', error);
+      toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการเผยแพร่');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle status change
+  const handleStatusChange = async (newStatus: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/novels/${encodeURIComponent(novel.slug)}/publish`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          scheduledPublicationDate: newStatus === 'scheduled' ? scheduledDate : undefined
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
+      }
+
+      // Update novel data
+      onNovelUpdate(data.novel);
+      toast.success('อัปเดตสถานะสำเร็จ');
+      
+      // Revalidate homepage if status changes affect visibility
+      if (newStatus === 'published' || newStatus === 'unpublished' || newStatus === 'archived') {
+        if (typeof window !== 'undefined') {
+          fetch('/api/revalidate?path=/', { method: 'POST' }).catch(() => {
+            // Ignore revalidation errors
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle access level change
+  const handleAccessLevelChange = async (newAccessLevel: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/novels/${encodeURIComponent(novel.slug)}/publish`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessLevel: newAccessLevel
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการอัปเดตระดับการเข้าถึง');
+      }
+
+      // Update novel data
+      onNovelUpdate(data.novel);
+      toast.success('อัปเดตระดับการเข้าถึงสำเร็จ');
+      
+      // Revalidate homepage if access level changes affect visibility
+      if (newAccessLevel === 'public' || newAccessLevel === 'private') {
+        if (typeof window !== 'undefined') {
+          fetch('/api/revalidate?path=/', { method: 'POST' }).catch(() => {
+            // Ignore revalidation errors
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error updating access level:', error);
+      toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัปเดตระดับการเข้าถึง');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle settings update
+  const handleUpdateSettings = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/novels/${encodeURIComponent(novel.slug)}/publish`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: novel.status,
+          accessLevel: novel.accessLevel,
+          scheduledPublicationDate: scheduledDate || undefined
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'เกิดข้อผิดพลาดในการอัปเดตการตั้งค่า');
+      }
+
+      // Update novel data
+      onNovelUpdate(data.novel);
+      toast.success('อัปเดตการตั้งค่าสำเร็จ');
+      
+      // Revalidate homepage if settings affect visibility
+      if (typeof window !== 'undefined') {
+        fetch('/api/revalidate?path=/', { method: 'POST' }).catch(() => {
+          // Ignore revalidation errors
+        });
+      }
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอัปเดตการตั้งค่า');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -1066,22 +1240,32 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                     <CardContent className="space-y-4">
                       <div className="flex items-center justify-between">
                         <Label htmlFor="novel-status">Current Status</Label>
-                        <Select value={novel.status}>
+                        <Select 
+                          value={novel.status} 
+                          onValueChange={handleStatusChange}
+                          disabled={isLoading}
+                        >
                           <SelectTrigger className="w-40">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="draft">Draft</SelectItem>
                             <SelectItem value="published">Published</SelectItem>
+                            <SelectItem value="unpublished">Unpublished</SelectItem>
                             <SelectItem value="completed">Completed</SelectItem>
                             <SelectItem value="archived">Archived</SelectItem>
+                            <SelectItem value="scheduled">Scheduled</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       
                       <div className="flex items-center justify-between">
                         <Label htmlFor="access-level">Access Level</Label>
-                        <Select value={novel.accessLevel}>
+                        <Select 
+                          value={novel.accessLevel} 
+                          onValueChange={handleAccessLevelChange}
+                          disabled={isLoading}
+                        >
                           <SelectTrigger className="w-40">
                             <SelectValue />
                           </SelectTrigger>
@@ -1089,14 +1273,161 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                             <SelectItem value="public">Public</SelectItem>
                             <SelectItem value="unlisted">Unlisted</SelectItem>
                             <SelectItem value="private">Private</SelectItem>
+                            <SelectItem value="followers_only">Followers Only</SelectItem>
+                            <SelectItem value="premium_only">Premium Only</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
 
-                      <Button className="w-full">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Update Novel Settings
-                      </Button>
+                      {/* Publication Date */}
+                      {novel.publishedAt && (
+                        <div className="flex items-center justify-between">
+                          <Label>Published Date</Label>
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(novel.publishedAt).toLocaleDateString('th-TH')}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Scheduled Publication */}
+                      {novel.status === 'scheduled' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="scheduled-date">Scheduled Publication Date</Label>
+                          <Input
+                            id="scheduled-date"
+                            type="datetime-local"
+                            value={scheduledDate}
+                            onChange={(e) => setScheduledDate(e.target.value)}
+                            disabled={isLoading}
+                          />
+                        </div>
+                      )}
+
+                      {/* Publication Requirements Check */}
+                      <div className="space-y-3">
+                        <h5 className="font-medium">Publication Requirements</h5>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            {novel.title?.trim() ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm">Novel Title</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {novel.synopsis?.trim() ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm">Synopsis</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {novel.coverImageUrl ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm">Cover Image</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {stats.publishedEpisodes > 0 ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm">Published Episodes ({stats.publishedEpisodes})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="space-y-2">
+                        {novel.status === 'draft' && (
+                          <Button 
+                            className="w-full" 
+                            onClick={handlePublishNovel}
+                            disabled={isLoading || !canPublish}
+                          >
+                            {isLoading ? (
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Upload className="w-4 h-4 mr-2" />
+                            )}
+                            Publish Novel
+                          </Button>
+                        )}
+                        
+                        {novel.status === 'published' && (
+                          <Button 
+                            variant="outline" 
+                            className="w-full" 
+                            onClick={() => handleStatusChange('unpublished')}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <PauseCircle className="w-4 h-4 mr-2" />
+                            )}
+                            Unpublish Novel
+                          </Button>
+                        )}
+
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={handleUpdateSettings}
+                          disabled={isLoading}
+                        >
+                          {isLoading ? (
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Settings className="w-4 h-4 mr-2" />
+                          )}
+                          Update Settings
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Publishing History */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Publishing History</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Created</span>
+                          <span className="text-muted-foreground">
+                            {new Date(novel.createdAt).toLocaleDateString('th-TH')}
+                          </span>
+                        </div>
+                        {novel.publishedAt && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span>First Published</span>
+                            <span className="text-muted-foreground">
+                              {new Date(novel.publishedAt).toLocaleDateString('th-TH')}
+                            </span>
+                          </div>
+                        )}
+                        {novel.unpublishedAt && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Last Unpublished</span>
+                            <span className="text-muted-foreground">
+                              {new Date(novel.unpublishedAt).toLocaleDateString('th-TH')}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Last Updated</span>
+                          <span className="text-muted-foreground">
+                            {new Date(novel.lastContentUpdatedAt || novel.updatedAt).toLocaleDateString('th-TH')}
+                          </span>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>

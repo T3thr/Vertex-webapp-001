@@ -20,18 +20,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
-
-// Icons
-import { 
-  Play, 
-  Pause, 
-  Square, 
-  SkipBack, 
-  SkipForward,
-  Volume2,
-  VolumeX,
-  Maximize2,
-  Minimize2,
+import {
+  ChevronDown,
+  Play,
+  Undo,
+  Redo,
+  Menu as MenuIcon,
+  Folder,
+  File,
+  Search,
   Plus,
   Trash2,
   Copy,
@@ -57,8 +54,28 @@ import {
   Clock,
   Camera,
   Palette,
-  Code
+  Code,
+  Upload,
+  Download,
+  Filter,
+  Grid3X3,
+  List,
+  Monitor,
+  Smartphone,
+  Tablet,
+  Pause,
+  Square,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+
+// Director Components
+import CharacterManagementModal from '@/components/director/CharacterManagementModal';
+import BackgroundManagementModal from '@/components/director/BackgroundManagementModal';
 
 // Types from backend models
 import { TimelineEventType, ITimelineEvent, ITimelineTrack, IScene } from '@/backend/models/Scene';
@@ -73,37 +90,8 @@ interface DirectorTabProps {
   onSceneUpdate: (sceneId: string, sceneData: any) => void;
 }
 
-// Enhanced Timeline Event Component with drag and resize functionality
-const TimelineEvent = ({ 
-  event, 
-  track, 
-  scale, 
-  onSelect, 
-  isSelected,
-  onUpdate,
-  onDelete,
-  onDrag,
-  onResize 
-}: {
-  event: ITimelineEvent;
-  track: ITimelineTrack;
-  scale: number;
-  onSelect: (event: ITimelineEvent) => void;
-  isSelected: boolean;
-  onUpdate: (eventId: string, updates: Partial<ITimelineEvent>) => void;
-  onDelete: (eventId: string) => void;
-  onDrag?: (eventId: string, newStartTime: number) => void;
-  onResize?: (eventId: string, newDuration: number) => void;
-}) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, startTime: 0 });
-  const [resizeStart, setResizeStart] = useState({ x: 0, duration: 0 });
-
-  const width = Math.max(60, (event.durationMs || 1000) / 1000 * scale);
-  const left = (event.startTimeMs / 1000) * scale;
-
-  const getEventColor = (type: TimelineEventType) => {
+// Helper functions for event styling
+const getEventColor = (type: TimelineEventType) => {
     switch (type) {
       case TimelineEventType.SHOW_CHARACTER: return 'bg-blue-500';
       case TimelineEventType.HIDE_CHARACTER: return 'bg-blue-400';
@@ -135,9 +123,9 @@ const TimelineEvent = ({
       case TimelineEventType.WAIT: return 'bg-gray-500';
       default: return 'bg-gray-400';
     }
-  };
+};
 
-  const getEventIcon = (type: TimelineEventType) => {
+const getEventIcon = (type: TimelineEventType) => {
     switch (type) {
       case TimelineEventType.SHOW_CHARACTER:
       case TimelineEventType.HIDE_CHARACTER:
@@ -181,9 +169,38 @@ const TimelineEvent = ({
       default:
         return <Clock className="w-3 h-3" />;
     }
-  };
+};
 
-  // Handle mouse events for dragging
+// Enhanced Timeline Event Component with drag and resize functionality (for Advanced Timeline)
+const TimelineEvent = ({ 
+  event, 
+  track, 
+  scale, 
+  onSelect, 
+  isSelected,
+  onUpdate,
+  onDelete,
+  onDrag,
+  onResize 
+}: {
+  event: ITimelineEvent;
+  track: ITimelineTrack;
+  scale: number;
+  onSelect: (event: ITimelineEvent) => void;
+  isSelected: boolean;
+  onUpdate: (eventId: string, updates: Partial<ITimelineEvent>) => void;
+  onDelete: (eventId: string) => void;
+  onDrag?: (eventId: string, newStartTime: number) => void;
+  onResize?: (eventId: string, newDuration: number) => void;
+}) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, startTime: 0 });
+  const [resizeStart, setResizeStart] = useState({ x: 0, duration: 0 });
+
+  const width = Math.max(60, (event.durationMs || 1000) / 1000 * scale);
+  const left = (event.startTimeMs / 1000) * scale;
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDragging(true);
@@ -191,14 +208,12 @@ const TimelineEvent = ({
     onSelect(event);
   };
 
-  // Handle resize mouse events
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsResizing(true);
     setResizeStart({ x: e.clientX, duration: event.durationMs || 1000 });
   };
 
-  // Mouse move handler (would be attached to document)
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging && onDrag) {
@@ -240,7 +255,7 @@ const TimelineEvent = ({
         ${isResizing ? 'shadow-xl z-10' : ''}
         hover:shadow-md transition-all duration-200 select-none
       `}
-      style={{ left, width }}
+      style={{ left, width, top: '0.5rem' }}
       onMouseDown={handleMouseDown}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
@@ -255,412 +270,368 @@ const TimelineEvent = ({
           {event.eventType.replace(/_/g, ' ').toLowerCase()}
         </span>
       </div>
-      
-      {/* Duration indicator */}
       <div className="absolute bottom-0 right-1 text-xs opacity-75">
         {((event.durationMs || 1000) / 1000).toFixed(1)}s
       </div>
-      
-      {/* Resize handle */}
       <div 
         className="absolute right-0 top-0 h-full w-2 bg-white/30 cursor-ew-resize hover:bg-white/50 transition-colors"
         onMouseDown={handleResizeMouseDown}
       />
-      
-      {/* Drag handle indicator */}
       <div className="absolute left-1 top-1/2 transform -translate-y-1/2 w-1 h-4 bg-white/30 rounded-full" />
     </motion.div>
   );
 };
 
+
 // Main Director Tab Component
-const DirectorTab: React.FC<DirectorTabProps> = ({ 
-  novel, 
-  scenes, 
-  characters, 
-  userMedia, 
-  officialMedia, 
-  onSceneUpdate 
+const DirectorTab: React.FC<DirectorTabProps> = ({
+  novel,
+  scenes,
+  characters,
+  userMedia,
+  officialMedia,
+  onSceneUpdate
 }) => {
   const [selectedScene, setSelectedScene] = useState<any>(scenes[0] || null);
   const [selectedEvent, setSelectedEvent] = useState<ITimelineEvent | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [timelineScale, setTimelineScale] = useState(50); // pixels per second
+  const [timelineScale, setTimelineScale] = useState(50);
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [showGrid, setShowGrid] = useState(true);
   const playbackRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+  const [isBackgroundModalOpen, setIsBackgroundModalOpen] = useState(false);
+
+  const [characterList, setCharacterList] = useState(characters || []);
+  const [backgroundList, setBackgroundList] = useState<any[]>([]);
 
   const allMedia = useMemo(() => [...userMedia, ...officialMedia], [userMedia, officialMedia]);
   const sceneDuration = selectedScene?.estimatedTimelineDurationMs || 30000;
 
+  // Character management functions
+  const handleCharacterAdd = useCallback((character: any) => {
+    const newCharacter = { ...character, id: `char_${Date.now()}`, createdAt: new Date().toISOString() };
+    setCharacterList(prev => [...prev, newCharacter]);
+  }, []);
+
+  const handleCharacterUpdate = useCallback((id: string, updates: any) => {
+    setCharacterList(prev => prev.map(char => char.id === id ? { ...char, ...updates } : char));
+  }, []);
+
+  const handleCharacterDelete = useCallback((id: string) => {
+    setCharacterList(prev => prev.filter(char => char.id !== id));
+  }, []);
+
+  // Background management functions
+  const handleBackgroundAdd = useCallback((background: any) => {
+    const newBackground = { ...background, id: `bg_${Date.now()}`, createdAt: new Date().toISOString() };
+    setBackgroundList(prev => [...prev, newBackground]);
+  }, []);
+
+  const handleBackgroundUpdate = useCallback((id: string, updates: any) => {
+    setBackgroundList(prev => prev.map(bg => bg.id === id ? { ...bg, ...updates } : bg));
+  }, []);
+
+  const handleBackgroundDelete = useCallback((id: string) => {
+    setBackgroundList(prev => prev.filter(bg => bg.id !== id));
+  }, []);
+  
+  // NOTE: This is a placeholder for the tree structure.
+  // In a real app, you'd likely use a recursive component.
+  const SceneTree = ({ scenes, onSelectScene }: { scenes: any[], onSelectScene: (scene: any) => void }) => (
+    <div className="space-y-1 text-sm">
+        {scenes.map(scene => (
+            <div key={scene._id} className="pl-2">
+                <button 
+                    onClick={() => onSelectScene(scene)} 
+                    className={`flex items-center gap-2 w-full text-left p-1.5 rounded-md ${selectedScene?._id === scene._id ? 'bg-blue-100 dark:bg-blue-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                >
+                    <File className="w-4 h-4 text-slate-500" />
+                    <span>{`ฉากที่ ${scene.sceneOrder}: ${scene.title || 'Untitled'}`}</span>
+                </button>
+            </div>
+        ))}
+    </div>
+);
+
+
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-4 border-b">
-        <h2 className="text-lg font-semibold">Director</h2>
+    <div className="h-screen flex flex-col bg-slate-100 dark:bg-slate-900 font-sans">
+      {/* Header Bar - Styled according to Figma */}
+      <header className="flex items-center justify-between px-4 py-2 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+        <Button variant="outline" size="sm" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+          กลับ
+        </Button>
+        <div className="text-xl font-bold text-green-500">
+
+        </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsSidebarOpen(true)}
-          >
-            <Menu className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsInspectorOpen(true)}
-          >
-            <Settings className="w-4 h-4" />
-          </Button>
+          <Button variant="ghost" size="icon" className="w-8 h-8"><Play className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" className="w-8 h-8"><Undo className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" className="w-8 h-8"><Redo className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" className="w-8 h-8"><MenuIcon className="w-4 h-4" /></Button>
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row">
-        {/* Preview Window */}
-        <div className="lg:flex-1 flex flex-col">
-          <div className="flex items-center justify-between p-4 border-b">
-            <div className="flex items-center gap-2">
-              <Select value={selectedScene?._id} onValueChange={(value) => {
-                const scene = scenes.find(s => s._id === value);
-                setSelectedScene(scene);
-              }}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select scene" />
-                </SelectTrigger>
-                <SelectContent>
-                  {scenes.map((scene) => (
-                    <SelectItem key={scene._id} value={scene._id}>
-                      {scene.title || `Scene ${scene.sceneOrder}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsPreviewMaximized(!isPreviewMaximized)}
-              >
-                {isPreviewMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isSaving}
-              >
-                {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              </Button>
-            </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Panel: Tools */}
+        <aside className="w-64 flex flex-col bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 p-3">
+          <div className="flex items-center justify-between p-2 mb-2 border rounded-md">
+            <span className="font-semibold">เครื่องมือ</span>
+            <ChevronDown className="w-4 h-4" />
           </div>
-
-          {/* Preview Area */}
-          <div className="flex-1 p-4">
-            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
-              {/* Background */}
-              <div className="absolute inset-0">
-                {selectedScene?.background?.type === 'image' && selectedScene.background.value && (
-                  <img 
-                    src={selectedScene.background.value} 
-                    alt="Background"
-                    className="w-full h-full object-cover"
-                  />
-                )}
-                {selectedScene?.background?.type === 'color' && (
-                  <div 
-                    className="w-full h-full"
-                    style={{ backgroundColor: selectedScene.background.value }}
-                  />
-                )}
+          <Tabs defaultValue="อนิเมชัน" className="flex flex-col flex-1">
+            <TabsList className="grid w-full grid-cols-3 h-auto">
+              <TabsTrigger value="ทั่วไป" className="text-xs">ทั่วไป</TabsTrigger>
+              <TabsTrigger value="ทรัพยากร" className="text-xs">ทรัพยากร</TabsTrigger>
+              <TabsTrigger value="ข้อความ" className="text-xs">ข้อความ</TabsTrigger>
+              <TabsTrigger value="อนิเมชัน" className="text-xs">อนิเมชัน</TabsTrigger>
+              <TabsTrigger value="ตัวเลือก" className="text-xs">ตัวเลือก</TabsTrigger>
+            </TabsList>
+            <TabsContent value="ทั่วไป" className="p-1">General tools content.</TabsContent>
+            <TabsContent value="ทรัพยากร" className="p-1">Assets content.</TabsContent>
+            <TabsContent value="ข้อความ" className="p-1">Text tools content.</TabsContent>
+            <TabsContent value="อนิเมชัน" className="p-1 mt-2">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <Button variant="outline" className="h-auto py-2">ปรากฏ/ซ่อน</Button>
+                <Button variant="outline" className="h-auto py-2">หมุน</Button>
+                <Button variant="outline" className="h-auto py-2">ซูม</Button>
+                <Button variant="outline" className="h-auto py-2">ฟิลเตอร์</Button>
+                <Button variant="outline" className="h-auto py-2">กลับด้าน</Button>
+                <Button variant="outline" className="h-auto py-2">สั่น</Button>
+                <Button variant="outline" className="h-auto py-2">แฟลช</Button>
+                <Button variant="outline" className="h-auto py-2">ลำดับ</Button>
               </div>
+            </TabsContent>
+             <TabsContent value="ตัวเลือก" className="p-1">Choices content.</TabsContent>
+          </Tabs>
+        </aside>
 
-              {/* Playback indicator */}
-              <div className="absolute top-4 right-4">
-                {isPlaying ? (
-                  <div className="flex items-center gap-2 bg-red-500 text-white px-3 py-1 rounded-full text-sm">
-                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                    LIVE
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 bg-gray-500 text-white px-3 py-1 rounded-full text-sm">
-                    <Pause className="w-3 h-3" />
-                    PAUSED
-                  </div>
-                )}
-              </div>
-
-              {/* Timeline scrubber */}
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
-                <div 
-                  className="h-full bg-red-500 transition-all duration-100"
-                  style={{ width: `${(currentTime / sceneDuration) * 100}%` }}
-                />
-              </div>
-            </div>
+        {/* Center Panel: Main Workspace */}
+        <main className="flex-1 flex flex-col p-4 bg-slate-50 dark:bg-slate-900/50">
+          {/* Preview Canvas */}
+          <div className="flex-1 flex items-center justify-center bg-slate-200 dark:bg-slate-800 rounded-lg overflow-hidden mb-4">
+            <img src="/placeholder-character.png" alt="Character Preview" className="max-h-full max-w-full object-contain" />
           </div>
-
-          {/* Playback Controls */}
-          <div className="p-4 border-t">
-            <div className="flex items-center justify-center gap-4">
-              <Button variant="outline" size="sm" onClick={() => setCurrentTime(0)}>
-                <Square className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setIsPlaying(!isPlaying)}>
-                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              </Button>
-              <div className="flex-1 max-w-md">
-                <Slider
-                  value={[currentTime]}
-                  onValueChange={([value]) => setCurrentTime(value)}
-                  max={sceneDuration}
-                  min={0}
-                  step={100}
-                />
-              </div>
-              <div className="text-sm text-muted-foreground min-w-20">
-                {Math.floor(currentTime / 1000)}s / {Math.floor(sceneDuration / 1000)}s
-              </div>
+          
+          {/* Content Arrangement / Advanced Timeline */}
+          <Tabs defaultValue="arrange" className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex-1 flex flex-col">
+            <div className="flex items-center justify-between p-2 border-b border-slate-200 dark:border-slate-700">
+               <TabsList className="bg-slate-100 dark:bg-slate-900">
+                  <TabsTrigger value="arrange">จัดเรียงเนื้อหา</TabsTrigger>
+                  <TabsTrigger value="advanced-timeline">Advanced Timeline Editor</TabsTrigger>
+               </TabsList>
+                <ChevronDown className="w-4 h-4 text-slate-500"/>
             </div>
-          </div>
-        </div>
-
-        {/* Enhanced Timeline with Professional Features */}
-        <div className="lg:flex-1 border-t lg:border-t-0 lg:border-l director-timeline">
-          {/* Timeline Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-            <div className="flex items-center gap-4">
-              <h3 className="font-semibold">Timeline</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                <span>Duration: {Math.floor(sceneDuration / 1000)}s</span>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {/* Timeline Scale Controls */}
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTimelineScale(Math.max(20, timelineScale - 10))}
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </Button>
-                <span className="text-xs text-muted-foreground min-w-8 text-center">
-                  {timelineScale}px/s
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTimelineScale(Math.min(200, timelineScale + 10))}
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {/* Timeline Tools */}
-              <Separator orientation="vertical" className="h-6" />
-              <Button
-                variant="outline"
-                size="sm"
-                title="Add Track"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                title="Timeline Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Timeline Ruler */}
-          <div className="border-b bg-background">
-            <div className="h-8 relative overflow-x-auto">
-              <div className="absolute inset-0 flex items-center" style={{ width: `${(sceneDuration / 1000) * timelineScale + 100}px` }}>
-                {Array.from({ length: Math.ceil(sceneDuration / 1000) + 1 }).map((_, index) => (
-                  <div key={index} className="flex flex-col items-start" style={{ width: `${timelineScale}px` }}>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {index}s
+           
+            {/* Figma-style simple content arrangement list */}
+            <TabsContent value="arrange" className="flex-1 overflow-y-auto p-2">
+                <ScrollArea className="h-full">
+                    <div className="space-y-2">
+                        {selectedScene?.timelineTracks?.flatMap((track: any) => track.events.map((event: any) => (
+                           <Card key={event.eventId} className="flex items-center p-2 justify-between">
+                               <div className="flex items-center gap-2">
+                                   <Menu className="w-4 h-4 cursor-grab text-slate-400" />
+                                   <div className={`w-8 h-8 ${getEventColor(event.eventType)} rounded-md flex items-center justify-center`}>
+                                      {getEventIcon(event.eventType)}
+                                   </div>
+                                   <div>
+                                       <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').toLowerCase()}</p>
+                                       <p className="text-xs text-slate-500">{`on track: ${track.trackName}`}</p>
+                                   </div>
+                               </div>
+                               <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">{(event.startTimeMs / 1000).toFixed(1)}s</Badge>
+                                  <Badge variant="outline">{(event.durationMs / 1000).toFixed(1)}s</Badge>
+                               </div>
+                           </Card>
+                        )))}
+                        {(!selectedScene || selectedScene?.timelineTracks?.length === 0) && (
+                            <div className="text-center p-8 text-slate-500">
+                                <p>ไม่มีเนื้อหาในฉากนี้</p>
+                                <p className="text-xs">เพิ่ม Event ใน Advanced Timeline Editor</p>
+                            </div>
+                        )}
                     </div>
-                    <div className="w-px h-2 bg-border" />
-                    {/* Sub-divisions */}
-                    {timelineScale > 50 && (
-                      <div className="flex" style={{ width: `${timelineScale}px` }}>
-                        {Array.from({ length: 10 }).map((_, subIndex) => (
-                          <div key={subIndex} className="flex-1 flex justify-center">
-                            <div className="w-px h-1 bg-border/50" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
-                {/* Playhead */}
-                <div 
-                  className="absolute top-0 bottom-0 w-0.5 bg-red-500 shadow-lg z-20 pointer-events-none"
-                  style={{ left: `${(currentTime / 1000) * timelineScale}px` }}
-                >
-                  <div className="absolute -top-1 -left-2 w-4 h-4 bg-red-500 rounded-full shadow-lg" />
-                </div>
-              </div>
-            </div>
-          </div>
+                </ScrollArea>
+            </TabsContent>
 
-          {/* Timeline Content */}
-          <div className="flex-1 overflow-auto">
-            {selectedScene?.timelineTracks?.length > 0 ? (
-              <div className="relative">
-                {selectedScene.timelineTracks.map((track: any, trackIndex: number) => (
-                  <div key={track.trackId} className="border-b last:border-b-0 bg-background hover:bg-muted/30 transition-colors">
-                    {/* Track Header */}
-                    <div className="flex">
-                      <div className="w-48 p-3 border-r bg-muted/20 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${
-                            track.trackType === 'character' ? 'bg-blue-500' :
-                            track.trackType === 'audio' ? 'bg-purple-500' :
-                            track.trackType === 'visual' ? 'bg-pink-500' :
-                            track.trackType === 'camera' ? 'bg-cyan-500' :
-                            'bg-gray-500'
-                          }`} />
-                          <div>
-                            <h4 className="font-medium text-sm">{track.trackName}</h4>
-                            <p className="text-xs text-muted-foreground capitalize">
-                              {track.trackType || 'general'}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                            {track.isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                            <Settings className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </div>
-                      
-                      {/* Track Timeline */}
-                      <div className="flex-1 relative h-16 overflow-x-auto">
-                        <div className="absolute inset-0" style={{ width: `${(sceneDuration / 1000) * timelineScale + 100}px` }}>
-                          {/* Track Events */}
-                          {track.events?.map((event: ITimelineEvent) => (
-                            <TimelineEvent
-                              key={event.eventId}
-                              event={event}
-                              track={track}
-                              scale={timelineScale}
-                              onSelect={setSelectedEvent}
-                              isSelected={selectedEvent?.eventId === event.eventId}
-                              onUpdate={(eventId, updates) => {
-                                // Handle event updates
-                                console.log('Update event:', eventId, updates);
-                              }}
-                              onDelete={(eventId) => {
-                                // Handle event deletion
-                                console.log('Delete event:', eventId);
-                              }}
-                              onDrag={(eventId, newStartTime) => {
-                                // Handle event dragging
-                                console.log('Drag event:', eventId, newStartTime);
-                              }}
-                              onResize={(eventId, newDuration) => {
-                                // Handle event resizing
-                                console.log('Resize event:', eventId, newDuration);
-                              }}
-                            />
+            {/* Original Advanced Timeline Editor (kept as a feature) */}
+            <TabsContent value="advanced-timeline" className="flex-1 flex flex-col m-0">
+               <div className="flex-1 flex flex-col">
+                  {/* Timeline Header and Tools */}
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                     <div className="flex items-center gap-2">
+                         <Button variant="outline" size="sm" className="gap-2 text-xs"><Plus className="w-3 h-3" /> Add Track</Button>
+                         <Button variant="ghost" size="sm" className="gap-2 text-xs"><Filter className="w-3 h-3" /> Filter</Button>
+                     </div>
+                     <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setTimelineScale(s => Math.max(20, s - 10))}><ZoomOut className="w-4 h-4" /></Button>
+                        <span className="text-xs font-mono text-slate-500 w-16 text-center">{timelineScale}px/s</span>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setTimelineScale(s => Math.min(200, s + 10))}><ZoomIn className="w-4 h-4" /></Button>
+                     </div>
+                  </div>
+                  
+                  {/* Timeline Ruler */}
+                  <div className="h-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 relative overflow-x-auto flex-shrink-0">
+                     <div className="absolute inset-0" style={{ width: `${(sceneDuration / 1000) * timelineScale + 100}px` }}>
+                       {/* Ticks */}
+                       {Array.from({ length: Math.ceil(sceneDuration / 1000) + 1 }).map((_, index) => (
+                         <div key={index} className="absolute top-0 bottom-0 flex flex-col items-start justify-end" style={{ left: `${index * timelineScale}px`, width: `${timelineScale}px` }}>
+                           <span className="text-xs text-slate-500">{index}s</span>
+                           <div className="w-px h-2 bg-slate-300 dark:bg-slate-600" />
+                         </div>
+                       ))}
+                       {/* Playhead */}
+                       <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: `${(currentTime / 1000) * timelineScale}px` }}>
+                         <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+                       </div>
+                     </div>
+                  </div>
+                  
+                  {/* Timeline Content */}
+                  <ScrollArea className="flex-1">
+                      <div className="relative">
+                          {selectedScene?.timelineTracks?.map((track: any) => (
+                              <div key={track.trackId} className="flex border-b border-slate-200 dark:border-slate-700">
+                                  <div className="w-32 px-2 py-2 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex-shrink-0">
+                                      <p className="font-medium text-xs truncate">{track.trackName}</p>
+                                      <p className="text-xs text-slate-500 capitalize">{track.trackType}</p>
+                                  </div>
+                                  <div className="flex-1 relative h-12">
+                                      <div className="absolute inset-0" style={{ width: `${(sceneDuration / 1000) * timelineScale + 100}px` }}>
+                                          {track.events?.map((event: ITimelineEvent) => (
+                                              <TimelineEvent
+                                                  key={event.eventId}
+                                                  event={event}
+                                                  track={track}
+                                                  scale={timelineScale}
+                                                  onSelect={setSelectedEvent}
+                                                  isSelected={selectedEvent?.eventId === event.eventId}
+                                                  onUpdate={() => {}}
+                                                  onDelete={() => {}}
+                                                  onDrag={() => {}}
+                                                  onResize={() => {}}
+                                              />
+                                          ))}
+                                      </div>
+                                  </div>
+                              </div>
                           ))}
-                        </div>
                       </div>
+                  </ScrollArea>
+                  {/* Playback Controls */}
+                    <div className="px-4 py-2 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setCurrentTime(0)}><SkipBack className="w-4 h-4" /></Button>
+                                <Button variant="default" size="icon" className="w-10 h-10 rounded-full" onClick={() => setIsPlaying(!isPlaying)}>
+                                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                                </Button>
+                                <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setCurrentTime(sceneDuration)}><SkipForward className="w-4 h-4" /></Button>
+                            </div>
+                            <div className="flex-1 flex items-center gap-2">
+                                <span className="text-xs font-mono">{(currentTime / 1000).toFixed(2)}s</span>
+                                <Slider value={[currentTime]} onValueChange={([v]) => setCurrentTime(v)} max={sceneDuration} step={100} />
+                                <span className="text-xs font-mono">{(sceneDuration / 1000).toFixed(2)}s</span>
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-muted-foreground">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="p-4 bg-muted/20 rounded-full">
-                    <Clock className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-medium mb-2">No Timeline Available</p>
-                    <p className="text-sm max-w-md">
-                      Create timeline tracks to add visual effects, character animations, audio, and more to your scene.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Character Track
-                    </Button>
-                    <Button variant="outline" className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Audio Track
-                    </Button>
-                    <Button variant="outline" className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Effects Track
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+               </div>
+            </TabsContent>
+          </Tabs>
+        </main>
 
-          {/* Timeline Footer */}
-          <div className="border-t p-2 bg-muted/10">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <div className="flex items-center gap-4">
-                <span>Tracks: {selectedScene?.timelineTracks?.length || 0}</span>
-                <span>Events: {selectedScene?.timelineTracks?.reduce((sum: number, track: any) => sum + (track.events?.length || 0), 0) || 0}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Snap: 0.1s</span>
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
-                  Grid
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Right Panel: Gallery, Chapters, Properties */}
+        <aside className="w-80 flex flex-col bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700">
+            <Tabs defaultValue="chapter" className="flex-1 flex flex-col">
+                <TabsList className="grid grid-cols-3 m-2">
+                    <TabsTrigger value="gallery">คลังทางการ</TabsTrigger>
+                    <TabsTrigger value="chapter">Chapter</TabsTrigger>
+                    <TabsTrigger value="properties">Properties</TabsTrigger>
+                </TabsList>
+                
+                {/* Official Gallery */}
+                <TabsContent value="gallery" className="flex-1 flex flex-col p-2 m-0">
+                    <Button variant="outline" size="sm" className="mb-2">นำเข้า <Upload className="w-3 h-3 ml-2" /></Button>
+                    <ScrollArea className="flex-1">
+                        <div className="grid grid-cols-2 gap-2">
+                            {officialMedia.map((media: any, index: number) => (
+                                <div key={media.id || index} className="aspect-square bg-slate-200 dark:bg-slate-700 rounded-md overflow-hidden">
+                                    <img src={media.url} alt={media.name} className="w-full h-full object-cover"/>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                </TabsContent>
+                
+                {/* Chapter/Scene Tree */}
+                <TabsContent value="chapter" className="flex-1 flex flex-col p-2 m-0">
+                    <div className="flex items-center gap-2 p-1 mb-2 border rounded-md">
+                        <Input placeholder="ค้นหา..." className="h-8 border-none focus-visible:ring-0" />
+                        <Search className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <ScrollArea className="flex-1">
+                       <SceneTree scenes={scenes} onSelectScene={setSelectedScene} />
+                    </ScrollArea>
+                </TabsContent>
 
-        {/* Desktop Inspector Panel */}
-        <div className="hidden lg:block w-80 border-l bg-background">
-          <div className="p-4 border-b">
-            <h3 className="font-semibold">Event Inspector</h3>
-          </div>
-          <div className="p-4 text-center text-muted-foreground">
-            <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Select an event to edit properties</p>
-          </div>
-        </div>
+                {/* Properties Inspector (original feature) */}
+                <TabsContent value="properties" className="flex-1 overflow-y-auto p-4 m-0">
+                     {selectedEvent ? (
+                        <div className="w-full space-y-4 text-sm">
+                            <h3 className="font-semibold text-base">Event Properties</h3>
+                            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
+                                <div className="flex justify-between"><span className="text-slate-500">Type:</span> <span>{selectedEvent.eventType}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Start:</span> <span>{selectedEvent.startTimeMs}ms</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Duration:</span> <span>{selectedEvent.durationMs}ms</span></div>
+                            </div>
+                            <div className="space-y-3">
+                                <Label>Event Name</Label>
+                                <Input defaultValue={selectedEvent.eventType.toLowerCase()} />
+                                <Label>Description</Label>
+                                <Textarea placeholder="Add a description..." rows={3} />
+                            </div>
+                            <div className="flex gap-2">
+                                <Button variant="outline" size="sm" className="flex-1"><Copy className="w-3 h-3 mr-1" /> Copy</Button>
+                                <Button variant="outline" size="sm" className="flex-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"><Trash2 className="w-3 h-3 mr-1" /> Delete</Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center text-slate-500 pt-10">
+                            <Settings className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                            <p>No event selected</p>
+                            <p className="text-xs">Select an event in the Advanced Timeline Editor to see its properties.</p>
+                        </div>
+                    )}
+                </TabsContent>
+            </Tabs>
+        </aside>
       </div>
 
-      {/* Mobile Inspector Sheet */}
-      <Sheet open={isInspectorOpen} onOpenChange={setIsInspectorOpen}>
-        <SheetContent side="right" className="w-80">
-          <SheetHeader>
-            <SheetTitle>Event Inspector</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4 text-center text-muted-foreground">
-            <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Select an event to edit properties</p>
-          </div>
-        </SheetContent>
-      </Sheet>
+       {/* All original modals are kept */}
+      <CharacterManagementModal
+        isOpen={isCharacterModalOpen}
+        onClose={() => setIsCharacterModalOpen(false)}
+        characters={characterList}
+        onCharacterAdd={handleCharacterAdd}
+        onCharacterUpdate={handleCharacterUpdate}
+        onCharacterDelete={handleCharacterDelete}
+      />
+      <BackgroundManagementModal
+        isOpen={isBackgroundModalOpen}
+        onClose={() => setIsBackgroundModalOpen(false)}
+        backgrounds={backgroundList}
+        onBackgroundAdd={handleBackgroundAdd}
+        onBackgroundUpdate={handleBackgroundUpdate}
+        onBackgroundDelete={handleBackgroundDelete}
+      />
     </div>
   );
 };

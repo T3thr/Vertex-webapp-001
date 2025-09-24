@@ -35,7 +35,8 @@ import { IScene } from "./Scene"; // อ้างอิง IScene จาก Scen
 export enum StoryMapNodeType {
   START_NODE = "start_node",
   SCENE_NODE = "scene_node",
-  EPISODE_NODE = "episode_node", // 🎯 NEW: Node type สำหรับ Episode
+  // ❌ REMOVED: EPISODE_NODE - Episodes are database-only entities, not canvas nodes
+  // EPISODE_NODE = "episode_node", // DEPRECATED: Episodes should not be nodes on canvas
   CHOICE_NODE = "choice_node",
   BRANCH_NODE = "branch_node", // เดิมคือ conditional_logic_node แต่ branch_node อาจจะสื่อความหมายได้กว้างกว่า
   MERGE_NODE = "merge_node", // เดิมคือ merge_point_node
@@ -124,22 +125,19 @@ export interface ISceneNodeData {
   sceneId: Types.ObjectId;
 }
 
-/**
- * @interface IEpisodeNodeData
- * @description ข้อมูลเฉพาะสำหรับ `episode_node` - โหนดที่แทนตอนของนิยาย
- * @property {Types.ObjectId} episodeId - ID ของ Episode ที่จะแสดง (อ้างอิง Episode model)
- * @property {number} episodeOrder - ลำดับตอนในนิยาย
- * @property {string} episodeTitle - ชื่อตอน (cache เพื่อการแสดงผลเร็วขึ้น)
- * @property {string} episodeStatus - สถานะตอน (cache เพื่อการแสดงผลเร็วขึ้น)
- * @property {boolean} autoGenerateScenes - สร้าง Scene nodes อัตโนมัติหรือไม่
- */
-export interface IEpisodeNodeData {
-  episodeId: Types.ObjectId;
-  episodeOrder: number;
-  episodeTitle: string;
-  episodeStatus: string;
-  autoGenerateScenes?: boolean;
-}
+// ❌ REMOVED: IEpisodeNodeData - Episodes are database-only entities, not canvas nodes
+// Episodes are managed through Episode model and EpisodeManagementModal
+// /**
+//  * @interface IEpisodeNodeData
+//  * @description DEPRECATED - Episodes should not be nodes on canvas
+//  */
+// export interface IEpisodeNodeData {
+//   episodeId: Types.ObjectId;
+//   episodeOrder: number;
+//   episodeTitle: string;
+//   episodeStatus: string;
+//   autoGenerateScenes?: boolean;
+// }
 
 /**
  * @interface IChoiceNodeData
@@ -300,7 +298,8 @@ export interface IStoryMapNode {
   dimensions?: { width: number; height: number };
   nodeSpecificData?:
     | ISceneNodeData
-    | IEpisodeNodeData // 🎯 NEW: Episode node data support
+    // ❌ REMOVED: IEpisodeNodeData - Episodes are database-only entities
+    // | IEpisodeNodeData // DEPRECATED: Episode node data support
     | IChoiceNodeData
     | IBranchNodeData
     | IVariableModifierNodeData

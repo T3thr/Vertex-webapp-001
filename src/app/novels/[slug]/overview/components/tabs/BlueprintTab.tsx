@@ -48,6 +48,7 @@ import {
 } from '@xyflow/react';
 import { toast } from 'sonner';
 import NextImage from 'next/image';
+import { useSearchParams } from 'next/navigation';
 
 // Blueprint Node Components
 import { 
@@ -57,6 +58,9 @@ import {
   CommentNode, 
   EndingNode 
 } from './blueprint';
+
+// Episode Management Modal
+import EpisodeManagementModal from './EpisodeManagementModal';
 
 import '@xyflow/react/dist/style.css';
 
@@ -215,12 +219,14 @@ interface BlueprintTabProps {
     snapToGrid: boolean;
     nodeOrientation: 'horizontal' | 'vertical';
   };
-  // 🎯 Enhanced Episode Integration
+  // 🎯 Enhanced Episode Integration - SIMPLIFIED (NO URL MANAGEMENT)
   onEpisodeCreate?: (newEpisode: any, updatedEpisodes: any[]) => void;
   onEpisodeUpdate?: (updatedEpisode: any, updatedEpisodes: any[]) => void;
   onEpisodeDelete?: (deletedEpisodeId: string, updatedEpisodes: any[]) => void;
-  // URL State Management สำหรับ persistent episode selection
-  selectedEpisodeId?: string;
+  // 🎯 NEW: Unified Tab State Management
+  onSceneUpdate?: (sceneId: string, sceneData: any) => void;
+  // ❌ REMOVED: URL State Management - ไม่ใช้ URL-based episode selection อีกต่อไป
+  // selectedEpisodeId?: string;
   onEpisodeSelect?: (episodeId: string | null) => void;
 }
 
@@ -501,16 +507,17 @@ const CustomEdge = ({
     </>
   );
 };
-
 // Enhanced Custom Node with improved connection system and scene thumbnails
 const CustomNode = ({ 
   data, 
   selected, 
-  id 
+  id,
+  onNavigateToDirector 
 }: { 
   data: any; 
   selected: boolean; 
   id: string;
+  onNavigateToDirector?: (sceneId?: string) => void;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [localConnectionMode, setLocalConnectionMode] = useState<'none' | 'connecting'>('none');
@@ -526,7 +533,6 @@ const CustomNode = ({
     switch (type) {
       case StoryMapNodeType.START_NODE: return <Play className="w-5 h-5" />;
       case StoryMapNodeType.SCENE_NODE: return <Square className="w-5 h-5" />;
-      case StoryMapNodeType.EPISODE_NODE: return <BookOpen className="w-5 h-5" />;
       case StoryMapNodeType.CHOICE_NODE: return <GitBranch className="w-5 h-5" />;
       case StoryMapNodeType.BRANCH_NODE: return <GitBranch className="w-5 h-5" />;
       case StoryMapNodeType.MERGE_NODE: return <GitBranch className="w-5 h-5 rotate-180" />;
@@ -540,6 +546,8 @@ const CustomNode = ({
       case StoryMapNodeType.RANDOM_BRANCH_NODE: return <Shuffle className="w-5 h-5" />;
       case StoryMapNodeType.PARALLEL_EXECUTION_NODE: return <Split className="w-5 h-5" />;
       case StoryMapNodeType.SUB_STORYMAP_NODE: return <Map className="w-5 h-5" />;
+      // ❌ REMOVED: Episode node support - Episodes ไม่ควรเป็น nodes บน canvas
+      // case StoryMapNodeType.EPISODE_NODE: return <BookOpen className="w-5 h-5" />;
       default: return <Square className="w-5 h-5" />;
     }
   };
@@ -584,16 +592,6 @@ const CustomNode = ({
         handles: getHandlesForOrientation({ top: true, bottom: true, left: false, right: false }),
         sparkle: false,
         isSpecial: false
-      };
-      case StoryMapNodeType.EPISODE_NODE: return {
-        gradient: 'from-indigo-400 via-indigo-500 to-indigo-600',
-        shadow: 'shadow-indigo-500/30 shadow-lg',
-        glow: 'shadow-indigo-400/60 shadow-2xl',
-        ring: 'ring-indigo-300',
-        shape: 'rounded-2xl',
-        handles: getHandlesForOrientation({ top: true, bottom: true, left: false, right: false }),
-        sparkle: true,
-        isSpecial: true
       };
       case StoryMapNodeType.CHOICE_NODE: return {
         gradient: 'from-amber-400 via-amber-500 to-amber-600',
@@ -785,6 +783,27 @@ const CustomNode = ({
                 <Image className="w-3 h-3" />
                   <span>{data.sceneData.images?.length || 0}</span>
               </div>
+              </div>
+              
+              {/* 🎯 NEW: Scene Edit Button - Navigate to DirectorTab */}
+              <div className="pt-2 border-t border-white/10">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateToDirector && data.sceneData?._id) {
+                      onNavigateToDirector(data.sceneData._id);
+                    }
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 rounded-lg text-xs font-medium transition-all duration-200 group"
+                >
+                  <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  <span>แต่งฉาก</span>
+                  <svg className="w-3 h-3 ml-auto opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
             </div>
           )}
@@ -1286,7 +1305,6 @@ const useModalManager = () => {
     closeModal
   };
 };
-
 const NodePalette = ({ 
   onAddNode, 
   onDragStart,
@@ -1298,50 +1316,23 @@ const NodePalette = ({
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }) => {
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['story', 'interaction']);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['basic']);
 
+  // 🎯 SIMPLIFIED: เหลือเฉพาะโหนดพื้นฐานที่เว็บรองรับในปัจจุบัน
   const nodeCategories = {
-    story: {
-      name: '📚 เนื้อเรื่อง',
+    basic: {
+      name: '📖 องค์ประกอบเรื่องราว',
       icon: BookOpen,
       color: 'from-blue-500 to-blue-600',
       nodes: [
-        { type: StoryMapNodeType.START_NODE, name: 'จุดเริ่มต้น', desc: 'เริ่มต้นเรื่อง', icon: Target },
-        { type: StoryMapNodeType.EPISODE_NODE, name: 'ตอน', desc: 'ตอนในนิยาย', icon: BookOpen },
-        { type: StoryMapNodeType.SCENE_NODE, name: 'ฉาก', desc: 'ฉากในเรื่อง', icon: Square },
-        { type: StoryMapNodeType.ENDING_NODE, name: 'จบเรื่อง', desc: 'จุดจบของเรื่อง', icon: Flag }
-      ]
-    },
-    interaction: {
-      name: '🎮 ปฏิสัมพันธ์',
-      icon: GitBranch,
-      color: 'from-green-500 to-green-600',
-      nodes: [
-        { type: StoryMapNodeType.CHOICE_NODE, name: 'ตัวเลือก', desc: 'ให้ผู้เล่นเลือก', icon: GitBranch },
-        { type: StoryMapNodeType.BRANCH_NODE, name: 'แยกเส้นทาง', desc: 'แยกตามเงื่อนไข', icon: Split },
-        { type: StoryMapNodeType.MERGE_NODE, name: 'รวมเส้นทาง', desc: 'รวมเส้นทางเข้าด้วยกัน', icon: ArrowRight }
-      ]
-    },
-    system: {
-      name: '⚙️ ระบบ',
-      icon: Settings,
-      color: 'from-purple-500 to-purple-600',
-      nodes: [
-        { type: StoryMapNodeType.VARIABLE_MODIFIER_NODE, name: 'ตัวแปร', desc: 'เปลี่ยนค่าตัวแปร', icon: Settings },
-        { type: StoryMapNodeType.EVENT_TRIGGER_NODE, name: 'เหตุการณ์', desc: 'เรียกเหตุการณ์', icon: Zap },
-        { type: StoryMapNodeType.DELAY_NODE, name: 'หน่วงเวลา', desc: 'รอเวลา', icon: Clock }
-      ]
-    },
-    tools: {
-      name: '🛠️ เครื่องมือ',
-      icon: Layers,
-      color: 'from-amber-500 to-amber-600',
-      nodes: [
-        { type: StoryMapNodeType.COMMENT_NODE, name: 'โน้ต', desc: 'บันทึกความคิด', icon: MessageCircle },
-        { type: StoryMapNodeType.GROUP_NODE, name: 'กลุ่ม', desc: 'จัดกลุ่มโหนด', icon: Layers },
-        { type: StoryMapNodeType.RANDOM_BRANCH_NODE, name: 'สุ่ม', desc: 'เลือกแบบสุ่ม', icon: Shuffle }
+        { type: StoryMapNodeType.START_NODE, name: '🎯 จุดเริ่มต้น', desc: 'เริ่มต้นเรื่อง (สีเขียว)', icon: Target },
+        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 ฉาก', desc: 'ฉากในเรื่อง', icon: Square },
+        { type: StoryMapNodeType.CHOICE_NODE, name: '🎮 ตัวเลือก', desc: 'ให้ผู้เล่นเลือก', icon: GitBranch },
+        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 จบเรื่อง', desc: 'จุดจบของเรื่อง', icon: Flag }
       ]
     }
+    // 🔒 HIDDEN: ซ่อนโหนดขั้นสูงไว้ก่อน จนกว่าจะพัฒนาเสร็จ
+    // interaction, system, tools categories จะถูกเพิ่มกลับมาในอนาคต
   };
 
   const toggleCategory = (category: string) => {
@@ -2017,7 +2008,6 @@ const ValidationPanel = ({
     </ScrollArea>
   );
 };
-
 // Main Blueprint Tab Component
 const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({ 
   novel, 
@@ -2034,12 +2024,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   eventManager, // Professional Event Management Integration
   autoSaveConfig, // ✅ PROFESSIONAL SOLUTION 5: รับ autoSaveConfig prop
   blueprintSettings,
-  // 🎯 Enhanced Episode Integration
+  // 🎯 Enhanced Episode Integration - SIMPLIFIED
   onEpisodeCreate,
   onEpisodeUpdate,
-  onEpisodeDelete,
-  selectedEpisodeId,
-  onEpisodeSelect
+  onEpisodeDelete
 }, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -2123,28 +2111,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // 🎯 ENHANCED EPISODE MANAGEMENT
   // ===============================
   
-  // Episode state management
+  // 🎯 PROFESSIONAL: Realtime Episode Management - No URL dependency
   const [episodeList, setEpisodeList] = useState<any[]>(episodes || []);
-  const [selectedEpisodeFromBlueprint, setSelectedEpisodeFromBlueprint] = useState<any | null>(
-    selectedEpisodeId ? episodeList.find(ep => ep._id === selectedEpisodeId) || null : null
-  );
+  const [currentEpisodeId, setCurrentEpisodeId] = useState<string | null>(null);
+  const [selectedEpisodeFromBlueprint, setSelectedEpisodeFromBlueprint] = useState<any | null>(null);
   
   // 🎯 StoryMap loading state
   const [isLoadingStoryMap, setIsLoadingStoryMap] = useState(false);
+  
+  // 🎯 Episode Management Modal State
+  const [showEpisodeManagementModal, setShowEpisodeManagementModal] = useState(false);
   const [currentEpisodeStoryMap, setCurrentEpisodeStoryMap] = useState<any>(null);
   
   // ReactFlow instance (ย้ายมาจากด้านล่าง)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-  const [isCreatingEpisodeInBlueprint, setIsCreatingEpisodeInBlueprint] = useState(false);
-  const [episodeFormData, setEpisodeFormData] = useState({
-    title: '',
-    episodeOrder: episodeList.length + 1,
-    volumeNumber: undefined,
-    status: 'draft',
-    accessType: 'free',
-    priceCoins: 0,
-    teaserText: ''
-  });
 
   // 🆕 PHASE 2: Modal Management Integration
   const { modalState, openModal, closeModal } = useModalManager();
@@ -2234,86 +2214,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [novel.slug]);
 
-  // 🎯 Episode Event Handlers
-  const handleCreateEpisodeInBlueprint = useCallback(async (nodePosition?: { x: number; y: number }) => {
-    if (!episodeFormData.title.trim()) {
-      toast.error('กรุณาระบุชื่อตอน');
-      return;
-    }
-
-    setIsCreatingEpisodeInBlueprint(true);
-    try {
-      // สร้าง nodeId สำหรับ StoryMap
-      const nodeId = `episode_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // เตรียม StoryMap data
-      const storyMapData = {
-        nodeId,
-        position: nodePosition || { 
-          x: 100 + (episodeList.length * 200), 
-          y: 100 + (episodeList.length * 150) 
-        },
-        editorVisuals: {
-          color: '#3B82F6', // Blue color for episode nodes
-          borderRadius: 8
-        }
-      };
-
-      // สร้าง Episode ใหม่
-      const newEpisode = await createEpisodeAPI(episodeFormData, storyMapData);
-
-      // อัปเดต local state
-      const updatedEpisodes = [...episodeList, newEpisode];
-      setEpisodeList(updatedEpisodes);
-
-      // เลือก Episode ใหม่
-      setSelectedEpisodeFromBlueprint(newEpisode);
-      if (onEpisodeSelect) {
-        onEpisodeSelect(newEpisode._id);
-      }
-
-      // สร้าง node ใน StoryMap
-      const newNode: Node = {
-        id: nodeId,
-        type: 'custom',
-        position: storyMapData.position,
-        data: {
-          nodeType: 'episode_node',
-          title: newEpisode.title,
-          episodeId: newEpisode._id,
-          episodeOrder: newEpisode.episodeOrder,
-          episodeStatus: newEpisode.status,
-          ...storyMapData.editorVisuals
-        }
-      };
-
-      // เพิ่ม node เข้า canvas
-      setNodes(prev => [...prev, newNode]);
-
-      // Reset form
-      setEpisodeFormData({
-        title: '',
-        episodeOrder: updatedEpisodes.length + 1,
-        volumeNumber: undefined,
-        status: 'draft',
-        accessType: 'free',
-        priceCoins: 0,
-        teaserText: ''
-      });
-
-      // Callback to parent
-      if (onEpisodeCreate) {
-        onEpisodeCreate(newEpisode, updatedEpisodes);
-      }
-
-      toast.success(`สร้างตอน "${newEpisode.title}" เรียบร้อยแล้ว`);
-
-    } catch (error) {
-      console.error('[handleCreateEpisode] Error:', error);
-    } finally {
-      setIsCreatingEpisode(false);
-    }
-  }, [episodeFormData, episodeList, createEpisodeAPI, onEpisodeCreate, onEpisodeSelect, setNodes]);
+  // 🎯 REMOVED OLD EPISODE HANDLERS - Episodes are now managed via modal only
+  // Episodes no longer create nodes on canvas - they maintain separate StoryMaps
 
   const handleUpdateEpisode = useCallback(async (episodeId: string, updateData: any) => {
     try {
@@ -2357,27 +2259,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [episodeList, selectedEpisodeFromBlueprint, updateEpisodeAPI, onEpisodeUpdate, setNodes]);
 
-  // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode
+  // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode - SMOOTH TRANSITION WITHOUT LOADING MESSAGE
   const loadStoryMapForEpisode = useCallback(async (episodeId: string | null) => {
     if (!episodeId || !novel?.slug) {
-      // ถ้าไม่มี episode ให้ล้าง canvas
-      setNodes([]);
-      setEdges([]);
-      setCurrentEpisodeStoryMap(null);
-      return;
-    }
-
-    setIsLoadingStoryMap(true);
-    try {
-      // โหลด StoryMap สำหรับ Episode นี้
-      const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}/storymap`);
+      // ถ้าไม่มี episode ให้โหลด main story map
+      console.log('🎯 Loading main story map (no episode selected)');
       
-      if (response.ok) {
-        const episodeStoryMap = await response.json();
-        setCurrentEpisodeStoryMap(episodeStoryMap);
-        
-        // แปลง StoryMap nodes/edges เป็น ReactFlow format
-        const reactFlowNodes = (episodeStoryMap.nodes || []).map((node: any) => ({
+      // 🔥 PROFESSIONAL: Load main story map instead of clearing canvas
+      if (storyMap && storyMap.nodes && storyMap.edges) {
+        const reactFlowNodes = (storyMap.nodes || []).map((node: any) => ({
           id: node.nodeId,
           type: getReactFlowNodeType(node.nodeType),
           position: node.position || { x: 0, y: 0 },
@@ -2390,7 +2280,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           }
         }));
 
-        const reactFlowEdges = (episodeStoryMap.edges || []).map((edge: any) => ({
+        const reactFlowEdges = (storyMap.edges || []).map((edge: any) => ({
           id: edge.edgeId,
           source: edge.sourceNodeId,
           target: edge.targetNodeId,
@@ -2409,14 +2299,93 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
         setNodes(reactFlowNodes);
         setEdges(reactFlowEdges);
+        setCurrentEpisodeStoryMap(null);
+        
+        console.log(`✅ Loaded main story map: ${reactFlowNodes.length} nodes, ${reactFlowEdges.length} edges`);
+      } else {
+        // Only clear if no main story map exists
+        setNodes([]);
+        setEdges([]);
+        setCurrentEpisodeStoryMap(null);
+        console.log('ℹ️ No main story map found - starting with empty canvas');
+      }
+      
+      // 🎯 อัปเดต EventManager context เป็น novel-level
+      if (professionalEventManager && professionalEventManager.updateConfig) {
+        professionalEventManager.updateConfig({
+          selectedEpisodeId: null
+        });
+      }
+      return;
+    }
+
+    // 🎯 PROFESSIONAL: NO LOADING INDICATOR - SMOOTH TRANSITION
+    // setIsLoadingStoryMap(true); // REMOVED - ไม่แสดงข้อความ loading
+    try {
+      // 🎯 อัปเดต EventManager context สำหรับ episode-specific operations
+      if (professionalEventManager && professionalEventManager.updateConfig) {
+        professionalEventManager.updateConfig({
+          selectedEpisodeId: episodeId
+        });
+      }
+      
+      // 🎯 โหลด StoryMap สำหรับ Episode นี้จาก episode-specific endpoint
+      console.log(`🔍 Fetching StoryMap for Episode ID: ${episodeId}`);
+      const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}/storymap`);
+      
+      if (response.ok) {
+        const episodeStoryMap = await response.json();
+        setCurrentEpisodeStoryMap(episodeStoryMap);
+        
+        // แปลง StoryMap nodes/edges เป็น ReactFlow format
+        const reactFlowNodes = (episodeStoryMap.nodes || []).map((node: any) => ({
+          id: node.nodeId,
+          type: getReactFlowNodeType(node.nodeType),
+          position: node.position || { x: 0, y: 0 },
+          data: {
+            ...node,
+            nodeType: node.nodeType,
+            title: node.title,
+            nodeSpecificData: node.nodeSpecificData,
+            editorVisuals: node.editorVisuals,
+            episodeId: episodeId // 🎯 Tag node with episodeId for proper persistence
+          }
+        }));
+
+        const reactFlowEdges = (episodeStoryMap.edges || []).map((edge: any) => ({
+          id: edge.edgeId,
+          source: edge.sourceNodeId,
+          target: edge.targetNodeId,
+          type: 'custom',
+          data: {
+            ...edge,
+            label: edge.label,
+            condition: edge.condition,
+            editorVisuals: edge.editorVisuals,
+            episodeId: episodeId // 🎯 Tag edge with episodeId for proper persistence
+          },
+          style: {
+            stroke: edge.editorVisuals?.color || '#6B7280',
+            strokeWidth: edge.editorVisuals?.strokeWidth || 2
+          }
+        }));
+
+        setNodes(reactFlowNodes);
+        setEdges(reactFlowEdges);
         
         console.log(`✅ โหลด StoryMap สำหรับ Episode ${episodeId} สำเร็จ:`, {
           nodes: reactFlowNodes.length,
-          edges: reactFlowEdges.length
+          edges: reactFlowEdges.length,
+          episodeTitle: episodeStoryMap.episode?.title
         });
-      } else {
-        // ถ้าไม่พบ StoryMap ให้สร้างเปล่า
+      } else if (response.status === 404) {
+        // ถ้าไม่พบ StoryMap ให้สร้างเปล่า (ตอนใหม่ที่ยังไม่มี storymap)
         console.log(`ℹ️ ไม่พบ StoryMap สำหรับ Episode ${episodeId} - แสดง canvas เปล่า`);
+        setNodes([]);
+        setEdges([]);
+        setCurrentEpisodeStoryMap({ nodes: [], edges: [], storyVariables: [], version: 1 });
+      } else {
+        console.error(`❌ Failed to load StoryMap: ${response.status} ${response.statusText}`);
         setNodes([]);
         setEdges([]);
         setCurrentEpisodeStoryMap(null);
@@ -2427,37 +2396,36 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setNodes([]);
       setEdges([]);
       setCurrentEpisodeStoryMap(null);
-    } finally {
-      setIsLoadingStoryMap(false);
     }
+    // 🎯 REMOVED setIsLoadingStoryMap(false) - NO LOADING STATE
   }, [novel?.slug, setNodes, setEdges]);
 
-  const handleEpisodeSelect = useCallback((episodeId: string | null) => {
+  // 🎯 PROFESSIONAL: Realtime Episode Selection - No URL dependency
+  const handleEpisodeSelect = useCallback(async (episodeId: string | null) => {
     const episode = episodeId ? episodeList.find(ep => ep._id === episodeId) : null;
+    
+    // 🎯 Update realtime state
+    setCurrentEpisodeId(episodeId);
     setSelectedEpisodeFromBlueprint(episode);
     
-    // 🎯 โหลด StoryMap สำหรับ Episode ที่เลือก
-    loadStoryMapForEpisode(episodeId);
+    // 🎯 Load StoryMap for selected Episode
+    await loadStoryMapForEpisode(episodeId);
     
-    if (onEpisodeSelect) {
-      onEpisodeSelect(episodeId);
+    // 🎯 Update EventManager context for episode-specific operations
+    if (professionalEventManager && professionalEventManager.updateConfig) {
+      professionalEventManager.updateConfig({
+        selectedEpisodeId: episodeId
+      });
     }
 
-    // Focus บน node ที่เกี่ยวข้อง (หลังจากโหลด StoryMap แล้ว)
-    if (episode && episode.storyMapNodeId) {
-      // รอให้โหลด StoryMap เสร็จก่อน
-      setTimeout(() => {
-        const node = nodes.find(n => n.id === episode.storyMapNodeId);
-        if (node && reactFlowInstance) {
-          reactFlowInstance.fitView({
-            nodes: [node],
-            duration: 800,
-            padding: 0.3
-          });
-        }
-      }, 500);
+    // 🎯 Callback to parent (optional - for external state sync)
+    if (onEpisodeCreate && episode) {
+      // Note: Using onEpisodeCreate as a generic episode change callback
+      onEpisodeCreate(episode, episodeList);
     }
-  }, [episodeList, loadStoryMapForEpisode, onEpisodeSelect, nodes, reactFlowInstance]);
+
+    console.log(`🎯 Episode selected (realtime): ${episode?.title || 'Main Story'}`);
+  }, [episodeList, loadStoryMapForEpisode, professionalEventManager, onEpisodeCreate]);
 
   // Sync episodes with nodes on canvas
   useEffect(() => {
@@ -2466,18 +2434,18 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [episodes, episodeList]);
 
-  // 🎯 โหลด StoryMap เมื่อเริ่มต้นหรือเมื่อ selectedEpisodeId เปลี่ยน
+  // 🎯 PROFESSIONAL: Don't auto-select any episode - require manual selection
   useEffect(() => {
-    if (selectedEpisodeId && selectedEpisodeId !== selectedEpisodeFromBlueprint?._id) {
-      // โหลด StoryMap สำหรับ Episode ที่เลือก
-      loadStoryMapForEpisode(selectedEpisodeId);
-    } else if (!selectedEpisodeId && episodeList.length > 0) {
-      // ถ้าไม่มี Episode ที่เลือก ให้เลือก Episode แรก
-      const firstEpisode = episodeList[0];
-      setSelectedEpisodeFromBlueprint(firstEpisode);
-      loadStoryMapForEpisode(firstEpisode._id);
+    // Clear selection when no episodes exist
+    if (episodeList.length === 0 && currentEpisodeId) {
+      setCurrentEpisodeId(null);
+      setSelectedEpisodeFromBlueprint(null);
+      loadStoryMapForEpisode(null);
+      console.log(`🎯 Cleared episode selection - no episodes available`);
     }
-  }, [selectedEpisodeId, selectedEpisodeFromBlueprint, episodeList, loadStoryMapForEpisode]);
+    // ❌ REMOVED: Auto-selection of first episode
+    // User must manually select episode to edit
+  }, [episodeList, currentEpisodeId, loadStoryMapForEpisode]);
 
   // ฟังก์ชันตรวจสอบว่าควรสร้าง command หรือไม่
   const shouldCreateCommand = useCallback((change: NodeChange | EdgeChange): boolean => {
@@ -2701,7 +2669,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
       
       // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
-      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+      // 🔥 CRITICAL FIX: Clean story variables before sync to prevent null variableId
+      const cleanedVariables = cleanStoryVariables(storyMap?.storyVariables || []);
+      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, cleanedVariables);
     }
 
     // Clear drag positions หลัง position change เสร็จ
@@ -2729,7 +2699,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       });
       
       // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
-      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, storyMap?.storyVariables || []);
+      // 🔥 CRITICAL FIX: Clean story variables before sync to prevent null variableId
+      const cleanedVariables = cleanStoryVariables(storyMap?.storyVariables || []);
+      professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, cleanedVariables);
     }
   }, [onEdgesChange, shouldCreateCommand, createCommandFromChange, professionalEventManager, nodes, edges, storyMap]);
   
@@ -2772,37 +2744,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const result = await response.json();
       const newEpisode = result.data;
 
-      // 🎯 อัปเดต local state
+      // 🎯 PROFESSIONAL: Update realtime state (no URL management)
       const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
       setEpisodeList(updatedEpisodes);
+      
+      // 🎯 Auto-select new episode (realtime)
+      setCurrentEpisodeId(newEpisode._id);
       setSelectedEpisodeFromBlueprint(newEpisode);
 
-      // 🎯 สร้าง Node ใน Canvas ทันที
-      const newNode = {
-        id: `episode_${newEpisode._id}`,
-        type: 'episode',
-        position: episodeData.canvasPosition || { x: 100, y: 100 },
-        data: {
-          ...newEpisode,
-          episodeId: newEpisode._id,
-          nodeType: 'episode_node',
-          title: newEpisode.title,
-          status: newEpisode.status,
-          visualStyle: episodeData.visualStyle || {}
-        }
-      };
+      // 🎯 Load empty StoryMap for new Episode (database-only)
+      await loadStoryMapForEpisode(newEpisode._id);
 
-      setNodes(prevNodes => [...prevNodes, newNode]);
-
-      // 🎯 Callback to parent
+      // 🎯 Callback to parent for external state sync
       if (onEpisodeCreate) {
         onEpisodeCreate(newEpisode, updatedEpisodes);
       }
-
-      // 🎯 Select new episode in URL
-      if (onEpisodeSelect) {
-        onEpisodeSelect(newEpisode._id);
-      }
+      
+      // 🎯 Hide tutorial when first episode is created
+      setShowTutorial(false);
 
       toast.success(`สร้างตอน "${newEpisode.title}" เรียบร้อยแล้ว`);
 
@@ -2811,7 +2770,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       toast.error(`การสร้างตอนล้มเหลว: ${error.message}`);
       throw error;
     }
-  }, [novel.slug, episodeList, setNodes, onEpisodeCreate, onEpisodeSelect]);
+  }, [novel.slug, episodeList, setNodes, onEpisodeCreate]);
 
   // 🎯 Legacy handler for backward compatibility
   const handleCreateEpisode = useCallback(async () => {
@@ -2820,10 +2779,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     // ตั้งค่าฟอร์มเริ่มต้น
     const nextOrder = Math.max(...episodeList.map(ep => ep.episodeOrder), 0) + 1;
-    setEpisodeCreationForm(prev => ({
-      ...prev,
-      episodeOrder: nextOrder
-    }));
+    setEpisodeCreationForm({
+      title: '',
+      episodeOrder: nextOrder,
+      teaserText: '',
+      accessType: 'free',
+      priceCoins: 0,
+      status: 'draft'
+    });
   }, [episodeList, setIsEpisodeCreatorOpen, setEpisodeCreationForm]);
 
   // 🎯 Canvas-based Episode Creation (right-click context menu)
@@ -2833,12 +2796,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     // ตั้งค่าฟอร์มเริ่มต้น
     const nextOrder = Math.max(...episodeList.map(ep => ep.episodeOrder), 0) + 1;
-    setEpisodeCreationForm(prev => ({
-      ...prev,
-      episodeOrder: nextOrder
-    }));
+    setEpisodeCreationForm({
+      title: '',
+      episodeOrder: nextOrder,
+      teaserText: '',
+      accessType: 'free',
+      priceCoins: 0,
+      status: 'draft'
+    });
   }, [episodeList, setIsEpisodeCreatorOpen, setEpisodeCreationForm]);
-
   // 🎯 Episode Deletion Handler (Modal-based)
   const handleDeleteEpisodeModal = useCallback(async (episodeIds: string[]) => {
     try {
@@ -2859,22 +2825,33 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
       const result = await response.json();
 
-      // 🎯 อัปเดต local state
+      // 🎯 Real-time อัปเดต local state
       const updatedEpisodes = episodeList.filter(ep => !episodeIds.includes(ep._id));
       setEpisodeList(updatedEpisodes);
 
-      // 🎯 ลบ nodes จาก canvas
-      setNodes(prevNodes => 
-        prevNodes.filter(node => 
-          !episodeIds.some(epId => node.data?.episodeId === epId)
-        )
-      );
-
-      // 🎯 Clear selection if deleted episode was selected
+      // 🎯 PROFESSIONAL: Clear selection if deleted episode was selected (realtime)
       if (selectedEpisodeFromBlueprint && episodeIds.includes(selectedEpisodeFromBlueprint._id)) {
+        setCurrentEpisodeId(null);
         setSelectedEpisodeFromBlueprint(null);
-        if (onEpisodeSelect) {
-          onEpisodeSelect(null);
+        setNodes([]);
+        setEdges([]);
+        setCurrentEpisodeStoryMap(null);
+        
+        // 🎯 Update EventManager context to novel-level
+        if (professionalEventManager && professionalEventManager.updateConfig) {
+          professionalEventManager.updateConfig({
+            selectedEpisodeId: null
+          });
+        }
+        
+        // 🎯 Auto-select first remaining episode if available
+        const remainingEpisodes = updatedEpisodes;
+        if (remainingEpisodes.length > 0) {
+          const firstRemaining = remainingEpisodes[0];
+          setCurrentEpisodeId(firstRemaining._id);
+          setSelectedEpisodeFromBlueprint(firstRemaining);
+          await loadStoryMapForEpisode(firstRemaining._id);
+          console.log(`🎯 Auto-selected first remaining episode: ${firstRemaining.title}`);
         }
       }
 
@@ -2893,7 +2870,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       toast.error(`การลบตอนล้มเหลว: ${error.message}`);
       throw error;
     }
-  }, [novel.slug, episodeList, selectedEpisodeFromBlueprint, setNodes, onEpisodeDelete, onEpisodeSelect]);
+  }, [novel.slug, episodeList, selectedEpisodeFromBlueprint, setNodes, onEpisodeDelete]);
 
   // 🎯 Legacy delete handler
   const handleDeleteEpisode = useCallback((episodeId: string) => {
@@ -2908,6 +2885,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     openModal('episode_delete', null, { selectedEpisodes: episodes });
   }, [openModal]);
 
+  // 🎯 Dynamic Episode Selection Handler (ไม่ใช้ URL management) - ใช้ existing function ที่บรรทัด 2455
+
   // 🎯 Professional Episode Creator Handler
   const legacyHandleCreateEpisode = useCallback(async () => {
     if (!novel?.slug || !episodeCreationForm.title.trim()) {
@@ -2918,22 +2897,22 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     setIsCreatingEpisode(true);
     
     try {
-      // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode พร้อม StoryMap เปล่า
-      const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
+      // 🔥 ใช้ Episodes API สำหรับการสร้าง Episode โดยตรงเข้า Database
+      const response = await fetch(`/api/novels/${novel.slug}/episodes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'create',
-          episodes: [{
-            title: episodeCreationForm.title.trim(),
-            episodeOrder: episodeCreationForm.episodeOrder,
-            teaserText: episodeCreationForm.teaserText?.trim() || '',
-            accessType: episodeCreationForm.accessType,
-            priceCoins: episodeCreationForm.accessType === 'paid_unlock' ? episodeCreationForm.priceCoins : 0,
-            status: episodeCreationForm.status,
-            // 🎯 สร้าง StoryMap เปล่าโดยไม่มี nodes/edges จากตอนเก่า
-            createEmptyStoryMap: true
-          }]
+          title: episodeCreationForm.title.trim(),
+          episodeOrder: episodeCreationForm.episodeOrder,
+          teaserText: episodeCreationForm.teaserText?.trim() || '',
+          accessType: episodeCreationForm.accessType,
+          priceCoins: episodeCreationForm.accessType === 'paid_unlock' ? episodeCreationForm.priceCoins : 0,
+          status: episodeCreationForm.status,
+          // 🎯 สร้าง StoryMap เปล่าสำหรับ Episode ใหม่
+          storyMapData: {
+            nodeId: `episode_${Date.now()}`,
+            position: { x: 100 + (episodeList.length * 200), y: 100 + (episodeList.length * 150) }
+          }
         })
       });
 
@@ -2943,48 +2922,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
 
       const result = await response.json();
-      const newEpisode = result.data;
+      const newEpisode = result.episode;
 
-      // 🎯 อัปเดต local state
+      // 🎯 PROFESSIONAL: Update realtime state (database-only)
       const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
       setEpisodeList(updatedEpisodes);
+      
+      // 🎯 Auto-select new episode (realtime)
+      setCurrentEpisodeId(newEpisode._id);
       setSelectedEpisodeFromBlueprint(newEpisode);
 
-      // 🎯 สร้าง Node ใน Canvas ทันที
-      const newNode = {
-        id: `episode_${newEpisode._id}`,
-        type: 'episode',
-        position: { x: 100 + (episodeList.length * 200), y: 100 + (episodeList.length * 150) },
-        data: {
-          ...newEpisode,
-          episodeId: newEpisode._id,
-          nodeType: 'episode_node',
-          title: newEpisode.title,
-          status: newEpisode.status,
-          visualStyle: {
-            color: '#3b82f6',
-            borderStyle: 'solid',
-            borderRadius: 8
-          }
-        }
-      };
+      // 🎯 Load empty StoryMap for new Episode (database-only)
+      await loadStoryMapForEpisode(newEpisode._id);
 
-      setNodes(prevNodes => [...prevNodes, newNode]);
-
-      // 🎯 Callback to parent
+      // 🎯 Callback to parent for external state sync
       if (onEpisodeCreate) {
         onEpisodeCreate(newEpisode, updatedEpisodes);
-      }
-
-      // 🎯 Select new episode in URL
-      if (onEpisodeSelect) {
-        onEpisodeSelect(newEpisode._id);
       }
       
       // Reset form
       setEpisodeCreationForm({
         title: '',
-        episodeOrder: episodeList.length + 1,
+        episodeOrder: updatedEpisodes.length + 1,
         teaserText: '',
         accessType: 'free',
         priceCoins: 0,
@@ -3010,6 +2969,41 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   
   // Node Palette collapse state
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
+  
+  // Tutorial state management
+  const searchParams = useSearchParams();
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  
+  // 🎯 PROFESSIONAL: Show tutorial based on episode selection state
+  useEffect(() => {
+    // Show "Select Episode" tutorial when novel has episodes but none selected
+    if (episodes.length > 0 && !currentEpisodeId && !showTutorial) {
+      setShowTutorial(true);
+      setTutorialStep(1); // Different tutorial step for "select episode"
+    } 
+    // Show "Create Episode" tutorial when no episodes exist
+    else if (episodes.length === 0 && !showTutorial) {
+      setShowTutorial(true);
+      setTutorialStep(0); // Tutorial step for "create episode"
+    } 
+    // Hide tutorial when episode is selected
+    else if (currentEpisodeId && showTutorial) {
+      setShowTutorial(false);
+    }
+  }, [episodes.length, currentEpisodeId, showTutorial]);
+
+  // 🎯 Listen for episode creator messages from modal
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'OPEN_EPISODE_CREATOR') {
+        setIsEpisodeCreatorOpen(true);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
   
   // Auto-save settings จะถูกจัดการโดย NovelEditor ผ่าน props
   const [autoSaveSettings, setAutoSaveSettings] = useState<AutoSaveSettings>({
@@ -3164,7 +3158,46 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // ===============================
 
   // Generate idempotency key for commands
+  // 🔥 PROFESSIONAL: Enhanced ID generation with collision prevention
   const generateCommandId = () => `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  // 🔥 PROFESSIONAL: Enhanced unique node ID generation with collision detection
+  const generateUniqueNodeId = (nodeType: string | StoryMapNodeType) => {
+    const timestamp = Date.now();
+    const sessionId = Math.random().toString(36).substr(2, 12);
+    const randomSuffix = Math.random().toString(36).substr(2, 9);
+    
+    // Create type-specific prefixes for better identification
+    let typePrefix: string;
+    if (nodeType === StoryMapNodeType.START_NODE || nodeType === 'start_node') {
+      typePrefix = 'start';
+    } else if (nodeType === StoryMapNodeType.SCENE_NODE || nodeType === 'scene_node') {
+      typePrefix = 'scene';
+    } else {
+      typePrefix = nodeType.toString().toLowerCase().replace('_node', '').replace('_', '-');
+    }
+    
+    const baseId = `${typePrefix}_${timestamp}_${sessionId}`;
+    
+    // Ensure absolute uniqueness by checking existing nodes
+    let counter = 0;
+    let finalId = baseId;
+    const existingIds = new Set(nodes.map(node => node.id));
+    
+    while (existingIds.has(finalId)) {
+      counter++;
+      finalId = `${baseId}_${counter}_${randomSuffix}`;
+      
+      // Safety break to prevent infinite loop
+      if (counter > 1000) {
+        finalId = `emergency_${typePrefix}_${Date.now()}_${Math.random().toString(36).substr(2, 12)}`;
+        break;
+      }
+    }
+    
+    console.log(`[BlueprintTab] Generated unique node ID: ${finalId} for type: ${nodeType}`);
+    return finalId;
+  };
 
   // Auto-save debounced function (300-800ms สำหรับการลาก/ย้าย)
   const debouncedAutoSave = useMemo(
@@ -3211,8 +3244,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const command = currentSaveState.saveQueue[0];
       
       try {
-        // PATCH request พร้อม version control
-        const response = await fetch(`/api/novels/${novel._id}/storymap`, {
+        // PATCH request พร้อม version control - รองรับ episode-specific saving
+        const apiUrl = selectedEpisodeFromBlueprint 
+          ? `/api/novels/${novel.slug}/episodes/${selectedEpisodeFromBlueprint._id}/storymap/save`
+          : `/api/novels/${novel._id}/storymap`;
+        const response = await fetch(apiUrl, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -3312,8 +3348,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     try {
       console.log('Handling save conflict, attempt:', failedCommand.retryCount + 1);
       
-      // 1. ดึง story map ล่าสุดจาก server
-      const response = await fetch(`/api/novels/${novel._id}/storymap`);
+      // 1. ดึง story map ล่าสุดจาก server - รองรับ episode-specific
+      const apiUrl = selectedEpisodeFromBlueprint 
+        ? `/api/novels/${novel.slug}/episodes/${selectedEpisodeFromBlueprint._id}/storymap`
+        : `/api/novels/${novel._id}/storymap`;
+      const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error('Failed to fetch latest story map');
       }
@@ -3362,7 +3401,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
           // Force overwrite โดยใช้ PUT request โดยตรง
           try {
-            const response = await fetch(`/api/novels/${novel._id}/storymap`, {
+            const apiUrl = selectedEpisodeFromBlueprint 
+              ? `/api/novels/${novel.slug}/episodes/${selectedEpisodeFromBlueprint._id}/storymap/save`
+              : `/api/novels/${novel._id}/storymap`;
+            const response = await fetch(apiUrl, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -3382,7 +3424,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   targetNodeId: edge.target,
                   data: edge.data
                 })),
-                storyVariables: storyMap?.storyVariables || []
+                storyVariables: cleanStoryVariables(storyMap?.storyVariables || [])
               })
             });
             
@@ -3457,7 +3499,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     setSaveState(prev => ({ ...prev, isSaving: true, saveError: null }));
 
     try {
-      const response = await fetch(`/api/novels/${novel._id}/storymap`, {
+      const apiUrl = selectedEpisodeFromBlueprint 
+        ? `/api/novels/${novel.slug}/episodes/${selectedEpisodeFromBlueprint._id}/storymap/save`
+        : `/api/novels/${novel._id}/storymap`;
+      const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -3466,7 +3511,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         body: JSON.stringify({
           nodes,
           edges,
-          storyVariables: storyMap?.storyVariables || [],
+          storyVariables: cleanStoryVariables(storyMap?.storyVariables || []),
           version: saveState.version
         })
       });
@@ -3617,7 +3662,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   useEffect(() => {
     debouncedUpdateLocalStorage('blueprint-node-palette-collapsed', isNodePaletteCollapsed);
   }, [isNodePaletteCollapsed, debouncedUpdateLocalStorage]);
-
   // การตั้งค่าถูกจัดการโดย NovelEditor ผ่าน localStorage โดยตรง
   
   // อัปเดต node data เมื่อ display settings เปลี่ยน
@@ -3651,6 +3695,68 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Flag สำหรับตรวจสอบว่าได้สร้าง initial snapshot แล้วหรือยัง
   const [isSnapshotReady, setIsSnapshotReady] = useState(false);
 
+  // 🔥 CRITICAL FIX: Helper function to clean story variables and ensure NO duplicates
+  const cleanStoryVariables = useCallback((variables: any[]): any[] => {
+    if (!variables || !Array.isArray(variables)) return [];
+    
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const timestamp = Date.now();
+    const sessionId = Math.random().toString(36).substr(2, 12);
+    
+    return variables
+      .filter(v => {
+        // Filter out invalid variables
+        if (!v) return false;
+        // 🔥 CRITICAL: Filter out variables with invalid/empty/null IDs
+        const id = String(v.variableId || '').trim();
+        if (!id || id === 'null' || id === 'undefined' || id === 'NaN') return false;
+        if (!v.variableName && !v.name) return false;
+        return true;
+      })
+      .map((v, index) => {
+        // 🔥 CRITICAL: Ensure unique variableId and variableName
+        let variableId = String(v.variableId).trim();
+        let variableName = String(v.variableName || v.name || `Variable_${index + 1}`).trim();
+        
+        // Handle duplicate variableId
+        if (seenIds.has(variableId)) {
+          const randomSuffix = Math.random().toString(36).substr(2, 9);
+          variableId = `var_${timestamp}_${sessionId}_${index}_${randomSuffix}`;
+          console.warn(`[cleanStoryVariables] ⚠️ Duplicate variableId detected, regenerated:`, variableId);
+        }
+        seenIds.add(variableId);
+        
+        // Handle duplicate variableName
+        if (seenNames.has(variableName)) {
+          let counter = 2;
+          let newName = `${variableName}_${counter}`;
+          while (seenNames.has(newName)) {
+            counter++;
+            newName = `${variableName}_${counter}`;
+          }
+          variableName = newName;
+          console.warn(`[cleanStoryVariables] ⚠️ Duplicate variableName detected, renamed to:`, variableName);
+        }
+        seenNames.add(variableName);
+        
+        // Ensure all required fields exist
+        return {
+          variableId,
+          variableName,
+          dataType: v.dataType || v.variableType || 'string',
+          initialValue: v.initialValue !== undefined ? v.initialValue : '',
+          description: v.description || '',
+          isGlobal: v.isGlobal !== undefined ? v.isGlobal : true,
+          isVisibleToPlayer: v.isVisibleToPlayer || false
+        };
+      })
+      // 🔥 CRITICAL: Final deduplication pass (safety net)
+      .filter((v, index, array) => {
+        return array.findIndex(item => item.variableId === v.variableId) === index;
+      });
+  }, []);
+
   // สร้าง snapshot ของ state ปัจจุบันเพื่อเปรียบเทียบ
   const createStateSnapshot = useCallback(() => {
     return {
@@ -3671,12 +3777,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         targetHandle: edge.targetHandle,
         data: edge.data ? JSON.parse(JSON.stringify(edge.data)) : {}
       })).sort((a, b) => a.id.localeCompare(b.id)),
-      storyVariables: (storyMap?.storyVariables || []).map((v: any) => 
+      storyVariables: cleanStoryVariables(storyMap?.storyVariables || []).map((v: any) => 
         JSON.parse(JSON.stringify(v))
       ).sort((a: any, b: any) => (a.variableId || a.variableName || '').localeCompare(b.variableId || b.variableName || '')),
       timestamp: Date.now()
     };
-  }, [nodes, edges, storyMap?.storyVariables]);
+  }, [nodes, edges, storyMap?.storyVariables, cleanStoryVariables]);
 
   // สร้าง initial snapshot เมื่อข้อมูลจาก database โหลดเสร็จ
   useEffect(() => {
@@ -4266,7 +4372,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             target: edge.target,
             data: edge.data
           })),
-          storyVariables: storyMap?.storyVariables || []
+          storyVariables: cleanStoryVariables(storyMap?.storyVariables || [])
         };
         
         // ตรวจสอบว่าต้อง enable ปุ่ม save หรือไม่
@@ -4344,13 +4450,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Auto-save timer and debounce
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const saveDebounceTimer = useRef<NodeJS.Timeout | null>(null);
-
-
-
-
-
-
-
   // Enhanced API functions for database sync with better error handling
   const saveStoryMapToDatabase = useCallback(async (currentNodes: Node[], currentEdges: Edge[], isManual = false) => {
     if (!novel?.slug) return;
@@ -4388,12 +4487,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             lineStyle: (edge.data as any)?.lineStyle || 'solid'
           }
         })),
-        storyVariables: storyMap?.storyVariables || [],
+        storyVariables: cleanStoryVariables(storyMap?.storyVariables || []),
         episodeFilter: selectedEpisodeFromBlueprint,
         version: saveState.version // Send current version for conflict detection
       };
 
-      const response = await fetch(`/api/novels/${encodeURIComponent(novel.slug)}/storymap`, {
+      const apiUrl = selectedEpisodeFromBlueprint 
+        ? `/api/novels/${novel.slug}/episodes/${selectedEpisodeFromBlueprint._id}/storymap/save`
+        : `/api/novels/${encodeURIComponent(novel.slug)}/storymap`;
+      const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -4506,7 +4608,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         lastSyncedAt: new Date().toISOString()
       };
 
-      const response = await fetch(`/api/novels/${novel.slug}/storymap/patch`, {
+      const apiUrl = selectedEpisodeFromBlueprint 
+        ? `/api/novels/${novel.slug}/episodes/${selectedEpisodeFromBlueprint._id}/storymap/save`
+        : `/api/novels/${novel.slug}/storymap/patch`;
+      const response = await fetch(apiUrl, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -5050,7 +5155,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [canvasState.isLocked]);
 
   // (keyboard shortcuts listener will be attached below after function declarations)
-
   // Enhanced initialization with stable reference tracking
   const storyMapRef = useRef(storyMap);
   const lastProcessedVersionRef = useRef<number>(0);
@@ -5221,10 +5325,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
     
-    // 🎯 Check for Episode nodes that need database deletion
-    const episodeNodesToDelete = nodesToDelete.filter(node => 
-      node.data.nodeType === StoryMapNodeType.EPISODE_NODE && node.data.episodeId
-    );
+    // ❌ REMOVED: Episode node deletion logic - Episodes ไม่ควรเป็น nodes บน canvas
+    // const episodeNodesToDelete = nodesToDelete.filter(node => 
+    //   node.data.nodeType === StoryMapNodeType.EPISODE_NODE && node.data.episodeId
+    // );
     
     // ✅ CRITICAL FIX: Include edges connected to deleted nodes
     const allEdgesToDelete = [
@@ -5239,27 +5343,27 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const totalItemsToDelete = nodesToDelete.length + allEdgesToDelete.length;
       let confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`;
       
-      // 🚨 Special warning for episode nodes
-      if (episodeNodesToDelete.length > 0) {
-        confirmMessage += `\n\n⚠️ จะลบตอนออกจาก Database ด้วย: ${episodeNodesToDelete.map(n => n.data.title).join(', ')}`;
-      }
+      // ❌ REMOVED: Special warning for episode nodes - Episodes are database-only entities
+      // if (episodeNodesToDelete.length > 0) {
+      //   confirmMessage += `\n\n⚠️ จะลบตอนออกจาก Database ด้วย: ${episodeNodesToDelete.map(n => n.data.title).join(', ')}`;
+      // }
       
       const ok = window.confirm(confirmMessage);
       if (!ok) return;
     }
     
-    // 🎯 Delete episodes from database first
-    if (episodeNodesToDelete.length > 0) {
-      try {
-        for (const episodeNode of episodeNodesToDelete) {
-          await handleDeleteEpisode(episodeNode.data.episodeId as string);
-        }
-      } catch (error) {
-        console.error('Failed to delete episodes from database:', error);
-        toast.error('ไม่สามารถลบตอนจาก Database ได้');
-        return;
-      }
-    }
+    // ❌ REMOVED: Episode deletion from database - Episodes are managed separately
+    // if (episodeNodesToDelete.length > 0) {
+    //   try {
+    //     for (const episodeNode of episodeNodesToDelete) {
+    //       await handleDeleteEpisode(episodeNode.data.episodeId as string);
+    //     }
+    //   } catch (error) {
+    //     console.error('Failed to delete episodes from database:', error);
+    //     toast.error('ไม่สามารถลบตอนจาก Database ได้');
+    //     return;
+    //   }
+    // }
     
     if (!professionalEventManager) {
       toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
@@ -5805,7 +5909,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     professionalEventManager.executeCommand(command);
     toast.success(`✅ Selected ${pendingNodeIds.length} nodes. Use Ctrl+Z to undo.`);
   }, [selection.pendingSelection, selection.selectedNodes, selection.selectedEdges, selection.multiSelectMode, selection.showSelectionBar, professionalEventManager, reactFlowInstance]);
-
   // 🔧 FIGMA STYLE: Clear all selections with ULTRA-aggressive UI sync
   const clearAllSelections = useCallback(() => {
     console.log(`[BlueprintTab] 🧹 Starting clear all selections - should NOT trigger refresh protection`);
@@ -6380,10 +6483,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   
   // Helper functions สำหรับ node creation
   const getDefaultNodeTitle = (nodeType: StoryMapNodeType): string => {
-    const titles: Record<StoryMapNodeType, string> = {
+    const titles: Partial<Record<StoryMapNodeType, string>> = {
       [StoryMapNodeType.START_NODE]: 'จุดเริ่มต้น',
       [StoryMapNodeType.SCENE_NODE]: 'ฉากใหม่',
-      [StoryMapNodeType.EPISODE_NODE]: 'ตอน',
       [StoryMapNodeType.CHOICE_NODE]: 'ตัวเลือก',
       [StoryMapNodeType.ENDING_NODE]: 'จุดจบ',
       [StoryMapNodeType.BRANCH_NODE]: 'แยกเงื่อนไข',
@@ -6402,10 +6504,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   };
   
   const getDefaultNodeColor = (nodeType: StoryMapNodeType): string => {
-    const colors: Record<StoryMapNodeType, string> = {
-      [StoryMapNodeType.START_NODE]: '#10b981',
+    const colors: Partial<Record<StoryMapNodeType, string>> = {
+      [StoryMapNodeType.START_NODE]: '#22c55e', // 🎯 เขียวสดใส - จุดเริ่มต้น (แยกจาก SCENE_NODE)
       [StoryMapNodeType.SCENE_NODE]: '#3b82f6',
-      [StoryMapNodeType.EPISODE_NODE]: '#6366f1',
       [StoryMapNodeType.CHOICE_NODE]: '#f59e0b',
       [StoryMapNodeType.ENDING_NODE]: '#ef4444',
       [StoryMapNodeType.BRANCH_NODE]: '#8b5cf6',
@@ -6427,14 +6528,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     switch (nodeType) {
       case StoryMapNodeType.SCENE_NODE:
         return { sceneId: null };
-      case StoryMapNodeType.EPISODE_NODE:
-        return { 
-          episodeId: null,
-          episodeOrder: episodes.length + 1,
-          episodeTitle: `ตอนที่ ${episodes.length + 1}`,
-          episodeStatus: 'draft',
-          autoGenerateScenes: false
-        };
       case StoryMapNodeType.CHOICE_NODE:
         return { choices: [] };
       case StoryMapNodeType.VARIABLE_MODIFIER_NODE:
@@ -6445,6 +6538,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         return { eventType: '', parameters: {} };
       case StoryMapNodeType.COMMENT_NODE:
         return { note: '', color: '#fbbf24' };
+      // ❌ REMOVED: Episode node data - Episodes ไม่ควรเป็น nodes บน canvas
+      // case StoryMapNodeType.EPISODE_NODE:
+      //   return { episodeId: null, title: '', status: 'draft' };
       default:
         return {};
     }
@@ -6472,78 +6568,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
     }
 
-    // 🎯 SPECIAL HANDLING FOR EPISODE_NODE: Create database episode first
-    if (nodeType === StoryMapNodeType.EPISODE_NODE) {
-      try {
-        const episodeData = {
-          title: `ตอนที่ ${episodeList.length + 1}`,
-          episodeOrder: episodeList.length + 1,
-          storyMapData: {
-            nodeId: `node-${timestamp}-${randomOffset}`,
-            position: centerPosition,
-            editorVisuals: {
-              color: getDefaultNodeColor(nodeType)
-            }
-          }
-        };
-
-        const response = await createEpisodeAPI(episodeData);
-        if (!response.success) {
-          throw new Error(response.error || 'Failed to create episode');
-        }
-
-        const newEpisode = response.episode;
-        
-        // สร้าง node ที่เชื่อมกับ database episode
-        const newNode: Node = {
-          id: `node-${timestamp}-${randomOffset}`,
-          type: getReactFlowNodeType(nodeType),
-          position: centerPosition,
-          data: {
-            nodeId: `node-${timestamp}-${randomOffset}`,
-            nodeType,
-            title: newEpisode.title,
-            episodeId: newEpisode._id,
-            episodeOrder: newEpisode.episodeOrder,
-            episodeStatus: newEpisode.status,
-            color: getDefaultNodeColor(nodeType),
-            nodeSpecificData: getDefaultNodeData(nodeType),
-            isFirstScene: false,
-            showThumbnails: currentBlueprintSettings.showSceneThumbnails,
-            showLabels: currentBlueprintSettings.showNodeLabels
-          }
-        };
-
-        // อัปเดต episode list
-        setEpisodeList(prev => [...prev, newEpisode]);
-        
-        // สร้างและ execute command
-        const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
-        executeCommand(command);
-        
-        toast.success(`สร้างตอน "${newEpisode.title}" สำเร็จ`);
-        
-        // Auto-select the new episode
-        setSelectedEpisodeFromBlueprint(newEpisode);
-        if (onEpisodeCreate) {
-          onEpisodeCreate(newEpisode, [...episodeList, newEpisode]);
-        }
-        
-        return;
-      } catch (error) {
-        console.error('Failed to create episode:', error);
-        toast.error('ไม่สามารถสร้างตอนได้');
-        return;
-      }
-    }
+    // ❌ REMOVED: Episode node creation check - EPISODE_NODE no longer exists in enum
+    // Episodes are database-only entities managed through Episode Management Modal
     
-    // Default node creation for non-episode nodes
+    // 🔥 PROFESSIONAL: Create node with unique ID generation
+    const uniqueNodeId = generateUniqueNodeId(nodeType);
     const newNode: Node = {
-      id: `node-${timestamp}-${randomOffset}`,
+      id: uniqueNodeId,
       type: getReactFlowNodeType(nodeType),
       position: centerPosition,
       data: {
-        nodeId: `node-${timestamp}-${randomOffset}`,
+        nodeId: uniqueNodeId,
         nodeType,
         title: getDefaultNodeTitle(nodeType),
         notesForAuthor: '',
@@ -6561,8 +6596,26 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const command = createNodeCommand('ADD_NODE', newNode.id, newNode);
     executeCommand(command);
     
+    // 🎬 NEW: Automatically create linked scene for scene nodes
+    if (nodeType === StoryMapNodeType.SCENE_NODE && eventManager) {
+      try {
+        const { scene } = await eventManager.createSynchronizedSceneNode(newNode.data, {
+          title: newNode.data.title,
+          description: `Scene for ${newNode.data.title}`,
+          sceneOrder: scenes.length
+        });
+        
+        toast.success(`เพิ่ม${getNodeDisplayName(nodeType)}และฉากใหม่สำเร็จ`);
+        console.log(`[BlueprintTab] 🎬 Created synchronized scene: ${scene._id} for node: ${newNode.id}`);
+      } catch (error) {
+        console.error('[BlueprintTab] Failed to create synchronized scene:', error);
+        toast.error('เพิ่มโหนดสำเร็จ แต่การสร้างฉากล้มเหลว');
+      }
+    } else {
+      toast.success(`เพิ่ม${getNodeDisplayName(nodeType)}ใหม่สำเร็จ`);
+    }
+    
     setIsSidebarOpen(false); // Close sidebar on mobile
-    toast.success(`เพิ่ม${getNodeDisplayName(nodeType)}ใหม่สำเร็จ`);
     
     // Auto-select the new node after a brief delay
     setTimeout(() => {
@@ -6590,7 +6643,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       edge.id === edgeId ? { ...edge, data: newData } : edge
     ));
   }, [setEdges]);
-
   // Enhanced connections with database sync and validation (Professional Canva/Figma style)
   const onConnect = useCallback((params: Connection) => {
     if (!params.source || !params.target) {
@@ -6894,14 +6946,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
   // Custom node and edge types - สร้าง wrapper เพื่อส่ง nodeOrientation พร้อม real-time updates
   const nodeTypes: NodeTypes = useMemo(() => ({
-    scene_node: (props: any) => <SceneNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
+    scene_node: (props: any) => <SceneNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} onNavigateToDirector={onNavigateToDirector} />,
     choice_node: (props: any) => <ChoiceNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
     branch_node: (props: any) => <BranchNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
     comment_node: (props: any) => <CommentNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
     ending_node: (props: any) => <EndingNode {...props} nodeOrientation={currentBlueprintSettings.nodeOrientation} />,
-    // Keep custom as fallback
-    custom: CustomNode
-  }), [currentBlueprintSettings.nodeOrientation]);
+    // Keep custom as fallback with navigation support
+    custom: (props: any) => <CustomNode {...props} onNavigateToDirector={onNavigateToDirector} />
+  }), [currentBlueprintSettings.nodeOrientation, onNavigateToDirector]);
   
   // Track previous orientation to show toast only on actual changes
   const [previousOrientation, setPreviousOrientation] = useState<'horizontal' | 'vertical'>(currentBlueprintSettings.nodeOrientation);
@@ -7034,7 +7086,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           target: edge.target,
           data: edge.data
         })),
-        storyVariables: storyMap?.storyVariables || []
+        storyVariables: cleanStoryVariables(storyMap?.storyVariables || [])
       };
     },
     // Enterprise-grade state monitoring via EventManager
@@ -7049,7 +7101,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       };
     }
   }), [handleManualSave, nodes, edges, storyMap, professionalEventManager]);
-
   return (
       <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
         {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
@@ -7146,14 +7197,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlowProvider>
             <div className="h-full w-full">
-              {isLoadingStoryMap && (
-                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-50">
-                  <div className="flex items-center gap-3 bg-background border rounded-lg px-4 py-3 shadow-lg">
-                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm font-medium">กำลังโหลด StoryMap...</span>
-                  </div>
-                </div>
-              )}
+              {/* 🎯 REMOVED LOADING INDICATOR - Professional smooth transitions */}
               
               <ReactFlow
                 nodes={nodes}
@@ -7210,7 +7254,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       
                       console.log(`[BlueprintTab] 🔄 Updating selection state:`, {
                         oldState: { 
-                          pendingSelection: prev.pendingSelection, 
+                          pendingSelection: prev.pendingSelection,
                           showSelectionBar: prev.showSelectionBar,
                           multiSelectMode: prev.multiSelectMode
                         },
@@ -7399,23 +7443,23 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 {/* Enhanced Floating Toolbar */}
                 <Panel
                   position="top-left"
-                  className="bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg"
+                  className="floating-toolbar bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg"
                   style={{ top: isMobile ? 56 : undefined, left: isMobile ? 0 : undefined }}
                 >
                   <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}`}>
                     {/* Enhanced Episode Selector with Add Episode - Desktop & Tablet (non-mobile) */}
                     <div className="hidden md:block">
                       <div className="flex items-center gap-2">
-                        <Select value={selectedEpisodeFromBlueprint?._id || ''} onValueChange={(value) => handleEpisodeSelect(value || null)}>
-                          <SelectTrigger className="w-48 h-8 text-xs bg-background/50">
-                            <SelectValue placeholder="Select Episode" />
+                        <Select value={currentEpisodeId || ''} onValueChange={(value) => handleEpisodeSelect(value || null)}>
+                          <SelectTrigger className="w-56 h-8 text-xs bg-background/50">
+                            <SelectValue placeholder={episodes.length > 0 ? "เลือกตอน" : "ยังไม่มีตอน"} />
                           </SelectTrigger>
                           <SelectContent>
                             {episodes.map((episode) => (
                               <SelectItem key={episode._id} value={episode._id} className="text-xs">
                                 <div className="flex items-center gap-2">
                                   <BookOpen className="w-3 h-3" />
-                                  <span>Ep {episode.episodeOrder}: {episode.title}</span>
+                                  <span className="truncate">{episode.episodeOrder}-{episode.slug || episode.title}</span>
                                 </div>
                               </SelectItem>
                             ))}
@@ -7432,11 +7476,34 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         >
                           <PlusCircle className="w-4 h-4" />
                         </Button>
+                        
+                        {/* Episode Management Modal Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowEpisodeManagementModal(true)}
+                          className="h-8 px-3"
+                          title="จัดการตอนทั้งหมด"
+                        >
+                          <BookOpen className="w-3 h-3 mr-1.5" />
+                          <span className="text-xs">จัดการตอน</span>
+                        </Button>
                       </div>
                     </div>
 
                     {/* Enhanced Mobile Controls - Mobile Only */}
                     <div className={`${isMobile ? 'flex flex-col gap-2' : 'hidden'}`}>
+                      {/* Add Episode Button - Mobile */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEpisodeCreatorOpen(true)}
+                        className="h-8 w-8 p-0 bg-background/80 hover:bg-background/90 border-2"
+                        title="เพิ่มตอนใหม่"
+                      >
+                        <PlusCircle className="w-4 h-4" />
+                      </Button>
+                      
                       {/* Story Blueprint Toggle */}
                       <Button
                         variant="outline"
@@ -7509,16 +7576,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 {/* Enhanced Episode Selector with Add Episode - Mobile Only */}
                 <Panel position="top-left" className="md:hidden bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg" style={{ top: 8, left: 0 }}>
                   <div className="flex items-center gap-2">
-                    <Select value={selectedEpisodeFromBlueprint?._id || ''} onValueChange={(value) => handleEpisodeSelect(value || null)}>
-                      <SelectTrigger className="w-32 h-8 text-xs bg-background/50">
-                        <SelectValue placeholder="Select Episode" />
+                    <Select value={currentEpisodeId || ''} onValueChange={(value) => handleEpisodeSelect(value || null)}>
+                      <SelectTrigger className="w-40 h-8 text-xs bg-background/50">
+                        <SelectValue placeholder={episodes.length > 0 ? "เลือกตอน" : "ยังไม่มีตอน"} />
                       </SelectTrigger>
                       <SelectContent>
                         {episodes.map((episode) => (
                           <SelectItem key={episode._id} value={episode._id} className="text-xs">
                             <div className="flex items-center gap-2">
                               <BookOpen className="w-3 h-3" />
-                              <span>Ep {episode.episodeOrder}: {episode.title}</span>
+                              <span className="truncate">{episode.episodeOrder}-{episode.slug || episode.title}</span>
                             </div>
                           </SelectItem>
                         ))}
@@ -7862,33 +7929,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   <TabsTrigger value="validation" className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
                 </TabsList>
                 <TabsContent value="episodes" className="overflow-y-auto flex-1 h-full">
-                  <div className="pr-2">
-                    <EpisodeManagementPanel
-                      episodes={episodeList}
-                      selectedEpisode={selectedEpisodeFromBlueprint}
-                      isCreating={isCreatingEpisode}
-                      formData={episodeFormData}
-                      onFormChange={(data) => {
-                        setEpisodeFormData(data);
-                        if (!isCreatingEpisode) setIsCreatingEpisode(true);
-                      }}
-                      onEpisodeSelect={handleEpisodeSelect}
-                      onCreate={() => handleCreateEpisode()}
-                      onUpdate={handleUpdateEpisode}
-                      onDelete={handleDeleteEpisode}
-                      onCancel={() => {
-                        setIsCreatingEpisode(false);
-                        setEpisodeFormData({
-                          title: '',
-                          episodeOrder: episodeList.length + 1,
-                          volumeNumber: undefined,
-                          status: 'draft',
-                          accessType: 'free',
-                          priceCoins: 0,
-                          teaserText: ''
-                        });
-                      }}
-                    />
+                  <div className="pr-2 p-4">
+                    {/* 🎯 PROFESSIONAL: Episodes are now managed via modal */}
+                    <div className="text-center space-y-4">
+                      <BookOpen className="w-12 h-12 mx-auto text-gray-400" />
+                      <p className="text-sm text-gray-600">จัดการตอนผ่านปุ่มด้านบน</p>
+                      <Button 
+                        onClick={() => setShowEpisodeManagementModal(true)}
+                        className="w-full"
+                        size="sm"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        จัดการตอน
+                      </Button>
+                    </div>
                   </div>
                 </TabsContent>
                 <TabsContent value="palette" className="overflow-y-auto flex-1 h-full">
@@ -7941,39 +7995,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     <TabsTrigger value="validation" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Validation</TabsTrigger>
                   </TabsList>
                   <TabsContent value="episodes" className="flex-1 mt-2 overflow-hidden">
-                    <EpisodeErrorBoundary 
-                      onError={(error) => {
-                        console.error('[Episode Management Error]:', error);
-                        toast.error('เกิดข้อผิดพลาดในการจัดการตอน');
-                      }}
-                    >
-                      <EpisodeManagementPanel
-                        episodes={episodeList}
-                        selectedEpisode={selectedEpisodeFromBlueprint}
-                        isCreating={isCreatingEpisode}
-                        formData={episodeFormData}
-                        onFormChange={(data) => {
-                          setEpisodeFormData(data);
-                          if (!isCreatingEpisode) setIsCreatingEpisode(true);
-                        }}
-                        onEpisodeSelect={handleEpisodeSelect}
-                        onCreate={() => handleCreateEpisode()}
-                        onUpdate={handleUpdateEpisode}
-                        onDelete={handleDeleteEpisode}
-                        onCancel={() => {
-                          setIsCreatingEpisode(false);
-                          setEpisodeFormData({
-                            title: '',
-                            episodeOrder: episodeList.length + 1,
-                            volumeNumber: undefined,
-                            status: 'draft',
-                            accessType: 'free',
-                            priceCoins: 0,
-                            teaserText: ''
-                          });
-                        }}
-                      />
-                    </EpisodeErrorBoundary>
+                    <div className="p-4 text-center">
+                      <BookOpen className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                      <p className="text-sm text-gray-600 mb-4">จัดการตอนผ่านปุ่มด้านบน</p>
+                      <Button 
+                        onClick={() => setShowEpisodeManagementModal(true)}
+                        size="sm"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        จัดการตอน
+                      </Button>
+                    </div>
                   </TabsContent>
                   <TabsContent value="palette" className="flex-1 mt-2 overflow-hidden">
                     <NodePalette 
@@ -8298,7 +8330,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 disabled={isCreatingEpisode}
               />
               <p className="text-xs text-muted-foreground">
-                ใช้ทศนิยมสำหรับตอนพิเศษ เช่น 1.5 สำหรับตอนระหว่าง 1 และ 2
+                ใช้ทศนิยมสำหรับตอนพิเศษ เช่น 1.5
               </p>
             </div>
 
@@ -8423,7 +8455,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               ยกเลิก
             </Button>
             <Button
-              onClick={handleCreateEpisode}
+              onClick={legacyHandleCreateEpisode}
               disabled={isCreatingEpisode || !episodeCreationForm.title.trim()}
               className="bg-primary hover:bg-primary/90"
             >
@@ -8450,11 +8482,191 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         onClose={closeModal}
         onConfirm={handleDeleteEpisodeModal}
       />
+      
+      {/* Episode Management Modal */}
+      <EpisodeManagementModal
+        isOpen={showEpisodeManagementModal}
+        onClose={() => setShowEpisodeManagementModal(false)}
+        novelSlug={novel.slug}
+        currentEpisodeId={currentEpisodeId || undefined}
+        onEpisodeSelect={(episodeId) => {
+          handleEpisodeSelect(episodeId);
+          setShowEpisodeManagementModal(false);
+        }}
+        onEpisodesUpdate={(updatedEpisodes) => {
+          setEpisodeList(updatedEpisodes);
+        }}
+      />
+
+              {/* 🎯 CANVAS TUTORIAL OVERLAY - Shows based on episode state */}
+              {showTutorial && tutorialStep === 0 && episodes.length === 0 && (
+                <div className="absolute inset-0 bg-background/30 flex items-center justify-center z-40 pointer-events-none">
+                  <div className="text-center max-w-sm mx-auto p-6 bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl border pointer-events-auto">
+                    <div className="mb-4">
+                      <BookOpen className="w-12 h-12 mx-auto text-primary mb-3" />
+                      <h3 className="text-lg font-bold text-card-foreground mb-2">เริ่มต้นสร้างเรื่องราว</h3>
+                      <p className="text-sm text-muted-foreground">สร้างตอนแรกเพื่อเริ่มออกแบบ Visual Novel</p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <Button 
+                        onClick={() => {
+                          setIsEpisodeCreatorOpen(true);
+                          setShowTutorial(false);
+                        }}
+                        className="w-full"
+                        size="sm"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        สร้างตอนแรก
+                      </Button>
+                      
+                      <Button 
+                        onClick={() => setShowTutorial(false)}
+                        variant="ghost"
+                        className="w-full"
+                        size="sm"
+                      >
+                        ข้ามไปก่อน
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* 🎯 SELECT EPISODE TUTORIAL - Shows when episodes exist but none selected */}
+              {showTutorial && tutorialStep === 1 && episodes.length > 0 && !currentEpisodeId && (
+                <div className="absolute inset-0 bg-background/30 flex items-center justify-center z-40 pointer-events-none">
+                  <div className="text-center max-w-sm mx-auto p-6 bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl border pointer-events-auto">
+                    <div className="mb-4">
+                      <BookOpen className="w-12 h-12 mx-auto text-primary mb-3" />
+                      <h3 className="text-lg font-bold text-card-foreground mb-2">เลือกตอนเพื่อเริ่มแก้ไข</h3>
+                      <p className="text-sm text-muted-foreground">
+                        เลือกตอนจากด้านบนเพื่อเริ่มออกแบบเนื้อเรื่อง<br/>
+                        การเพิ่ม nodes และ edges ต้องเลือกตอนก่อน
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="text-left p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
+                        <p className="mb-2">💡 คุณสามารถ:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>เลือกตอนจากเมนู dropdown ด้านบน</li>
+                          <li>หรือเพิ่มตอนใหม่ได้ทันที</li>
+                        </ul>
+                      </div>
+                      
+                      <Button 
+                        onClick={() => setShowTutorial(false)}
+                        variant="outline"
+                        className="w-full"
+                        size="sm"
+                      >
+                        เข้าใจแล้ว
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
       </div>
   );
 });
-
 BlueprintTab.displayName = 'BlueprintTab'; 
+
+// 🎯 REMOVED OLD TUTORIAL OVERLAY - Now using canvas overlay instead
+/*
+const TutorialOverlay = ({ 
+  step, 
+  onNext, 
+  onSkip, 
+  onComplete 
+}: {
+  step: number;
+  onNext: () => void;
+  onSkip: () => void;
+  onComplete: () => void;
+}) => {
+  const tutorialSteps = [
+    {
+      title: "ยินดีต้อนรับสู่ Blueprint Editor! 🎉",
+      content: "นี่คือที่ที่คุณจะออกแบบเส้นทางเรื่องราวของ Visual Novel ของคุณ เริ่มต้นด้วยการสร้างตอนแรกกันเลย!",
+      highlight: null,
+      position: "center"
+    },
+    {
+      title: "เริ่มต้นด้วยการเพิ่มตอนแรก 📖",
+      content: "คลิกปุ่ม ➕ ในแถบเครื่องมือด้านบนซ้าย เพื่อเพิ่มตอนแรกของนิยายคุณ แต่ละตอนจะมีพื้นที่สร้างเรื่องแยกต่างหาก",
+      highlight: ".floating-toolbar",
+      position: "bottom"
+    },
+    {
+      title: "จัดการตอนและเนื้อเรื่อง 🎭",
+      content: "หลังจากสร้างตอนแล้ว คุณสามารถเพิ่มฉาก สร้างตัวเลือกให้ผู้เล่น และออกแบบเส้นทางเรื่องราวที่หลากหลายได้ในแต่ละตอน",
+      highlight: null,
+      position: "center"
+    },
+    {
+      title: "พร้อมเริ่มต้นแล้ว! ✨",
+      content: "ตอนนี้คุณพร้อมที่จะสร้างสรรค์ Visual Novel ที่น่าตื่นเต้นแล้ว เริ่มจากการเพิ่มตอนแรกกันเลย!",
+      highlight: ".floating-toolbar",
+      position: "bottom"
+    }
+  ];
+
+  const currentStep = tutorialSteps[step];
+  const isLastStep = step === tutorialSteps.length - 1;
+
+  if (!currentStep) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm">
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-card border border-border rounded-2xl shadow-2xl max-w-md w-full p-6"
+        >
+          <div className="text-center space-y-4">
+            <h3 className="text-xl font-bold text-foreground">
+              {currentStep.title}
+            </h3>
+            <p className="text-muted-foreground leading-relaxed">
+              {currentStep.content}
+            </p>
+            
+            <div className="flex items-center justify-center gap-2 py-2">
+              {tutorialSteps.map((_, index) => (
+                <div
+                  key={index}
+                  className={`w-2 h-2 rounded-full transition-colors ${
+                    index === step ? 'bg-primary' : 'bg-muted'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={onSkip}
+                className="flex-1"
+              >
+                ข้าม
+              </Button>
+              <Button
+                onClick={isLastStep ? onComplete : onNext}
+                className="flex-1 bg-primary hover:bg-primary/90"
+              >
+                {isLastStep ? 'เริ่มต้นเลย!' : 'ถัดไป'}
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+*/
 
 export default BlueprintTab;

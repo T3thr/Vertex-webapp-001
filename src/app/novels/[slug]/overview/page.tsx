@@ -185,8 +185,8 @@ export default async function NovelOverviewPage({ params, searchParams }: PagePr
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const decodedSlug = decodeURIComponent(slug);
   
-  // 🎯 Extract episode selection from URL
-  const selectedEpisodeId = typeof resolvedSearchParams?.episodeId === 'string' ? resolvedSearchParams.episodeId : null;
+  // ❌ REMOVED: URL-based episode selection - Episodes are managed dynamically in client
+  // const selectedEpisodeId = typeof resolvedSearchParams?.episodeId === 'string' ? resolvedSearchParams.episodeId : null;
 
   console.log(`[DEBUG] Slug ดั้งเดิม (URL-encoded): ${slug}`);
   console.log(`[DEBUG] Slug ที่ถอดรหัสแล้ว: ${decodedSlug}`);

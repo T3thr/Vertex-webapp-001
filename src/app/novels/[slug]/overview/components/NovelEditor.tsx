@@ -86,6 +86,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // ใช้ SingleUserEventManager สำหรับโหมดผู้ใช้คนเดียว (Canva/Figma-like experience)
   const [eventManager] = useState(() => createSingleUserEventManager({
     novelSlug: novel.slug,
+    selectedEpisodeId,
     autoSaveEnabled: isAutoSaveEnabled,
     autoSaveIntervalMs: autoSaveIntervalSec * 1000,
     maxHistorySize: 50,
@@ -159,6 +160,28 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     onError: (error, context) => {
       console.error(`[NovelEditor] SingleUserEventManager error in ${context}:`, error);
       toast.error(`Save error: ${error.message}`);
+    },
+    // 🎬 NEW: Blueprint-Director Integration Callbacks
+    onSceneNodeSync: (sceneId: string, nodeId: string) => {
+      console.log(`[NovelEditor] 🎬 Scene-Node synchronized: scene=${sceneId}, node=${nodeId}`);
+      // Force re-render of both tabs to show the synchronization
+      setCurrentScenes([...eventManager.getCurrentSnapshot().scenes || []]);
+    },
+    onDirectorTabUpdate: (scenes: any[]) => {
+      console.log(`[NovelEditor] 🎬 Director tab updated with ${scenes.length} scenes`);
+      setCurrentScenes([...scenes]);
+    },
+    onBlueprintTabUpdate: (nodes: any[], edges: any[]) => {
+      console.log(`[NovelEditor] 🎬 Blueprint tab updated with ${nodes.length} nodes, ${edges.length} edges`);
+      // Update storymap if needed
+      if (currentStoryMap) {
+        setCurrentStoryMap({
+          ...currentStoryMap,
+          nodes,
+          edges,
+          updatedAt: new Date().toISOString()
+        });
+      }
     }
   }))
   
@@ -464,6 +487,22 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     setCurrentStoryMap(updatedStoryMap)
     toast.success('StoryMap updated successfully')
   }
+
+  // 🎬 NEW: Handle navigation to Director tab with scene context
+  const handleNavigateToDirector = useCallback((sceneId?: string) => {
+    console.log(`[NovelEditor] 🎬 Navigating to Director tab`, { sceneId });
+    
+    setActiveTab('director');
+    
+    // If a specific scene is provided, we could set it as selected in DirectorTab
+    if (sceneId) {
+      // The DirectorTab will receive the sceneId and can auto-select it
+      console.log(`[NovelEditor] 🎬 Will focus on scene: ${sceneId}`);
+    }
+    
+    // Ensure scenes are up to date
+    setCurrentScenes([...eventManager.getCurrentSnapshot().scenes || []]);
+  }, [eventManager]);
 
   const handleSceneUpdate = async (sceneId: string, sceneData: any) => {
     try {
@@ -1622,9 +1661,6 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 onEpisodeCreate={handleEpisodeCreate}
                 onEpisodeUpdate={handleEpisodeUpdate}
                 onEpisodeDelete={handleEpisodeDelete}
-                // 🎯 Episode selection with URL persistence
-                selectedEpisodeId={selectedEpisodeId || undefined}
-                onEpisodeSelect={handleEpisodeSelect}
                 // ✅ PROFESSIONAL SOLUTION 3: ส่ง auto-save config ไปยัง BlueprintTab
                 autoSaveConfig={{
                   enabled: isAutoSaveEnabled,
@@ -1638,10 +1674,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                   snapToGrid,
                   nodeOrientation
                 }}
-                onNavigateToDirector={(sceneId?: string) => {
-                  setActiveTab('director')
-                  // Potentially scroll/locate the scene inside DirectorTab via shared state or event bus
-                }}
+                onNavigateToDirector={handleNavigateToDirector}
               />
             </TabsContent>
 

@@ -166,6 +166,7 @@ export interface IEpisode extends Document {
   accessType: EpisodeAccessType;
   priceCoins?: number;
   // 🎯 NEW: StoryMap Integration Fields
+  storyMapId?: Types.ObjectId; // ID ของ StoryMap เฉพาะสำหรับตอนนี้
   storyMapNodeId?: string; // เชื่อมโยงกับ StoryMap node
   storyMapData?: {
     nodeId: string;
@@ -404,6 +405,12 @@ const EpisodeSchema = new Schema<IEpisode>(
       changes: { type: String, required: true, trim: true, maxlength: 1000 },
     }],
     // 🎯 NEW: StoryMap Integration Schema
+    storyMapId: {
+      type: Schema.Types.ObjectId,
+      ref: "StoryMap",
+      index: true,
+      comment: "ID ของ StoryMap เฉพาะสำหรับตอนนี้"
+    },
     storyMapNodeId: { 
       type: String, 
       trim: true, 

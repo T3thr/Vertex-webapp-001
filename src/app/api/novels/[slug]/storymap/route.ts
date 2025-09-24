@@ -262,7 +262,8 @@ export async function PUT(
       // Normal update - ไม่มี conflict
       storyMap.nodes = nodes;
       storyMap.edges = edges;
-      storyMap.storyVariables = storyVariables || storyMap.storyVariables;
+      // 🔥 CRITICAL: Clean story variables before saving to prevent duplicates
+      storyMap.storyVariables = cleanStoryVariablesArray(storyVariables || storyMap.storyVariables || []);
       storyMap.version += 1;
       storyMap.lastModifiedByUserId = new mongoose.Types.ObjectId(userId);
       storyMap.updatedAt = new Date();
@@ -291,7 +292,8 @@ export async function PUT(
         version: 1,
         nodes: nodes || [],
         edges: edges || [],
-        storyVariables: storyVariables || [],
+        // 🔥 CRITICAL: Clean story variables on creation to prevent duplicates
+        storyVariables: cleanStoryVariablesArray(storyVariables || []),
         startNodeId: nodes?.find((node: any) => node.nodeType === 'start_node')?.nodeId || '',
         lastModifiedByUserId: new mongoose.Types.ObjectId(userId),
         isActive: true,
@@ -571,5 +573,69 @@ function mergeStoryVariables(localVars: any[], serverVars: any[]): any[] {
     }
   });
   
-  return Array.from(varMap.values());
+  // 🔥 CRITICAL: Clean merged variables to prevent duplicates before returning
+  return cleanStoryVariablesArray(Array.from(varMap.values()));
+}
+
+/**
+ * 🔥 CRITICAL: Clean story variables to prevent duplicates and invalid data
+ * This ensures MongoDB validation will pass
+ */
+function cleanStoryVariablesArray(variables: any[]): any[] {
+  if (!variables || !Array.isArray(variables)) return [];
+  
+  const usedVariableIds = new Set<string>();
+  const usedVariableNames = new Set<string>();
+  const timestamp = Date.now();
+  const sessionId = Math.random().toString(36).substr(2, 12);
+
+  return variables
+    .filter(variable => {
+      // กรองตัวแปรที่ไม่ถูกต้อง
+      if (!variable) return false;
+      if (!variable.variableName && !variable.name) return false;
+      // 🔥 CRITICAL: Filter out invalid IDs
+      const id = String(variable.variableId || '').trim();
+      if (!id || id === 'null' || id === 'undefined' || id === 'NaN' || id === '') return false;
+      return true;
+    })
+    .map((variable, index) => {
+      let uniqueId = String(variable.variableId).trim();
+      let uniqueName = String(variable.variableName || variable.name || `Variable_${index + 1}`).trim();
+
+      // 🔥 CRITICAL: ตรวจสอบและแก้ไข duplicate IDs
+      if (usedVariableIds.has(uniqueId)) {
+        const randomSuffix = Math.random().toString(36).substr(2, 9);
+        uniqueId = `var_${timestamp}_${sessionId}_${index}_${randomSuffix}`;
+        console.warn(`[StoryMap API] ⚠️ Duplicate variableId detected, regenerated: ${uniqueId}`);
+      }
+      usedVariableIds.add(uniqueId);
+
+      // 🔥 CRITICAL: ตรวจสอบและแก้ไข duplicate variable names
+      if (usedVariableNames.has(uniqueName)) {
+        let counter = 2;
+        let newName = `${uniqueName}_${counter}`;
+        while (usedVariableNames.has(newName)) {
+          counter++;
+          newName = `${uniqueName}_${counter}`;
+        }
+        uniqueName = newName;
+        console.warn(`[StoryMap API] ⚠️ Duplicate variableName detected, renamed to: ${uniqueName}`);
+      }
+      usedVariableNames.add(uniqueName);
+
+      return {
+        variableId: uniqueId,
+        variableName: uniqueName,
+        dataType: variable.dataType || variable.variableType || 'string',
+        initialValue: variable.initialValue !== undefined ? variable.initialValue : '',
+        description: variable.description || '',
+        isGlobal: variable.isGlobal !== undefined ? variable.isGlobal : true,
+        isVisibleToPlayer: variable.isVisibleToPlayer || false
+      };
+    })
+    // 🔥 SAFETY NET: Final deduplication pass
+    .filter((variable, index, array) => {
+      return array.findIndex(v => v.variableId === variable.variableId) === index;
+    });
 }

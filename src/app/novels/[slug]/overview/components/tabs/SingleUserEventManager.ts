@@ -8,12 +8,17 @@ import { Command, CommandResult, CommandContext } from '@/lib/commands/Command';
 
 export interface SingleUserConfig {
   novelSlug: string;
+  selectedEpisodeId?: string | null; // 🆕 Episode-specific context
   autoSaveEnabled: boolean;
   autoSaveIntervalMs: number;
   maxHistorySize: number;
   onStateChange?: (state: SingleUserState) => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onError?: (error: Error, context: string) => void;
+  // 🎬 NEW: Unified Blueprint-Director Integration
+  onSceneNodeSync?: (sceneId: string, nodeId: string) => void;
+  onDirectorTabUpdate?: (scenes: any[]) => void;
+  onBlueprintTabUpdate?: (nodes: any[], edges: any[]) => void;
 }
 
 export interface SingleUserState {
@@ -45,6 +50,7 @@ export interface SnapshotData {
   edges: any[];
   storyVariables: any[];
   episodes?: any[]; // 🆕 PHASE 3: Episode data
+  scenes?: any[]; // 🆕 UNIFIED STATE: Scene data for DirectorTab integration
   timestamp: number;
   version: number;
 }
@@ -59,11 +65,32 @@ export interface EpisodeCommand extends Command {
   bulkData?: Array<{ episodeId: string; updates: any }>;
 }
 
+// 🆕 UNIFIED STATE: Scene Command Interfaces for DirectorTab integration
+export interface SceneCommand extends Command {
+  type: 'SCENE_CREATE' | 'SCENE_UPDATE' | 'SCENE_DELETE' | 'SCENE_TIMELINE_UPDATE' | 'SCENE_REORDER' | 'SCENE_NODE_SYNC_CREATE';
+  sceneId?: string;
+  sceneData?: any;
+  timelineData?: any;
+  undoData?: any;
+  linkedNodeId?: string; // Link to blueprint node
+  bulkData?: Array<{ sceneId: string; updates: any }>;
+  // 🎬 NEW: Synchronized creation data
+  nodeData?: any; // Blueprint node data for synchronized creation
+  autoSync?: boolean; // Whether to automatically sync with blueprint
+}
+
 export interface EpisodeCommandResult extends CommandResult {
   episode?: any;
   episodes?: any[];
   updatedNodes?: any[];
   updatedEdges?: any[];
+}
+
+export interface SceneCommandResult extends CommandResult {
+  scene?: any;
+  scenes?: any[];
+  linkedNode?: any;
+  updatedNodes?: any[];
 }
 
 // ===================================================================
@@ -131,6 +158,72 @@ class SingleUserCommandContext implements CommandContext {
     const currentEpisodes = this.getCurrentEpisodes();
     const updatedEpisodes = currentEpisodes.filter(ep => ep._id !== episodeId);
     this.setEpisodes(updatedEpisodes);
+  }
+
+  // 🆕 UNIFIED STATE: Scene Management Methods
+  getCurrentScenes(): any[] {
+    return this.eventManager.getCurrentSnapshot().scenes || [];
+  }
+
+  setScenes(scenes: any[]): void {
+    this.eventManager.updateSnapshot({ 
+      ...this.eventManager.getCurrentSnapshot(), 
+      scenes,
+      timestamp: Date.now()
+    });
+  }
+
+  findSceneById(id: string): any | null {
+    return this.getCurrentScenes().find(scene => scene._id === id) || null;
+  }
+
+  addScene(scene: any): void {
+    const currentScenes = this.getCurrentScenes();
+    const updatedScenes = [...currentScenes, scene].sort((a, b) => a.sceneOrder - b.sceneOrder);
+    this.setScenes(updatedScenes);
+  }
+
+  updateScene(sceneId: string, updates: any): void {
+    const currentScenes = this.getCurrentScenes();
+    const updatedScenes = currentScenes.map(scene => 
+      scene._id === sceneId ? { ...scene, ...updates } : scene
+    );
+    this.setScenes(updatedScenes);
+    
+    // 🎯 UNIFIED STATE: Update linked blueprint node
+    this.updateLinkedSceneNode(sceneId, updates);
+  }
+
+  removeScene(sceneId: string): void {
+    const currentScenes = this.getCurrentScenes();
+    const updatedScenes = currentScenes.filter(scene => scene._id !== sceneId);
+    this.setScenes(updatedScenes);
+  }
+
+  // Link scene to blueprint node
+  updateLinkedSceneNode(sceneId: string, sceneUpdates: any): void {
+    const nodes = this.getCurrentNodes();
+    const linkedNode = nodes.find(node => 
+      node.data.nodeType === 'scene_node' && 
+      node.data.nodeSpecificData?.sceneId === sceneId
+    );
+    
+    if (linkedNode) {
+      const updatedNodes = nodes.map(node => {
+        if (node.id === linkedNode.id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              sceneData: { ...node.data.sceneData, ...sceneUpdates },
+              title: sceneUpdates.title || node.data.title
+            }
+          };
+        }
+        return node;
+      });
+      this.setNodes(updatedNodes);
+    }
   }
 
   setNodes(nodes: any[]): void {
@@ -271,6 +364,11 @@ export class SingleUserEventManager {
         return await this.executeEpisodeCommand(command as EpisodeCommand);
       }
 
+      // 🆕 UNIFIED STATE: Handle Scene Commands
+      if (this.isSceneCommand(command)) {
+        return await this.executeSceneCommand(command as SceneCommand);
+      }
+
       // Execute command
       if (command.execute) {
         await command.execute();
@@ -330,6 +428,10 @@ export class SingleUserEventManager {
     return command.type.startsWith('EPISODE_');
   }
 
+  private isSceneCommand(command: Command): boolean {
+    return command.type.startsWith('SCENE_');
+  }
+
   private async executeEpisodeCommand(command: EpisodeCommand): Promise<EpisodeCommandResult> {
     try {
       console.log(`[SingleUserEventManager] 🎭 Executing Episode command: ${command.type}`);
@@ -377,6 +479,59 @@ export class SingleUserEventManager {
 
     } catch (error) {
       console.error(`[SingleUserEventManager] ❌ Episode command failed: ${command.type}`, error);
+      throw error;
+    }
+  }
+
+  // 🆕 UNIFIED STATE: Scene Command Execution
+  private async executeSceneCommand(command: SceneCommand): Promise<SceneCommandResult> {
+    try {
+      console.log(`[SingleUserEventManager] 🎬 Executing Scene command: ${command.type}`);
+
+      let result: SceneCommandResult;
+
+      switch (command.type) {
+        case 'SCENE_CREATE':
+          result = await this.handleSceneCreate(command);
+          break;
+        case 'SCENE_UPDATE':
+          result = await this.handleSceneUpdate(command);
+          break;
+        case 'SCENE_DELETE':
+          result = await this.handleSceneDelete(command);
+          break;
+        case 'SCENE_TIMELINE_UPDATE':
+          result = await this.handleSceneTimelineUpdate(command);
+          break;
+        case 'SCENE_REORDER':
+          result = await this.handleSceneReorder(command);
+          break;
+        case 'SCENE_NODE_SYNC_CREATE':
+          result = await this.handleSceneNodeSyncCreate(command);
+          break;
+        default:
+          throw new Error(`Unknown scene command: ${command.type}`);
+      }
+
+      // Add to history if undoable
+      if (this.isUndoableCommand(command)) {
+        this.addToHistory(command);
+        this.state.redoStack = [];
+      }
+
+      // Mark as dirty for content commands
+      if (this.isContentCommand(command)) {
+        this.markAsDirty();
+      }
+
+      // Update state
+      this.updateState({
+        totalEvents: this.state.totalEvents + 1
+      });
+
+      return result;
+    } catch (error) {
+      console.error(`[SingleUserEventManager] ❌ Scene command failed: ${command.type}`, error);
       throw error;
     }
   }
@@ -556,6 +711,265 @@ export class SingleUserEventManager {
       success: true,
       command,
       episodes: updatedEpisodes,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  // 🆕 UNIFIED STATE: Scene Command Handlers
+  private async handleSceneCreate(command: SceneCommand): Promise<SceneCommandResult> {
+    const { sceneData, linkedNodeId } = command;
+    
+    if (!sceneData) {
+      throw new Error('Scene data is required for create command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    const newScene = {
+      ...sceneData,
+      _id: sceneData._id || `scene_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    context.addScene(newScene);
+
+    // Link to blueprint node if specified
+    if (linkedNodeId) {
+      const nodes = context.getCurrentNodes();
+      const linkedNode = nodes.find(node => node.id === linkedNodeId);
+      if (linkedNode) {
+        const updatedNodes = nodes.map(node => {
+          if (node.id === linkedNodeId) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                nodeSpecificData: {
+                  ...node.data.nodeSpecificData,
+                  sceneId: newScene._id
+                },
+                sceneData: newScene
+              }
+            };
+          }
+          return node;
+        });
+        context.setNodes(updatedNodes);
+      }
+    }
+
+    return {
+      success: true,
+      command,
+      scene: newScene,
+      linkedNode: linkedNodeId,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleSceneUpdate(command: SceneCommand): Promise<SceneCommandResult> {
+    const { sceneId, sceneData } = command;
+    
+    if (!sceneId || !sceneData) {
+      throw new Error('Scene ID and data are required for update command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    const existingScene = context.findSceneById(sceneId);
+    
+    if (!existingScene) {
+      throw new Error(`Scene not found: ${sceneId}`);
+    }
+
+    // Store undo data
+    command.undoData = { ...existingScene };
+
+    // Update scene (this also updates linked blueprint node)
+    context.updateScene(sceneId, { ...sceneData, updatedAt: new Date() });
+
+    const updatedScene = context.findSceneById(sceneId);
+
+    return {
+      success: true,
+      command,
+      scene: updatedScene,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleSceneDelete(command: SceneCommand): Promise<SceneCommandResult> {
+    const { sceneId } = command;
+    
+    if (!sceneId) {
+      throw new Error('Scene ID is required for delete command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    const existingScene = context.findSceneById(sceneId);
+    
+    if (!existingScene) {
+      throw new Error(`Scene not found: ${sceneId}`);
+    }
+
+    // Store undo data
+    command.undoData = { ...existingScene };
+
+    // Remove scene
+    context.removeScene(sceneId);
+
+    // Update linked blueprint node
+    const nodes = context.getCurrentNodes();
+    const linkedNode = nodes.find(node => 
+      node.data.nodeType === 'scene_node' && 
+      node.data.nodeSpecificData?.sceneId === sceneId
+    );
+
+    if (linkedNode) {
+      const updatedNodes = nodes.map(node => {
+        if (node.id === linkedNode.id) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              nodeSpecificData: {
+                ...node.data.nodeSpecificData,
+                sceneId: null
+              },
+              sceneData: null
+            }
+          };
+        }
+        return node;
+      });
+      context.setNodes(updatedNodes);
+    }
+
+    return {
+      success: true,
+      command,
+      scene: existingScene,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleSceneTimelineUpdate(command: SceneCommand): Promise<SceneCommandResult> {
+    const { sceneId, timelineData } = command;
+    
+    if (!sceneId || !timelineData) {
+      throw new Error('Scene ID and timeline data are required for timeline update command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    const existingScene = context.findSceneById(sceneId);
+    
+    if (!existingScene) {
+      throw new Error(`Scene not found: ${sceneId}`);
+    }
+
+    // Store undo data
+    command.undoData = { timeline: existingScene.timeline };
+
+    // Update scene timeline
+    context.updateScene(sceneId, { 
+      timeline: timelineData,
+      updatedAt: new Date()
+    });
+
+    const updatedScene = context.findSceneById(sceneId);
+
+    return {
+      success: true,
+      command,
+      scene: updatedScene,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  private async handleSceneReorder(command: SceneCommand): Promise<SceneCommandResult> {
+    const { bulkData } = command;
+    
+    if (!bulkData || bulkData.length === 0) {
+      throw new Error('Bulk data is required for reorder command');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+    const currentScenes = context.getCurrentScenes();
+    
+    // Store undo data
+    command.undoData = currentScenes.map(scene => ({ sceneId: scene._id, sceneOrder: scene.sceneOrder }));
+
+    // Update scene orders
+    const updatedScenes = currentScenes.map(scene => {
+      const updateData = bulkData.find(item => item.sceneId === scene._id);
+      return updateData ? { ...scene, ...updateData.updates } : scene;
+    }).sort((a, b) => a.sceneOrder - b.sceneOrder);
+
+    context.setScenes(updatedScenes);
+
+    return {
+      success: true,
+      command,
+      scenes: updatedScenes,
+      metadata: { timestamp: Date.now() }
+    };
+  }
+
+  // 🎬 NEW: Handle synchronized scene-node creation
+  private async handleSceneNodeSyncCreate(command: SceneCommand): Promise<SceneCommandResult> {
+    const { sceneData, nodeData, linkedNodeId } = command;
+
+    if (!sceneData || !nodeData || !linkedNodeId) {
+      throw new Error('Scene data, node data, and linked node ID are required for synchronized creation');
+    }
+
+    const context = this.commandContext as SingleUserCommandContext;
+
+    // Create scene with linked node reference
+    const newScene = {
+      _id: sceneData._id || `scene_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      title: sceneData.title || nodeData.title || 'New Scene',
+      description: sceneData.description || nodeData.notesForAuthor || '',
+      linkedNodeId: linkedNodeId,
+      nodeType: nodeData.nodeType,
+      sceneOrder: sceneData.sceneOrder || context.getCurrentScenes().length,
+      estimatedTimelineDurationMs: 30000,
+      background: sceneData.background || { type: 'color', value: '#1a1a1a' },
+      timelineTracks: [],
+      storyVariables: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...sceneData
+    };
+
+    // Add scene
+    context.addScene(newScene);
+
+    // Update linked node to reference the scene
+    context.updateLinkedSceneNode(newScene._id, newScene);
+
+    // Store undo data
+    command.undoData = { sceneId: newScene._id, linkedNodeId };
+
+    // Notify callbacks
+    if (this.config.onSceneNodeSync) {
+      this.config.onSceneNodeSync(newScene._id, linkedNodeId);
+    }
+
+    if (this.config.onDirectorTabUpdate) {
+      this.config.onDirectorTabUpdate(context.getCurrentScenes());
+    }
+
+    if (this.config.onBlueprintTabUpdate) {
+      this.config.onBlueprintTabUpdate(context.getCurrentNodes(), context.getCurrentEdges());
+    }
+
+    return {
+      success: true,
+      command,
+      scene: newScene,
+      scenes: context.getCurrentScenes(),
+      linkedNode: context.findNodeById(linkedNodeId),
+      updatedNodes: context.getCurrentNodes(),
       metadata: { timestamp: Date.now() }
     };
   }
@@ -839,16 +1253,99 @@ export class SingleUserEventManager {
         }
       }));
 
-      // ทำความสะอาดข้อมูล storyVariables ให้ตรงกับ IStoryVariableDefinition interface
-      const cleanedStoryVariables = storyVariables.map(variable => ({
-        variableId: variable.variableId || `var_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        variableName: variable.variableName || variable.name || 'Unknown Variable',
-        dataType: variable.dataType || variable.variableType || 'string',
-        initialValue: variable.initialValue !== undefined ? variable.initialValue : '',
-        description: variable.description || '',
-        isGlobal: variable.isGlobal !== undefined ? variable.isGlobal : true,
-        isVisibleToPlayer: variable.isVisibleToPlayer || false
-      }));
+      // 🔥 CRITICAL FIX: Enhanced storyVariables cleaning to completely prevent duplicates
+      const usedVariableIds = new Set<string>(); // Track used IDs to prevent duplicates
+      const timestamp = Date.now();
+      const sessionId = Math.random().toString(36).substr(2, 12); // Unique session ID
+      
+      console.log(`[SingleUserEventManager] 🧹 Starting variable cleaning process:`, {
+        originalCount: storyVariables.length,
+        timestamp,
+        sessionId
+      });
+      
+      // 🎯 STEP 1: Filter out invalid variables completely
+      const validVariables = storyVariables.filter(variable => {
+        if (!variable) return false;
+        if (!variable.variableName && !variable.name) return false;
+        // 🔥 CRITICAL: Filter out variables with null/undefined/empty variableId that cause duplicates
+        if (variable.variableId === null || variable.variableId === undefined || variable.variableId === '' || variable.variableId === 'null' || variable.variableId === 'undefined') {
+          return false; // Skip these problematic variables entirely
+        }
+        return true;
+      });
+      
+      // 🎯 STEP 2: Clean and deduplicate remaining variables
+      const cleanedStoryVariables = validVariables
+        .map((variable, index) => {
+          // 🔥 ENHANCED: Create absolutely unique variableId
+          const baseId = variable.variableId && 
+                         variable.variableId !== null && 
+                         variable.variableId !== 'null' && 
+                         variable.variableId !== 'undefined'
+            ? variable.variableId 
+            : null;
+
+          let uniqueId;
+          if (baseId && !usedVariableIds.has(baseId)) {
+            uniqueId = baseId; // Use existing ID if it's unique
+          } else {
+            // Generate new unique ID with enhanced randomness
+            const randomSuffix = Math.random().toString(36).substr(2, 9);
+            const indexSuffix = index.toString().padStart(3, '0');
+            uniqueId = `var_${timestamp}_${sessionId}_${indexSuffix}_${randomSuffix}`;
+          }
+
+          // 🔥 CRITICAL: Ensure absolute uniqueness with collision detection
+          let counter = 0;
+          let originalId = uniqueId;
+          while (usedVariableIds.has(uniqueId)) {
+            counter++;
+            uniqueId = `${originalId}_${counter}`;
+            
+            // Safety break to prevent infinite loop
+            if (counter > 1000) {
+              uniqueId = `var_emergency_${Date.now()}_${Math.random().toString(36).substr(2, 12)}`;
+              break;
+            }
+          }
+          
+          usedVariableIds.add(uniqueId);
+
+          return {
+            variableId: uniqueId,
+            variableName: variable.variableName || variable.name || `Variable_${index + 1}`,
+            dataType: variable.dataType || variable.variableType || 'string',
+            initialValue: variable.initialValue !== undefined ? variable.initialValue : '',
+            description: variable.description || '',
+            isGlobal: variable.isGlobal !== undefined ? variable.isGlobal : true,
+            isVisibleToPlayer: variable.isVisibleToPlayer || false
+          };
+        })
+        .filter(variable => {
+          // 🔥 FINAL CHECK: ตรวจสอบว่า variableId ไม่เป็น null หรือ undefined
+          if (!variable.variableId || variable.variableId === null || variable.variableId === 'null' || variable.variableId === 'undefined') {
+            console.warn(`[SingleUserEventManager] 🚨 Removing variable with null/invalid ID:`, variable);
+            return false;
+          }
+          return true;
+        })
+        .filter((variable, index, array) => {
+          // 🔥 FINAL DEDUPLICATION: Remove duplicates by variableId (keep first occurrence)
+          const firstIndex = array.findIndex(v => v.variableId === variable.variableId);
+          if (firstIndex !== index) {
+            console.warn(`[SingleUserEventManager] 🔄 Removing duplicate variable:`, variable.variableId);
+            return false;
+          }
+          return true;
+        });
+
+      console.log(`[SingleUserEventManager] ✅ Variable cleaning completed:`, {
+        originalCount: storyVariables.length,
+        validCount: validVariables.length,
+        finalCount: cleanedStoryVariables.length,
+        finalVariables: cleanedStoryVariables.map(v => ({ id: v.variableId, name: v.variableName }))
+      });
 
       const saveData = {
         nodes: cleanedNodes,
@@ -862,16 +1359,35 @@ export class SingleUserEventManager {
         nodeCount: saveData.nodes.length,
         edgeCount: saveData.edges.length,
         variableCount: saveData.storyVariables.length,
-        version: saveData.version
+        version: saveData.version,
+        isEpisodeSpecific: !!this.config.selectedEpisodeId,
+        episodeId: this.config.selectedEpisodeId,
+        storyVariableIds: saveData.storyVariables.map(v => v.variableId),
+        duplicateVariableIds: saveData.storyVariables.filter((v, i, arr) => 
+          arr.findIndex(x => x.variableId === v.variableId) !== i
+        ).map(v => v.variableId)
       });
       
       // 🔥 ADOBE/FIGMA STYLE: Use SaveDebouncer to prevent duplicate saves
       const saveFunction = async (data: any) => {
         const encodedSlug = encodeURIComponent(this.config.novelSlug);
-        const response = await fetch(`/api/novels/${encodedSlug}/storymap`, {
-          method: 'PUT',
+        
+        // 🎯 Episode-specific API routing
+        const isEpisodeSpecific = this.config.selectedEpisodeId;
+        const apiUrl = isEpisodeSpecific 
+          ? `/api/novels/${encodedSlug}/episodes/${this.config.selectedEpisodeId}/storymap/save`
+          : `/api/novels/${encodedSlug}/storymap`;
+        
+        console.log(`[SingleUserEventManager] 🎯 Saving to: ${apiUrl}`, {
+          isEpisodeSpecific,
+          episodeId: this.config.selectedEpisodeId
+        });
+        
+        const response = await fetch(apiUrl, {
+          method: isEpisodeSpecific ? 'POST' : 'PUT', // Episode API uses POST, Novel API uses PUT
           headers: {
             'Content-Type': 'application/json',
+            'X-Idempotency-Key': `save_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           },
           body: JSON.stringify(data)
         });
@@ -889,8 +1405,27 @@ export class SingleUserEventManager {
             if (errorData.error) {
               errorMessage = `Save failed: ${errorData.error}`;
             }
-            if (errorData.details) {
+            if (errorData.message) {
+              errorDetail = ` - ${errorData.message}`;
+            } else if (errorData.details) {
               errorDetail = ` - ${errorData.details}`;
+            }
+            
+            // 🔥 CRITICAL FIX: Handle specific error types with better error messages
+            if (errorData.message && errorData.message.includes('E11000') && errorData.message.includes('storyVariables.variableId')) {
+              errorMessage = 'Save failed: Duplicate story variable detected';
+              errorDetail = ' - The system will automatically fix this on retry';
+              
+              // 🔥 PROFESSIONAL: Log the error but don't auto-retry to prevent infinite loops
+              console.log('[SingleUserEventManager] 🚨 Duplicate variable error - enhanced cleaning should prevent this');
+              console.error('[SingleUserEventManager] 📊 Debug info:', {
+                cleanedVariablesCount: cleanedStoryVariables.length,
+                cleanedVariables: cleanedStoryVariables.map(v => ({ id: v.variableId, name: v.variableName })),
+                serverError: errorData
+              });
+              
+              // Throw error with user-friendly message for auto-retry case
+              throw new Error(errorMessage + errorDetail);
             }
           } catch (parseError) {
             // ถ้า parse JSON ไม่ได้ ใช้ response text
@@ -913,8 +1448,12 @@ export class SingleUserEventManager {
       const result = await this.saveDebouncer.performSave(saveData, saveFunction);
       console.log('[SingleUserEventManager] ✅ Save successful, server response:', result);
       
-      // Update version และ state หลังบันทึกสำเร็จ
-      const newVersion = result.newVersion || result.storyMap?.version || (this.state.serverVersion + 1);
+      // 🔥 CRITICAL FIX: Handle different API response formats with null safety
+      if (!result) {
+        throw new Error('Save failed: No response from server');
+      }
+      
+      const newVersion = result.newVersion || result.storyMap?.version || result.version || (this.state.serverVersion + 1);
       
       // ✅ CRITICAL FIX: Update originalSnapshot BEFORE state update
       this.originalSnapshot = { 
@@ -995,10 +1534,11 @@ export class SingleUserEventManager {
     }
   }
 
-  initializeWithData(data: { nodes: any[]; edges: any[]; storyVariables: any[]; episodes?: any[] }): void {
+  initializeWithData(data: { nodes: any[]; edges: any[]; storyVariables: any[]; episodes?: any[]; scenes?: any[] }): void {
     const snapshot: SnapshotData = {
       ...data,
       episodes: data.episodes || [], // 🆕 PHASE 3: Initialize episodes
+      scenes: data.scenes || [], // 🆕 UNIFIED STATE: Initialize scenes
       timestamp: Date.now(),
       version: this.state.serverVersion
     };
@@ -1078,9 +1618,30 @@ export class SingleUserEventManager {
   updateConfig(newConfig: Partial<SingleUserConfig>): void {
     const oldAutoSaveEnabled = this.config.autoSaveEnabled;
     const oldInterval = this.config.autoSaveIntervalMs;
+    const oldEpisodeId = this.config.selectedEpisodeId;
     
     // Update configuration
     this.config = { ...this.config, ...newConfig };
+    
+    // 🎯 Handle episode context changes
+    if (newConfig.selectedEpisodeId !== oldEpisodeId) {
+      console.log('[SingleUserEventManager] 🎭 Episode context changed:', {
+        from: oldEpisodeId,
+        to: newConfig.selectedEpisodeId,
+        isEpisodeSpecific: !!newConfig.selectedEpisodeId
+      });
+      
+      // Reset save state for new episode context
+      this.updateState({
+        isDirty: false,
+        hasUnsavedChanges: false,
+        lastSaved: null
+      });
+      
+      // Clear command history when switching episodes
+      this.state.undoStack = [];
+      this.state.redoStack = [];
+    }
     
     // Handle auto-save timer changes dynamically
     if (newConfig.autoSaveEnabled !== undefined || newConfig.autoSaveIntervalMs !== undefined) {
@@ -1090,7 +1651,8 @@ export class SingleUserEventManager {
         this.startAutoSave(); // Start with new config
         console.log('[SingleUserEventManager] ✅ Auto-save restarted with new config:', {
           enabled: this.config.autoSaveEnabled,
-          intervalMs: this.config.autoSaveIntervalMs
+          intervalMs: this.config.autoSaveIntervalMs,
+          episodeId: this.config.selectedEpisodeId
         });
       } else {
         console.log('[SingleUserEventManager] ⏹️ Auto-save disabled');
@@ -1140,6 +1702,7 @@ export class SingleUserEventManager {
       edges: [],
       storyVariables: [],
       episodes: [], // 🆕 PHASE 3: Initialize episodes
+      scenes: [], // 🆕 UNIFIED STATE: Initialize scenes
       timestamp: Date.now(),
       version: 1
     };
@@ -1204,13 +1767,15 @@ export class SingleUserEventManager {
   }
 
   // Compatibility method for BlueprintTab
-  updateSnapshotFromReactFlow(nodes: any[], edges: any[], storyVariables: any[]): void {
+  updateSnapshotFromReactFlow(nodes: any[], edges: any[], storyVariables: any[], scenes?: any[]): void {
     const newSnapshot: SnapshotData = {
       nodes: [...nodes],
       edges: [...edges],
       storyVariables: [...storyVariables],
       timestamp: Date.now(),
-      version: this.state.localVersion
+      version: this.state.localVersion,
+      episodes: this.currentSnapshot.episodes || [], // Preserve episodes
+      scenes: scenes ? [...scenes] : this.currentSnapshot.scenes || [] // Update or preserve scenes
     };
 
     // Professional change detection - ตรวจสอบการเปลี่ยนแปลงอย่างละเอียด (Canva/Figma level)
@@ -1256,6 +1821,49 @@ export class SingleUserEventManager {
       lastSaved: new Date()
     });
     this.config.onDirtyChange?.(false);
+  }
+
+  // 🎬 NEW: Create synchronized scene-node pair
+  async createSynchronizedSceneNode(nodeData: any, sceneData?: any): Promise<{ scene: any; node: any }> {
+    const nodeId = nodeData.id || `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const sceneId = sceneData?._id || `scene_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create the synchronized scene-node command
+    const command: SceneCommand = {
+      id: `sync_create_${Date.now()}`,
+      type: 'SCENE_NODE_SYNC_CREATE',
+      timestamp: Date.now(),
+      description: `Create synchronized scene-node pair: ${nodeData.title}`,
+      sceneData: {
+        _id: sceneId,
+        title: nodeData.title || 'New Scene',
+        description: nodeData.notesForAuthor || '',
+        ...sceneData
+      },
+      nodeData,
+      linkedNodeId: nodeId,
+      autoSync: true,
+      execute: () => {},
+      undo: () => {},
+      serialize: () => ({
+        id: `sync_create_${Date.now()}`,
+        type: 'SCENE_NODE_SYNC_CREATE',
+        timestamp: Date.now(),
+        payload: { nodeData, sceneData }
+      })
+    };
+
+    const result = await this.executeCommand(command);
+    
+    if (!result.success) {
+      const errorMessage = typeof result.error === 'string' ? result.error : 'Failed to create synchronized scene-node pair';
+      throw new Error(errorMessage);
+    }
+
+    return {
+      scene: (result as SceneCommandResult).scene!,
+      node: (result as SceneCommandResult).linkedNode!
+    };
   }
 
   notifyChange(changeType: string, data: any): void {

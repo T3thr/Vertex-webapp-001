@@ -29,6 +29,7 @@ import {
   Users
 } from 'lucide-react';
 import { SerializedUser } from '@/app/dashboard/page';
+import { useRouter } from 'next/navigation';
 
 interface CreateNovelModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ interface CreateNovelModalProps {
 
 interface NovelFormData {
   title: string;
+  slug: string;
   penName: string;
   synopsis: string;
   longDescription: string;
@@ -59,8 +61,10 @@ interface Category {
 }
 
 export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated }: CreateNovelModalProps) {
+  const router = useRouter();
   const [formData, setFormData] = useState<NovelFormData>({
     title: '',
+    slug: '',
     penName: user.profile?.penNames?.[0] || user.profile?.displayName || user.username || '',
     synopsis: '',
     longDescription: '',
@@ -106,22 +110,22 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
     try {
       setLoadingCategories(true);
       const [themesRes, languagesRes, ageRatingsRes] = await Promise.all([
-        fetch('/api/search/categories?type=THEME&limit=20&forNovelCreation=true'),
-        fetch('/api/search/categories?type=LANGUAGE&limit=10&forNovelCreation=true'),
-        fetch('/api/search/categories?type=AGE_RATING&limit=10&forNovelCreation=true')
+        fetch('/api/categories?type=theme&limit=20&isActive=true'),
+        fetch('/api/categories?type=language&limit=10&isActive=true'),
+        fetch('/api/categories?type=age_rating&limit=10&isActive=true')
       ]);
 
       if (themesRes.ok) {
         const themesData = await themesRes.json();
-        setThemes(themesData.data || []);
+        setThemes(themesData.categories || []);
       }
 
       if (languagesRes.ok) {
         const languagesData = await languagesRes.json();
-        setLanguages(languagesData.data || []);
+        setLanguages(languagesData.categories || []);
 
         // Auto-select Thai language if available
-        const thaiLang = languagesData.data?.find((lang: Category) =>
+        const thaiLang = languagesData.categories?.find((lang: Category) =>
           lang.name === 'ไทย' || lang.name === 'Thai' || lang.slug === 'thai'
         );
         if (thaiLang) {
@@ -131,17 +135,43 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
 
       if (ageRatingsRes.ok) {
         const ageRatingsData = await ageRatingsRes.json();
-        setAgeRatings(ageRatingsData.data || []);
+        setAgeRatings(ageRatingsData.categories || []);
       }
     } catch (error) {
       console.error('Error loading categories:', error);
+      setError('ไม่สามารถโหลดหมวดหมู่ได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setLoadingCategories(false);
     }
   };
 
+  // ฟังก์ชันสร้าง slug จากชื่อเรื่อง
+  const generateSlug = (title: string): string => {
+    if (!title) return '';
+    
+    return title
+      .toString()
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^\p{L}\p{N}\p{M}-]+/gu, '')
+      .replace(/--+/g, '-')
+      .replace(/^-+/, '')
+      .replace(/-+$/, '')
+      .substring(0, 280);
+  };
+
   const handleInputChange = (field: keyof NovelFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Auto-generate slug when title changes
+      if (field === 'title') {
+        newData.slug = generateSlug(value);
+      }
+      
+      return newData;
+    });
     setError(null);
   };
 
@@ -170,8 +200,18 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
       return;
     }
 
+    if (!formData.slug.trim()) {
+      setError('กรุณาระบุ Slug');
+      return;
+    }
+
     if (!formData.penName.trim()) {
       setError('กรุณาระบุนามปากกา');
+      return;
+    }
+
+    if (!formData.synopsis.trim()) {
+      setError('กรุณาระบุเรื่องย่อ');
       return;
     }
 
@@ -182,6 +222,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
       // Create FormData for file uploads
       const submitData = new FormData();
       submitData.append('title', formData.title.trim());
+      submitData.append('slug', formData.slug.trim());
       submitData.append('penName', formData.penName.trim());
       submitData.append('synopsis', formData.synopsis.trim());
       submitData.append('longDescription', formData.longDescription.trim());
@@ -200,11 +241,31 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
         body: submitData
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'เกิดข้อผิดพลาดในการสร้างนิยาย';
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        
+        setError(errorMessage);
+        return;
+      }
+
       const data = await response.json();
 
-      if (response.ok) {
+      if (data.success && data.novel) {
         onNovelCreated(data.novel);
         handleClose();
+        
+        // 🎯 PROFESSIONAL: Navigate to overview without any URL parameters
+        // Tutorial will show automatically when no episodes exist
+        router.push(`/novels/${data.novel.slug}/overview`);
       } else {
         setError(data.error || 'เกิดข้อผิดพลาดในการสร้างนิยาย');
       }
@@ -220,6 +281,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
     if (!isLoading) {
       setFormData({
         title: '',
+        slug: '',
         penName: user.profile?.penNames?.[0] || user.profile?.displayName || user.username || '',
         synopsis: '',
         longDescription: '',
@@ -265,11 +327,11 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
   };
 
   const contentTypes = [
-    { value: 'interactive_fiction', label: 'Visual Novel', icon: Gamepad2, color: 'purple' },
-    { value: 'original', label: 'นิยายต้นฉบับ', icon: BookOpen, color: 'blue' },
-    { value: 'fan_fiction', label: 'แฟนฟิคชั่น', icon: Heart, color: 'pink' },
-    { value: 'adaptation', label: 'ดัดแปลง', icon: Star, color: 'yellow' },
-    { value: 'translation', label: 'แปล', icon: Globe, color: 'green' }
+    { value: 'interactive_fiction', label: 'Visual Novel', icon: Gamepad2, color: 'bg-gradient-to-br from-purple-500 to-purple-600 text-white' },
+    { value: 'original', label: 'นิยายต้นฉบับ', icon: BookOpen, color: 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' },
+    { value: 'fan_fiction', label: 'แฟนฟิคชั่น', icon: Heart, color: 'bg-gradient-to-br from-pink-500 to-pink-600 text-white' },
+    { value: 'adaptation', label: 'ดัดแปลง', icon: Star, color: 'bg-gradient-to-br from-amber-500 to-amber-600 text-white' },
+    { value: 'translation', label: 'แปล', icon: Globe, color: 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white' }
   ];
 
   const endingTypes = [
@@ -337,13 +399,13 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                 {/* Error Message */}
                 {error && (
                   <motion.div
-                    className="bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 backdrop-blur-sm"
+                    className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border border-red-200 dark:border-red-700 rounded-xl p-4 backdrop-blur-sm"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                      <p className="text-red-600 dark:text-red-400 text-sm font-medium">{error}</p>
+                      <p className="text-red-600 dark:text-red-300 text-sm font-medium">{error}</p>
                     </div>
                   </motion.div>
                 )}
@@ -429,11 +491,36 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                         type="text"
                         value={formData.title}
                         onChange={(e) => handleInputChange('title', e.target.value)}
-                        className="w-full px-4 py-4 bg-gradient-to-r from-background to-background/80 border border-border rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all duration-300 text-foreground placeholder-muted-foreground text-lg font-medium backdrop-blur-sm"
+                        className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground placeholder-muted-foreground text-lg font-medium"
                         placeholder="ใส่ชื่อ Visual Novel ที่น่าสนใจ..."
                         disabled={isLoading}
                         required
                       />
+                    </div>
+
+                    {/* Slug */}
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-card-foreground">
+                        <Globe className="w-4 h-4 text-green-500" />
+                        Slug (URL) <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={formData.slug}
+                          onChange={(e) => handleInputChange('slug', e.target.value)}
+                          className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground placeholder-muted-foreground font-mono text-sm"
+                          placeholder="my-visual-novel"
+                          disabled={isLoading}
+                          required
+                        />
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-4">
+                          <span className="text-xs text-muted-foreground">/novels/{formData.slug || 'slug'}</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Slug จะถูกสร้างอัตโนมัติจากชื่อเรื่อง หรือคุณสามารถแก้ไขได้เอง
+                      </p>
                     </div>
 
                     {/* Pen Name Dropdown */}
@@ -446,7 +533,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                         <button
                           type="button"
                           onClick={() => setPenNameDropdownOpen(!penNameDropdownOpen)}
-                          className="w-full px-4 py-4 bg-gradient-to-r from-background to-background/80 border border-border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 text-foreground backdrop-blur-sm flex items-center justify-between"
+                          className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground flex items-center justify-between"
                           disabled={isLoading}
                         >
                           <span className={formData.penName ? 'text-foreground' : 'text-muted-foreground'}>
@@ -490,15 +577,15 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                               onClick={() => handleInputChange('contentType', type.value)}
                               className={`p-3 rounded-xl border transition-all duration-300 ${
                                 formData.contentType === type.value
-                                  ? `border-${type.color}-500 bg-${type.color}-50 dark:bg-${type.color}-900/20`
-                                  : 'border-border hover:border-muted-foreground'
+                            ? `border-primary bg-primary/10 ${type.color}`
+                            : 'border-border hover:border-muted-foreground hover:bg-secondary/50'
                               }`}
                             >
                               <Icon className={`w-5 h-5 mx-auto mb-2 ${
-                                formData.contentType === type.value ? `text-${type.color}-600` : 'text-muted-foreground'
+                                formData.contentType === type.value ? 'text-white' : 'text-muted-foreground'
                               }`} />
                               <p className={`text-xs font-medium ${
-                                formData.contentType === type.value ? `text-${type.color}-700 dark:text-${type.color}-400` : 'text-muted-foreground'
+                                formData.contentType === type.value ? 'text-white' : 'text-muted-foreground'
                               }`}>
                                 {type.label}
                               </p>
@@ -522,13 +609,13 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                             onClick={() => handleInputChange('endingType', type.value)}
                             className={`p-3 rounded-xl border transition-all duration-300 ${
                               formData.endingType === type.value
-                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                : 'border-border hover:border-muted-foreground'
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border hover:border-muted-foreground hover:bg-secondary/50'
                             }`}
                           >
                             <div className="text-2xl mb-2">{type.icon}</div>
                             <p className={`text-xs font-medium ${
-                              formData.endingType === type.value ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
+                              formData.endingType === type.value ? 'text-primary' : 'text-muted-foreground'
                             }`}>
                               {type.label}
                             </p>
@@ -546,7 +633,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                       <textarea
                         value={formData.synopsis}
                         onChange={(e) => handleInputChange('synopsis', e.target.value)}
-                        className="w-full px-4 py-4 bg-gradient-to-r from-background to-background/80 border border-border rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-300 text-foreground placeholder-muted-foreground resize-none backdrop-blur-sm"
+                        className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground placeholder-muted-foreground resize-none"
                         placeholder="เขียนเรื่องย่อที่ดึงดูดใจ..."
                         rows={3}
                         disabled={isLoading}
@@ -570,7 +657,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                           <select
                             value={formData.mainThemeId}
                             onChange={(e) => handleInputChange('mainThemeId', e.target.value)}
-                            className="w-full px-4 py-4 bg-gradient-to-r from-background to-background/80 border border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300 text-foreground backdrop-blur-sm"
+                            className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground"
                             disabled={isLoading}
                           >
                             <option value="">เลือกหมวดหมู่</option>
@@ -598,7 +685,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                           <select
                             value={formData.languageId}
                             onChange={(e) => handleInputChange('languageId', e.target.value)}
-                            className="w-full px-4 py-4 bg-gradient-to-r from-background to-background/80 border border-border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all duration-300 text-foreground backdrop-blur-sm"
+                            className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground"
                             disabled={isLoading}
                           >
                             <option value="">เลือกภาษา</option>
@@ -626,7 +713,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                           <select
                             value={formData.ageRating}
                             onChange={(e) => handleInputChange('ageRating', e.target.value)}
-                            className="w-full px-4 py-4 bg-gradient-to-r from-background to-background/80 border border-border rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 text-foreground backdrop-blur-sm"
+                            className="w-full px-4 py-4 bg-background border border-input-border rounded-xl focus:ring-2 focus:ring-ring focus:border-ring transition-all duration-300 text-foreground"
                             disabled={isLoading}
                           >
                             <option value="">เลือกเรทติ้ง</option>
@@ -643,9 +730,9 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                 </div>
 
                 {/* Info Note */}
-                <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
+                <div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20 rounded-xl p-6">
                   <div className="flex items-start gap-4">
-                    <Sparkles className="w-6 h-6 text-blue-500 flex-shrink-0 mt-1" />
+                    <Sparkles className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
                     <div className="text-sm text-muted-foreground">
                       <p className="font-semibold text-foreground mb-2">เกี่ยวกับการสร้าง Visual Novel:</p>
                       <ul className="space-y-1 text-sm">
@@ -653,6 +740,7 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                         <li>• คุณสามารถเพิ่มตอน สร้างตัวละคร และออกแบบเส้นทางเรื่องได้ภายหลัง</li>
                         <li>• รูปภาพทั้งหมดจะถูกประมวลผลและปรับขนาดอัตโนมัติ</li>
                         <li>• Visual Novel รองรับการมีปฏิสัมพันธ์และการเลือกที่หลากหลาย</li>
+                        <li>• ระบบจะสร้างแผนผังเรื่อง (StoryMap) เริ่มต้นให้อัตโนมัติ</li>
                       </ul>
                     </div>
                   </div>
@@ -672,10 +760,10 @@ export default function CreateNovelModal({ isOpen, onClose, user, onNovelCreated
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-10 py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                    className="bg-gradient-to-r from-primary to-primary-hover text-primary-foreground px-10 py-3 rounded-xl font-semibold hover:opacity-90 transition-all duration-300 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                     whileHover={{ scale: isLoading ? 1 : 1.02 }}
                     whileTap={{ scale: isLoading ? 1 : 0.98 }}
-                    disabled={isLoading || !formData.title.trim() || !formData.penName.trim()}
+                    disabled={isLoading || !formData.title.trim() || !formData.slug.trim() || !formData.penName.trim() || !formData.synopsis.trim()}
                   >
                     {isLoading ? (
                       <>

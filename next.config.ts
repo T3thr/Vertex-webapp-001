@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   // ==========================================
   turbopack: {
     resolveAlias: {
-      'lodash': 'lodash-es',
+      // Removed lodash alias to fix Cloudinary compatibility
     },
   },
 
@@ -90,11 +90,19 @@ const nextConfig: NextConfig = {
   // Bundle Analysis & Optimization (Webpack only)
   // ==========================================
   webpack: (config, { dev, isServer }) => {
-    // ✅ ย้าย alias กลับมาไว้ใน webpack config สำหรับ Production build
+    // ✅ Configure module resolution for better compatibility
     config.resolve.alias = {
       ...config.resolve.alias,
-      'lodash': 'lodash-es',
+      // Removed lodash alias to fix Cloudinary compatibility
     };
+
+    // Ensure proper module resolution for server-side packages
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push({
+        'lodash': 'commonjs lodash'
+      });
+    }
 
     // การตั้งค่านี้จะทำงานเฉพาะตอน 'next build' (production) เท่านั้น
     if (!dev && !isServer) {
