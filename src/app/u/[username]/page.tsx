@@ -149,7 +149,7 @@ export default async function UserPage({
     return score(b) - score(a);
   });
 
-  // --- End of new data fetching logic ---
+  // --- End of new data fetching logic 2---
 
   const totalNovels = user?.writerStats?.totalNovelsPublished ?? 0;
   const favoriteNovels = 5; // TODO: ดึงจาก UserLibraryItem หรือระบบ Favorite จริง
