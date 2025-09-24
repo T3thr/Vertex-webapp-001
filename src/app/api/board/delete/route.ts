@@ -1,55 +1,14 @@
-// src/app/api/board/[slug]/route.ts
-// API endpoint สำหรับดึงข้อมูลกระทู้ตาม slug
+// src/app/api/board/delete/route.ts
+// API endpoint สำหรับลบกระทู้
 
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import dbConnect from "@/backend/lib/mongodb";
+import BoardModel from "@/backend/models/Board";
 import CommunityBoardService from "@/backend/services/CommunityBoard";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 
-// ดึงข้อมูลกระทู้ตาม slug
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
-    await dbConnect();
-    
-    const { slug } = await params;
-    if (!slug) {
-      return NextResponse.json(
-        { success: false, error: "ไม่พบ slug ของกระทู้" },
-        { status: 400 }
-      );
-    }
-    
-    const post = await CommunityBoardService.getBoardBySlug(slug);
-    if (!post) {
-      return NextResponse.json(
-        { success: false, error: "ไม่พบกระทู้" },
-        { status: 404 }
-      );
-    }
-    
-    // เพิ่มจำนวนการดู
-    const session = await getServerSession(authOptions);
-    await CommunityBoardService.incrementViewCount(post._id.toString(), session?.user?.id);
-    
-    return NextResponse.json({ success: true, post });
-  } catch (error) {
-    console.error("Error fetching board post:", error);
-    return NextResponse.json(
-      { success: false, error: "เกิดข้อผิดพลาดในการดึงข้อมูลกระทู้" },
-      { status: 500 }
-    );
-  }
-}
-
-// ลบกระทู้ตาม slug (สำหรับผู้ที่เป็นเจ้าของกระทู้เท่านั้น)
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export async function POST(req: NextRequest) {
   try {
     await dbConnect();
     
@@ -62,16 +21,19 @@ export async function DELETE(
       );
     }
 
-    const { slug } = await params;
-    if (!slug) {
+    // รับข้อมูลจาก request body
+    const data = await req.json();
+    const { postId } = data;
+    
+    if (!postId) {
       return NextResponse.json(
-        { success: false, error: "ไม่พบ slug ของกระทู้" },
+        { success: false, error: "ไม่พบ ID ของกระทู้" },
         { status: 400 }
       );
     }
     
     // ดึงข้อมูลกระทู้
-    const post = await CommunityBoardService.getBoardBySlug(slug);
+    const post = await BoardModel.findById(postId).lean();
     if (!post) {
       return NextResponse.json(
         { success: false, error: "ไม่พบกระทู้" },
@@ -111,3 +73,4 @@ export async function DELETE(
     );
   }
 }
+

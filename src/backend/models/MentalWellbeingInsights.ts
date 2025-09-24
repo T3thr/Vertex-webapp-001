@@ -1,7 +1,7 @@
 // src/backend/models/UserMentalInsights.ts
 
 // SECTION: Imports
-import mongoose, { Schema, Document, Types, Model } from 'mongoose';
+import mongoose, { Document, Model, Schema, Types } from 'mongoose';
 
 // SECTION: Type Definitions and Interfaces
 
@@ -104,6 +104,20 @@ UserMentalInsightsSchema.pre('save', function(next) {
 // 5.  **Anonymization:** ในการนำข้อมูลไปใช้เพื่อการวิเคราะห์ในภาพรวม ต้องผ่านกระบวนการทำให้ข้อมูลนิรนาม (Anonymization) หรือ De-identification ก่อนเสมอ
 
 // SECTION: Model Export
-const UserMentalInsights = mongoose.model<IUserMentalInsightsDoc>('UserMentalInsights', UserMentalInsightsSchema);
+// ใช้ try-catch เพื่อป้องกันปัญหา OverwriteModelError
+let UserMentalInsights: mongoose.Model<IUserMentalInsightsDoc>;
+
+try {
+  // ตรวจสอบว่ามีการสร้างโมเดลไว้แล้วหรือไม่
+  if (mongoose.models && mongoose.models.UserMentalInsights) {
+    UserMentalInsights = mongoose.models.UserMentalInsights as mongoose.Model<IUserMentalInsightsDoc>;
+  } else {
+    UserMentalInsights = mongoose.model<IUserMentalInsightsDoc>('UserMentalInsights', UserMentalInsightsSchema);
+  }
+} catch (error) {
+  // กรณีเกิดข้อผิดพลาด ให้ใช้โมเดลที่มีอยู่แล้ว
+  console.error("Error creating UserMentalInsights model:", error);
+  UserMentalInsights = mongoose.models.UserMentalInsights as mongoose.Model<IUserMentalInsightsDoc>;
+}
 
 export default UserMentalInsights;

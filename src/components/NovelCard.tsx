@@ -1,15 +1,15 @@
 // src/components/NovelCard.tsx
 "use client";
 
+import type { CategoryType, ICategoryLocalization } from "@/backend/models/Category";
+import type { IMonetizationSettings, INovel, INovelStats } from "@/backend/models/Novel";
+import type { IUser } from "@/backend/models/User";
+import { formatDistanceToNow } from "date-fns";
+import { th } from "date-fns/locale";
+import { BookOpen, CheckCircle, Clock, Eye, Heart, ShieldCheck, Sparkles, Star, Tag, ThumbsUp } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { memo } from "react";
-import { Heart, Eye, Star, Clock, ShieldCheck, Tag, CheckCircle, Sparkles, ThumbsUp, BookOpen } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { th } from "date-fns/locale";
-import type { INovel, NovelStatus, IMonetizationSettings, INovelStats } from "@/backend/models/Novel"; 
-import type { ICategory, CategoryType, ICategoryLocalization } from "@/backend/models/Category"; 
-import type { IUser } from "@/backend/models/User"; 
 
 // อินเทอร์เฟซสำหรับผู้เขียนที่ถูก populate
 export interface PopulatedAuthor {
@@ -366,3 +366,4 @@ function formatNumber(num?: number | null): string {
 }
 
 export { NovelCard as default };
+

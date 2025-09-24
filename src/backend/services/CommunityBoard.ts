@@ -3,6 +3,7 @@
 
 import mongoose from 'mongoose';
 import BoardModel, { BoardStatus, BoardType, IBoard } from '../models/Board';
+import { CategoryType } from '../models/Category';
 
 // อินเตอร์เฟซสำหรับข้อมูลที่ใช้สร้างกระทู้ใหม่
 export interface CreateBoardPostDto {
@@ -10,8 +11,10 @@ export interface CreateBoardPostDto {
   content: string;
   authorId: string;
   boardType: BoardType;
+  sourceType?: string; // เพิ่ม sourceType เพื่อระบุที่มาของกระทู้ (review, problem, etc.)
   categoryAssociatedId: string;
   novelAssociatedId?: string;
+  novelTitle?: string;
   tags?: string[];
   containsSpoilers?: boolean;
   reviewDetails?: {
@@ -37,23 +40,62 @@ class CommunityBoardService {
   async createBoardPost(postData: CreateBoardPostDto): Promise<IBoard> {
     try {
       // ตรวจสอบข้อมูลที่จำเป็น
-      if (!postData.title || !postData.content || !postData.authorId || !postData.categoryAssociatedId) {
-        throw new Error('ข้อมูลไม่ครบถ้วน กรุณาระบุหัวข้อ เนื้อหา ผู้เขียน และหมวดหมู่');
+      if (!postData.title || !postData.content || !postData.authorId) {
+        throw new Error('ข้อมูลไม่ครบถ้วน กรุณาระบุหัวข้อ เนื้อหา และผู้เขียน');
+      }
+
+      // ดึงข้อมูลผู้ใช้เพื่อเอา username
+      const UserModel = (await import('../models/User')).default;
+      const author = await UserModel.findById(postData.authorId).select('username profile.avatarUrl roles');
+      if (!author) {
+        throw new Error('ไม่พบข้อมูลผู้ใช้');
+      }
+
+      // สร้างหมวดหมู่เริ่มต้นถ้าไม่มี
+      let categoryId = postData.categoryAssociatedId;
+      
+      // ตรวจสอบว่า categoryId เป็น ObjectId ที่ถูกต้องหรือไม่
+      const isValidObjectId = categoryId && mongoose.Types.ObjectId.isValid(categoryId);
+      
+      if (!categoryId || !isValidObjectId) {
+        const CategoryModel = (await import('../models/Category')).default;
+        let generalCategory = await CategoryModel.findOne({ 
+          slug: 'general-discussion',
+          categoryType: CategoryType.TAG
+        });
+        
+        if (!generalCategory) {
+          generalCategory = await CategoryModel.create({
+            name: 'พูดคุยทั่วไป',
+            slug: 'general-discussion',
+            categoryType: CategoryType.TAG,
+            description: 'พูดคุยเรื่องทั่วไป แชร์ประสบการณ์ และแลกเปลี่ยนความคิดเห็น',
+            isActive: true,
+            isSystemDefined: true,
+            visibility: 'public',
+            displayOrder: 0
+          });
+        }
+        categoryId = generalCategory._id.toString();
       }
 
       // สร้าง slug จากชื่อกระทู้
       const slug = await this.generateUniqueSlug(postData.title);
 
-      // สร้างกระทู้ใหม่
-      const newBoardPost = new BoardModel({
+      // สร้างข้อมูลพื้นฐานของกระทู้
+      const boardData: any = {
         title: postData.title,
         slug,
         content: postData.content,
         contentFormat: 'markdown', // ค่าเริ่มต้นเป็น markdown
         authorId: new mongoose.Types.ObjectId(postData.authorId),
+        authorUsername: author.username, // เพิ่ม authorUsername ที่จำเป็น
+        authorAvatarUrl: author.profile?.avatarUrl, // เพิ่ม authorAvatarUrl
+        authorRoles: author.roles || [], // เพิ่ม authorRoles
         boardType: postData.boardType || BoardType.DISCUSSION,
+        sourceType: postData.sourceType || null, // เพิ่ม sourceType เพื่อระบุที่มาของกระทู้
         status: BoardStatus.PUBLISHED,
-        categoryAssociated: new mongoose.Types.ObjectId(postData.categoryAssociatedId),
+        categoryAssociated: new mongoose.Types.ObjectId(categoryId),
         tags: postData.tags || [],
         containsSpoilers: postData.containsSpoilers || false,
         stats: {
@@ -65,17 +107,24 @@ class CommunityBoardService {
           sharesCount: 0,
           bookmarksCount: 0
         }
-      });
+      };
+
+      // เพิ่ม reviewDetails เฉพาะเมื่อเป็น REVIEW type
+      if (postData.boardType === BoardType.REVIEW && postData.reviewDetails) {
+        boardData.reviewDetails = postData.reviewDetails;
+      }
+
+      // สร้างกระทู้ใหม่
+      const newBoardPost = new BoardModel(boardData);
 
       // เพิ่มข้อมูลนิยายที่เกี่ยวข้อง (ถ้ามี)
       if (postData.novelAssociatedId) {
         newBoardPost.novelAssociated = new mongoose.Types.ObjectId(postData.novelAssociatedId);
+      } else if (postData.novelTitle) {
+        // ใช้ชื่อนิยายที่ผู้ใช้กรอกแทน ID
+        (newBoardPost as any).novelTitle = postData.novelTitle;
       }
 
-      // เพิ่มข้อมูลรีวิว (ถ้าเป็นกระทู้ประเภทรีวิว)
-      if (postData.boardType === BoardType.REVIEW && postData.reviewDetails) {
-        newBoardPost.reviewDetails = postData.reviewDetails;
-      }
 
       // บันทึกกระทู้
       await newBoardPost.save();
@@ -209,7 +258,7 @@ class CommunityBoardService {
   async getBoardBySlug(slug: string): Promise<any | null> {
     try {
       return await BoardModel.findOne({ slug, status: BoardStatus.PUBLISHED, isDeleted: false })
-        .populate('authorId', 'username profile.avatarUrl')
+        .populate('authorId', '_id username profile.avatarUrl') // เพิ่ม _id เพื่อให้แน่ใจว่าดึง ID มาด้วย
         .populate('categoryAssociated', 'name')
         .lean();
     } catch (error) {
@@ -230,6 +279,24 @@ class CommunityBoardService {
       });
     } catch (error) {
       console.error('Error incrementing view count:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ลบกระทู้ (soft delete)
+   * @param boardId ID ของกระทู้
+   * @returns ผลลัพธ์การลบกระทู้
+   */
+  async deleteBoard(boardId: string): Promise<any> {
+    try {
+      return await BoardModel.findByIdAndUpdate(boardId, {
+        isDeleted: true,
+        status: BoardStatus.DELETED,
+        updatedAt: new Date()
+      }, { new: true });
+    } catch (error) {
+      console.error('Error deleting board post:', error);
       throw error;
     }
   }

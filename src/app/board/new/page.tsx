@@ -5,7 +5,7 @@ import { AlertCircle, ArrowLeft, Check, Image, Info } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function NewBoardPostPage() {
   const { data: session, status } = useSession();
@@ -14,18 +14,58 @@ export default function NewBoardPostPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     boardType: BoardType.DISCUSSION,
-    categoryAssociatedId: '65f4e8c35d35f6c7b8a1e2d3', // ตั้งค่าเริ่มต้นเป็น ID ของหมวดหมู่ "พูดคุยทั่วไป"
+    categoryAssociatedId: '', // จะถูกตั้งค่าหลังจากโหลดหมวดหมู่
     tags: '',
     containsSpoilers: false,
   });
 
+  // โหลดหมวดหมู่
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/board/categories');
+        const data = await response.json();
+        
+        if (data.success && data.categories.length > 0) {
+          setCategories(data.categories);
+          // ตั้งค่าหมวดหมู่แรกเป็นค่าเริ่มต้น
+          setFormData(prev => ({
+            ...prev,
+            categoryAssociatedId: data.categories[0]._id
+          }));
+        } else {
+          // ถ้าไม่มีหมวดหมู่ ให้ใช้หมวดหมู่เริ่มต้น (ไม่ส่ง categoryAssociatedId)
+          setCategories(defaultCategories);
+          setFormData(prev => ({
+            ...prev,
+            categoryAssociatedId: '' // ให้ service สร้างหมวดหมู่เริ่มต้นเอง
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        // ใช้หมวดหมู่เริ่มต้น (ไม่ส่ง categoryAssociatedId)
+        setCategories(defaultCategories);
+        setFormData(prev => ({
+          ...prev,
+          categoryAssociatedId: '' // ให้ service สร้างหมวดหมู่เริ่มต้นเอง
+        }));
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
   // ตรวจสอบการล็อกอิน
-  if (status === 'loading') {
+  if (status === 'loading' || isLoadingCategories) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -75,20 +115,27 @@ export default function NewBoardPostPage() {
         ? formData.tags.split(',').map(tag => tag.trim().toLowerCase())
         : [];
 
+      // สร้างข้อมูลที่จะส่ง
+      const requestData: any = {
+        title: formData.title,
+        content: formData.content,
+        boardType: formData.boardType,
+        tags: tagsArray,
+        containsSpoilers: formData.containsSpoilers,
+      };
+
+      // ส่ง categoryAssociatedId เฉพาะเมื่อมีค่าและเป็น ObjectId ที่ถูกต้อง
+      if (formData.categoryAssociatedId && formData.categoryAssociatedId.length === 24) {
+        requestData.categoryAssociatedId = formData.categoryAssociatedId;
+      }
+
       // ส่งข้อมูลไปยัง API
       const response = await fetch('/api/board', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title: formData.title,
-          content: formData.content,
-          boardType: formData.boardType,
-          categoryAssociatedId: formData.categoryAssociatedId,
-          tags: tagsArray,
-          containsSpoilers: formData.containsSpoilers,
-        }),
+        body: JSON.stringify(requestData),
       });
 
       const data = await response.json();
@@ -99,10 +146,8 @@ export default function NewBoardPostPage() {
 
       setSuccess('สร้างกระทู้สำเร็จ กำลังนำคุณไปยังหน้ากระทู้...');
       
-      // รีเดเร็คไปยังหน้ากระทู้หลังจากสร้างสำเร็จ
-      setTimeout(() => {
-        router.push('/board');
-      }, 1500);
+      // รีเดเร็คไปยังหน้ากระทู้ทันทีหลังจากสร้างสำเร็จ
+      router.push('/board');
     } catch (error: any) {
       setError(error.message || 'เกิดข้อผิดพลาดในการสร้างกระทู้');
     } finally {
@@ -121,20 +166,20 @@ export default function NewBoardPostPage() {
     { value: BoardType.BUG_REPORT, label: 'รายงานปัญหา' },
   ];
 
-  // หมวดหมู่ของกระทู้ (ในอนาคตควรดึงจาก API)
-  const categories = [
-    { id: '65f4e8c35d35f6c7b8a1e2d3', name: 'พูดคุยทั่วไป' },
-    { id: '65f4e8c35d35f6c7b8a1e2d4', name: 'รีวิวนิยาย' },
-    { id: '65f4e8c35d35f6c7b8a1e2d5', name: 'ถาม-ตอบปัญหา' },
-    { id: '65f4e8c35d35f6c7b8a1e2d6', name: 'แนะนำนิยาย' },
-    { id: '65f4e8c35d35f6c7b8a1e2d7', name: 'เทคนิคการเขียน' },
+  // หมวดหมู่เริ่มต้น (จะถูกแทนที่ด้วยข้อมูลจาก API)
+  const defaultCategories = [
+    { id: 'general', name: 'พูดคุยทั่วไป' },
+    { id: 'reviews', name: 'รีวิวนิยาย' },
+    { id: 'questions', name: 'ถาม-ตอบปัญหา' },
+    { id: 'recommendations', name: 'แนะนำนิยาย' },
+    { id: 'writing', name: 'เทคนิคการเขียน' },
   ];
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-6">
       {/* หัวข้อและปุ่มย้อนกลับ */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">สร้างกระทู้ใหม่</h1>
+        <h1 className="text-2xl font-semibold text-foreground">สร้างกระทู้ใหม่</h1>
         <Link
           href="/board"
           className="flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -169,8 +214,8 @@ export default function NewBoardPostPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* หัวข้อกระทู้ */}
         <div>
-          <label htmlFor="title" className="block text-sm font-medium mb-1">
-            หัวข้อกระทู้ <span className="text-red-500">*</span>
+          <label htmlFor="title" className="block text-sm font-medium mb-1 text-foreground">
+            หัวข้อกระทู้ <span className="text-destructive">*</span>
           </label>
           <input
             type="text"
@@ -182,14 +227,14 @@ export default function NewBoardPostPage() {
             minLength={5}
             maxLength={200}
             placeholder="ระบุหัวข้อกระทู้ (5-200 ตัวอักษร)"
-            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
           />
         </div>
 
         {/* ประเภทกระทู้ */}
         <div>
-          <label htmlFor="boardType" className="block text-sm font-medium mb-1">
-            ประเภทกระทู้ <span className="text-red-500">*</span>
+          <label htmlFor="boardType" className="block text-sm font-medium mb-1 text-foreground">
+            ประเภทกระทู้ <span className="text-destructive">*</span>
           </label>
           <select
             id="boardType"
@@ -197,7 +242,7 @@ export default function NewBoardPostPage() {
             value={formData.boardType}
             onChange={handleChange}
             required
-            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
           >
             {boardTypes.map((type) => (
               <option key={type.value} value={type.value}>
@@ -209,8 +254,8 @@ export default function NewBoardPostPage() {
 
         {/* หมวดหมู่ */}
         <div>
-          <label htmlFor="categoryAssociatedId" className="block text-sm font-medium mb-1">
-            หมวดหมู่ <span className="text-red-500">*</span>
+          <label htmlFor="categoryAssociatedId" className="block text-sm font-medium mb-1 text-foreground">
+            หมวดหมู่ <span className="text-destructive">*</span>
           </label>
           <select
             id="categoryAssociatedId"
@@ -218,7 +263,7 @@ export default function NewBoardPostPage() {
             value={formData.categoryAssociatedId}
             onChange={handleChange}
             required
-            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
           >
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -230,8 +275,8 @@ export default function NewBoardPostPage() {
 
         {/* เนื้อหากระทู้ */}
         <div>
-          <label htmlFor="content" className="block text-sm font-medium mb-1">
-            เนื้อหากระทู้ <span className="text-red-500">*</span>
+          <label htmlFor="content" className="block text-sm font-medium mb-1 text-foreground">
+            เนื้อหากระทู้ <span className="text-destructive">*</span>
           </label>
           <textarea
             id="content"
@@ -242,13 +287,13 @@ export default function NewBoardPostPage() {
             minLength={10}
             rows={10}
             placeholder="เขียนเนื้อหากระทู้ของคุณที่นี่ (อย่างน้อย 10 ตัวอักษร)"
-            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors resize-vertical"
           ></textarea>
         </div>
 
         {/* แท็ก */}
         <div>
-          <label htmlFor="tags" className="block text-sm font-medium mb-1">
+          <label htmlFor="tags" className="block text-sm font-medium mb-1 text-foreground">
             แท็ก (คั่นด้วยเครื่องหมายคอมม่า)
           </label>
           <input
@@ -258,7 +303,7 @@ export default function NewBoardPostPage() {
             value={formData.tags}
             onChange={handleChange}
             placeholder="เช่น: นิยาย, แฟนตาซี, รีวิว"
-            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
           />
           <p className="text-xs text-muted-foreground mt-1">
             ใส่แท็กเพื่อให้ผู้อื่นค้นหากระทู้ของคุณได้ง่ายขึ้น
@@ -273,15 +318,15 @@ export default function NewBoardPostPage() {
             name="containsSpoilers"
             checked={formData.containsSpoilers}
             onChange={handleCheckboxChange}
-            className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+            className="h-4 w-4 text-primary border-border rounded focus:ring-primary focus:ring-2 bg-background"
           />
-          <label htmlFor="containsSpoilers" className="ml-2 block text-sm">
+          <label htmlFor="containsSpoilers" className="ml-2 block text-sm text-foreground">
             กระทู้นี้มีสปอยล์
           </label>
         </div>
 
         {/* ปุ่มแนบรูปภาพ (จะพัฒนาในอนาคต) */}
-        <div className="border border-dashed border-gray-300 rounded-md p-6 text-center">
+        <div className="border border-dashed border-border rounded-md p-6 text-center bg-muted/20">
           <div className="flex flex-col items-center">
             <Image size={24} className="text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">
@@ -309,7 +354,7 @@ export default function NewBoardPostPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className={`px-6 py-2 bg-[#8bc34a] text-white rounded-full hover:bg-[#7baf41] transition-colors ${
+            className={`px-6 py-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors font-medium ${
               isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
             }`}
           >

@@ -3,11 +3,11 @@
 // จัดการความคิดเห็นของผู้ใช้ต่อเนื้อหาต่างๆ เช่น นิยาย, ตอน, กระทู้, หรือความคิดเห็นอื่นๆ (nested comments)
 // เวอร์ชันปรับปรุง: เพิ่มการรองรับ Board Model และการเชื่อมต่อฟังก์ชันเฉพาะทาง
 
-import mongoose, { Schema, model, models, Types, Document } from "mongoose";
-import { IUser } from "./User"; // สำหรับ userId, mentionedUserIds, hiddenByUserId, deletedByUserId
-import { INovel } from "./Novel"; // สำหรับ novelId (context)
-import { IEpisode } from "./Episode"; // สำหรับ episodeId (context)
+import mongoose, { Document, model, models, Schema, Types } from "mongoose";
 import { IBoard } from "./Board"; // (ใหม่) สำหรับการเชื่อมต่อกับ Board Model
+import { IEpisode } from "./Episode"; // สำหรับ episodeId (context)
+import { INovel } from "./Novel"; // สำหรับ novelId (context)
+import { IUser } from "./User"; // สำหรับ userId, mentionedUserIds, hiddenByUserId, deletedByUserId
 
 // ==================================================================================================
 // SECTION: Enums และ Types ที่ใช้ในโมเดล Comment
@@ -296,7 +296,19 @@ async function updateCounts(comment: IComment, operation: "increment" | "decreme
 
   // 2. อัปเดต commentsCount/repliesCount ใน Target Model (Novel, Episode, Board)
   const targetModelName = comment.targetType;
-  const TargetModel = models[targetModelName] as mongoose.Model<any>;
+  
+  // ตรวจสอบว่า mongoose.models มีค่าหรือไม่ก่อนเข้าถึง
+  // เพื่อป้องกัน "Cannot read properties of undefined"
+  let TargetModel: mongoose.Model<any> | null = null;
+  
+  try {
+    if (mongoose.models && mongoose.models[targetModelName]) {
+      TargetModel = mongoose.models[targetModelName] as mongoose.Model<any>;
+    }
+  } catch (error) {
+    console.error(`Error accessing mongoose.models[${targetModelName}]:`, error);
+  }
+  
   if (!TargetModel) return;
 
   try {
@@ -306,7 +318,18 @@ async function updateCounts(comment: IComment, operation: "increment" | "decreme
         
         // เมื่อเพิ่ม comment ใหม่ ให้ update 'lastReply' ด้วย
         if (operation === "increment") {
-            const user = await (models.User as mongoose.Model<IUser>).findById(comment.userId).select("username").lean();
+            // ตรวจสอบว่า mongoose.models.User มีค่าหรือไม่ก่อนเข้าถึง
+            let UserModel: mongoose.Model<IUser> | null = null;
+            let user = null;
+            
+            try {
+              if (mongoose.models && mongoose.models.User) {
+                UserModel = mongoose.models.User as mongoose.Model<IUser>;
+                user = await UserModel.findById(comment.userId).select("username").lean();
+              }
+            } catch (error) {
+              console.error("Error accessing mongoose.models.User:", error);
+            }
             updateQuery.$set = {
                 "lastReply": {
                     userId: comment.userId,
@@ -395,7 +418,18 @@ CommentSchema.post<mongoose.Query<IComment, IComment>>("findOneAndDelete", async
 // SECTION: Model Export (ส่งออก Model สำหรับใช้งาน)
 // ==================================================================================================
 
-const CommentModel = (models.Comment as mongoose.Model<IComment>) || model<IComment>("Comment", CommentSchema);
+// ใช้ try-catch เพื่อป้องกันข้อผิดพลาด "Cannot read properties of undefined"
+let CommentModel: mongoose.Model<IComment>;
+try {
+  // ตรวจสอบว่า mongoose.models มีค่าหรือไม่
+  CommentModel = mongoose.models && mongoose.models.Comment 
+    ? mongoose.models.Comment as mongoose.Model<IComment>
+    : model<IComment>("Comment", CommentSchema);
+} catch (error) {
+  // กรณีเกิดข้อผิดพลาด ให้สร้างโมเดลใหม่
+  console.error("Error accessing mongoose.models.Comment:", error);
+  CommentModel = model<IComment>("Comment", CommentSchema);
+}
 
 export default CommentModel;
 

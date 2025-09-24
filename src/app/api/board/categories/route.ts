@@ -2,6 +2,8 @@
 // API endpoint สำหรับดึงข้อมูลหมวดหมู่สำหรับกระทู้
 
 import dbConnect from "@/backend/lib/mongodb";
+// นำเข้าโมเดล Category และ registerModels เพื่อให้แน่ใจว่าโมเดลถูกลงทะเบียน
+import { registerModels } from "@/backend/models";
 import CategoryModel, { CategoryType } from "@/backend/models/Category";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -9,6 +11,8 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(req: NextRequest) {
   try {
     await dbConnect();
+    // เรียกใช้ registerModels เพื่อให้แน่ใจว่าโมเดลถูกลงทะเบียน
+    registerModels();
     
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || "all";
@@ -43,9 +47,16 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .lean();
     
+    // แปลง _id เป็น string และเพิ่ม id field
+    const formattedCategories = categories.map(category => ({
+      ...category,
+      id: category._id.toString(),
+      _id: category._id.toString()
+    }));
+    
     return NextResponse.json({ 
       success: true, 
-      categories 
+      categories: formattedCategories 
     });
   } catch (error) {
     console.error("Error fetching board categories:", error);
