@@ -16,11 +16,7 @@ import {
   Layout,
   LogOut,
   Menu,
-<<<<<<< HEAD
-  MessageCircle,
-=======
   MessageSquare, // สำหรับกระทู้
->>>>>>> f223326e (finish)
   Moon,
   Search, // สำหรับ Dashboard
   Settings,
@@ -242,13 +238,8 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
     () => [
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
       { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
-<<<<<<< HEAD
-      { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
-      { href: "/board", label: "กระทู้", icon: <MessageCircle size={18} /> },
-=======
       { href: "/board", label: "กระทู้", icon: <MessageSquare size={18} /> },
       { href: "/dashboard", label: "งานเขียนของฉัน", icon: <Layout size={18} /> },
->>>>>>> f223326e (finish)
     ],
     []
   );
