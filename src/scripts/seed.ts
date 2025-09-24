@@ -3,11 +3,14 @@
 import { config } from 'dotenv';
 import dbConnect from '../backend/lib/mongodb';
 import { seedNovelData } from '../data/seed-novel-data';
+import { seedCategories } from '../../scripts/seed-categories'; // Import the function
+import { seedSubCategories } from '../../scripts/seed-sub-categories'; // Import the sub-category seeder
 import NovelModel from '../backend/models/Novel';
 import EpisodeModel from '../backend/models/Episode';
 import SceneModel from '../backend/models/Scene';
 import ChoiceModel from '../backend/models/Choice';
 import CharacterModel from '../backend/models/Character';
+import CategoryModel from '../backend/models/Category'; // Import Category model
 
 // โหลดตัวแปรสภาพแวดล้อม
 config({ path: '.env' });
@@ -41,6 +44,19 @@ const main = async () => {
     await dbConnect();
     console.log('✅ เชื่อมต่อฐานข้อมูลสำเร็จ');
     console.log('');
+    
+    // Step 1: Seed Categories
+    console.log('🌿 กำลังสร้างข้อมูลหมวดหมู่ (Categories)...');
+    await seedCategories();
+    await seedSubCategories(); // Run the sub-category seeder
+    console.log('✅ สร้างข้อมูลหมวดหมู่สำเร็จ');
+    console.log('');
+    
+    // Fetch seeded categories to pass to novel seeder
+    const categories = await CategoryModel.find({ categoryType: 'genre' }).lean();
+    if (categories.length === 0) {
+        throw new Error("ไม่พบหมวดหมู่หลังจากการ seed, กรุณาตรวจสอบ 'scripts/seed-categories.js'");
+    }
 
     // ลบข้อมูลเก่าที่เกี่ยวข้องกับนิยายที่จะ seed
     const novelTitlesToDelete = ['Now or Never', 'The Chosen One'];
@@ -51,40 +67,21 @@ const main = async () => {
 
     if (novelIdsToDelete.length > 0) {
       console.log(`ℹ️  พบนิยาย ${novelIdsToDelete.length} เรื่องที่ต้องลบข้อมูลเกี่ยวข้อง`);
-
-      // ลบ Episodes ที่เกี่ยวข้อง
-      console.log('🗑️  กำลังลบ Episodes เก่า...');
-      const episodeResult = await EpisodeModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
-      console.log(`✅  ลบ ${episodeResult.deletedCount} episodes สำเร็จ`);
-
-      // ลบ Scenes ที่เกี่ยวข้อง
-      console.log('🗑️  กำลังลบ Scenes เก่า...');
-      const sceneResult = await SceneModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
-      console.log(`✅  ลบ ${sceneResult.deletedCount} scenes สำเร็จ`);
-
-      // ลบ Choices ที่เกี่ยวข้อง
-      console.log('🗑️  กำลังลบ Choices เก่า...');
-      const choiceResult = await ChoiceModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
-      console.log(`✅  ลบ ${choiceResult.deletedCount} choices สำเร็จ`);
-
-      // ลบ Characters ที่เกี่ยวข้อง
-      console.log('🗑️  กำลังลบ Characters เก่า...');
-      const characterResult = await CharacterModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
-      console.log(`✅  ลบ ${characterResult.deletedCount} characters สำเร็จ`);
-      
-      // ลบ Novels เอง
-      console.log('🗑️  กำลังลบ Novels...');
-      const novelResult = await NovelModel.deleteMany({ _id: { $in: novelIdsToDelete } });
-      console.log(`✅  ลบ ${novelResult.deletedCount} นิยายสำเร็จ`);
-
+      console.log('🗑️  กำลังลบข้อมูลนิยายเก่า...');
+      await EpisodeModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
+      await SceneModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
+      await ChoiceModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
+      await CharacterModel.deleteMany({ novelId: { $in: novelIdsToDelete } });
+      await NovelModel.deleteMany({ _id: { $in: novelIdsToDelete } });
+      console.log('✅  ลบข้อมูลนิยายเก่าสำเร็จ');
     } else {
       console.log('ℹ️  ไม่พบนิยายเก่าที่ต้องลบ');
     }
     console.log('');
 
-    // รัน seed data สำหรับนิยาย
+    // Step 2: Run seed data for novels, passing in categories
     console.log('📚 กำลังสร้างข้อมูลนิยายจำลอง...');
-    await seedNovelData();
+    await seedNovelData(categories); // Pass categories to the function
 
     console.log('');
     console.log('🎉 Seed Script ทำงานเสร็จสิ้น!');

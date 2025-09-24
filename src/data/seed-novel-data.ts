@@ -7,6 +7,7 @@ import SceneModel from '@/backend/models/Scene';
 import CharacterModel from '@/backend/models/Character';
 import ChoiceModel from '@/backend/models/Choice';
 import UserModel from '@/backend/models/User';
+import { ICategory } from '@/backend/models/Category';
 
 // โหลดตัวแปรสภาพแวดล้อมจากไฟล์ .env
 config({ path: '.env' });
@@ -1459,7 +1460,12 @@ const createChosenOneScenes = async (
 };
 
 // สร้างนิยาย "Now or Never"
-const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
+const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId, categories: ICategory[]) => {
+  const thrillerCategory = categories.find(c => c.slug === 'thriller');
+  const dramaCategory = categories.find(c => c.slug === 'drama');
+  const romanceCategory = categories.find(c => c.slug === 'romance');
+  const politicsCategory = categories.find(c => c.slug === 'politics');
+
   const novel = new NovelModel({
     title: 'Now or Never',
     slug: 'now-or-never',
@@ -1470,21 +1476,21 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
     bannerImageUrl: 'https://picsum.photos/seed/now-or-never-banner/1200/400',
     themeAssignment: {
       mainTheme: {
-        categoryId: new mongoose.Types.ObjectId(),
-        customName: 'ระทึกขวัญจิตวิทยา'
+        categoryId: thrillerCategory ? thrillerCategory._id : new mongoose.Types.ObjectId(),
+        customName: thrillerCategory ? undefined : 'ระทึกขวัญจิตวิทยา'
       },
       subThemes: [
         {
-          categoryId: new mongoose.Types.ObjectId(),
-          customName: 'การเลือกทางศีลธรรม'
+          categoryId: dramaCategory ? dramaCategory._id : new mongoose.Types.ObjectId(),
+          customName: dramaCategory ? undefined : 'การเลือกทางศีลธรรม'
         },
         {
-          categoryId: new mongoose.Types.ObjectId(),
-          customName: 'ความรักและการเสียสละ'
+          categoryId: romanceCategory ? romanceCategory._id : new mongoose.Types.ObjectId(),
+          customName: romanceCategory ? undefined : 'ความรักและการเสียสละ'
         }
       ],
-      moodAndTone: [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()],
-      contentWarnings: [new mongoose.Types.ObjectId()],
+      moodAndTone: politicsCategory ? [politicsCategory._id] : [],
+      contentWarnings: [], // Add actual content warning categories if needed
       customTags: ['การเลือก', 'วัยรุ่น', 'ศีลธรรม', 'อาชญากรรม', 'ความรัก', 'ระทึกขวัญ']
     },
     narrativeFocus: {
@@ -1495,7 +1501,7 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
       commonTropes: [new mongoose.Types.ObjectId()],
       interactivityLevel: new mongoose.Types.ObjectId(),
       lengthTag: new mongoose.Types.ObjectId(),
-      targetAudienceProfileTags: [new mongoose.Types.ObjectId()]
+      targetAudienceProfileTags: []
     },
     worldBuildingDetails: {
       loreSummary: 'โลกแห่งการเลือกที่ยากลำบาก ที่ซึ่งทุกการตัดสินใจล้วนมีผลต่อชะตากรรม',
@@ -1509,7 +1515,7 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
     sourceType: {
       type: NovelContentType.INTERACTIVE_FICTION
     },
-    language: new mongoose.Types.ObjectId(),
+    language: new mongoose.Types.ObjectId(), // Should be mapped from a language category
     totalEpisodesCount: 3,
     publishedEpisodesCount: 3,
     stats: {
@@ -1755,7 +1761,12 @@ const createNowOrNeverNovel = async (authorId: mongoose.Types.ObjectId) => {
 };
 
 // สร้างนิยาย "The Chosen One"  
-const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
+const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId, categories: ICategory[]) => {
+  const dramaCategory = categories.find(c => c.slug === 'drama');
+  const sliceOfLifeCategory = categories.find(c => c.slug === 'slice-of-life');
+  const boyLoveCategory = categories.find(c => c.slug === 'boy-love');
+  const girlLoveCategory = categories.find(c => c.slug === 'girl-love');
+
   const novel = new NovelModel({
     title: 'The Chosen One',
     slug: 'the-chosen-one',
@@ -1766,20 +1777,20 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
     bannerImageUrl: 'https://picsum.photos/seed/chosen-one-banner/1200/400',
     themeAssignment: {
       mainTheme: {
-        categoryId: new mongoose.Types.ObjectId(),
-        customName: 'ปรัชญาจริยธรรม'
+        categoryId: dramaCategory ? dramaCategory._id : new mongoose.Types.ObjectId(),
+        customName: dramaCategory ? undefined : 'ปรัชญาจริยธรรม'
       },
       subThemes: [
         {
-          categoryId: new mongoose.Types.ObjectId(),
-          customName: 'ความสัมพันธ์ระหว่างมนุษย์กับสัตว์'
+          categoryId: sliceOfLifeCategory ? sliceOfLifeCategory._id : new mongoose.Types.ObjectId(),
+          customName: sliceOfLifeCategory ? undefined : 'ความสัมพันธ์ระหว่างมนุษย์กับสัตว์'
         },
         {
-          categoryId: new mongoose.Types.ObjectId(),
-          customName: 'การเลือกที่ยากลำบาก'
+          categoryId: boyLoveCategory ? boyLoveCategory._id : new mongoose.Types.ObjectId(),
+          customName: boyLoveCategory ? undefined : 'การเลือกที่ยากลำบาก'
         }
       ],
-      moodAndTone: [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()],
+      moodAndTone: girlLoveCategory ? [girlLoveCategory._id] : [],
       contentWarnings: [],
       customTags: ['จริยธรรม', 'การเลือก', 'ปรัชญา', 'จิตวิทยา', 'ครอบครัว', 'สัตว์']
     },
@@ -1791,7 +1802,7 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
       commonTropes: [new mongoose.Types.ObjectId()],
       interactivityLevel: new mongoose.Types.ObjectId(),
       lengthTag: new mongoose.Types.ObjectId(),
-      targetAudienceProfileTags: [new mongoose.Types.ObjectId()]
+      targetAudienceProfileTags: []
     },
     worldBuildingDetails: {
       loreSummary: 'โลกที่เต็มไปด้วยการเลือกทางจริยธรรม ที่ซึ่งทุกการตัดสินใจสะท้อนถึงค่านิยมที่แท้จริง',
@@ -1805,7 +1816,7 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
     sourceType: {
       type: NovelContentType.INTERACTIVE_FICTION
     },
-    language: new mongoose.Types.ObjectId(),
+    language: new mongoose.Types.ObjectId(), // Should be mapped from a language category
     totalEpisodesCount: 3,
     publishedEpisodesCount: 3,
     stats: {
@@ -2037,7 +2048,7 @@ const createChosenOneNovel = async (authorId: mongoose.Types.ObjectId) => {
 };
 
 // ฟังก์ชันหลักสำหรับสร้างข้อมูล seed ทั้งหมด
-export const seedNovelData = async () => {
+export const seedNovelData = async (categories: ICategory[]) => {
   try {
     console.log('🌱 เริ่มต้นการสร้างข้อมูลนิยายจำลอง...');
 
@@ -2054,7 +2065,7 @@ export const seedNovelData = async () => {
 
     // สร้างนิยาย "Now or Never"
     console.log('📚 กำลังสร้างนิยาย "Now or Never"...');
-    const nowOrNeverData = await createNowOrNeverNovel(authorId);
+    const nowOrNeverData = await createNowOrNeverNovel(authorId, categories);
     console.log(`✅ สร้างนิยาย "Now or Never" สำเร็จ:
     - นิยาย: ${nowOrNeverData.novel._id}
     - ตอน: ${nowOrNeverData.episodes.length} ตอน
@@ -2064,7 +2075,7 @@ export const seedNovelData = async () => {
 
     // สร้างนิยาย "The Chosen One"
     console.log('📚 กำลังสร้างนิยาย "The Chosen One"...');
-    const chosenOneData = await createChosenOneNovel(authorId);
+    const chosenOneData = await createChosenOneNovel(authorId, categories);
     console.log(`✅ สร้างนิยาย "The Chosen One" สำเร็จ:
     - นิยาย: ${chosenOneData.novel._id}
     - ตอน: ${chosenOneData.episodes.length} ตอน
@@ -2092,7 +2103,7 @@ export const seedNovelData = async () => {
 // ฟังก์ชันสำหรับเรียกใช้โดยตรง
 export const runSeedNovelData = async () => {
   try {
-    const result = await seedNovelData();
+    const result = await seedNovelData([]);
     console.log('📊 สรุปข้อมูลที่สร้าง:');
     console.log(`- ผู้แต่ง: 1 คน`);
     console.log(`- นิยาย: ${result.novels.length} เรื่อง`);

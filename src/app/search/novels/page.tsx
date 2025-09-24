@@ -184,28 +184,28 @@ interface SearchPageProps {
 export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
   const params = await searchParams; // Resolve Promise
   const query = typeof params.q === 'string' ? params.q : '';
-  const categorySlug = typeof params.category === 'string' ? params.category : '';
+  const mainThemeSlug = typeof params.mainTheme === 'string' ? params.mainTheme : '';
 
   // ค่าเริ่มต้นสำหรับ title และ description
   let title = 'ค้นหานิยายทั้งหมด | DivWy';
   let description = 'ค้นหานิยายและการ์ตูนออนไลน์จากทั่วทุกมุมโลก แบ่งตามหมวดหมู่ สถานะ และอื่นๆ บน DivWy';
 
   // ปรับ title และ description ตาม query และ category
-  if (query && categorySlug) {
-    title = `ผลการค้นหา "${query}" ในหมวดหมู่ '${categorySlug}' | DivWy`;
-    description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" ในหมวดหมู่ '${categorySlug}' บน DivWy`;
+  if (query && mainThemeSlug) {
+    title = `ผลการค้นหา "${query}" ในหมวดหมู่ '${mainThemeSlug}' | DivWy`;
+    description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" ในหมวดหมู่ '${mainThemeSlug}' บน DivWy`;
   } else if (query) {
     title = `ผลการค้นหา "${query}" | DivWy`;
     description = `ผลการค้นหานิยายและการ์ตูนสำหรับ "${query}" บน DivWy`;
-  } else if (categorySlug) {
-    title = `นิยายในหมวดหมู่ '${categorySlug}' | DivWy`;
-    description = `สำรวจนิยายและการ์ตูนในหมวดหมู่ '${categorySlug}' บน DivWy`;
+  } else if (mainThemeSlug) {
+    title = `นิยายในหมวดหมู่ '${mainThemeSlug}' | DivWy`;
+    description = `สำรวจนิยายและการ์ตูนในหมวดหมู่ '${mainThemeSlug}' บน DivWy`;
   }
 
   return {
     title,
     description,
-    keywords: `ค้นหานิยาย, นิยายออนไลน์, ${query ? query + ',' : ''} ${categorySlug ? categorySlug + ',' : ''} DivWy, การ์ตูน`,
+    keywords: `ค้นหานิยาย, นิยายออนไลน์, ${query ? query + ',' : ''} ${mainThemeSlug ? mainThemeSlug + ',' : ''} DivWy, การ์ตูน`,
     openGraph: {
       title,
       description,
@@ -222,39 +222,54 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
 export default async function SearchNovelsPage({ searchParams }: SearchPageProps) {
   const params = await searchParams; // Resolve Promise
   const query = typeof params.q === 'string' ? params.q : '';
-  const categorySlug = typeof params.category === 'string' ? params.category : '';
-  const status = typeof params.status === 'string' ? params.status : '';
-  const sortBy = typeof params.sortBy === 'string' ? params.sortBy : (query ? 'relevance' : 'lastContentUpdatedAt');
   const page = parseInt(typeof params.page === 'string' ? params.page : '1', 10);
+  
+  // New filters from searchParams
+  const mainThemeSlug = typeof params.mainTheme === 'string' ? params.mainTheme : '';
+  const subThemeSlug = typeof params.subTheme === 'string' ? params.subTheme : '';
+  const gameplaySlug = typeof params.gameplay === 'string' ? params.gameplay : '';
+  const romanceLineSlug = typeof params.romanceLine === 'string' ? params.romanceLine : '';
+  const characteristicSlug = typeof params.characteristic === 'string' ? params.characteristic : '';
+  const status = typeof params.status === 'string' ? params.status : '';
+  const sortBy = typeof params.sortBy === 'string' ? params.sortBy : 'popularity';
+
 
   if (isNaN(page) || page < 1) {
     notFound();
   }
 
   // --- ดึงข้อมูลจาก API ---
-  // 1. ดึงหมวดหมู่หลักสำหรับ Filter
-  const mainCategoriesResponse: ApiCategoriesResponse | null = await fetchApiData('/categories', {
-    type: CategoryType.GENRE,
-    parentId: "null",
-    limit: 60,
-    forNovelCreation: "false",
-  });
-  const mainCategories: PopulatedCategory[] = mainCategoriesResponse?.data || [];
+  // Fetch all categories in parallel
+  const [
+    mainCategoriesResponse,
+    subCategoriesResponse,
+    gameplayCategoriesResponse,
+    romanceLineCategoriesResponse,
+    characteristicCategoriesResponse
+  ] = await Promise.all([
+    fetchApiData('/categories', { type: CategoryType.GENRE, limit: 60 }),
+    fetchApiData('/categories', { type: CategoryType.SUB_GENRE, limit: 100 }),
+    fetchApiData('/categories', { type: CategoryType.GAMEPLAY_MECHANIC, limit: 100 }),
+    fetchApiData('/categories', { type: CategoryType.COMMON_TROPE, limit: 100 }), // Assuming 'เส้นรัก' are tropes
+    fetchApiData('/categories', { type: CategoryType.MOOD_AND_TONE, limit: 100 }), // Assuming 'ลักษณะ' is mood/tone
+  ]);
 
-  // 2. ค้นหานิยาย
-  let mainThemeIdForApi = '';
-  if (categorySlug) {
-    const foundCat = mainCategories.find(cat => cat.slug === categorySlug);
-    if (foundCat) {
-      mainThemeIdForApi = foundCat._id;
-    } else {
-      console.warn(`[Page Search] ไม่พบหมวดหมู่ slug "${categorySlug}" ใน main categories`);
-    }
-  }
+  const mainCategories: PopulatedCategory[] = (mainCategoriesResponse as ApiCategoriesResponse)?.data || [];
+  const subCategories: PopulatedCategory[] = (subCategoriesResponse as ApiCategoriesResponse)?.data || [];
+  const gameplayCategories: PopulatedCategory[] = (gameplayCategoriesResponse as ApiCategoriesResponse)?.data || [];
+  const romanceLineCategories: PopulatedCategory[] = (romanceLineCategoriesResponse as ApiCategoriesResponse)?.data || [];
+  const characteristicCategories: PopulatedCategory[] = (characteristicCategoriesResponse as ApiCategoriesResponse)?.data || [];
+
+  // Find IDs for API call from slugs
+  const getCategoryId = (slug: string, categories: PopulatedCategory[]) => categories.find(c => c.slug === slug)?._id || '';
 
   const novelSearchResponse: ApiNovelsSearchResponse | null = await fetchApiData('/novels', {
     q: query,
-    mainTheme: mainThemeIdForApi,
+    mainTheme: getCategoryId(mainThemeSlug, mainCategories),
+    subTheme: getCategoryId(subThemeSlug, subCategories),
+    gameplay: getCategoryId(gameplaySlug, gameplayCategories),
+    romanceLine: getCategoryId(romanceLineSlug, romanceLineCategories),
+    characteristic: getCategoryId(characteristicSlug, characteristicCategories),
     status: status,
     sort: sortBy,
     limit: ITEMS_PER_PAGE,
@@ -267,7 +282,7 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
   const popularCustomTags: { tag: string; count: number }[] = novelSearchResponse?.relatedTags || [];
 
   // --- เตรียมข้อมูลสำหรับ Components ---
-  const hasNoResults = novelsFromApi.length === 0 && (!!query || !!categorySlug || !!status);
+  const hasNoResults = novelsFromApi.length === 0 && (!!query || !!mainThemeSlug || !!status);
 
   const novelsForSearchResults: SearchNovelCardData[] = novelsFromApi.map((novel) => ({
     _id: novel._id.toString(),
@@ -309,17 +324,18 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
   };
 
   // หาชื่อหมวดหมู่ที่เลือก
-  const selectedCategoryName = apiSelectedMainTheme?.name || (categorySlug && mainCategories.find(c => c.slug === categorySlug)?.name) || '';
+  const selectedCategoryName = apiSelectedMainTheme?.name || (mainThemeSlug && mainCategories.find(c => c.slug === mainThemeSlug)?.name) || '';
 
   return (
     <div className="space-y-6">
       <Suspense fallback={<div className="bg-card rounded-lg border border-border p-4 md:p-6 shadow-sm min-h-[300px] md:min-h-[200px] flex justify-center items-center">กำลังโหลดตัวกรอง...</div>}>
         <SearchFilters
           initialQuery={query}
-          initialCategorySlug={categorySlug}
-          initialStatus={status}
-          initialSortBy={sortBy}
           mainCategories={mainCategories}
+          subCategories={subCategories}
+          gameplayCategories={gameplayCategories}
+          romanceLineCategories={romanceLineCategories}
+          characteristicCategories={characteristicCategories}
           selectedCategoryName={selectedCategoryName}
           totalItems={paginationFromApi.total}
         />
@@ -369,7 +385,11 @@ export default async function SearchNovelsPage({ searchParams }: SearchPageProps
               pagination={paginationForComponent}
               searchParams={{
                 q: query,
-                category: categorySlug,
+                mainTheme: mainThemeSlug,
+                subTheme: subThemeSlug,
+                gameplay: gameplaySlug,
+                romanceLine: romanceLineSlug,
+                characteristic: characteristicSlug,
                 status,
                 sortBy,
               }}

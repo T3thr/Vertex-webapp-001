@@ -45,10 +45,22 @@ export const useGamification = () => {
   });
 
   // State to keep track of achievements that have already been shown
-  const [shownAchievements, setShownAchievements] = useState<Set<string>>(new Set());
+  const [shownAchievements, setShownAchievements] = useState<Set<string>>(
+    new Set()
+  );
 
   useEffect(() => {
-    if (summary?.achievements) {
+    if (session?.user?.id) {
+      const storageKey = `shownAchievements_${session.user.id}`;
+      const storedData = localStorage.getItem(storageKey);
+      if (storedData) {
+        setShownAchievements(new Set(JSON.parse(storedData)));
+      }
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (summary?.achievements && session?.user?.id) {
       const newAchievements = summary.achievements.filter(
         (ach) => !shownAchievements.has(ach._id)
       );
@@ -65,11 +77,15 @@ export const useGamification = () => {
         setShownAchievements((prev) => {
           const newSet = new Set(prev);
           newAchievements.forEach((ach) => newSet.add(ach._id));
+          if (typeof window !== 'undefined' && session?.user?.id) {
+            const storageKey = `shownAchievements_${session.user.id}`;
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(newSet)));
+          }
           return newSet;
         });
       }
     }
-  }, [summary, shownAchievements]);
+  }, [summary, session?.user?.id]);
 
   return {
     experiencePoints: summary?.experiencePoints,

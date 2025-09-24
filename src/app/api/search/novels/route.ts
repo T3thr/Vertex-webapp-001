@@ -77,8 +77,11 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get("q")?.trim() || "";
     const mainThemeId = searchParams.get("mainTheme") || "";
     const subThemeId = searchParams.get("subTheme") || "";
+    const gameplayId = searchParams.get("gameplay") || "";
+    const romanceLineId = searchParams.get("romanceLine") || "";
+    const characteristicId = searchParams.get("characteristic") || "";
     const tagQuery = searchParams.getAll("tag").map(tag => tag.trim().toLowerCase()).filter(tag => tag) || [];
-    const sortParam = searchParams.get("sort") || "lastContentUpdatedAt"; // Default sort changed
+    const sortParam = searchParams.get("sort") || "popularity"; // Default sort changed to match UI
     const novelStatusQuery = searchParams.get("status")?.toUpperCase() || "";
     const ageRatingId = searchParams.get("ageRating") || "";
     const isDiscountedParam = searchParams.get("discounted"); // "true", "false", ""
@@ -89,6 +92,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`📡 API /api/search/novels called with:
       query: "${query}", mainThemeId: ${mainThemeId}, subThemeId: ${subThemeId},
+      gameplayId: ${gameplayId}, romanceLineId: ${romanceLineId}, characteristicId: ${characteristicId},
       tags: [${tagQuery.join(', ')}], sort: ${sortParam}, status: ${novelStatusQuery},
       ageRating: ${ageRatingId}, discounted: ${isDiscountedParam}, lang: ${languageId},
       limit: ${limit}, page: ${page}`);
@@ -165,6 +169,18 @@ export async function GET(request: NextRequest) {
       searchCriteria["themeAssignment.subThemes.categoryId"] = new Types.ObjectId(subThemeId);
     }
 
+    if (gameplayId && Types.ObjectId.isValid(gameplayId)) {
+      searchCriteria["narrativeFocus.gameplayMechanics"] = new Types.ObjectId(gameplayId);
+    }
+
+    if (romanceLineId && Types.ObjectId.isValid(romanceLineId)) {
+      searchCriteria["narrativeFocus.commonTropes"] = new Types.ObjectId(romanceLineId);
+    }
+
+    if (characteristicId && Types.ObjectId.isValid(characteristicId)) {
+      searchCriteria["themeAssignment.moodAndTone"] = new Types.ObjectId(characteristicId);
+    }
+
     if (tagQuery.length > 0) {
       searchCriteria["themeAssignment.customTags"] = { $all: tagQuery };
     }
@@ -184,14 +200,14 @@ export async function GET(request: NextRequest) {
       sortOptions.score = { $meta: "textScore" };
     } else {
       switch (sortParam) {
-        case "lastContentUpdatedAt": // Default for non-query, or specific choice
+        case "latest": // Match "อัพเดตล่าสุด"
           sortOptions.lastContentUpdatedAt = -1;
+          break;
+        case "popularity": // Match "ผลงานที่ได้รับความนิยม"
+          sortOptions["stats.viewsCount"] = -1;
           break;
         case "stats.lastPublishedEpisodeAt": // latestEpisode published
           sortOptions["stats.lastPublishedEpisodeAt"] = -1;
-          break;
-        case "stats.viewsCount": // popular (views)
-          sortOptions["stats.viewsCount"] = -1;
           break;
         case "stats.averageRating": // rating
           sortOptions["stats.averageRating"] = -1;
@@ -201,7 +217,7 @@ export async function GET(request: NextRequest) {
           sortOptions["stats.followersCount"] = -1; // Assuming followersCount is the primary metric for "likes" on a novel
           break;
         default:
-          sortOptions.lastContentUpdatedAt = -1;
+          sortOptions["stats.viewsCount"] = -1; // Default to popularity
           break;
       }
     }
@@ -209,7 +225,8 @@ export async function GET(request: NextRequest) {
 
     const selectedFields = [
       "title", "slug", "coverImageUrl", "synopsis", "status", "isCompleted",
-      "themeAssignment.mainTheme.categoryId", "themeAssignment.subThemes.categoryId", "themeAssignment.customTags",
+      "themeAssignment.mainTheme.categoryId", "themeAssignment.subThemes.categoryId", "themeAssignment.customTags", "themeAssignment.moodAndTone",
+      "narrativeFocus.gameplayMechanics", "narrativeFocus.commonTropes",
       "ageRatingCategoryId", "language",
       "stats.viewsCount", "stats.likesCount", "stats.averageRating", "stats.followersCount",
       "stats.lastPublishedEpisodeAt", "stats.totalWords",
