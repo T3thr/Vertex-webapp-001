@@ -251,6 +251,12 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
         condition: !!userDisplay?.username,
       },
       {
+        href: `/profile/edit`, // Path สำหรับแก้ไขโปรไฟล์
+        label: "แก้ไขโปรไฟล์",
+        icon: <User size={16} />,
+        condition: !!userDisplay,
+      },
+      {
         href: userDisplay?.roles?.includes("Writer") ? `/dashboard` : `/dashboard`,
         label: "แดชบอร์ด",
         icon: <Layout size={16} />,

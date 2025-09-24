@@ -2,13 +2,17 @@
 
 import dbConnect from "@/backend/lib/mongodb"; // Utility สำหรับเชื่อมต่อ MongoDB
 import UserModel from "@/backend/models/User"; // Mongoose Model สำหรับ User
+import UserProfileModel from "@/backend/models/UserProfile"; // Mongoose Model สำหรับ UserProfile
 import UserAchievementModel from "@/backend/models/UserAchievement"; // Import a UserAchievement model
 import UserGamificationModel from "@/backend/models/UserGamification";
 import AchievementModel from "@/backend/models/Achievement";
 import { notFound } from "next/navigation"; // Function สำหรับแสดงหน้า 404
 import Image from "next/image"; // Component สำหรับแสดงรูปภาพจาก Next.js
+import Link from "next/link"; // Component สำหรับสร้าง link
 import React from "react"; // React library
 import { Tabs } from "@/components/mydashboard/Tabs";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
 interface UserPageProps {
   params: Promise<{ username: string }>;
@@ -19,6 +23,8 @@ export default async function UserPage({
   params: paramsPromise,
 }: UserPageProps) {
   const params = await paramsPromise;
+  const session = await getServerSession(authOptions);
+  const isOwnProfile = session?.user?.username === params.username;
 
   await dbConnect(); // เชื่อมต่อกับ MongoDB
 
@@ -29,18 +35,21 @@ export default async function UserPage({
     username: params.username,
     isDeleted: false,
   })
-    .select("username profile roles isActive isBanned writerStats socialStats")
+    .select("username _id roles isActive isBanned writerStats socialStats")
     .lean();
 
   // ถ้าไม่พบ user ให้แสดงหน้า 404
   if (!user) {
     return notFound(); // เรียกใช้ notFound() ที่ import มา
   }
+  
+  // ดึงข้อมูล UserProfile เพื่อให้ได้ข้อมูลโปรไฟล์ล่าสุด
+  const userProfile = await UserProfileModel.findOne({ userId: user._id }).lean();
 
   // Destructure ข้อมูล user ที่ได้จาก database
   // TypeScript จะพยายาม infer type จาก .lean() และ .select()
   // ถ้าต้องการความแม่นยำสูงสุด สามารถกำหนด Interface/Type สำหรับ user object ที่ดึงมาได้
-  const { profile, username, roles, isActive, isBanned } = user;
+  const { username, roles, isActive, isBanned } = user;
 
   // --- Start of new data fetching logic ---
 
@@ -152,9 +161,9 @@ export default async function UserPage({
       <div
         className="rounded-2xl border border-gray-600 shadow-lg"
         style={
-          profile?.coverImageUrl
+          userProfile?.coverImageUrl
             ? {
-                backgroundImage: `url(${profile.coverImageUrl})`,
+                backgroundImage: `url(${userProfile.coverImageUrl})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat',
@@ -165,10 +174,10 @@ export default async function UserPage({
       >
         {/* ส่วนแสดงรูปโปรไฟล์ */}
         <div className="flex items-center justify-center p-10">
-          {profile?.avatarUrl ? ( // ตรวจสอบว่ามี avatarUrl ใน profile หรือไม่
+          {userProfile?.avatarUrl ? ( // ตรวจสอบว่ามี avatarUrl ใน userProfile หรือไม่
             <Image
-              src={profile.avatarUrl} // URL ของรูปโปรไฟล์ ( || '' ไม่จำเป็นแล้วเพราะมีการเช็ค profile.avatarUrl ก่อนหน้า)
-              alt={profile.displayName || username || ""}
+              src={userProfile.avatarUrl} // URL ของรูปโปรไฟล์
+              alt={userProfile.displayName || username || ""}
               width={256} // กำหนดความกว้างของรูปเริ่มต้น
               height={256} // กำหนดความสูงของรูปเริ่มต้น
               className="rounded-full border shadow w-24 h-24 sm:w-32 sm:h-32 md:w-48 md:h-48 lg:w-64 lg:h-64" // ปรับขนาดตาม responsive
@@ -177,25 +186,50 @@ export default async function UserPage({
           ) : (
             // ถ้าไม่มี avatarUrl ให้แสดงตัวอักษรแรกของ displayName หรือ username
             <div className="w-24 h-24 sm:w-32 sm:h-32 md:w-48 md:h-48 lg:w-64 lg:h-64 rounded-full bg-gray-200 flex items-center justify-center text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold">
-              {profile?.displayName?.[0] || username?.[0] || "?"}
+              {userProfile?.displayName?.[0] || username?.[0] || "?"}
             </div>
           )}
         </div>
       </div>
       <div className="py-2">
         <h1 className="text-2xl font-bold flex items-center justify-center">
-          {profile?.displayName || username}
+          {userProfile?.displayName || username}
         </h1>
         <div className="text-gray-500 flex items-center justify-center">
           @{username}
+        </div>
+        
+        {/* แสดงข้อมูล bio และ Facebook */}
+        <div className="flex flex-col items-center justify-center mt-2 max-w-lg mx-auto">
+          {userProfile?.bio && (
+            <p className="text-center text-sm text-gray-600 mb-2">{userProfile.bio}</p>
+          )}
+          
+          {userProfile?.websiteUrl && (
+            <a 
+              href={userProfile.websiteUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-blue-500 hover:text-blue-700 text-sm flex items-center gap-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+              </svg>
+              Facebook
+            </a>
+          )}
         </div>
         <div className="flex items-center justify-center gap-10 py-2">
           <button className="bg-green-500 text-white px-4 py-2 rounded-md">
             แชร์โปรไฟล์นี้
           </button>
-          <button className="bg-green-500 text-white px-4 py-2 rounded-md">
-            แก้ไขโปรไฟล์
-          </button>
+          {isOwnProfile && (
+            <Link href="/profile/edit">
+              <button className="bg-green-500 text-white px-4 py-2 rounded-md">
+                แก้ไขโปรไฟล์
+              </button>
+            </Link>
+          )}
         </div>
         <div className="flex justify-between items-center py-6">
           <div>งานเขียนนิยาย {totalNovels} เรื่อง</div>
@@ -204,13 +238,18 @@ export default async function UserPage({
           <div>ยอดอ่านรวม {totalReads} ครั้ง</div>
         </div>
       </div>
-      <div className="border-t border-b border-gray-300 py-4">
-        <Tabs
-          achievements={achievements}
-          level={gamificationData?.gamification.level || 1} 
-          experiencePoints={gamificationData?.gamification.experiencePoints || 0}
-        />
-      </div>
+      {/* แสดง Tabs เฉพาะเมื่อผู้ใช้ตั้งค่าให้แสดง Trophy หรือเป็นโปรไฟล์ของตัวเอง */}
+      {(userProfile?.showTrophies !== false || isOwnProfile) && (
+        <div className="border-t border-b border-gray-300 py-4">
+          <Tabs
+            achievements={achievements}
+            level={gamificationData?.gamification.level || 1} 
+            experiencePoints={gamificationData?.gamification.experiencePoints || 0}
+            isOwnProfile={isOwnProfile}
+            showTrophies={userProfile?.showTrophies !== false}
+          />
+        </div>
+      )}
     </main>
   );
 }
