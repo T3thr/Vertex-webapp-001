@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { SearchNovelCard, type Novel } from '@/components/search/SearchNovelCard';
+import type { SearchParams } from '@/types/search';
 
 interface Pagination {
   currentPage: number;
@@ -14,13 +15,6 @@ interface Pagination {
   totalItems: number;
   hasNextPage: boolean;
   hasPrevPage: boolean;
-}
-
-interface SearchParams {
-  q?: string;
-  category?: string;
-  status?: string;
-  sortBy?: string;
 }
 
 interface SearchResultsProps {
