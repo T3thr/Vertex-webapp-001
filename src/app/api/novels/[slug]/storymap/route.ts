@@ -50,7 +50,7 @@ export async function GET(
     }
 
     // Get story map with episode-specific data
-    let storyMapQuery: any = {
+    const storyMapQuery: any = {
       novelId: novel._id,
       isActive: true
     };
@@ -212,7 +212,7 @@ export async function PUT(
     }
 
     // Update or create story map for specific episode
-    let storyMapQuery: any = {
+    const storyMapQuery: any = {
       novelId: novel._id,
       isActive: true
     };
