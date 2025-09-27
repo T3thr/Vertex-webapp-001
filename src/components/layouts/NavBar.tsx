@@ -5,6 +5,7 @@ import {
   Bookmark,
   // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
   ChevronDown,
+  Coins,
   Grid, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
   Home,
   BookOpen as IconBookOpen,
