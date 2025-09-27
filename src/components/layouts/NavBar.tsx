@@ -2,22 +2,22 @@
 "use client";
 
 import {
-  LogOut,
-  Menu,
-  Search,
-  User,
-  X,
-  BookOpen as IconBookOpen, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
-  Home,
-  Grid,
-  Layout, // สำหรับ Dashboard
-  Settings,
-  Sun,
-  Moon,
+  Bookmark,
   // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
   ChevronDown,
-  Bookmark,
-  Coins, // Add Coins icon import
+  Grid, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
+  Home,
+  BookOpen as IconBookOpen,
+  Layout,
+  LogOut,
+  Menu,
+  MessageCircle,
+  Moon,
+  Search, // สำหรับ Dashboard
+  Settings,
+  Sun,
+  User,
+  X,
 } from "lucide-react"; // ตรวจสอบว่า Laptop icon จำเป็นหรือไม่
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -137,7 +137,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
     setIsHydrated(true);
   }, []);
 
-  const isReadPage = pathname.startsWith('/read/');
+  const isReadPage = pathname?.startsWith('/read/') || false;
 
   const handleScroll = useCallback(() => {
     if (isReadPage) {
@@ -238,6 +238,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
       { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
       { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
+      { href: "/board", label: "กระทู้", icon: <MessageCircle size={18} /> },
     ],
     []
   );
