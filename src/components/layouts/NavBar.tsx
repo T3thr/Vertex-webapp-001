@@ -9,22 +9,20 @@ import {
   Bookmark,
   // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
   ChevronDown,
+  Coins,
   Grid, // เปลี่ยนชื่อเพื่อหลีกเลี่ยงการชนกับ ThemeContext
   Home,
   BookOpen as IconBookOpen,
   Layout,
   LogOut,
   Menu,
-  MessageCircle,
+  MessageSquare, // สำหรับกระทู้
   Moon,
   Search, // สำหรับ Dashboard
   Settings,
   Sun,
-  Moon,
-  // Laptop, // ไม่ได้ใช้ในโค้ดที่แสดง
-  ChevronDown,
-  Bookmark,
-  Coins, // Add Coins icon import
+  User,
+  X,
 } from "lucide-react"; // ตรวจสอบว่า Laptop icon จำเป็นหรือไม่
 import Image from "next/image";
 import Link from "next/link";
@@ -140,7 +138,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
     setIsHydrated(true);
   }, []);
 
-  const isReadPage = pathname.startsWith('/read/');
+  const isReadPage = pathname?.startsWith('/read/') || false;
 
   const handleScroll = useCallback(() => {
     if (isReadPage) {
@@ -240,8 +238,8 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
     () => [
       { href: "/", label: "หน้าหลัก", icon: <Home size={18} /> },
       { href: "/search/novels", label: "หมวดหมู่", icon: <Grid size={18} /> },
-      { href: "/novels", label: "คลังนิยาย", icon: <IconBookOpen size={18} /> },
-      { href: "/board", label: "กระทู้", icon: <MessageCircle size={18} /> },
+      { href: "/board", label: "กระทู้", icon: <MessageSquare size={18} /> },
+      { href: "/dashboard", label: "งานเขียนของฉัน", icon: <Layout size={18} /> },
     ],
     []
   );
@@ -518,7 +516,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                   key={link.href}
                   href={link.href}
                   className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors
-                    ${(pathname === link.href) || false
+                    ${pathname === link.href
                       ? "bg-primary/10 text-primary" // Active link: primary color
                       : "text-foreground hover:bg-muted hover:text-primary" // Default & Hover: foreground/muted/primary color
                     }`}
@@ -531,6 +529,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
 
             {/* Right Section: Search, Auth, Mobile Menu Toggle */}
             <div className="flex items-center space-x-2 sm:space-x-3">
+
               {/* Desktop Search */}
               <div className="hidden md:block relative" ref={searchRef}>
                 <button
@@ -592,7 +591,7 @@ export default function NavBar({ logoText = "DIVWY", initialUser }: NavBarProps)
                       key={`mobile-${link.href}`}
                       href={link.href}
                       className={`flex items-center space-x-2 px-3 py-2.5 rounded-md text-base font-medium transition-colors
-                        ${(pathname === link.href) || false
+                        ${pathname === link.href
                           ? "bg-muted text-primary" // Active mobile link
                           : "text-foreground hover:bg-muted hover:text-primary" // Default mobile link
                         }`}
