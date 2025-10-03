@@ -3,12 +3,11 @@
 
 import React from 'react';
 import Image from 'next/image';
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import { UserCircle, Zap, ShieldQuestion, Users } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 
 interface NovelCharactersTabProps {
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
 }
 
 const characterCardVariants: Variants = {
@@ -62,7 +61,7 @@ const NovelCharactersTab: React.FC<NovelCharactersTabProps> = ({ novel }) => {
         ตัวละคร ({characters.length} {characters.length >=6 ? "ตัวละครหลักที่แสดง" : "ตัวละคร"})
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {characters.map((character, index) => (
+        {characters.map((character: any, index: number) => (
           <motion.div
             key={character._id}
             custom={index}
