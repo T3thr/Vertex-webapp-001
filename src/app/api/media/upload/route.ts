@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
 
     const result = await cloudinary.search
       .expression(`folder:divwy/* AND context.uploaded_by=${session.user?.id}`)
-      .sort_by([{ created_at: 'desc' }])
+      .sort_by('created_at', 'desc')
       .max_results(limit)
       .execute();
 
