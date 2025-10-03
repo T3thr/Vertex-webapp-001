@@ -24,7 +24,6 @@ export interface QRCodePaymentProps {
 export enum PaymentStatus {
   PENDING = 'pending',
   COMPLETED = 'succeeded', // เปลี่ยนจาก 'completed' เป็น 'succeeded' เพื่อให้ตรงกับ backend
-  SUCCEEDED = 'succeeded', // เพิ่มเพื่อให้ตรงกับ backend
   FAILED = 'failed',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
