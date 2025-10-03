@@ -99,8 +99,8 @@ export const Thread = () => {
           const problems = problemsData.posts || [];
           
           // แยกโพสต์ที่สร้างจากปุ่มรีวิวและปุ่มปัญหา
-          const reviewsFromBtn = reviews.filter(post => post.sourceType === 'review');
-          const problemsFromBtn = problems.filter(post => post.sourceType === 'problem');
+          const reviewsFromBtn = reviews.filter((post: any) => post.sourceType === 'review');
+          const problemsFromBtn = problems.filter((post: any) => post.sourceType === 'problem');
           
           setPosts(allPosts);
           setReviewPosts(reviews);
