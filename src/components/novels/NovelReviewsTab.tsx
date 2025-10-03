@@ -1,12 +1,11 @@
 // src/components/novels/NovelReviewsTab.tsx
 // Component สำหรับแสดง Tab รีวิวของนิยาย
 
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import { Edit, MessageSquare, Star, ThumbsDown, ThumbsUp, User } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 interface NovelReviewsTabProps {
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
 }
 
 // ✅ [เพิ่มใหม่] Component สำหรับแสดง Star Rating แบบ App Store

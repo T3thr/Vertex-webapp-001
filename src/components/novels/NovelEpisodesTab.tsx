@@ -30,7 +30,6 @@ import {
   Info,
   Loader2
 } from 'lucide-react';
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
@@ -39,7 +38,7 @@ import { useRouter } from 'next/navigation';
 // ===================================================================
 
 interface NovelEpisodesTabProps {
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
 }
 
 interface EpisodeAccess {
@@ -272,7 +271,7 @@ function PurchaseDialog({ episode, episodeAccess, novelSlug, onClose, onPurchase
 
 interface EpisodeCardProps {
   episode: any;
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
   index: number;
 }
 
@@ -591,7 +590,7 @@ export default function NovelEpisodeTab({ novel }: NovelEpisodesTabProps) {
   ];
 
   // Filter episodes
-  const filteredEpisodes = novel.episodes.filter((episode) => {
+  const filteredEpisodes = novel.episodes.filter((episode: any) => {
     if (filterAccessType === 'all') return true;
     if (filterAccessType === 'free') return episode.accessType === 'free';
     if (filterAccessType === 'paid') return episode.accessType !== 'free';
@@ -741,7 +740,7 @@ export default function NovelEpisodeTab({ novel }: NovelEpisodesTabProps) {
         className="space-y-3"
         variants={containerVariants}
       >
-        {sortedEpisodes.map((episode, index) => (
+        {sortedEpisodes.map((episode: any, index: number) => (
           <EpisodeCard
             key={episode._id}
             episode={episode}

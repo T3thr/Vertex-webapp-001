@@ -22,14 +22,13 @@ import {
   Crown,
   Award
 } from 'lucide-react';
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 
 // ===================================================================
 // SECTION: TypeScript Interfaces
 // ===================================================================
 
 interface NovelHeaderProps {
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
 }
 
 // ===================================================================

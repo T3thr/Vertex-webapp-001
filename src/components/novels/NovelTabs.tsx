@@ -4,7 +4,6 @@
 
 "use client";
 
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import CommentSection from '@/components/comments/CommentSection';
 import { CommentableType } from '@/types/comment';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -26,7 +25,7 @@ import NovelReviewsTab from './NovelReviewsTab';
 // ===================================================================
 
 interface NovelTabsProps {
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
 }
 
 interface TabItem {

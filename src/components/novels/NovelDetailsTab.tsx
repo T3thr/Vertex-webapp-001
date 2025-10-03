@@ -22,7 +22,6 @@ import {
   TrendingUp,
   Info
 } from 'lucide-react';
-import { PopulatedNovelForDetailPage } from '@/app/api/novels/[slug]/route';
 import TagBadge from './TagBadge';
 
 // ===================================================================
@@ -30,7 +29,7 @@ import TagBadge from './TagBadge';
 // ===================================================================
 
 interface NovelDetailsTabProps {
-  novel: PopulatedNovelForDetailPage;
+  novel: any;
 }
 
 // ===================================================================
@@ -268,7 +267,7 @@ export default function NovelDetailsTab({novel}:NovelDetailsTabProps) {
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">หมวดหมู่รอง</h4>
               <div className="flex flex-wrap gap-2">
-                {themeAssignment.subThemes.map((subTheme, index) => (
+                {themeAssignment.subThemes.map((subTheme: any, index: number) => (
                   <TagBadge 
                     key={index}
                     category={subTheme.categoryId}
@@ -284,7 +283,7 @@ export default function NovelDetailsTab({novel}:NovelDetailsTabProps) {
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">อารมณ์และโทน</h4>
               <div className="flex flex-wrap gap-2">
-                {themeAssignment.moodAndTone.map((mood, index) => (
+                {themeAssignment.moodAndTone.map((mood: any, index: number) => (
                   <TagBadge 
                     key={index}
                     category={mood}
@@ -300,7 +299,7 @@ export default function NovelDetailsTab({novel}:NovelDetailsTabProps) {
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-2">แท็กเพิ่มเติม</h4>
               <div className="flex flex-wrap gap-2">
-                {themeAssignment.customTags.map((tag, index) => (
+                {themeAssignment.customTags.map((tag: any, index: number) => (
                   <span 
                     key={index}
                     className="px-3 py-1 bg-accent/20 text-accent border border-accent/30 rounded-full text-sm"
@@ -323,7 +322,7 @@ export default function NovelDetailsTab({novel}:NovelDetailsTabProps) {
           </h3>
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
             <div className="flex flex-wrap gap-2">
-              {themeAssignment.contentWarnings.map((warning, index) => (
+              {themeAssignment.contentWarnings.map((warning: any, index: number) => (
                 <TagBadge 
                   key={index}
                   category={warning}
