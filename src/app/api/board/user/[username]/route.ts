@@ -9,10 +9,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { username: string } }
+  { params }: { params: Promise<{ username: string }> }
 ) {
   try {
-    const username = params.username;
+    const { username } = await params;
     // ดึง query parameters จาก URL
     const url = new URL(req.url);
     const type = url.searchParams.get('type');
