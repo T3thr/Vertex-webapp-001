@@ -91,7 +91,7 @@ export default function QRCodePayment({
           throw new Error(data.error || 'ไม่สามารถตรวจสอบสถานะการชำระเงินได้');
         }
 
-        if ((data.status === PaymentStatus.COMPLETED || data.status === PaymentStatus.SUCCEEDED) && data.processed) {
+        if ((data.status === PaymentStatus.COMPLETED) && data.processed) {
           setStatus(PaymentStatus.COMPLETED);
           onSuccess?.(data);
           clearInterval(intervalId);
@@ -161,7 +161,7 @@ export default function QRCodePayment({
         throw new Error(data.error || 'ไม่สามารถตรวจสอบสถานะการชำระเงินได้');
       }
 
-      if ((data.status === PaymentStatus.COMPLETED || data.status === PaymentStatus.SUCCEEDED) && data.processed) {
+      if ((data.status === PaymentStatus.COMPLETED) && data.processed) {
         setStatus(PaymentStatus.COMPLETED);
         onSuccess?.(data);
         toast.success(`เติมเหรียญสำเร็จ! เพิ่ม ${data.coinAmount} เหรียญเข้ากระเป๋าของคุณแล้ว`);
