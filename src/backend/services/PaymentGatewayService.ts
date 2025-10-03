@@ -266,6 +266,9 @@ export class PaymentGatewayService {
     console.log(`[PaymentGatewayService] Created Stripe Checkout Session ID: ${session.id}`);
 
     // 2. สร้าง Payment record ในระบบ
+    // เพิ่มการกำหนดค่า transactionId เป็นค่าชั่วคราวที่ไม่ซ้ำกัน
+    const tempTransactionId = `TEMP-${Date.now()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+
     const payment = new PaymentModel({
       paymentReadableId,
       userId,
@@ -284,8 +287,8 @@ export class PaymentGatewayService {
       reference,
       gatewayDetails: {
         sessionId: session.id,
-        // paymentIntentId: session.payment_intent || undefined, // จะถูกอัปเดตโดย webhook เมื่อชำระเงินสำเร็จ
-        // transactionId: session.payment_intent || undefined, // จะถูกอัปเดตโดย webhook เมื่อชำระเงินสำเร็จ
+        transactionId: tempTransactionId, // เพิ่มค่าชั่วคราวที่ไม่ซ้ำกัน
+        paymentIntentId: tempTransactionId, // ใช้ค่าเดียวกับ transactionId ชั่วคราว
       },
     });
 
