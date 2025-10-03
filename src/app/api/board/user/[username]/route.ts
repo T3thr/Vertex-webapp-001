@@ -74,32 +74,37 @@ export async function GET(
     console.log('Found posts:', posts.length);
     
     // แปลงข้อมูลให้เหมาะสมกับการส่งกลับ
-    const formattedPosts = posts.map(post => ({
-      id: post._id.toString(),
-      slug: post.slug,
-      title: post.title,
-      content: post.content,
-      boardType: post.boardType,
-      sourceType: post.sourceType || null, // เพิ่ม sourceType เพื่อระบุว่ากระทู้นี้สร้างมาจากหน้าไหน
-      author: {
-        id: post.authorId.toString(),
-        name: post.authorUsername || username,
-        avatar: post.authorAvatarUrl || "/images/default-avatar.png",
-      },
-      category: post.categoryAssociated ? {
-        id: post.categoryAssociated._id.toString(),
-        name: post.categoryAssociated.name
-      } : null,
-      novel: post.novelAssociated ? {
-        id: post.novelAssociated._id.toString(),
-        title: post.novelAssociated.title,
-        coverImageUrl: post.novelAssociated.coverImageUrl,
-        slug: post.novelAssociated.slug
-      } : null,
-      createdAt: post.createdAt,
-      viewCount: post.stats?.viewsCount || 0,
-      commentCount: post.stats?.repliesCount || 0,
-    }));
+    const formattedPosts = posts.map(post => {
+      const category = post.categoryAssociated as any;
+      const novel = post.novelAssociated as any;
+      
+      return {
+        id: post._id.toString(),
+        slug: post.slug,
+        title: post.title,
+        content: post.content,
+        boardType: post.boardType,
+        sourceType: post.sourceType || null,
+        author: {
+          id: post.authorId.toString(),
+          name: post.authorUsername || username,
+          avatar: post.authorAvatarUrl || "/images/default-avatar.png",
+        },
+        category: category ? {
+          id: category._id.toString(),
+          name: category.name
+        } : null,
+        novel: novel ? {
+          id: novel._id.toString(),
+          title: novel.title,
+          coverImageUrl: novel.coverImageUrl,
+          slug: novel.slug
+        } : null,
+        createdAt: post.createdAt,
+        viewCount: post.stats?.viewsCount || 0,
+        commentCount: post.stats?.repliesCount || 0,
+      };
+    });
     
     return NextResponse.json({
       success: true,
