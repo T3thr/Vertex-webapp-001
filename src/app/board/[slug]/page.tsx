@@ -138,27 +138,31 @@ export default async function BoardPostPage({ params }: { params: Promise<{ slug
   ).exec();
   
   // จัดรูปแบบข้อมูล
+  const category = post.categoryAssociated as any;
+  const author = post.authorId as any;
+  const novel = post.novelAssociated as any;
+  
   const formattedPost = {
     id: post._id.toString(),
     title: post.title,
     content: post.content,
     boardType: post.boardType,
     boardTypeLabel: getBoardTypeLabel(post.boardType),
-    category: post.categoryAssociated?.name || "ไม่ระบุหมวดหมู่",
+    category: category?.name || "ไม่ระบุหมวดหมู่",
     author: {
-      id: post.authorId?._id?.toString() || "",
-      name: post.authorUsername || post.authorId?.username || "ไม่ระบุชื่อ",
-      avatar: post.authorAvatarUrl || post.authorId?.profile?.avatarUrl || "/images/default-avatar.png"
+      id: author?._id?.toString() || "",
+      name: post.authorUsername || author?.username || "ไม่ระบุชื่อ",
+      avatar: post.authorAvatarUrl || author?.profile?.avatarUrl || "/images/default-avatar.png"
     },
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     viewCount: post.stats?.viewsCount || 0,
     commentCount: post.stats?.repliesCount || 0,
-    novel: post.novelAssociated ? {
-      id: post.novelAssociated._id.toString(),
-      title: post.novelAssociated.title,
-      coverImageUrl: post.novelAssociated.coverImageUrl,
-      slug: post.novelAssociated.slug
+    novel: novel ? {
+      id: novel._id.toString(),
+      title: novel.title,
+      coverImageUrl: novel.coverImageUrl,
+      slug: novel.slug
     } : null
   };
   
