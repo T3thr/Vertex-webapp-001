@@ -1,7 +1,7 @@
 // src/app/novels/[slug]/overview/components/tabs/EpisodeManagementModal.tsx
 // 🎯 Modal สำหรับจัดการตอน (Episodes) แบบภาพรวม
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Plus, Trash2, Edit3, Save, ChevronRight, 
@@ -269,13 +269,7 @@ export default function EpisodeManagementModal({
   });
 
   // 🔄 Load episodes
-  useEffect(() => {
-    if (isOpen) {
-      loadEpisodes();
-    }
-  }, [isOpen, novelSlug]);
-
-  const loadEpisodes = async () => {
+  const loadEpisodes = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch(`/api/novels/${novelSlug}/episodes`);
@@ -290,7 +284,13 @@ export default function EpisodeManagementModal({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [novelSlug]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadEpisodes();
+    }
+  }, [isOpen, loadEpisodes]);
 
   // 📝 Create new episode
   const handleCreateEpisode = async () => {
@@ -545,7 +545,7 @@ export default function EpisodeManagementModal({
               <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
                 <Book className="w-16 h-16 mb-4 opacity-50" />
                 <p className="text-lg font-medium">ยังไม่มีตอน</p>
-                <p className="text-sm mt-2">คลิก "เพิ่มตอนใหม่" เพื่อเริ่มสร้างเรื่องราว</p>
+                <p className="text-sm mt-2">คลิก &quot;เพิ่มตอนใหม่&quot; เพื่อเริ่มสร้างเรื่องราว</p>
               </div>
             ) : (
               <div className={

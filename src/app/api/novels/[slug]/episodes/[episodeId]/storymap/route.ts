@@ -68,7 +68,7 @@ export async function GET(
     }
 
     // โหลด StoryMap สำหรับ Episode นี้
-    let storyMap = await StoryMapModel.findOne({
+    const storyMap = await StoryMapModel.findOne({
       novelId: novel._id,
       episodeId: new Types.ObjectId(episodeId),
       isActive: true

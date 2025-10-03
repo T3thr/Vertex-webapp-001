@@ -5341,7 +5341,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     if (nodesToDelete.length > 0) {
       const totalItemsToDelete = nodesToDelete.length + allEdgesToDelete.length;
-      let confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`;
+      const confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`;
       
       // ❌ REMOVED: Special warning for episode nodes - Episodes are database-only entities
       // if (episodeNodesToDelete.length > 0) {

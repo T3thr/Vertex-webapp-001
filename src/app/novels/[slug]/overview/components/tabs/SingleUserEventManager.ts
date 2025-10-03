@@ -1298,7 +1298,7 @@ export class SingleUserEventManager {
 
           // 🔥 CRITICAL: Ensure absolute uniqueness with collision detection
           let counter = 0;
-          let originalId = uniqueId;
+          const originalId = uniqueId;
           while (usedVariableIds.has(uniqueId)) {
             counter++;
             uniqueId = `${originalId}_${counter}`;

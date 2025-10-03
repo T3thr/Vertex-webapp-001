@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build base query
-    let query: any = {
+    const query: any = {
       isDeleted: false,
       accessLevel: { $in: ['public', 'unlisted'] } // Only show public and unlisted novels
     };
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
     // ตรวจสอบและหา default categories
     let validMainThemeId = mainThemeId;
     let validLanguageId = languageId;
-    let validAgeRatingId = ageRating;
+    const validAgeRatingId = ageRating;
 
     // หา default theme ถ้าไม่ได้เลือก
     if (!validMainThemeId) {

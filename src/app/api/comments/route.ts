@@ -251,7 +251,7 @@ export async function PATCH(req: NextRequest) {
     if (comment.content !== content) {
       // สร้าง editHistory ถ้ายังไม่มี
       if (!comment.editHistory) {
-        // @ts-ignore - เนื่องจาก TypeScript อาจไม่เข้าใจ DocumentArray ของ Mongoose
+        // @ts-expect-error - เนื่องจาก TypeScript อาจไม่เข้าใจ DocumentArray ของ Mongoose
         comment.editHistory = [];
       }
       
@@ -262,7 +262,7 @@ export async function PATCH(req: NextRequest) {
         previousContent: comment.content,
       };
       
-      // @ts-ignore - เนื่องจาก TypeScript อาจไม่เข้าใจ DocumentArray ของ Mongoose
+      // @ts-expect-error - เนื่องจาก TypeScript อาจไม่เข้าใจ DocumentArray ของ Mongoose
       comment.editHistory.push(editHistoryItem);
     }
     
@@ -342,17 +342,17 @@ export async function DELETE(req: NextRequest) {
     // อัปเดตสถานะเป็น soft delete
     if (isAdmin && comment.userId.toString() !== session.user.id) {
       comment.status = CommentStatus.DELETED_BY_MODERATOR;
-      // @ts-ignore - เนื่องจาก TypeScript อาจไม่เข้าใจประเภทของ ObjectId
+      // @ts-expect-error - เนื่องจาก TypeScript อาจไม่เข้าใจประเภทของ ObjectId
       comment.hiddenOrDeletedByUserId = session.user.id;
       comment.moderationDetails = {
         actionTaken: 'delete',
-        // @ts-ignore - เนื่องจาก TypeScript อาจไม่เข้าใจประเภทของ ObjectId
+        // @ts-expect-error - เนื่องจาก TypeScript อาจไม่เข้าใจประเภทของ ObjectId
         moderatorId: session.user.id,
         actionAt: new Date(),
       };
     } else {
       comment.status = CommentStatus.DELETED_BY_USER;
-      // @ts-ignore - เนื่องจาก TypeScript อาจไม่เข้าใจประเภทของ ObjectId
+      // @ts-expect-error - เนื่องจาก TypeScript อาจไม่เข้าใจประเภทของ ObjectId
       comment.hiddenOrDeletedByUserId = session.user.id;
     }
     
