@@ -3,6 +3,14 @@
 
 import { Types } from 'mongoose';
 import PaymentModel, { IPayment, PaymentStatus, PaymentGateway, PaymentForType } from '../models/Payment';
+import generatePayload from 'promptpay-qr';
+import QRCode from 'qrcode';
+import Stripe from 'stripe';
+
+// สร้าง Stripe client
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2022-11-15' as any, // ใช้ API version ที่ Stripe รองรับ
+});
 
 /**
  * ข้อมูลการสร้าง QR Code สำหรับชำระเงิน
@@ -61,16 +69,109 @@ export class PaymentGatewayService {
       }
 
       // 2. สร้างรายการชำระเงินในระบบ
-      // สร้าง ID ที่อ่านได้และค่าที่ไม่ซ้ำกันสำหรับการชำระเงิน โดยใช้ timestamp และตัวเลขสุ่ม
       const timestamp = Date.now();
       const paymentReadableId = `PAY-${timestamp}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
       const userId = new Types.ObjectId(request.userId);
       const reference = `REF${timestamp}${Math.floor(Math.random() * 1000)}`;
+      
+      // ตรวจสอบว่ามี STRIPE_SECRET_KEY หรือไม่
+      if (process.env.STRIPE_SECRET_KEY) {
+        try {
+          // สร้าง Payment Intent ใน Stripe
+          const paymentIntent = await stripe.paymentIntents.create({
+            amount: Math.round(request.amount * 100), // แปลงเป็นสตางค์ (เช่น 100 บาท = 10000 สตางค์)
+            currency: 'thb',
+            payment_method_types: ['promptpay'],
+            metadata: {
+              userId: request.userId,
+              coinAmount: request.metadata?.coinAmount || request.amount,
+              topupType: 'coin'
+            }
+          });
+          
+          // สร้าง QR code สำหรับ PromptPay ผ่าน Stripe
+          let qrData = '';
+          
+          // ถ้าใช้ Stripe จริงจะได้ QR code จาก Stripe
+          // หมายเหตุ: โครงสร้างข้อมูลอาจแตกต่างกันตาม API version ของ Stripe
+          // ในกรณีนี้ใช้ type assertion เพื่อเข้าถึงข้อมูล QR code
+          if (paymentIntent.next_action?.display_bank_transfer_instructions) {
+            const instructions = paymentIntent.next_action.display_bank_transfer_instructions as any;
+            if (instructions.image_url_png) {
+              qrData = instructions.image_url_png;
+            }
+          } else {
+            // Fallback: สร้าง QR code ด้วย promptpay-qr library ถ้าไม่ได้จาก Stripe
+            const promptpayId = "0923288569"; // เบอร์โทรที่ลงทะเบียน PromptPay
+            const payload = generatePayload(promptpayId, { amount: request.amount });
+            qrData = await QRCode.toDataURL(payload, {
+              errorCorrectionLevel: 'M',
+              margin: 1,
+              scale: 4,
+              width: 200,
+              rendererOpts: { quality: 0.8 }
+            });
+          }
+          
+          // สร้าง Payment ในระบบของเรา
+          const payment = new PaymentModel({
+            paymentReadableId,
+            userId,
+            paymentForType: PaymentForType.COIN_TOPUP,
+            paymentGateway: PaymentGateway.STRIPE,
+            relatedDocumentId: userId,
+            amount: request.amount,
+            currency: 'THB',
+            netAmount: request.amount,
+            status: PaymentStatus.PENDING,
+            description: request.description || `เติมเหรียญ ${request.amount} บาท`,
+            metadata: request.metadata || {},
+            initiatedAt: new Date(),
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            schemaVersion: 1,
+            reference,
+            gatewayDetails: {
+              qrCodeData: qrData,
+              paymentIntentId: paymentIntent.id,
+              transactionId: paymentIntent.id
+            }
+          });
+
+          // บันทึกเพียงครั้งเดียว
+          await payment.save();
+
+          // ส่งผลลัพธ์กลับ
+          return {
+            success: true,
+            paymentId: payment._id.toString(),
+            qrData,
+            expiresAt: payment.expiresAt,
+            amount: payment.amount,
+            reference,
+            paymentIntentId: paymentIntent.id
+          };
+        } catch (stripeError: any) {
+          console.error('❌ [PaymentGatewayService] Stripe error:', stripeError);
+          // Fallback ไปใช้ PromptPay QR แบบเดิม
+        }
+      }
+      
+      // Fallback หรือกรณีไม่มี STRIPE_SECRET_KEY: ใช้ PromptPay QR แบบเดิม
       const tempTransactionId = `TX-${timestamp}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
       const tempPaymentIntentId = `PI-${timestamp}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-      const qrData = `https://example.com/qr-payment/${reference}`;
       
-      // สร้าง Payment ด้วยข้อมูลครบถ้วนตั้งแต่แรก รวมถึง transactionId และ paymentIntentId ที่ไม่ซ้ำกัน
+      // สร้าง QR code สำหรับ PromptPay
+      const promptpayId = "0923288569"; // เบอร์โทรที่ลงทะเบียน PromptPay
+      const payload = generatePayload(promptpayId, { amount: request.amount });
+      const qrData = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        scale: 4,
+        width: 200,
+        rendererOpts: { quality: 0.8 }
+      });
+      
+      // สร้าง Payment ด้วยข้อมูลครบถ้วน
       const payment = new PaymentModel({
         paymentReadableId,
         userId,
@@ -97,7 +198,7 @@ export class PaymentGatewayService {
       // บันทึกเพียงครั้งเดียว
       await payment.save();
 
-      // 5. ส่งผลลัพธ์กลับ
+      // ส่งผลลัพธ์กลับ
       return {
         success: true,
         paymentId: payment._id.toString(),
@@ -115,6 +216,90 @@ export class PaymentGatewayService {
         error: error.message || 'เกิดข้อผิดพลาดในการสร้าง QR Code'
       };
     }
+  }
+
+  /**
+   * สร้าง Stripe Checkout Session สำหรับเติมเหรียญ
+   * @param params ข้อมูลการสร้าง session
+   */
+  async createCheckoutSession({ userId, amount, description, metadata, successUrl, cancelUrl }: {
+    userId: string;
+    amount: number;
+    description?: string;
+    metadata?: any;
+    successUrl: string;
+    cancelUrl: string;
+  }) {
+    if (!userId || !Types.ObjectId.isValid(userId)) {
+      throw new Error('ไม่พบข้อมูลผู้ใช้หรือข้อมูลไม่ถูกต้อง');
+    }
+    if (!amount || amount <= 0) {
+      throw new Error('จำนวนเงินไม่ถูกต้อง');
+    }
+    const paymentReadableId = `PAY-${Date.now()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+    const reference = `REF${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    // 1. สร้าง Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'thb',
+            product_data: {
+              name: description || `เติมเหรียญ ${amount} บาท`,
+            },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      metadata: {
+        userId,
+        coinAmount: metadata?.coinAmount || amount,
+        topupType: 'coin',
+      },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
+
+    console.log(`[PaymentGatewayService] Created Stripe Checkout Session ID: ${session.id}`);
+
+    // 2. สร้าง Payment record ในระบบ
+    // เพิ่มการกำหนดค่า transactionId เป็นค่าชั่วคราวที่ไม่ซ้ำกัน
+    const tempTransactionId = `TEMP-${Date.now()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+
+    const payment = new PaymentModel({
+      paymentReadableId,
+      userId,
+      paymentForType: PaymentForType.COIN_TOPUP,
+      paymentGateway: PaymentGateway.STRIPE,
+      relatedDocumentId: userId,
+      amount,
+      currency: 'THB',
+      netAmount: amount,
+      status: PaymentStatus.PENDING,
+      description: description || `เติมเหรียญ ${amount} บาท`,
+      metadata: metadata || {},
+      initiatedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      schemaVersion: 1,
+      reference,
+      gatewayDetails: {
+        sessionId: session.id,
+        transactionId: tempTransactionId, // เพิ่มค่าชั่วคราวที่ไม่ซ้ำกัน
+        paymentIntentId: tempTransactionId, // ใช้ค่าเดียวกับ transactionId ชั่วคราว
+      },
+    });
+
+    console.log('[PaymentGatewayService] Payment object before save - gatewayDetails:', payment.gatewayDetails);
+
+    await payment.save();
+    return {
+      sessionId: session.id,
+      url: session.url,
+      paymentId: payment._id.toString(),
+    };
   }
 
   /**
@@ -187,6 +372,12 @@ export class PaymentGatewayService {
    */
   async simulateSuccessfulPayment(paymentId: string): Promise<boolean> {
     try {
+      // ตรวจสอบว่าอยู่ในโหมดพัฒนาหรือไม่
+      if (process.env.NODE_ENV !== 'development') {
+        console.warn('⚠️ [PaymentGatewayService] Attempt to simulate payment in non-development environment');
+        return false;
+      }
+      
       if (!Types.ObjectId.isValid(paymentId)) {
         return false;
       }

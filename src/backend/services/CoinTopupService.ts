@@ -113,6 +113,7 @@ export class CoinTopupService {
     session.startTransaction();
 
     try {
+      console.log(`[CoinTopupService] Processing coin topup for payment ID: ${paymentId}`);
       // 1. ตรวจสอบข้อมูลการชำระเงิน
       if (!Types.ObjectId.isValid(paymentId)) {
         return { success: false, error: 'รหัสการชำระเงินไม่ถูกต้อง' };
@@ -135,11 +136,21 @@ export class CoinTopupService {
 
       // 4. ตรวจสอบว่ารายการนี้ถูกประมวลผลไปแล้วหรือไม่
       if (payment.metadata.processed) {
+        console.warn(`⚠️ [CoinTopupService] Payment ID ${paymentId} already processed. Skipping.`);
         return { success: false, error: 'รายการนี้ถูกประมวลผลไปแล้ว' };
       }
 
       const userId = payment.userId.toString();
-      const coinAmount = parseInt(payment.metadata.coinAmount);
+      const coinAmount = parseInt(payment.metadata.coinAmount as string);
+
+      console.log(`[CoinTopupService] Found payment: userId=${userId}, coinAmount (from metadata)=${payment.metadata.coinAmount}`);
+      console.log(`[CoinTopupService] Parsed coinAmount: ${coinAmount}`);
+
+      if (isNaN(coinAmount) || coinAmount <= 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return { success: false, error: 'จำนวนเหรียญที่จะเติมไม่ถูกต้อง (Invalid coin amount)' };
+      }
 
       // 5. อัปเดตเหรียญในกระเป๋าของผู้ใช้
       const userGamification = await UserGamificationModel.findOne({ userId }).session(session);
@@ -155,12 +166,16 @@ export class CoinTopupService {
       userGamification.wallet.lastCoinTransactionAt = new Date();
       await userGamification.save({ session });
 
+      console.log(`[CoinTopupService] User ${userId}: Old balance = ${oldBalance}, Added = ${coinAmount}, New balance = ${userGamification.wallet.coinBalance}`);
+
       // 6. อัปเดตสถานะการประมวลผลในรายการชำระเงิน
       payment.metadata.processed = true;
       payment.metadata.processedAt = new Date();
       payment.metadata.oldCoinBalance = oldBalance;
       payment.metadata.newCoinBalance = userGamification.wallet.coinBalance;
       await payment.save({ session });
+
+      console.log(`[CoinTopupService] Payment ID ${paymentId} marked as processed.`);
 
       // 7. ยืนยันการทำธุรกรรม
       await session.commitTransaction();
@@ -224,6 +239,12 @@ export class CoinTopupService {
    */
   async simulateSuccessfulTopup(paymentId: string): Promise<ProcessTopupResult> {
     try {
+      // 0. ตรวจสอบว่าอยู่ในโหมดพัฒนาหรือไม่
+      if (process.env.NODE_ENV !== 'development') {
+        console.warn('⚠️ [CoinTopupService] Attempt to simulate payment in non-development environment');
+        return { success: false, error: 'การจำลองการชำระเงินสามารถทำได้เฉพาะในโหมดพัฒนาเท่านั้น' };
+      }
+      
       // 1. จำลองการชำระเงินสำเร็จ
       const paymentSuccess = await PaymentGatewayService.simulateSuccessfulPayment(paymentId);
       if (!paymentSuccess) {

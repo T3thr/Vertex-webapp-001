@@ -116,6 +116,7 @@ export interface IUserProfile extends Document {
   primaryDisplayBadge?: IUserDisplayBadge;
   secondaryDisplayBadges?: IUserDisplayBadge[];
   writerStatsSummary?: IWriterStatsSummary;
+  showTrophies?: boolean; // เพิ่มฟิลด์สำหรับการตั้งค่าการแสดง Trophy
   joinDate: Date;
 
   createdAt: Date;
@@ -216,6 +217,7 @@ const UserProfileSchema = new Schema<IUserProfile>(
         validate: [(val: any[]) => val.length <= 2, "สามารถเลือก Badge รองได้สูงสุด 2 อัน"],
     },
     writerStatsSummary: { type: WriterStatsSummarySchema, default: undefined },
+    showTrophies: { type: Boolean, default: true, comment: "การตั้งค่าการแสดง Trophy ในหน้าโปรไฟล์" },
     joinDate: { type: Date, required: true, default: Date.now },
   },
   {

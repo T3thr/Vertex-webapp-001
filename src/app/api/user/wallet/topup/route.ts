@@ -7,13 +7,14 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/options";
 import dbConnect from "@/backend/lib/mongodb";
 import { z } from "zod";
 import CoinTopupService from "@/backend/services/CoinTopupService";
+import PaymentGatewayService from '@/backend/services/PaymentGatewayService';
 
 // Schema สำหรับตรวจสอบข้อมูลขาเข้า
 const coinTopupSchema = z.object({
   amount: z.number().int().min(1).max(10000),
   paymentAmount: z.number().min(1).max(100000),
   description: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 // Schema สำหรับตรวจสอบข้อมูลการจำลองการชำระเงิน (สำหรับการทดสอบเท่านั้น)
@@ -22,6 +23,7 @@ const simulatePaymentSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Original QR Code Payment Flow
   try {
     // 1. ตรวจสอบการยืนยันตัวตนของผู้ใช้
     const session = await getServerSession(authOptions);
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
       qrData: result.qrData,
       expiresAt: result.expiresAt,
       amount: result.amount,
-      paymentAmount: result.paymentAmount,
+      paymentAmount: result.amount, // ใช้ amount จาก requestData.paymentAmount ที่ส่งมา
       reference: result.reference,
     });
   } catch (error: any) {
@@ -138,6 +140,15 @@ export async function GET(req: NextRequest) {
 // API endpoint สำหรับจำลองการชำระเงินสำเร็จ (สำหรับการทดสอบเท่านั้น)
 export async function PATCH(req: NextRequest) {
   try {
+    // 0. ตรวจสอบว่าอยู่ในโหมดพัฒนาหรือไม่
+    if (process.env.NODE_ENV !== 'development') {
+      console.warn("⚠️ [API Simulate Payment] Attempt to simulate payment in non-development environment");
+      return NextResponse.json(
+        { success: false, error: "การจำลองการชำระเงินสามารถทำได้เฉพาะในโหมดพัฒนาเท่านั้น" },
+        { status: 403 }
+      );
+    }
+    
     // 1. ตรวจสอบการยืนยันตัวตนของผู้ใช้
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {

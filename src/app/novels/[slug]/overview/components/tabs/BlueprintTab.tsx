@@ -191,6 +191,37 @@ import { IEpisode } from '@/backend/models/Episode';
 // import { Label } from '@/components/ui/label'; // Already imported
 // import { Textarea } from '@/components/ui/textarea'; // Already imported
 
+// 🔥 FIX 2: Helper function to map StoryMapNodeType to React Flow node type
+// Moved outside component to prevent hoisting issues
+const getReactFlowNodeType = (storyMapNodeType: string): string => {
+  switch (storyMapNodeType) {
+    case 'scene_node':
+      return 'scene_node';
+    case 'choice_node':
+      return 'choice_node';
+    case 'branch_node':
+      return 'branch_node';
+    case 'comment_node':
+      return 'comment_node';
+    case 'ending_node':
+      return 'ending_node';
+    case 'start_node':
+      return 'scene_node'; // Start nodes are essentially scene nodes
+    case 'merge_node':
+      return 'branch_node'; // Merge nodes can use branch node UI
+    case 'variable_modifier_node':
+    case 'event_trigger_node':
+    case 'custom_logic_node':
+    case 'delay_node':
+    case 'random_branch_node':
+    case 'parallel_execution_node':
+    case 'sub_storymap_node':
+    case 'group_node':
+    default:
+      return 'custom'; // Use custom component for unsupported types
+  }
+};
+
 // Props interface
 interface BlueprintTabProps {
   novel: any;
@@ -2227,6 +2258,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       );
       setEpisodeList(updatedEpisodes);
 
+      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      episodesRef.current = updatedEpisodes;
+
       // อัปเดต selected episode
       if (selectedEpisodeFromBlueprint?._id === episodeId) {
         setSelectedEpisodeFromBlueprint({ ...selectedEpisodeFromBlueprint, ...updatedEpisode });
@@ -2260,6 +2294,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [episodeList, selectedEpisodeFromBlueprint, updateEpisodeAPI, onEpisodeUpdate, setNodes]);
 
   // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode - SMOOTH TRANSITION WITHOUT LOADING MESSAGE
+  // 🔥 FIX 2: แก้ไข dependencies ให้ครบถ้วนเพื่อป้องกัน stale closure
   const loadStoryMapForEpisode = useCallback(async (episodeId: string | null) => {
     if (!episodeId || !novel?.slug) {
       // ถ้าไม่มี episode ให้โหลด main story map
@@ -2398,7 +2433,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setCurrentEpisodeStoryMap(null);
     }
     // 🎯 REMOVED setIsLoadingStoryMap(false) - NO LOADING STATE
-  }, [novel?.slug, setNodes, setEdges]);
+  }, [novel?.slug, storyMap, professionalEventManager, setNodes, setEdges, setCurrentEpisodeStoryMap]);
+  // 🔥 FIX 2: เอา getReactFlowNodeType ออกจาก dependencies เพราะเป็น pure function
+  // ที่ไม่ได้ depend on external state และถูก declare หลัง loadStoryMapForEpisode
 
   // 🎯 PROFESSIONAL: Realtime Episode Selection - No URL dependency
   const handleEpisodeSelect = useCallback(async (episodeId: string | null) => {
@@ -2427,25 +2464,43 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     console.log(`🎯 Episode selected (realtime): ${episode?.title || 'Main Story'}`);
   }, [episodeList, loadStoryMapForEpisode, professionalEventManager, onEpisodeCreate]);
 
-  // Sync episodes with nodes on canvas
+  // 🔥 FIX 6: Sync episodes prop ONLY when externally changed (not from internal updates)
+  // ❌ REMOVED episodeList from dependencies to prevent infinite loop
   useEffect(() => {
-    if (episodes && episodes !== episodeList) {
+    // Only update if episodes prop changed from EXTERNAL source (not from internal updates)
+    if (episodes && episodes !== episodesRef.current && episodes !== episodeList) {
+      console.log('[BlueprintTab] 🔄 External episodes prop changed, syncing...', {
+        propsLength: episodes.length,
+        stateLength: episodeList.length,
+        isSameReference: episodes === episodeList
+      });
+      
+      // Update episodes list without triggering cascade
       setEpisodeList(episodes);
+      episodesRef.current = episodes;
     }
-  }, [episodes, episodeList]);
+  }, [episodes]); // ✅ Only depend on episodes prop, NOT episodeList
 
   // 🎯 PROFESSIONAL: Don't auto-select any episode - require manual selection
+  // 🔥 FIX 3: แก้ไข useEffect loop โดยใช้ useRef wrapper และลด dependencies
   useEffect(() => {
     // Clear selection when no episodes exist
     if (episodeList.length === 0 && currentEpisodeId) {
       setCurrentEpisodeId(null);
       setSelectedEpisodeFromBlueprint(null);
-      loadStoryMapForEpisode(null);
+      
+      // 🔥 FIX 3: ใช้ useRef wrapper แทนการใส่ loadStoryMapForEpisode ใน dependencies
+      if (loadStoryMapForEpisodeRef.current) {
+        loadStoryMapForEpisodeRef.current(null);
+      }
+      
       console.log(`🎯 Cleared episode selection - no episodes available`);
     }
     // ❌ REMOVED: Auto-selection of first episode
     // User must manually select episode to edit
-  }, [episodeList, currentEpisodeId, loadStoryMapForEpisode]);
+    // 🔥 FIX 3: ใช้ episodeList.length แทน episodeList เพื่อลด re-render
+    // ไม่ใส่ loadStoryMapForEpisode ใน deps เพราะใช้ ref แทน
+  }, [episodeList.length, currentEpisodeId]);
 
   // ฟังก์ชันตรวจสอบว่าควรสร้าง command หรือไม่
   const shouldCreateCommand = useCallback((change: NodeChange | EdgeChange): boolean => {
@@ -2722,8 +2777,23 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   });
   const [isCreatingEpisode, setIsCreatingEpisode] = useState(false);
 
+  // 🔥 FIX 4: Toast Deduplication - Track created episodes to prevent duplicate toasts
+  const createdEpisodeIdsRef = useRef<Set<string>>(new Set());
+  
+  // 🔥 FIX 1: Stable reference for loadStoryMapForEpisode to prevent stale closures
+  const loadStoryMapForEpisodeRef = useRef<((episodeId: string | null) => Promise<void>) | null>(null);
+
+  // 🔥 FIX 1: Update ref whenever loadStoryMapForEpisode changes
+  useEffect(() => {
+    loadStoryMapForEpisodeRef.current = loadStoryMapForEpisode;
+  }, [loadStoryMapForEpisode]);
+
+  // 🔥 FIX 6: Track episodes prop to prevent infinite loop in sync useEffect
+  const episodesRef = useRef(episodes);
+
   // ✨ Episode creation handler
   // 🎯 Professional Episode Creation Handler (Modal-based)
+  // 🔥 FIX 5: แก้ไข dependencies และใช้ useRef wrapper + toast deduplication
   const handleCreateEpisodeModal = useCallback(async (episodeData: any) => {
     try {
       // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode
@@ -2744,6 +2814,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const result = await response.json();
       const newEpisode = result.data;
 
+      // 🔥 FIX 4: Toast Deduplication - ตรวจสอบว่า episode นี้สร้างไปแล้วหรือยัง
+      if (createdEpisodeIdsRef.current.has(newEpisode._id)) {
+        console.warn('⚠️ Episode already created, skipping duplicate toast and reload');
+        return;
+      }
+      
+      // เพิ่ม episode ID เข้า tracking set
+      createdEpisodeIdsRef.current.add(newEpisode._id);
+
       // 🎯 PROFESSIONAL: Update realtime state (no URL management)
       const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
       setEpisodeList(updatedEpisodes);
@@ -2752,8 +2831,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setCurrentEpisodeId(newEpisode._id);
       setSelectedEpisodeFromBlueprint(newEpisode);
 
-      // 🎯 Load empty StoryMap for new Episode (database-only)
-      await loadStoryMapForEpisode(newEpisode._id);
+      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      episodesRef.current = updatedEpisodes;
+
+      // 🔥 FIX 1: ใช้ useRef wrapper แทนการเรียกตรงๆ เพื่อป้องกัน stale closure
+      if (loadStoryMapForEpisodeRef.current) {
+        await loadStoryMapForEpisodeRef.current(newEpisode._id);
+      }
 
       // 🎯 Callback to parent for external state sync
       if (onEpisodeCreate) {
@@ -2770,7 +2854,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       toast.error(`การสร้างตอนล้มเหลว: ${error.message}`);
       throw error;
     }
-  }, [novel.slug, episodeList, setNodes, onEpisodeCreate]);
+  }, [novel.slug, episodeList, onEpisodeCreate]);
 
   // 🎯 Legacy handler for backward compatibility
   const handleCreateEpisode = useCallback(async () => {
@@ -2828,6 +2912,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // 🎯 Real-time อัปเดต local state
       const updatedEpisodes = episodeList.filter(ep => !episodeIds.includes(ep._id));
       setEpisodeList(updatedEpisodes);
+
+      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      episodesRef.current = updatedEpisodes;
 
       // 🎯 PROFESSIONAL: Clear selection if deleted episode was selected (realtime)
       if (selectedEpisodeFromBlueprint && episodeIds.includes(selectedEpisodeFromBlueprint._id)) {
@@ -2931,6 +3018,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // 🎯 Auto-select new episode (realtime)
       setCurrentEpisodeId(newEpisode._id);
       setSelectedEpisodeFromBlueprint(newEpisode);
+
+      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      episodesRef.current = updatedEpisodes;
 
       // 🎯 Load empty StoryMap for new Episode (database-only)
       await loadStoryMapForEpisode(newEpisode._id);
@@ -6914,35 +7004,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [handleKeyboardShortcuts]);
 
-  // Helper function to map StoryMapNodeType to React Flow node type
-  const getReactFlowNodeType = (storyMapNodeType: string): string => {
-    switch (storyMapNodeType) {
-      case 'scene_node':
-        return 'scene_node';
-      case 'choice_node':
-        return 'choice_node';
-      case 'branch_node':
-        return 'branch_node';
-      case 'comment_node':
-        return 'comment_node';
-      case 'ending_node':
-        return 'ending_node';
-      case 'start_node':
-        return 'scene_node'; // Start nodes are essentially scene nodes
-      case 'merge_node':
-        return 'branch_node'; // Merge nodes can use branch node UI
-      case 'variable_modifier_node':
-      case 'event_trigger_node':
-      case 'custom_logic_node':
-      case 'delay_node':
-      case 'random_branch_node':
-      case 'parallel_execution_node':
-      case 'sub_storymap_node':
-      case 'group_node':
-      default:
-        return 'custom'; // Use custom component for unsupported types
-    }
-  };
+  // 🔥 FIX 2: getReactFlowNodeType ถูกย้ายไปไว้ด้านบนของไฟล์ (นอก component)
+  // เพื่อป้องกัน hoisting issues และให้สามารถใช้ใน useCallback ได้
 
   // Custom node and edge types - สร้าง wrapper เพื่อส่ง nodeOrientation พร้อม real-time updates
   const nodeTypes: NodeTypes = useMemo(() => ({

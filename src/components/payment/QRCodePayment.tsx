@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, CheckCircle, AlertCircle, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
+import { QRCodeSVG } from 'qrcode.react';
 
 export interface QRCodePaymentProps {
   paymentId: string;
@@ -23,6 +24,7 @@ export interface QRCodePaymentProps {
 export enum PaymentStatus {
   PENDING = 'pending',
   COMPLETED = 'succeeded', // เปลี่ยนจาก 'completed' เป็น 'succeeded' เพื่อให้ตรงกับ backend
+  SUCCEEDED = 'succeeded', // เพิ่มเพื่อให้ตรงกับ backend
   FAILED = 'failed',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
@@ -90,7 +92,7 @@ export default function QRCodePayment({
           throw new Error(data.error || 'ไม่สามารถตรวจสอบสถานะการชำระเงินได้');
         }
 
-        if (data.status === PaymentStatus.COMPLETED && data.processed) {
+        if ((data.status === PaymentStatus.COMPLETED || data.status === PaymentStatus.SUCCEEDED) && data.processed) {
           setStatus(PaymentStatus.COMPLETED);
           onSuccess?.(data);
           clearInterval(intervalId);
@@ -160,7 +162,7 @@ export default function QRCodePayment({
         throw new Error(data.error || 'ไม่สามารถตรวจสอบสถานะการชำระเงินได้');
       }
 
-      if (data.status === PaymentStatus.COMPLETED && data.processed) {
+      if ((data.status === PaymentStatus.COMPLETED || data.status === PaymentStatus.SUCCEEDED) && data.processed) {
         setStatus(PaymentStatus.COMPLETED);
         onSuccess?.(data);
         toast.success(`เติมเหรียญสำเร็จ! เพิ่ม ${data.coinAmount} เหรียญเข้ากระเป๋าของคุณแล้ว`);
@@ -203,8 +205,24 @@ export default function QRCodePayment({
         {status === PaymentStatus.PENDING && (
           <>
             <div className="bg-white p-4 rounded-lg w-64 h-64 flex items-center justify-center">
-              {/* แสดงไอคอน QR Code แทนการใช้ Image component เพื่อหลีกเลี่ยงปัญหา domain ไม่ได้รับอนุญาต */}
-              <QrCode className="w-48 h-48" />
+              {/* ใช้ Image component เพื่อแสดง QR code จาก data URL */}
+              {qrData && qrData.startsWith('data:') ? (
+                <Image 
+                  src={qrData} 
+                  width={192} 
+                  height={192} 
+                  alt="QR Code สำหรับชำระเงิน"
+                />
+              ) : (
+                <QRCodeSVG 
+                  value={qrData || ''} 
+                  size={192} 
+                  bgColor={"#ffffff"} 
+                  fgColor={"#000000"} 
+                  level={"M"} 
+                  includeMargin={true} 
+                />
+              )}
             </div>
             
             <div className="text-center">
@@ -246,33 +264,35 @@ export default function QRCodePayment({
       <CardFooter className="flex flex-col space-y-2">
         {status === PaymentStatus.PENDING && (
           <>
-            <Button
-              onClick={checkStatus}
-              variant="outline"
-              className="w-full"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              ตรวจสอบสถานะการชำระเงิน
-            </Button>
+                          <Button
+                onClick={checkStatus}
+                variant="default"
+                className="w-full bg-green-600 hover:bg-green-700"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                ตรวจสอบสถานะการชำระเงิน
+              </Button>
             
-            {/* ปุ่มจำลองการชำระเงิน (สำหรับการทดสอบเท่านั้น) */}
-            <Button
-              onClick={simulatePayment}
-              variant="secondary"
-              className="w-full"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                'จำลองการชำระเงินสำเร็จ (สำหรับทดสอบ)'
-              )}
-            </Button>
+            {process.env.NODE_ENV === 'development' && (
+              <Button
+                onClick={simulatePayment}
+                variant="outline"
+                className="w-full"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                )}
+                จำลองการชำระเงิน (เฉพาะโหมดพัฒนา)
+              </Button>
+            )}
             
             <Button
               onClick={onCancel}
