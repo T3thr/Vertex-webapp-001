@@ -67,7 +67,7 @@ interface SearchNovelCardProps {
 export const SearchNovelCard = ({ novel, index }: SearchNovelCardProps) => {
   // แปลงสถานะเป็นภาษาไทย
   const getStatusText = (status: Novel['status']) => {
-    const statusMap = {
+    const statusMap: Record<string, string> = {
       'draft': 'ฉบับร่าง',
       'published': 'กำลังเผยแพร่',
       'completed': 'จบแล้ว',
