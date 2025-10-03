@@ -115,7 +115,7 @@ export default function CommentForm({
         {/* รูปโปรไฟล์ผู้ใช้ */}
         <div className="flex-shrink-0">
           <Image
-            src={session?.user?.image || '/images/default-avatar.png'}
+            src={(session?.user as any)?.image || '/images/default-avatar.png'}
             alt={session?.user?.name || 'ผู้ใช้'}
             width={36}
             height={36}
