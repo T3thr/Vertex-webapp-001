@@ -2058,7 +2058,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // 🎯 Enhanced Episode Integration - SIMPLIFIED
   onEpisodeCreate,
   onEpisodeUpdate,
-  onEpisodeDelete
+  onEpisodeDelete,
+  onEpisodeSelect // 🔥 FIX: เพิ่ม onEpisodeSelect callback
 }, ref) => {
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -2293,8 +2294,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [episodeList, selectedEpisodeFromBlueprint, updateEpisodeAPI, onEpisodeUpdate, setNodes]);
 
-  // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode - SMOOTH TRANSITION WITHOUT LOADING MESSAGE
-  // 🔥 FIX 2: แก้ไข dependencies ให้ครบถ้วนเพื่อป้องกัน stale closure
+  // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode - WITH LOADING STATE
+  // 🔥 FIX 2: เพิ่ม loading state และ info toast สำหรับ UX ที่ดีขึ้น
   const loadStoryMapForEpisode = useCallback(async (episodeId: string | null) => {
     if (!episodeId || !novel?.slug) {
       // ถ้าไม่มี episode ให้โหลด main story map
@@ -2354,8 +2355,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return;
     }
 
-    // 🎯 PROFESSIONAL: NO LOADING INDICATOR - SMOOTH TRANSITION
-    // setIsLoadingStoryMap(true); // REMOVED - ไม่แสดงข้อความ loading
+    // 🔥 FIX: แสดง loading state ชั่วคราว
+    setIsLoadingStoryMap(true);
+    
     try {
       // 🎯 อัปเดต EventManager context สำหรับ episode-specific operations
       if (professionalEventManager && professionalEventManager.updateConfig) {
@@ -2419,8 +2421,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setNodes([]);
         setEdges([]);
         setCurrentEpisodeStoryMap({ nodes: [], edges: [], storyVariables: [], version: 1 });
+        
+        // 🔥 FIX: แสดง toast แจ้งผู้ใช้ว่าเป็นตอนใหม่
+        const episode = episodeList.find(ep => ep._id === episodeId);
+        if (episode) {
+          toast.info(`โหลดตอน "${episode.title}" สำเร็จ - เริ่มต้นสร้างเนื้อเรื่องได้เลย`);
+        }
       } else {
         console.error(`❌ Failed to load StoryMap: ${response.status} ${response.statusText}`);
+        toast.error('ไม่สามารถโหลด StoryMap ได้');
         setNodes([]);
         setEdges([]);
         setCurrentEpisodeStoryMap(null);
@@ -2431,13 +2440,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setNodes([]);
       setEdges([]);
       setCurrentEpisodeStoryMap(null);
+    } finally {
+      // 🔥 FIX: ปิด loading state
+      setIsLoadingStoryMap(false);
     }
-    // 🎯 REMOVED setIsLoadingStoryMap(false) - NO LOADING STATE
-  }, [novel?.slug, storyMap, professionalEventManager, setNodes, setEdges, setCurrentEpisodeStoryMap]);
+  }, [novel?.slug, storyMap, professionalEventManager, episodeList, setNodes, setEdges, setCurrentEpisodeStoryMap]);
   // 🔥 FIX 2: เอา getReactFlowNodeType ออกจาก dependencies เพราะเป็น pure function
   // ที่ไม่ได้ depend on external state และถูก declare หลัง loadStoryMapForEpisode
 
   // 🎯 PROFESSIONAL: Realtime Episode Selection - No URL dependency
+  // 🔥 FIX 1: แก้ไข handleEpisodeSelect ไม่ให้ trigger toast ผิดพลาด
   const handleEpisodeSelect = useCallback(async (episodeId: string | null) => {
     const episode = episodeId ? episodeList.find(ep => ep._id === episodeId) : null;
     
@@ -2455,14 +2467,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       });
     }
 
-    // 🎯 Callback to parent (optional - for external state sync)
-    if (onEpisodeCreate && episode) {
-      // Note: Using onEpisodeCreate as a generic episode change callback
-      onEpisodeCreate(episode, episodeList);
+    // ❌ REMOVED: ไม่เรียก onEpisodeCreate เมื่อแค่เลือก episode
+    // 🔥 FIX: เรียก onEpisodeSelect callback แทน (ถ้ามี)
+    if (onEpisodeSelect && episodeId) {
+      onEpisodeSelect(episodeId);
     }
 
     console.log(`🎯 Episode selected (realtime): ${episode?.title || 'Main Story'}`);
-  }, [episodeList, loadStoryMapForEpisode, professionalEventManager, onEpisodeCreate]);
+  }, [episodeList, loadStoryMapForEpisode, professionalEventManager, onEpisodeSelect]);
 
   // 🔥 FIX 6: Sync episodes prop ONLY when externally changed (not from internal updates)
   // ❌ REMOVED episodeList from dependencies to prevent infinite loop
@@ -7164,6 +7176,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       };
     }
   }), [handleManualSave, nodes, edges, storyMap, professionalEventManager]);
+  
+  // 🔥 FIX 3: เพิ่ม disabled state เมื่อไม่มี episode ถูกเลือก
+  const isCanvasDisabled = episodes.length > 0 && !currentEpisodeId;
+  
   return (
       <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
         {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
@@ -7259,7 +7275,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         {/* Canvas Area */}
         <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlowProvider>
-            <div className="h-full w-full">
+            {/* 🔥 FIX 4: เพิ่ม overlay blocker เมื่อไม่มี episode ถูกเลือก */}
+            {isCanvasDisabled && (
+              <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-[2px]" />
+            )}
+            
+            <div className={cn(
+              "h-full w-full",
+              isCanvasDisabled && "pointer-events-none opacity-50"
+            )}>
               {/* 🎯 REMOVED LOADING INDICATOR - Professional smooth transitions */}
               
               <ReactFlow
@@ -8597,37 +8621,80 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </div>
               )}
               
-              {/* 🎯 SELECT EPISODE TUTORIAL - Shows when episodes exist but none selected */}
+              {/* 🔥 FIX 5: ปรับปรุง SELECT EPISODE TUTORIAL - แสดงเมื่อมี episodes แต่ไม่มี selection */}
               {showTutorial && tutorialStep === 1 && episodes.length > 0 && !currentEpisodeId && (
-                <div className="absolute inset-0 bg-background/30 flex items-center justify-center z-40 pointer-events-none">
-                  <div className="text-center max-w-sm mx-auto p-6 bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl border pointer-events-auto">
-                    <div className="mb-4">
-                      <BookOpen className="w-12 h-12 mx-auto text-primary mb-3" />
-                      <h3 className="text-lg font-bold text-card-foreground mb-2">เลือกตอนเพื่อเริ่มแก้ไข</h3>
-                      <p className="text-sm text-muted-foreground">
-                        เลือกตอนจากด้านบนเพื่อเริ่มออกแบบเนื้อเรื่อง<br/>
-                        การเพิ่ม nodes และ edges ต้องเลือกตอนก่อน
+                <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-[60] backdrop-blur-md pointer-events-none">
+                  <div className="text-center max-w-md mx-auto p-8 bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl border-2 border-primary/20 pointer-events-auto">
+                    <div className="mb-6">
+                      <div className="relative inline-block">
+                        <BookOpen className="w-16 h-16 mx-auto text-primary mb-4 animate-bounce" />
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />
+                      </div>
+                      <h3 className="text-xl font-bold text-card-foreground mb-3">
+                        📌 กรุณาเลือกตอนก่อนเริ่มแก้ไข
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        แต่ละตอนจะมี <span className="font-semibold text-primary">StoryMap แยกกัน</span><br/>
+                        เพื่อให้คุณออกแบบเนื้อเรื่องแต่ละตอนได้อย่างอิสระ
                       </p>
                     </div>
                     
-                    <div className="space-y-3">
-                      <div className="text-left p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
-                        <p className="mb-2">💡 คุณสามารถ:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          <li>เลือกตอนจากเมนู dropdown ด้านบน</li>
-                          <li>หรือเพิ่มตอนใหม่ได้ทันที</li>
+                    <div className="space-y-4">
+                      <div className="text-left p-4 bg-primary/5 rounded-lg text-xs text-muted-foreground border border-primary/10">
+                        <p className="mb-3 font-medium text-sm text-foreground">💡 ทำไมต้องเลือกตอน?</p>
+                        <ul className="list-disc list-inside space-y-2">
+                          <li>แต่ละตอนมี <strong>Nodes และ Edges แยกกัน</strong></li>
+                          <li>สามารถออกแบบเนื้อเรื่องแต่ละตอนได้อย่างอิสระ</li>
+                          <li>บันทึกและจัดการตอนได้ง่ายขึ้น</li>
                         </ul>
                       </div>
-                      
-                      <Button 
-                        onClick={() => setShowTutorial(false)}
-                        variant="outline"
-                        className="w-full"
-                        size="sm"
-                      >
-                        เข้าใจแล้ว
-                      </Button>
+
+                      <div className="flex flex-col gap-2">
+                        <Button 
+                          onClick={() => {
+                            setShowTutorial(false);
+                            // Auto-focus on episode selector
+                            setTimeout(() => {
+                              const selector = document.querySelector('[role="combobox"]');
+                              if (selector) {
+                                selector.scrollIntoView({ 
+                                  behavior: 'smooth', 
+                                  block: 'center' 
+                                });
+                              }
+                            }, 100);
+                          }}
+                          className="w-full shadow-lg hover:shadow-xl transition-all"
+                          size="lg"
+                        >
+                          <Check className="w-4 h-4 mr-2" />
+                          เข้าใจแล้ว - เลือกตอน
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => {
+                            setShowTutorial(false);
+                            setShowEpisodeManagementModal(true);
+                          }}
+                          variant="outline"
+                          className="w-full"
+                          size="sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          หรือสร้างตอนใหม่
+                        </Button>
+                      </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 🔥 FIX 6: Loading Overlay */}
+              {isLoadingStoryMap && (
+                <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-50 backdrop-blur-sm pointer-events-none">
+                  <div className="text-center pointer-events-none">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                    <p className="text-sm text-muted-foreground">กำลังโหลด StoryMap...</p>
                   </div>
                 </div>
               )}
