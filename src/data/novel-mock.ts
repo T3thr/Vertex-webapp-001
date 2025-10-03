@@ -2048,8 +2048,8 @@ export const loadMockNovelData = async (): Promise<MockNovelData> => {
   try {
     console.log('🔄 กำลังโหลดข้อมูลนิยายจำลอง...');
     
-    // สร้างข้อมูลจาก seed
-    const seedData = await seedNovelData();
+    // สร้างข้อมูลจาก seed (passing empty array for categories as fallback)
+    const seedData = await seedNovelData([]);
     
     // แปลงข้อมูลให้อยู่ในรูปแบบที่แอปใช้งาน
     cachedData = {
