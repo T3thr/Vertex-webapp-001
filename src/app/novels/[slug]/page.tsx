@@ -3,7 +3,6 @@
 
 import { Metadata, ResolvingMetadata } from "next";
 import { notFound } from "next/navigation";
-import { PopulatedNovelForDetailPage } from "@/app/api/novels/[slug]/route";
 // เพิ่มการเชื่อมต่อและโมเดลสำหรับการดึงข้อมูลโดยตรงจากฐานข้อมูล
 import dbConnect from "@/backend/lib/mongodb";
 import NovelModel, { INovel, INovelStats, ISourceType, INarrativeFocus, IWorldBuildingDetails, IMonetizationSettings, IPsychologicalAnalysisConfig, ICollaborationSettings } from "@/backend/models/Novel";
@@ -23,6 +22,50 @@ interface PopulatedCategoryInfo {
   name: string;
   slug: string;
   color?: string;
+}
+
+interface PopulatedNovelForDetailPage {
+  _id: string;
+  title: string;
+  slug: string;
+  author: {
+    _id: string;
+    username?: string;
+    profile?: any;
+    writerStats?: any;
+  };
+  synopsis?: string;
+  longDescription?: string;
+  coverImageUrl?: string;
+  bannerImageUrl?: string;
+  themeAssignment: any;
+  narrativeFocus?: any;
+  worldBuildingDetails?: any;
+  ageRatingCategoryId?: PopulatedCategoryInfo;
+  status: INovel["status"];
+  accessLevel: INovel["accessLevel"];
+  isCompleted?: boolean;
+  endingType?: INovel["endingType"];
+  sourceType?: ISourceType;
+  language: PopulatedCategoryInfo;
+  firstEpisodeId?: string;
+  totalEpisodesCount: number;
+  publishedEpisodesCount: number;
+  stats?: INovelStats;
+  monetizationSettings?: IMonetizationSettings;
+  psychologicalAnalysisConfig?: IPsychologicalAnalysisConfig;
+  collaborationSettings?: ICollaborationSettings;
+  isFeatured?: boolean;
+  publishedAt?: string;
+  scheduledPublicationDate?: string;
+  lastContentUpdatedAt: string;
+  relatedNovels?: string[];
+  seriesId?: string;
+  seriesOrder?: number;
+  createdAt: string;
+  updatedAt: string;
+  characters?: any[];
+  episodes?: any[];
 }
 
 const toPopulatedCategoryInfo = (cat: any): PopulatedCategoryInfo | undefined => {
@@ -328,8 +371,8 @@ export async function generateMetadata(
   const keywordsSet = new Set<string>();
   novel.themeAssignment?.customTags?.forEach((tag: string) => keywordsSet.add(tag.trim()));
   if (novel.themeAssignment?.mainTheme?.categoryId?.name) keywordsSet.add(novel.themeAssignment.mainTheme.categoryId.name.trim());
-  novel.themeAssignment?.subThemes?.forEach((st) => { if (st?.categoryId?.name) keywordsSet.add(st.categoryId.name.trim()); });
-  novel.themeAssignment?.moodAndTone?.forEach((mt) => { if (mt?.name) keywordsSet.add(mt.name.trim()); });
+  novel.themeAssignment?.subThemes?.forEach((st: any) => { if (st?.categoryId?.name) keywordsSet.add(st.categoryId.name.trim()); });
+  novel.themeAssignment?.moodAndTone?.forEach((mt: any) => { if (mt?.name) keywordsSet.add(mt.name.trim()); });
   if (novel.language?.name) keywordsSet.add(novel.language.name.trim());
   keywordsSet.add("visual novel");
   keywordsSet.add("นิยาย");
