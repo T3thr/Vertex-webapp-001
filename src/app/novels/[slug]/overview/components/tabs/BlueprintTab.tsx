@@ -187,13 +187,13 @@ import { ICharacter } from '@/backend/models/Character';
 import { IMedia } from '@/backend/models/Media';
 import { IOfficialMedia } from '@/backend/models/OfficialMedia';
 import { IEpisode } from '@/backend/models/Episode';
-// 🎯 Additional UI Components for Episode Management (already imported above)
+// Additional UI Components for Episode Management (already imported above)
 // import { Plus, Trash2 } from 'lucide-react'; // Already imported
 // import { Input } from '@/components/ui/input'; // Already imported  
 // import { Label } from '@/components/ui/label'; // Already imported
 // import { Textarea } from '@/components/ui/textarea'; // Already imported
 
-// 🔥 FIX 2: Helper function to map StoryMapNodeType to React Flow node type
+// Helper function to map StoryMapNodeType to React Flow node type
 // Moved outside component to prevent hoisting issues
 const getReactFlowNodeType = (storyMapNodeType: string): string => {
   switch (storyMapNodeType) {
@@ -239,7 +239,7 @@ interface BlueprintTabProps {
   onNavigateToDirector?: (sceneId?: string) => void;
   // Professional Event Management Integration (Adobe/Canva/Figma style)
   eventManager?: any; // EventManager instance from parent
-  // ✅ PROFESSIONAL SOLUTION 4: เพิ่ม autoSaveConfig prop
+  // PROFESSIONAL SOLUTION 4: เพิ่ม autoSaveConfig prop
   autoSaveConfig?: {
     enabled: boolean;
     intervalSec: 15 | 30;
@@ -252,13 +252,13 @@ interface BlueprintTabProps {
     snapToGrid: boolean;
     nodeOrientation: 'horizontal' | 'vertical';
   };
-  // 🎯 Enhanced Episode Integration - SIMPLIFIED (NO URL MANAGEMENT)
+  // Enhanced Episode Integration - SIMPLIFIED (NO URL MANAGEMENT)
   onEpisodeCreate?: (newEpisode: any, updatedEpisodes: any[]) => void;
   onEpisodeUpdate?: (updatedEpisode: any, updatedEpisodes: any[]) => void;
   onEpisodeDelete?: (deletedEpisodeId: string, updatedEpisodes: any[]) => void;
-  // 🎯 NEW: Unified Tab State Management
+  // NEW: Unified Tab State Management
   onSceneUpdate?: (sceneId: string, sceneData: any) => void;
-  // ❌ REMOVED: URL State Management - ไม่ใช้ URL-based episode selection อีกต่อไป
+  // REMOVED: URL State Management - ไม่ใช้ URL-based episode selection อีกต่อไป
   // selectedEpisodeId?: string;
   onEpisodeSelect?: (episodeId: string | null) => void;
 }
@@ -318,7 +318,7 @@ interface SelectionState {
   isSelectionMode: boolean;
   pendingSelection: string[]; // For Canva-style multi-select confirmation
   showSelectionBar: boolean; // Show bottom confirmation bar
-  isReactFlowInstantMode: boolean; // 🎯 แยก ReactFlow instant mode จาก manual mode
+  isReactFlowInstantMode: boolean; // แยก ReactFlow instant mode จาก manual mode
 }
 
 // Canvas interaction state
@@ -579,7 +579,7 @@ const CustomNode = ({
       case StoryMapNodeType.RANDOM_BRANCH_NODE: return <Shuffle className="w-5 h-5" />;
       case StoryMapNodeType.PARALLEL_EXECUTION_NODE: return <Split className="w-5 h-5" />;
       case StoryMapNodeType.SUB_STORYMAP_NODE: return <Map className="w-5 h-5" />;
-      // ❌ REMOVED: Episode node support - Episodes ไม่ควรเป็น nodes บน canvas
+      // REMOVED: Episode node support - Episodes ไม่ควรเป็น nodes บน canvas
       // case StoryMapNodeType.EPISODE_NODE: return <BookOpen className="w-5 h-5" />;
       default: return <Square className="w-5 h-5" />;
     }
@@ -818,7 +818,7 @@ const CustomNode = ({
               </div>
               </div>
               
-              {/* 🎯 NEW: Scene Edit Button - Navigate to DirectorTab */}
+              {/* NEW: Scene Edit Button - Navigate to DirectorTab */}
               <div className="pt-2 border-t border-white/10">
                 <button
                   onClick={(e) => {
@@ -1025,7 +1025,7 @@ const CustomNode = ({
 };
 
 // Node Palette Component with collapse support
-// 🎯 Episode Management Panel Component
+// Episode Management Panel Component
 const EpisodeManagementPanel = ({
   episodes,
   selectedEpisode,
@@ -1181,7 +1181,7 @@ const EpisodeManagementPanel = ({
   );
 };
 
-// 🆕 PHASE 2: Professional Modal Management System
+// Professional Modal Management System
 interface ModalState {
   type: 'episode_create' | 'episode_edit' | 'episode_delete' | 'episode_settings' | null;
   isOpen: boolean;
@@ -1193,10 +1193,10 @@ interface ModalState {
   };
 }
 
-// 🎯 Episode Create Modal Component - REMOVED
+// Episode Create Modal Component - REMOVED
 // ใช้ Professional Episode Creator Dialog แทน (บรรทัด 8313)
 
-// 🎯 Episode Delete Modal Component
+// Episode Delete Modal Component
 const EpisodeDeleteModal = ({ 
   isOpen, 
   episodes, 
@@ -1301,7 +1301,7 @@ const EpisodeDeleteModal = ({
   );
 };
 
-// 🎯 Modal Manager Hook
+// Modal Manager Hook
 const useModalManager = () => {
   const [modalState, setModalState] = useState<ModalState>({
     type: null,
@@ -1351,7 +1351,7 @@ const NodePalette = ({
 }) => {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['entryPoints', 'basic']);
 
-  // 🎯 PROFESSIONAL: Enhanced node categories with clear visual distinction
+  // PROFESSIONAL: Enhanced node categories with clear visual distinction
   const nodeCategories = {
     entryPoints: {
       name: '🎯 จุดเริ่มต้น (Entry Points)',
@@ -2133,15 +2133,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   onDirtyChange,
   onNavigateToDirector,
   eventManager, // Professional Event Management Integration
-  autoSaveConfig, // ✅ PROFESSIONAL SOLUTION 5: รับ autoSaveConfig prop
+  autoSaveConfig, // PROFESSIONAL SOLUTION 5: รับ autoSaveConfig prop
   blueprintSettings,
-  // 🎯 Enhanced Episode Integration - SIMPLIFIED
+  // Enhanced Episode Integration - SIMPLIFIED
   onEpisodeCreate,
   onEpisodeUpdate,
   onEpisodeDelete,
-  onEpisodeSelect // 🔥 FIX: เพิ่ม onEpisodeSelect callback
+  onEpisodeSelect // onEpisodeSelect callback
 }, ref) => {
-  // 🎯 URL handling hooks (must be at top level before any callbacks that use them)
+  // URL handling hooks (must be at top level before any callbacks that use them)
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -2149,7 +2149,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // ✨ Professional Event Management Integration (Adobe/Canva/Figma style)
+  // Professional Event Management Integration (Adobe/Canva/Figma style)
   // Use EventManager from parent (NovelEditor) for command-based state management
   const professionalEventManager = eventManager;
   
@@ -2166,25 +2166,25 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   });
 
   // Command execution function (moved up to be available for handlers)
-  // ✨ Enhanced Command execution function สำหรับ Canva/Figma-like experience
+  // Enhanced Command execution function สำหรับ Canva/Figma-like experience
   const executeCommand = useCallback(async (command: any) => {
     try {
-      // 🎯 ใช้ EventManager เป็นหลักในการจัดการ commands (Professional approach)
+      // ใช้ EventManager เป็นหลักในการจัดการ commands (Professional approach)
       if (professionalEventManager) {
-        console.log(`[BlueprintTab] 🎯 Executing command via EventManager: ${command.type} - ${command.description}`);
+        console.log(`[BlueprintTab] Executing command via EventManager: ${command.type} - ${command.description}`);
         
         // Execute ผ่าน EventManager เพื่อให้ undo/redo tracking ทำงานถูกต้อง
         const result = await professionalEventManager.executeCommand(command);
         
         if (result.success) {
-          console.log(`[BlueprintTab] ✅ Command executed successfully: ${command.type}`);
+          console.log(`[BlueprintTab] Command executed successfully: ${command.type}`);
           
           // Notify dirty state change (EventManager จะจัดการ markAsDirty เอง)
           if (onDirtyChange) {
             onDirtyChange(professionalEventManager.hasChanges());
           }
         } else {
-          console.error(`[BlueprintTab] ❌ Command execution failed: ${result.error?.message}`);
+          console.error(`[BlueprintTab] Command execution failed: ${result.error?.message}`);
           toast.error(`การดำเนินการล้มเหลว: ${result.error?.message}`);
         }
         
@@ -2218,37 +2218,37 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       console.log(`[BlueprintTab] ⚡ Command completed: ${command.type} - ${command.description}`);
       
     } catch (error) {
-      console.error('[BlueprintTab] ❌ Command execution failed:', error);
+      console.error('[BlueprintTab] Command execution failed:', error);
       toast.error('การดำเนินการล้มเหลว กรุณาลองใหม่อีกครั้ง');
     }
   }, [commandAdapter, professionalEventManager, onDirtyChange]);
 
   // ===============================
-  // 🎯 ENHANCED EPISODE MANAGEMENT
+  // ENHANCED EPISODE MANAGEMENT
   // ===============================
   
-  // 🎯 PROFESSIONAL: Realtime Episode Management - No URL dependency
+  // PROFESSIONAL: Realtime Episode Management - No URL dependency
   const [episodeList, setEpisodeList] = useState<any[]>(episodes || []);
   const [currentEpisodeId, setCurrentEpisodeId] = useState<string | null>(null);
   const [selectedEpisodeFromBlueprint, setSelectedEpisodeFromBlueprint] = useState<any | null>(null);
   
-  // 🎯 StoryMap loading state
+  // StoryMap loading state
   const [isLoadingStoryMap, setIsLoadingStoryMap] = useState(false);
   
-  // 🎯 Episode Management Modal State
+  // Episode Management Modal State
   const [showEpisodeManagementModal, setShowEpisodeManagementModal] = useState(false);
   const [currentEpisodeStoryMap, setCurrentEpisodeStoryMap] = useState<any>(null);
   
   // ReactFlow instance (ย้ายมาจากด้านล่าง)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
-  // 🆕 PHASE 2: Modal Management Integration
+  // Modal Management Integration
   const { modalState, openModal, closeModal } = useModalManager();
 
-  // 🎯 API Functions สำหรับ Episode Management
+  // API Functions สำหรับ Episode Management
   const createEpisodeAPI = useCallback(async (episodeData: any, storyMapData?: any) => {
     try {
-      // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode
+      // ใช้ Blueprint API สำหรับการสร้าง Episode
       const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2330,7 +2330,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [novel.slug]);
 
-  // 🎯 REMOVED OLD EPISODE HANDLERS - Episodes are now managed via modal only
+  // REMOVED OLD EPISODE HANDLERS - Episodes are now managed via modal only
   // Episodes no longer create nodes on canvas - they maintain separate StoryMaps
 
   const handleUpdateEpisode = useCallback(async (episodeId: string, updateData: any) => {
@@ -2343,7 +2343,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       );
       setEpisodeList(updatedEpisodes);
 
-      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      // Update episodesRef to match internal state to prevent sync loop
       episodesRef.current = updatedEpisodes;
 
       // อัปเดต selected episode
@@ -2378,14 +2378,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [episodeList, selectedEpisodeFromBlueprint, updateEpisodeAPI, onEpisodeUpdate, setNodes]);
 
-  // 🎯 ฟังก์ชันโหลด StoryMap ตาม Episode - WITH LOADING STATE
-  // 🔥 FIX 2: เพิ่ม loading state และ info toast สำหรับ UX ที่ดีขึ้น
+  // ฟังก์ชันโหลด StoryMap ตาม Episode - WITH LOADING STATE
+  // เพิ่ม loading state และ info toast สำหรับ UX ที่ดีขึ้น
   const loadStoryMapForEpisode = useCallback(async (episodeId: string | null) => {
     if (!episodeId || !novel?.slug) {
       // ถ้าไม่มี episode ให้โหลด main story map
       console.log('🎯 Loading main story map (no episode selected)');
       
-      // 🔥 PROFESSIONAL: Load main story map instead of clearing canvas
+      // PROFESSIONAL: Load main story map instead of clearing canvas
       if (storyMap && storyMap.nodes && storyMap.edges) {
         const reactFlowNodes = (storyMap.nodes || []).map((node: any) => ({
           id: node.nodeId,
@@ -2421,7 +2421,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setEdges(reactFlowEdges);
         setCurrentEpisodeStoryMap(null);
         
-        console.log(`✅ Loaded main story map: ${reactFlowNodes.length} nodes, ${reactFlowEdges.length} edges`);
+        console.log(`Loaded main story map: ${reactFlowNodes.length} nodes, ${reactFlowEdges.length} edges`);
       } else {
         // Only clear if no main story map exists
         setNodes([]);
@@ -2430,7 +2430,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         console.log('ℹ️ No main story map found - starting with empty canvas');
       }
       
-      // 🎯 อัปเดต EventManager context เป็น novel-level
+      // อัปเดต EventManager context เป็น novel-level
       if (professionalEventManager && professionalEventManager.updateConfig) {
         professionalEventManager.updateConfig({
           selectedEpisodeId: null
@@ -2439,27 +2439,27 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return;
     }
 
-    // 🔥 FIX: แสดง loading state ชั่วคราว
+    // แสดง loading state ชั่วคราว
     setIsLoadingStoryMap(true);
     
     try {
-      // 🎯 อัปเดต EventManager context สำหรับ episode-specific operations
+      // อัปเดต EventManager context สำหรับ episode-specific operations
       if (professionalEventManager && professionalEventManager.updateConfig) {
         professionalEventManager.updateConfig({
           selectedEpisodeId: episodeId
         });
       }
       
-      // 🎯 โหลด StoryMap สำหรับ Episode นี้จาก episode-specific endpoint
+      // โหลด StoryMap สำหรับ Episode นี้จาก episode-specific endpoint
       console.log(`🔍 Fetching StoryMap for Episode ID: ${episodeId}`);
       const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}/storymap`);
       
       if (response.ok) {
         const episodeStoryMap = await response.json();
         
-        // 🔥 FIX 2a: VALIDATION - ตรวจสอบว่า StoryMap ที่ได้มาตรงกับ Episode จริง
+        // VALIDATION - ตรวจสอบว่า StoryMap ที่ได้มาตรงกับ Episode จริง
         if (episodeStoryMap.episode?._id && episodeStoryMap.episode._id !== episodeId) {
-          console.error(`❌ StoryMap mismatch! Expected: ${episodeId}, Got: ${episodeStoryMap.episode._id}`);
+          console.error(`StoryMap mismatch! Expected: ${episodeId}, Got: ${episodeStoryMap.episode._id}`);
           toast.error('พบข้อผิดพลาด: โหลด StoryMap ผิดตอน');
           setNodes([]);
           setEdges([]);
@@ -2470,7 +2470,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setCurrentEpisodeStoryMap(episodeStoryMap);
         
         // แปลง StoryMap nodes/edges เป็น ReactFlow format
-        // 🔥 FIX 2b: เพิ่ม debug tag สำหรับ verification
+        // เพิ่ม debug tag สำหรับ verification
         const reactFlowNodes = (episodeStoryMap.nodes || []).map((node: any) => ({
           id: node.nodeId,
           type: getReactFlowNodeType(node.nodeType),
@@ -2481,8 +2481,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             title: node.title,
             nodeSpecificData: node.nodeSpecificData,
             editorVisuals: node.editorVisuals,
-            episodeId: episodeId, // 🎯 Tag node with episodeId for proper persistence
-            _loadedFrom: episodeId // 🔥 NEW: Debug verification tag
+            episodeId: episodeId, // Tag node with episodeId for proper persistence
+            _loadedFrom: episodeId // NEW: Debug verification tag
           }
         }));
 
@@ -2496,8 +2496,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             label: edge.label,
             condition: edge.condition,
             editorVisuals: edge.editorVisuals,
-            episodeId: episodeId, // 🎯 Tag edge with episodeId for proper persistence
-            _loadedFrom: episodeId // 🔥 NEW: Debug verification tag
+            episodeId: episodeId, // Tag edge with episodeId for proper persistence
+            _loadedFrom: episodeId // NEW: Debug verification tag
           },
           style: {
             stroke: edge.editorVisuals?.color || '#6B7280',
@@ -2508,7 +2508,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setNodes(reactFlowNodes);
         setEdges(reactFlowEdges);
         
-        console.log(`✅ โหลด StoryMap สำหรับ Episode ${episodeId} สำเร็จ:`, {
+        console.log(`โหลด StoryMap สำหรับ Episode ${episodeId} สำเร็จ:`, {
           nodes: reactFlowNodes.length,
           edges: reactFlowEdges.length,
           episodeTitle: episodeStoryMap.episode?.title,
@@ -2521,12 +2521,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setEdges([]);
         setCurrentEpisodeStoryMap({ nodes: [], edges: [], storyVariables: [], version: 1 });
         
-        // 🔥 FIX #1: Silent loading - ไม่แสดง toast ที่ทำให้สับสนว่าเป็นการสร้างตอนใหม่
+        // Silent loading - ไม่แสดง toast ที่ทำให้สับสนว่าเป็นการสร้างตอนใหม่
         // ผู้ใช้จะเห็น canvas เปล่าพร้อมแก้ไขได้ทันที
         const episode = episodeList.find(ep => ep._id === episodeId);
         console.log(`📝 Episode "${episode?.title || episodeId}" loaded - ready for editing (no existing StoryMap)`);
       } else {
-        console.error(`❌ Failed to load StoryMap: ${response.status} ${response.statusText}`);
+        console.error(`Failed to load StoryMap: ${response.status} ${response.statusText}`);
         toast.error('ไม่สามารถโหลด StoryMap ได้');
         setNodes([]);
         setEdges([]);
@@ -2539,26 +2539,26 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setEdges([]);
       setCurrentEpisodeStoryMap(null);
     } finally {
-      // 🔥 FIX: ปิด loading state
+      // ปิด loading state
       setIsLoadingStoryMap(false);
     }
   }, [novel?.slug, storyMap, professionalEventManager, episodeList, setNodes, setEdges, setCurrentEpisodeStoryMap]);
-  // 🔥 FIX 2: เอา getReactFlowNodeType ออกจาก dependencies เพราะเป็น pure function
+  // เอา getReactFlowNodeType ออกจาก dependencies เพราะเป็น pure function
   // ที่ไม่ได้ depend on external state และถูก declare หลัง loadStoryMapForEpisode
 
-  // 🎯 PROFESSIONAL: Realtime Episode Selection with URL persistence
-  // 🔥 FIX: Enhanced episode selection with immediate sync + URL update
+  // PROFESSIONAL: Realtime Episode Selection with URL persistence
+  // Enhanced episode selection with immediate sync + URL update
   const handleEpisodeSelect = useCallback(async (episodeId: string | null) => {
     const episode = episodeId ? episodeList.find(ep => ep._id === episodeId) : null;
     
-    console.log('[BlueprintTab] 🎯 Episode selection initiated:', {
+    console.log('[BlueprintTab] Episode selection initiated:', {
       episodeId,
       episodeTitle: episode?.title,
       hasEventManager: !!professionalEventManager,
       hasCallback: !!onEpisodeSelect
     });
     
-    // 🎯 CRITICAL FIX: ให้ parent (NovelEditor) จัดการ state และ URL update
+    // ให้ parent (NovelEditor) จัดการ state และ URL update
     // BlueprintTab เป็นแค่ child component ไม่ควรจัดการ URL เอง
     if (onEpisodeSelect) {
       // ให้ parent (NovelEditor) จัดการทั้งหมด:
@@ -2568,39 +2568,39 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // - Load StoryMap
       onEpisodeSelect(episodeId);
       
-      console.log('[BlueprintTab] ✅ Episode selection delegated to parent (NovelEditor)');
+      console.log('[BlueprintTab] Episode selection delegated to parent (NovelEditor)');
     } else {
       // Fallback: ถ้าไม่มี callback (ไม่ควรเกิด) ให้จัดการเอง
       console.warn('[BlueprintTab] ⚠️ No onEpisodeSelect callback, handling locally (fallback)');
       
-      // 🎯 Update local state
+      // Update local state
       setCurrentEpisodeId(episodeId);
       setSelectedEpisodeFromBlueprint(episode);
       
-      // 🎯 Load StoryMap for selected Episode
+      // Load StoryMap for selected Episode
       await loadStoryMapForEpisode(episodeId);
       
-      // 🎯 Update EventManager context
+      // Update EventManager context
       if (professionalEventManager && professionalEventManager.updateConfig) {
         professionalEventManager.updateConfig({
           selectedEpisodeId: episodeId
         });
         
-        console.log('[BlueprintTab] ✅ EventManager config updated (fallback):', {
+        console.log('[BlueprintTab] EventManager config updated (fallback):', {
           selectedEpisodeId: episodeId
         });
       }
     }
 
-    console.log(`[BlueprintTab] ✅ Episode selected: ${episode?.title || 'Main Story'}`);
+    console.log(`[BlueprintTab] Episode selected: ${episode?.title || 'Main Story'}`);
   }, [episodeList, loadStoryMapForEpisode, professionalEventManager, onEpisodeSelect]);
 
-  // 🔥 FIX 6: Sync episodes prop ONLY when externally changed (not from internal updates)
-  // ❌ REMOVED episodeList from dependencies to prevent infinite loop
+  // Sync episodes prop ONLY when externally changed (not from internal updates)
+  // REMOVED episodeList from dependencies to prevent infinite loop
   useEffect(() => {
     // Only update if episodes prop changed from EXTERNAL source (not from internal updates)
     if (episodes && episodes !== episodesRef.current && episodes !== episodeList) {
-      console.log('[BlueprintTab] 🔄 External episodes prop changed, syncing...', {
+      console.log('[BlueprintTab] External episodes prop changed, syncing...', {
         propsLength: episodes.length,
         stateLength: episodeList.length,
         isSameReference: episodes === episodeList
@@ -2610,26 +2610,26 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setEpisodeList(episodes);
       episodesRef.current = episodes;
     }
-  }, [episodes]); // ✅ Only depend on episodes prop, NOT episodeList
+  }, [episodes]); // Only depend on episodes prop, NOT episodeList
 
-  // 🎯 PROFESSIONAL: Don't auto-select any episode - require manual selection
-  // 🔥 FIX 3: แก้ไข useEffect loop โดยใช้ useRef wrapper และลด dependencies
+  // PROFESSIONAL: Don't auto-select any episode - require manual selection
+  // แก้ไข useEffect loop โดยใช้ useRef wrapper และลด dependencies
   useEffect(() => {
     // Clear selection when no episodes exist
     if (episodeList.length === 0 && currentEpisodeId) {
       setCurrentEpisodeId(null);
       setSelectedEpisodeFromBlueprint(null);
       
-      // 🔥 FIX 3: ใช้ useRef wrapper แทนการใส่ loadStoryMapForEpisode ใน dependencies
+      // ใช้ useRef wrapper แทนการใส่ loadStoryMapForEpisode ใน dependencies
       if (loadStoryMapForEpisodeRef.current) {
         loadStoryMapForEpisodeRef.current(null);
       }
       
       console.log(`🎯 Cleared episode selection - no episodes available`);
     }
-    // ❌ REMOVED: Auto-selection of first episode
+    // REMOVED: Auto-selection of first episode
     // User must manually select episode to edit
-    // 🔥 FIX 3: ใช้ episodeList.length แทน episodeList เพื่อลด re-render
+    // ใช้ episodeList.length แทน episodeList เพื่อลด re-render
     // ไม่ใส่ loadStoryMapForEpisode ใน deps เพราะใช้ ref แทน
   }, [episodeList.length, currentEpisodeId]);
 
@@ -2654,11 +2654,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     return false;
   }, []);
 
-  // 🔥 FIGMA/CANVA STYLE: สร้าง command โดยใช้ CommandContext แทน local state
+  // สร้าง command โดยใช้ CommandContext แทน local state
   const createCommandFromChange = useCallback((change: NodeChange | EdgeChange, type: 'nodes' | 'edges') => {
     if (!professionalEventManager) return null;
     
-    // ✅ ใช้ CommandContext เป็นหลักแทน local state
+    // ใช้ CommandContext เป็นหลักแทน local state
     const context = professionalEventManager.getCommandContext();
     
     if (type === 'nodes') {
@@ -2680,7 +2680,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 description: `Move node ${node?.data?.title || nodeChange.id}`,
                 timestamp: Date.now(),
                 execute: () => {
-                  // ✅ ใช้ CommandContext แทน local setState
+                  // ใช้ CommandContext แทน local setState
                   const currentNodes = context.getCurrentNodes();
                   const updatedNodes = currentNodes.map((n: any) => 
                     n.id === nodeChange.id 
@@ -2690,7 +2690,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   context.setNodes(updatedNodes);
                 },
                 undo: () => {
-                  // ✅ ใช้ CommandContext แทน local setState - ไม่มี setTimeout
+                  // ใช้ CommandContext แทน local setState - ไม่มี setTimeout
                   const currentNodes = context.getCurrentNodes();
                   const revertedNodes = currentNodes.map((n: any) => 
                       n.id === nodeChange.id 
@@ -2712,7 +2712,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               description: `Delete node ${node.data?.title || nodeChange.id}`,
               timestamp: Date.now(),
               execute: () => {
-                // ✅ ใช้ CommandContext
+                // ใช้ CommandContext
                 const currentNodes = context.getCurrentNodes();
                 const currentEdges = context.getCurrentEdges();
                 
@@ -2720,7 +2720,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 context.setEdges(currentEdges.filter((e: any) => e.source !== nodeChange.id && e.target !== nodeChange.id));
               },
               undo: () => {
-                // ✅ ใช้ CommandContext - ไม่มี setTimeout
+                // ใช้ CommandContext - ไม่มี setTimeout
                 const currentNodes = context.getCurrentNodes();
                 const currentEdges = context.getCurrentEdges();
                 
@@ -2745,12 +2745,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               description: `Delete connection ${edge.source} → ${edge.target}`,
               timestamp: Date.now(),
               execute: () => {
-                // ✅ ใช้ CommandContext
+                // ใช้ CommandContext
                 const currentEdges = context.getCurrentEdges();
                 context.setEdges(currentEdges.filter((e: any) => e.id !== edgeChange.id));
               },
                 undo: () => {
-                // ✅ ใช้ CommandContext - ไม่มี setTimeout
+                // ใช้ CommandContext - ไม่มี setTimeout
                 const currentEdges = context.getCurrentEdges();
                 context.setEdges([...currentEdges, edge]);
               }
@@ -2763,7 +2763,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [nodes, edges, professionalEventManager]);
 
   // Enhanced ReactFlow handlers แบบใหม่ - Single Command Pipeline
-  // 🔥 FIGMA/CANVA STYLE: Enhanced multi-select batch operation support
+  // Enhanced multi-select batch operation support
   const enhancedOnNodesChange = useCallback((changes: NodeChange[]) => {
     // Track drag start positions สำหรับ move commands
     changes.forEach(change => {
@@ -2782,7 +2782,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     // Apply ReactFlow changes first
     onNodesChange(changes);
     
-    // ✅ FIGMA/CANVA STYLE: Batch operations for multi-select
+    // Batch operations for multi-select
     if (professionalEventManager && !isInitializingRef.current) {
       // Group position changes that happen simultaneously (multi-select drag)
       const positionChanges = changes.filter(change => 
@@ -2793,7 +2793,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       ) as (NodeChange & { type: 'position' })[];
       
       if (positionChanges.length > 1) {
-        // ✅ FIGMA/CANVA STYLE: Create batch move command for multi-select operations
+        // Create batch move command for multi-select operations
         // Capture original positions for all moved nodes
         const originalPositions = positionChanges.map(change => ({
           nodeId: change.id,
@@ -2807,7 +2807,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           description: `Move ${positionChanges.length} nodes`,
           timestamp: Date.now(),
           execute: () => {
-            // ✅ Use CommandContext for batch move execution
+            // Use CommandContext for batch move execution
             const context = professionalEventManager.getCommandContext();
             const currentNodes = context.getCurrentNodes();
             
@@ -2820,10 +2820,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             });
             
             context.setNodes(movedNodes);
-            console.log(`[BlueprintTab] 🔄 Batch move executed for ${originalPositions.length} nodes`);
+            console.log(`[BlueprintTab] Batch move executed for ${originalPositions.length} nodes`);
           },
           undo: () => {
-            // ✅ Use CommandContext for batch undo
+            // Use CommandContext for batch undo
             const context = professionalEventManager.getCommandContext();
             const currentNodes = context.getCurrentNodes();
             
@@ -2841,7 +2841,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         };
         
         professionalEventManager.addCommandToHistory(batchMoveCommand);
-        console.log(`[BlueprintTab] 🔄 Created batch move command for ${positionChanges.length} nodes`);
+        console.log(`[BlueprintTab] Created batch move command for ${positionChanges.length} nodes`);
       } else {
         // Single node operations
       changes.forEach(change => {
@@ -2855,7 +2855,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
       
       // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
-      // 🔥 CRITICAL FIX: Clean story variables before sync to prevent null variableId
+      // Clean story variables before sync to prevent null variableId
       const cleanedVariables = cleanStoryVariables(storyMap?.storyVariables || []);
       professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, cleanedVariables);
     }
@@ -2885,7 +2885,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       });
       
       // Sync snapshot ทันทีหลัง changes (ไม่ใช้ setTimeout)
-      // 🔥 CRITICAL FIX: Clean story variables before sync to prevent null variableId
+      // Clean story variables before sync to prevent null variableId
       const cleanedVariables = cleanStoryVariables(storyMap?.storyVariables || []);
       professionalEventManager.updateSnapshotFromReactFlow(nodes, edges, cleanedVariables);
     }
@@ -2896,7 +2896,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   // selectedEpisode จะใช้ selectedEpisodeFromBlueprint แทน
   
-  // ✨ Episode creation state
+  // Episode creation state
   const [isEpisodeCreatorOpen, setIsEpisodeCreatorOpen] = useState(false);
   const [episodeCreationForm, setEpisodeCreationForm] = useState({
     title: '',
@@ -2908,24 +2908,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   });
   const [isCreatingEpisode, setIsCreatingEpisode] = useState(false);
 
-  // 🔥 FIX 4: Toast Deduplication - Track created episodes to prevent duplicate toasts
+  // Toast Deduplication - Track created episodes to prevent duplicate toasts
   const createdEpisodeIdsRef = useRef<Set<string>>(new Set());
   
-  // 🔥 FIX 1: Stable reference for loadStoryMapForEpisode to prevent stale closures
+  // Stable reference for loadStoryMapForEpisode to prevent stale closures
   const loadStoryMapForEpisodeRef = useRef<((episodeId: string | null) => Promise<void>) | null>(null);
 
-  // 🔥 FIX 1: Update ref whenever loadStoryMapForEpisode changes
+  // Update ref whenever loadStoryMapForEpisode changes
   useEffect(() => {
     loadStoryMapForEpisodeRef.current = loadStoryMapForEpisode;
   }, [loadStoryMapForEpisode]);
-  // 🔥 FIX 6: Track episodes prop to prevent infinite loop in sync useEffect
+  // Track episodes prop to prevent infinite loop in sync useEffect
   const episodesRef = useRef(episodes);
-  // ✨ Episode creation handler
-  // 🎯 Professional Episode Creation Handler (Modal-based)
-  // 🔥 FIX 5: แก้ไข dependencies และใช้ useRef wrapper + toast deduplication
+  // Episode creation handler
+  // Episode Creation Handler (Modal-based)
+  // แก้ไข dependencies และใช้ useRef wrapper + toast deduplication
   const handleCreateEpisodeModal = useCallback(async (episodeData: any) => {
     try {
-      // 🔥 ใช้ Blueprint API สำหรับการสร้าง Episode
+      // ใช้ Blueprint API สำหรับการสร้าง Episode
       const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2943,7 +2943,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const result = await response.json();
       const newEpisode = result.data;
 
-      // 🔥 FIX 4: Toast Deduplication - ตรวจสอบว่า episode นี้สร้างไปแล้วหรือยัง
+      // Toast Deduplication - ตรวจสอบว่า episode นี้สร้างไปแล้วหรือยัง
       if (createdEpisodeIdsRef.current.has(newEpisode._id)) {
         console.warn('⚠️ Episode already created, skipping duplicate toast and reload');
         return;
@@ -2952,28 +2952,28 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // เพิ่ม episode ID เข้า tracking set
       createdEpisodeIdsRef.current.add(newEpisode._id);
 
-      // 🎯 PROFESSIONAL: Update realtime state (no URL management)
+      // Update realtime state (no URL management)
       const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
       setEpisodeList(updatedEpisodes);
       
-      // 🎯 Auto-select new episode (realtime)
+      // Auto-select new episode (realtime)
       setCurrentEpisodeId(newEpisode._id);
       setSelectedEpisodeFromBlueprint(newEpisode);
 
-      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      // Update episodesRef to match internal state to prevent sync loop
       episodesRef.current = updatedEpisodes;
 
-      // 🔥 FIX 1: ใช้ useRef wrapper แทนการเรียกตรงๆ เพื่อป้องกัน stale closure
+      // ใช้ useRef wrapper แทนการเรียกตรงๆ เพื่อป้องกัน stale closure
       if (loadStoryMapForEpisodeRef.current) {
         await loadStoryMapForEpisodeRef.current(newEpisode._id);
       }
 
-      // 🎯 Callback to parent for external state sync
+      // Callback to parent for external state sync
       if (onEpisodeCreate) {
         onEpisodeCreate(newEpisode, updatedEpisodes);
       }
       
-      // 🎯 Hide tutorial when first episode is created
+      // Hide tutorial when first episode is created
       setShowTutorial(false);
 
       toast.success(`สร้างตอน "${newEpisode.title}" เรียบร้อยแล้ว`);
@@ -2985,9 +2985,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [novel.slug, episodeList, onEpisodeCreate]);
 
-  // 🎯 Legacy handler for backward compatibility
+  // Legacy handler for backward compatibility
   const handleCreateEpisode = useCallback(async () => {
-    // 🔥 เปิด Professional Episode Creator Dialog
+    // เปิด Professional Episode Creator Dialog
     setIsEpisodeCreatorOpen(true);
     
     // ตั้งค่าฟอร์มเริ่มต้น
@@ -3002,9 +3002,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     });
   }, [episodeList, setIsEpisodeCreatorOpen, setEpisodeCreationForm]);
 
-  // 🎯 Canvas-based Episode Creation (right-click context menu)
+  // Canvas-based Episode Creation (right-click context menu)
   const handleCanvasCreateEpisode = useCallback((canvasPosition: { x: number; y: number }) => {
-    // 🔥 เปิด Professional Episode Creator Dialog
+    // เปิด Professional Episode Creator Dialog
     setIsEpisodeCreatorOpen(true);
     
     // ตั้งค่าฟอร์มเริ่มต้น
@@ -3018,10 +3018,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       status: 'draft'
     });
   }, [episodeList, setIsEpisodeCreatorOpen, setEpisodeCreationForm]);
-  // 🎯 Episode Deletion Handler (Modal-based)
+  // Episode Deletion Handler (Modal-based)
   const handleDeleteEpisodeModal = useCallback(async (episodeIds: string[]) => {
     try {
-      // 🔥 ใช้ Blueprint API สำหรับการลบ Episode
+      // ใช้ Blueprint API สำหรับการลบ Episode
       const response = await fetch(`/api/novels/${novel.slug}/episodes/blueprint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3038,14 +3038,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
       const result = await response.json();
 
-      // 🎯 Real-time อัปเดต local state
+      // Real-time อัปเดต local state
       const updatedEpisodes = episodeList.filter(ep => !episodeIds.includes(ep._id));
       setEpisodeList(updatedEpisodes);
 
-      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      // Update episodesRef to match internal state to prevent sync loop
       episodesRef.current = updatedEpisodes;
 
-      // 🎯 PROFESSIONAL: Clear selection if deleted episode was selected (realtime)
+      // Clear selection if deleted episode was selected (realtime)
       if (selectedEpisodeFromBlueprint && episodeIds.includes(selectedEpisodeFromBlueprint._id)) {
         setCurrentEpisodeId(null);
         setSelectedEpisodeFromBlueprint(null);
@@ -3053,14 +3053,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setEdges([]);
         setCurrentEpisodeStoryMap(null);
         
-        // 🎯 Update EventManager context to novel-level
+        // Update EventManager context to novel-level
         if (professionalEventManager && professionalEventManager.updateConfig) {
           professionalEventManager.updateConfig({
             selectedEpisodeId: null
           });
         }
         
-        // 🎯 Auto-select first remaining episode if available
+        // Auto-select first remaining episode if available
         const remainingEpisodes = updatedEpisodes;
         if (remainingEpisodes.length > 0) {
           const firstRemaining = remainingEpisodes[0];
@@ -3071,7 +3071,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }
       }
 
-      // 🎯 Callback to parent
+      // Callback to parent
       if (onEpisodeDelete) {
         episodeIds.forEach(epId => {
           onEpisodeDelete(epId, updatedEpisodes);
@@ -3088,7 +3088,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [novel.slug, episodeList, selectedEpisodeFromBlueprint, setNodes, onEpisodeDelete]);
 
-  // 🎯 Legacy delete handler
+  // Legacy delete handler
   const handleDeleteEpisode = useCallback((episodeId: string) => {
     const episodeToDelete = episodeList.find(ep => ep._id === episodeId);
     if (episodeToDelete) {
@@ -3096,14 +3096,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [episodeList, openModal]);
 
-  // 🎯 Bulk delete handler
+  // Bulk delete handler
   const handleBulkDeleteEpisodes = useCallback((episodes: any[]) => {
     openModal('episode_delete', null, { selectedEpisodes: episodes });
   }, [openModal]);
 
-  // 🎯 Dynamic Episode Selection Handler (ไม่ใช้ URL management) - ใช้ existing function ที่บรรทัด 2455
+  // Dynamic Episode Selection Handler (ไม่ใช้ URL management) - ใช้ existing function ที่บรรทัด 2455
 
-  // 🎯 Professional Episode Creator Handler
+  // Professional Episode Creator Handler
   const legacyHandleCreateEpisode = useCallback(async () => {
     if (!novel?.slug || !episodeCreationForm.title.trim()) {
       toast.error('กรุณาระบุชื่อตอน');
@@ -3113,7 +3113,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     setIsCreatingEpisode(true);
     
     try {
-      // 🔥 ใช้ Episodes API สำหรับการสร้าง Episode โดยตรงเข้า Database
+      // ใช้ Episodes API สำหรับการสร้าง Episode โดยตรงเข้า Database
       const response = await fetch(`/api/novels/${novel.slug}/episodes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3124,7 +3124,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           accessType: episodeCreationForm.accessType,
           priceCoins: episodeCreationForm.accessType === 'paid_unlock' ? episodeCreationForm.priceCoins : 0,
           status: episodeCreationForm.status,
-          // 🎯 สร้าง StoryMap เปล่าสำหรับ Episode ใหม่
+          // สร้าง StoryMap เปล่าสำหรับ Episode ใหม่
           storyMapData: {
             nodeId: `episode_${Date.now()}`,
             position: { x: 100 + (episodeList.length * 200), y: 100 + (episodeList.length * 150) }
@@ -3140,21 +3140,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const result = await response.json();
       const newEpisode = result.episode;
 
-      // 🎯 PROFESSIONAL: Update realtime state (database-only)
+      // PROFESSIONAL: Update realtime state (database-only)
       const updatedEpisodes = [...episodeList, newEpisode].sort((a, b) => a.episodeOrder - b.episodeOrder);
       setEpisodeList(updatedEpisodes);
       
-      // 🎯 Auto-select new episode (realtime)
+      // Auto-select new episode (realtime)
       setCurrentEpisodeId(newEpisode._id);
       setSelectedEpisodeFromBlueprint(newEpisode);
 
-      // 🔥 FIX 7: Update episodesRef to match internal state to prevent sync loop
+      // Update episodesRef to match internal state to prevent sync loop
       episodesRef.current = updatedEpisodes;
 
-      // 🎯 Load empty StoryMap for new Episode (database-only)
+      // Load empty StoryMap for new Episode (database-only)
       await loadStoryMapForEpisode(newEpisode._id);
 
-      // 🎯 Callback to parent for external state sync
+      // Callback to parent for external state sync
       if (onEpisodeCreate) {
         onEpisodeCreate(newEpisode, updatedEpisodes);
       }
@@ -3190,10 +3190,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
   
   // Tutorial state management (router and searchParams already declared above)
-  // 🎯 PROFESSIONAL: Tutorial state - Only show SELECT EPISODE tutorial
+  // PROFESSIONAL: Tutorial state - Only show SELECT EPISODE tutorial
   const [showTutorial, setShowTutorial] = useState(false);
   
-  // ✅ NEW: Restore episode selection from URL on initial load
+  // NEW: Restore episode selection from URL on initial load
   useEffect(() => {
     const episodeIdFromUrl = searchParams.get('episode');
     
@@ -3213,7 +3213,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [searchParams, episodeList, currentEpisodeId, handleEpisodeSelect, router]);
   
-  // 🔥 ENHANCEMENT 1: Episode Context Persistence - บันทึก episode ที่เลือกล่าสุด
+  // ENHANCEMENT 1: Episode Context Persistence - บันทึก episode ที่เลือกล่าสุด
   useEffect(() => {
     if (currentEpisodeId && novel?.slug) {
       localStorage.setItem(`blueprint_last_episode_${novel.slug}`, currentEpisodeId);
@@ -3221,8 +3221,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [currentEpisodeId, novel?.slug]);
   
-  // 🎯 PROFESSIONAL: Show SELECT EPISODE tutorial based on state
-  // ✅ NEW STANDARD: Only show when episodes exist but none selected AND no episode in URL
+  // PROFESSIONAL: Show SELECT EPISODE tutorial based on state
+  // NEW STANDARD: Only show when episodes exist but none selected AND no episode in URL
   useEffect(() => {
     const episodeIdFromUrl = searchParams.get('episode');
     
@@ -3240,7 +3240,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [episodes.length, currentEpisodeId, showTutorial, searchParams]);
 
-  // 🎯 Listen for episode creator messages from modal
+  // Listen for episode creator messages from modal
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'OPEN_EPISODE_CREATOR') {
@@ -3259,7 +3259,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     conflictResolutionStrategy: 'merge' // จัดการโดย SaveManager
   });
 
-  // ✅ PROFESSIONAL SOLUTION 6: Sync autoSaveSettings จาก parent props
+  // PROFESSIONAL SOLUTION 6: Sync autoSaveSettings จาก parent props
   useEffect(() => {
     if (autoSaveConfig) {
       setAutoSaveSettings(prev => ({
@@ -3268,7 +3268,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         intervalSec: autoSaveConfig.intervalSec
       }));
       
-      console.log('[BlueprintTab] 🔄 Auto-save settings updated from parent:', autoSaveConfig);
+      console.log('[BlueprintTab] Auto-save settings updated from parent:', autoSaveConfig);
     }
   }, [autoSaveConfig]);
 
@@ -3299,10 +3299,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
 
   
-  // ✨ Professional Command Management สำหรับ Undo/Redo (ใช้ EventManager เป็นหลัก)
+  // Professional Command Management สำหรับ Undo/Redo (ใช้ EventManager เป็นหลัก)
   // ลบการใช้ local command stack และใช้ SingleUserEventManager แทน
-  // const [undoStack, setUndoStack] = useState<AnyCommand[]>([]); // ❌ ลบ local stack
-  // const [redoStack, setRedoStack] = useState<AnyCommand[]>([]); // ❌ ลบ local stack  
+  // const [undoStack, setUndoStack] = useState<AnyCommand[]>([]); // ลบ local stack
+  // const [redoStack, setRedoStack] = useState<AnyCommand[]>([]); // ลบ local stack  
   const [lastSavedCommandPosition, setLastSavedCommandPosition] = useState<number>(0);
   
   // Drag tracking for Command Pattern
@@ -3405,10 +3405,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // ===============================
 
   // Generate idempotency key for commands
-  // 🔥 PROFESSIONAL: Enhanced ID generation with collision prevention
+  // PROFESSIONAL: Enhanced ID generation with collision prevention
   const generateCommandId = () => `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  // 🔥 PROFESSIONAL: Enhanced unique node ID generation with collision detection
+  // PROFESSIONAL: Enhanced unique node ID generation with collision detection
   const generateUniqueNodeId = (nodeType: string | StoryMapNodeType) => {
     const timestamp = Date.now();
     const sessionId = Math.random().toString(36).substr(2, 12);
@@ -3830,7 +3830,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // บันทึก UI state ลง localStorage เมื่อเปลี่ยน (Desktop experience)
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  // ✅ CRITICAL FIX: Debounced localStorage updates to prevent rapid state changes
+  //Debounced localStorage updates to prevent rapid state changes
   const debouncedUpdateLocalStorage = useMemo(
     () => debounce((key: string, value: any) => {
       if (typeof window !== 'undefined' && !isInitialLoad) {
@@ -3850,7 +3850,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [isPropertiesOpen, debouncedUpdateLocalStorage]);
 
   // Load UI states from localStorage after mount (ทำครั้งเดียวเพื่อป้องกัน infinite loops)
-  // ✅ CRITICAL FIX: Load UI states from localStorage ONCE on mount (prevent infinite loops)
+  // Load UI states from localStorage ONCE on mount (prevent infinite loops)
   useEffect(() => {
     if (typeof window !== 'undefined' && isInitialLoad) {
       try {
@@ -3878,7 +3878,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           setIsNodePaletteCollapsed(JSON.parse(nodePaletteCollapsed));
         }
         
-        console.log('[BlueprintTab] ✅ UI states loaded from localStorage - no infinite loops');
+        console.log('[BlueprintTab] UI states loaded from localStorage - no infinite loops');
       } catch (error) {
         console.warn('[BlueprintTab] ⚠️ Failed to load UI states from localStorage:', error);
       } finally {
@@ -3886,9 +3886,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setIsInitialLoad(false);
       }
     }
-  }, []); // ✅ CRITICAL: Empty dependency array - run only once on mount
+  }, []); // CRITICAL: Empty dependency array - run only once on mount
 
-  // ✅ Cleanup debounced function on unmount
+  // Cleanup debounced function on unmount
   useEffect(() => {
     return () => {
       if ('cancel' in debouncedUpdateLocalStorage) {
@@ -3941,7 +3941,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Flag สำหรับตรวจสอบว่าได้สร้าง initial snapshot แล้วหรือยัง
   const [isSnapshotReady, setIsSnapshotReady] = useState(false);
 
-  // 🔥 CRITICAL FIX: Helper function to clean story variables and ensure NO duplicates
+  // Helper function to clean story variables and ensure NO duplicates
   const cleanStoryVariables = useCallback((variables: any[]): any[] => {
     if (!variables || !Array.isArray(variables)) return [];
     
@@ -3954,14 +3954,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       .filter(v => {
         // Filter out invalid variables
         if (!v) return false;
-        // 🔥 CRITICAL: Filter out variables with invalid/empty/null IDs
+        // CRITICAL: Filter out variables with invalid/empty/null IDs
         const id = String(v.variableId || '').trim();
         if (!id || id === 'null' || id === 'undefined' || id === 'NaN') return false;
         if (!v.variableName && !v.name) return false;
         return true;
       })
       .map((v, index) => {
-        // 🔥 CRITICAL: Ensure unique variableId and variableName
+        // CRITICAL: Ensure unique variableId and variableName
         let variableId = String(v.variableId).trim();
         let variableName = String(v.variableName || v.name || `Variable_${index + 1}`).trim();
         
@@ -3997,7 +3997,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           isVisibleToPlayer: v.isVisibleToPlayer || false
         };
       })
-      // 🔥 CRITICAL: Final deduplication pass (safety net)
+      // CRITICAL: Final deduplication pass (safety net)
       .filter((v, index, array) => {
         return array.findIndex(item => item.variableId === v.variableId) === index;
       });
@@ -4041,10 +4041,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       // Initialize save position to 0 (clean state)
       setLastSavedCommandPosition(0);
       
-      // 🔥 FIGMA/CANVA STYLE: Setup bidirectional sync between EventManager and ReactFlow
+      // Setup bidirectional sync between EventManager and ReactFlow
       if (professionalEventManager) {
         professionalEventManager.setReactFlowUpdater((nodes: any[], edges: any[]) => {
-          console.log('[BlueprintTab] 🔄 Force updating UI from EventManager:', {
+          console.log('[BlueprintTab] Force updating UI from EventManager:', {
             nodeCount: nodes.length,
             edgeCount: edges.length
           });
@@ -4053,10 +4053,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           setNodes([...nodes]);
           setEdges([...edges]);
         });
-        console.log('[BlueprintTab] ✅ Figma/Canva style bidirectional sync setup completed');
+        console.log('[BlueprintTab] bidirectional sync setup completed');
       }
       
-      // ✨ Professional Save Integration: Sync initial state with EventManager
+      // Professional Save Integration: Sync initial state with EventManager
       if (professionalEventManager) {
         professionalEventManager.initializeWithData({
           nodes: snapshot.nodes,
@@ -4071,7 +4071,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
       
       // Enterprise-grade initialization logging
-      console.log('[BlueprintTab] 🎯 Professional Editor Initialized:', {
+      console.log('[BlueprintTab] Professional Editor Initialized:', {
         novelSlug: novel?.slug,
         nodeCount: snapshot.nodes.length,
         edgeCount: snapshot.edges.length,
@@ -4086,7 +4086,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
   }, [storyMap, nodes, edges, initialSnapshot, createStateSnapshot, professionalEventManager, onDirtyChange, novel?.slug]);
 
-  // 🔥 CRITICAL FIX: Sync currentEpisodeId with EventManager config
+  // Sync currentEpisodeId with EventManager config
   useEffect(() => {
     if (!professionalEventManager) return;
 
@@ -4094,7 +4094,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     // Only update if different (prevent infinite loops)
     if (configEpisodeId !== currentEpisodeId) {
-      console.log('[BlueprintTab] 🔄 Syncing currentEpisodeId with EventManager:', {
+      console.log('[BlueprintTab] Syncing currentEpisodeId with EventManager:', {
         currentEpisodeId,
         configEpisodeId,
         needsUpdate: true
@@ -4118,7 +4118,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [professionalEventManager]);
 
-  // ✨ Command-Based Professional Change Detection (Adobe/Figma/Canva Style)
+  // Command-Based Professional Change Detection
   useEffect(() => {
     let stabilizeTimer: NodeJS.Timeout;
     
@@ -4129,9 +4129,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     if (onDirtyChange) {
       const performSmartChangeDetection = () => {
-        // ✨ Professional Save Integration: ใช้ SingleUserEventManager เป็น single source of truth
+        // Professional Save Integration: ใช้ SingleUserEventManager เป็น single source of truth
         if (professionalEventManager) {
-          // 🔥 ADOBE/FIGMA STYLE: ใช้ command-based detection แทน undo stack length
+          // ADOBE/ใช้ command-based detection แทน undo stack length
           const hasRealChanges = professionalEventManager.hasChanges();
           const eventManagerState = professionalEventManager.getState();
           
@@ -4319,7 +4319,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         
         if (hasUnsavedChanges) {
           // แสดงข้อความเตือนแบบ professional
-          const message = '🚨 คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\nหากออกจากหน้านี้ การเปลี่ยนแปลงทั้งหมดจะสูญหาย\nกรุณาบันทึกงานก่อนออกจากหน้า';
+          const message = 'คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\nหากออกจากหน้านี้ การเปลี่ยนแปลงทั้งหมดจะสูญหาย\nกรุณาบันทึกงานก่อนออกจากหน้า';
           event.returnValue = message;
           return message;
         }
@@ -4372,11 +4372,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
         event.preventDefault();
         
-        // ✅ CRITICAL FIX: ใช้ selection state แทน node.selected
+        // ใช้ selection state แทน node.selected
         const { selectedNodes: selectedNodeIds, selectedEdges: selectedEdgeIds } = selection;
         
         if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
-          // ✅ ใช้ copySelected function ที่มี undo/redo tracking
+          // ใช้ copySelected function ที่มี undo/redo tracking
           copySelected();
         } else {
           // Fallback: ตรวจสอบ ReactFlow selection
@@ -4402,7 +4402,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         event.preventDefault();
         
         if (selection.clipboard.nodes.length > 0 || selection.clipboard.edges.length > 0) {
-          // ✅ ใช้ pasteSelected function ที่มี undo/redo tracking
+          // ใช้ pasteSelected function ที่มี undo/redo tracking
           pasteSelected();
         }
       }
@@ -4411,11 +4411,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if ((event.ctrlKey || event.metaKey) && event.key === 'x') {
         event.preventDefault();
         
-        // ✅ CRITICAL FIX: ใช้ selection state แทน node.selected
+        // ใช้ selection state แทน node.selected
         const { selectedNodes: selectedNodeIds, selectedEdges: selectedEdgeIds } = selection;
         
         if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
-          // ✅ ใช้ cutSelected function ที่มี undo/redo tracking
+          // ใช้ cutSelected function ที่มี undo/redo tracking
           cutSelected();
         } else {
           // Fallback: ตรวจสอบ ReactFlow selection
@@ -4440,11 +4440,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         
-        // ✅ CRITICAL FIX: ใช้ selection state แทน node.selected
+        // ใช้ selection state แทน node.selected
         const { selectedNodes: selectedNodeIds, selectedEdges: selectedEdgeIds } = selection;
         
         if (selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) {
-          // ✅ ใช้ deleteSelected function ที่มี undo/redo tracking
+          // ใช้ deleteSelected function ที่มี undo/redo tracking
           deleteSelected();
         } else {
           // Fallback: ตรวจสอบ ReactFlow selection
@@ -4476,21 +4476,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [isSnapshotReady, initialSnapshot, createStateSnapshot, deepCompareSnapshots, onManualSave, commandAdapter, edges, executeCommand, nodes, professionalEventManager]);
 
-  // ✅ FIGMA/ADOBE STYLE: Content change tracking refs สำหรับป้องกัน selection-triggered auto-save
+  // FIGMA/ADOBE STYLE: Content change tracking refs สำหรับป้องกัน selection-triggered auto-save
   const prevNodesContent = useRef<string>('');
   const prevEdgesContent = useRef<string>('');
   const isInitialRender = useRef<boolean>(true);
 
-  // ✅ ENHANCED: Trigger auto-save เมื่อมีการเปลี่ยนแปลง content จริงๆ (ไม่รวม selection changes)
+  // ENHANCED: Trigger auto-save เมื่อมีการเปลี่ยนแปลง content จริงๆ (ไม่รวม selection changes)
   useEffect(() => {
     if (nodes.length > 0 || edges.length > 0) {
-      // ✅ CRITICAL: ตรวจสอบเฉพาะ content changes (ไม่รวม selection state)
+      // CRITICAL: ตรวจสอบเฉพาะ content changes (ไม่รวม selection state)
       const currentNodesContent = JSON.stringify(nodes.map(node => ({
         id: node.id,
         position: node.position,
         data: node.data,
         type: node.type
-        // ✅ NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
+        // NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
       })));
       
       const currentEdgesContent = JSON.stringify(edges.map(edge => ({
@@ -4498,19 +4498,19 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         source: edge.source,
         target: edge.target,
         data: edge.data
-        // ✅ NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
+        // NOTE: ไม่รวม 'selected' property เพื่อ ignore selection changes
       })));
       
-      // ✅ CRITICAL FIX: Initialize refs on first render to prevent false positive
+      // Initialize refs on first render to prevent false positive
       if (isInitialRender.current) {
         prevNodesContent.current = currentNodesContent;
         prevEdgesContent.current = currentEdgesContent;
         isInitialRender.current = false;
-        console.log('[BlueprintTab] 🔄 Initial content refs initialized, skipping auto-save');
+        console.log('[BlueprintTab] Initial content refs initialized, skipping auto-save');
         return;
       }
       
-      // ✅ FIGMA/ADOBE STYLE: Only trigger auto-save for real content changes
+      // FIGMA/ADOBE STYLE: Only trigger auto-save for real content changes
       if (currentNodesContent !== prevNodesContent.current || 
           currentEdgesContent !== prevEdgesContent.current) {
         
@@ -4529,10 +4529,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           }))
         };
         
-        console.log('[BlueprintTab] 🔄 Real content changes detected, triggering auto-save');
+        console.log('[BlueprintTab] Real content changes detected, triggering auto-save');
         debouncedAutoSave(commandData);
         
-        // ✅ Update refs for next comparison
+        // Update refs for next comparison
         prevNodesContent.current = currentNodesContent;
         prevEdgesContent.current = currentEdgesContent;
       } else {
@@ -4673,7 +4673,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     isSelectionMode: false,
     pendingSelection: [],
     showSelectionBar: false,
-    isReactFlowInstantMode: false // 🎯 เริ่มต้นเป็น false
+    isReactFlowInstantMode: false // เริ่มต้นเป็น false
   });
   
   // Multi-select UI state
@@ -4941,7 +4941,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         clearTimeout(saveDebounceTimer.current);
       }
       
-      // ✨ Professional Auto-save Integration (Adobe/Canva/Figma style)
+      // Professional Auto-save Integration (Adobe/Canva/Figma style)
       if (professionalEventManager && autoSaveSettings.enabled) {
         // EventManager handles auto-save through command execution
         // Commands are automatically tracked and saved
@@ -4949,7 +4949,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         
         if (hasChanges) {
           // EventManager will handle the auto-save based on its configuration
-          console.log('[BlueprintTab] 🔄 EventManager handling auto-save');
+          console.log('[BlueprintTab] EventManager handling auto-save');
         } else {
           console.log('[BlueprintTab] ✓ No changes detected, skipping auto-save');
         }
@@ -4990,7 +4990,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     const updateUI = () => {
       const state = professionalEventManager.getState();
-      console.log(`[BlueprintTab] 🔄 EventManager state changed: Undo: ${state.undoStack.length}, Redo: ${state.redoStack.length}, isDirty: ${state.isDirty}`);
+      console.log(`[BlueprintTab] EventManager state changed: Undo: ${state.undoStack.length}, Redo: ${state.redoStack.length}, isDirty: ${state.isDirty}`);
       
       // Force re-render toolbar และ UI elements ด้วย state ใหม่
       setForceUIUpdate(prev => prev + 1);
@@ -5028,7 +5028,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [professionalEventManager, onDirtyChange]);
 
-  // 🔥 FIGMA/CANVA STYLE: Professional Undo function using EventManager
+  // Professional Undo function using EventManager
   const undo = useCallback(() => {
     if (!professionalEventManager) {
       toast.warning('ระบบ Undo ไม่พร้อมใช้งาน');
@@ -5041,14 +5041,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return false;
     }
 
-    // 🔥 FIGMA/CANVA STYLE: Execute undo และ force UI update ทันที
+    // Execute undo และ force UI update ทันที
     const success = professionalEventManager.undo();
     
     if (success) {
-      // ✅ CRITICAL FIX: ไม่จำเป็นต้อง manual sync เพราะ CommandContext จะ handle
+      // ไม่จำเป็นต้อง manual sync เพราะ CommandContext จะ handle
       // CommandContext.setNodes/setEdges จะ trigger reactFlowUpdater อัตโนมัติ
       
-      console.log(`[BlueprintTab] 🔄 Figma/Canva style undo executed - CommandContext handles UI sync automatically`);
+      console.log(`[BlueprintTab] undo executed - CommandContext handles UI sync automatically`);
       
       // Force re-render UI components เพื่อแสดงสถานะ undo/redo ใหม่
       setForceUIUpdate(prev => prev + 1);
@@ -5060,7 +5060,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     return false;
   }, [professionalEventManager]);
 
-  // 🔥 FIGMA/CANVA STYLE: Professional Redo function using EventManager
+  // Professional Redo function using EventManager
   const redo = useCallback(() => {
     if (!professionalEventManager) {
       toast.warning('ระบบ Redo ไม่พร้อมใช้งาน');
@@ -5073,12 +5073,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return false;
     }
 
-    // 🔥 FIGMA/CANVA STYLE: Execute redo และ force UI update ทันที
+    // Execute redo และ force UI update ทันที
     const success = professionalEventManager.redo();
     
     if (success) {
-      // ✅ CRITICAL FIX: CommandContext handles UI sync automatically
-      console.log(`[BlueprintTab] 🔄 Figma/Canva style redo executed - CommandContext handles UI sync automatically`);
+      // CommandContext handles UI sync automatically
+      console.log(`[BlueprintTab] redo executed - CommandContext handles UI sync automatically`);
       
       // Force re-render UI components เพื่อแสดงสถานะ undo/redo ใหม่
       setForceUIUpdate(prev => prev + 1);
@@ -5091,7 +5091,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   }, [professionalEventManager]);
 
   // Command factory functions
-  // 🔥 FIGMA/CANVA STYLE: Command factory functions using CommandContext
+  // Command factory functions using CommandContext
   const createNodeCommand = useCallback((
     type: NodeCommand['type'],
     nodeId: string,
@@ -5105,7 +5105,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       throw new Error('EventManager is required for command creation');
     }
     
-    // ✅ ใช้ CommandContext เป็นหลักแทน local state
+    // ใช้ CommandContext เป็นหลักแทน local state
     const context = professionalEventManager.getCommandContext();
     
     const command: NodeCommand = {
@@ -5123,7 +5123,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         switch (type) {
           case 'ADD_NODE':
             if (nodeData) {
-              // ✅ ใช้ CommandContext แทน local setState
+              // ใช้ CommandContext แทน local setState
               const currentNodes = context.getCurrentNodes();
               context.setNodes([...currentNodes, nodeData]);
             }
@@ -5142,20 +5142,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }
               ]);
             }
-            // ✅ ใช้ CommandContext
+            // ใช้ CommandContext
             const currentNodes = context.getCurrentNodes();
             context.setNodes(currentNodes.filter((n: any) => n.id !== nodeId));
             break;
           case 'UPDATE_NODE':
             if (newData) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentNodes = context.getCurrentNodes();
               context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n));
             }
             break;
           case 'MOVE_NODE':
             if (newPosition) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentNodes = context.getCurrentNodes();
               context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, position: newPosition } : n));
             }
@@ -5165,13 +5165,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       undo: () => {
         switch (type) {
           case 'ADD_NODE':
-            // ✅ ใช้ CommandContext - ไม่มี setTimeout
+            // ใช้ CommandContext - ไม่มี setTimeout
             const currentNodesForUndo = context.getCurrentNodes();
             context.setNodes(currentNodesForUndo.filter((n: any) => n.id !== nodeId));
             break;
           case 'DELETE_NODE':
             if (nodeData) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentNodes = context.getCurrentNodes();
               context.setNodes([...currentNodes, nodeData]);
               // เมื่อ undo การลบ ให้เอาออกจาก Trash History อัตโนมัติ (รายการล่าสุดที่ตรง id/type)
@@ -5188,14 +5188,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             break;
           case 'UPDATE_NODE':
             if (oldData) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentNodes = context.getCurrentNodes();
               context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, data: { ...n.data, ...oldData } } : n));
             }
             break;
           case 'MOVE_NODE':
             if (oldPosition) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentNodes = context.getCurrentNodes();
               context.setNodes(currentNodes.map((n: any) => n.id === nodeId ? { ...n, position: oldPosition } : n));
             }
@@ -5207,7 +5207,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     return command;
   }, [professionalEventManager, setDeletedItems]);
 
-  // 🔥 FIGMA/CANVA STYLE: Edge Command factory using CommandContext
+  // Edge Command factory using CommandContext
   const createEdgeCommand = useCallback((
     type: EdgeCommand['type'],
     edgeId: string,
@@ -5221,7 +5221,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       throw new Error('EventManager is required for edge command creation');
     }
     
-    // ✅ ใช้ CommandContext เป็นหลักแทน local state
+    // ใช้ CommandContext เป็นหลักแทน local state
     const context = professionalEventManager.getCommandContext();
     
     const command: EdgeCommand = {
@@ -5239,7 +5239,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         switch (type) {
           case 'ADD_EDGE':
             if (edgeData) {
-              // ✅ ใช้ CommandContext แทน local setState
+              // ใช้ CommandContext แทน local setState
               const currentEdges = context.getCurrentEdges();
               context.setEdges([...currentEdges, edgeData]);
             }
@@ -5258,13 +5258,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 }
               ]);
             }
-            // ✅ ใช้ CommandContext
+            // ใช้ CommandContext
             const currentEdges = context.getCurrentEdges();
             context.setEdges(currentEdges.filter((e: any) => e.id !== edgeId));
             break;
           case 'UPDATE_EDGE':
             if (newData) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentEdges = context.getCurrentEdges();
               context.setEdges(currentEdges.map((e: any) => e.id === edgeId ? { ...e, ...newData } : e));
             }
@@ -5274,13 +5274,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       undo: () => {
         switch (type) {
           case 'ADD_EDGE':
-            // ✅ ใช้ CommandContext - ไม่มี setTimeout
+            // ใช้ CommandContext - ไม่มี setTimeout
             const currentEdgesForUndo = context.getCurrentEdges();
             context.setEdges(currentEdgesForUndo.filter((e: any) => e.id !== edgeId));
             break;
           case 'DELETE_EDGE':
             if (edgeData) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentEdges = context.getCurrentEdges();
               context.setEdges([...currentEdges, edgeData]);
               // เอาออกจาก Trash เมื่อกู้คืนผ่าน undo
@@ -5297,7 +5297,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             break;
           case 'UPDATE_EDGE':
             if (oldData) {
-              // ✅ ใช้ CommandContext
+              // ใช้ CommandContext
               const currentEdges = context.getCurrentEdges();
               context.setEdges(currentEdges.map((e: any) => e.id === edgeId ? { ...e, ...oldData } : e));
             }
@@ -5315,7 +5315,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       clearTimeout(autoSaveTimer.current);
     }
     
-    // 🔥 ADOBE/FIGMA STYLE: ตรวจสอบการเปลี่ยนแปลงก่อนบันทึก
+    // ADOBE/ตรวจสอบการเปลี่ยนแปลงก่อนบันทึก
     if (professionalEventManager && !professionalEventManager.hasChanges()) {
       toast.info('🔍 ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก', {
         description: 'เนื้อหาปัจจุบันตรงกับที่บันทึกไว้แล้ว'
@@ -5328,7 +5328,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         // ใช้ EventManager สำหรับ manual save
         await professionalEventManager.saveManual();
         
-        // ✨ NEW: Mark current command position as saved via EventManager
+        // NEW: Mark current command position as saved via EventManager
         const eventManagerState = professionalEventManager.getState();
         setLastSavedCommandPosition(eventManagerState.undoStack.length);
         
@@ -5350,7 +5350,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           onDirtyChange(false);
         }
         
-        toast.success('✅ บันทึกสำเร็จ');
+        toast.success('บันทึกสำเร็จ');
         
         console.log('[BlueprintTab] 💾 Manual Save Success:', {
           savedAtCommandPosition: eventManagerState.undoStack.length,
@@ -5363,7 +5363,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         // Fallback ไปยังระบบเดิม
         await saveStoryMapToDatabase(nodes, edges, true);
         
-        // ✨ NEW: Mark current command position as saved (fallback)
+        // NEW: Mark current command position as saved (fallback)
         // Note: Fallback mode won't have EventManager undoStack, using 0 as default
         setLastSavedCommandPosition(0);
         
@@ -5376,14 +5376,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           onDirtyChange(false);
         }
         
-        toast.success('✅ บันทึกสำเร็จ');
+        toast.success('บันทึกสำเร็จ');
       }
     } catch (error) {
       console.error('[BlueprintTab] Manual save failed:', error);
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
-      // 🔥 ADOBE/FIGMA STYLE: Handle duplicate save gracefully
+      // ADOBE/Handle duplicate save gracefully
       if (errorMessage === 'SAVE_IN_PROGRESS') {
         toast.info('⏳ กำลังบันทึกอยู่', {
           description: 'กรุณารอการบันทึกปัจจุบันให้เสร็จสิ้น'
@@ -5392,13 +5392,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
       
       if (errorMessage === 'DUPLICATE_DATA') {
-        toast.info('🔄 ไม่มีการเปลี่ยนแปลงใหม่', {
+        toast.info('ไม่มีการเปลี่ยนแปลงใหม่', {
           description: 'ข้อมูลถูกบันทึกไว้แล้ว'
         });
         return;
       }
       
-      toast.error('❌ บันทึกล้มเหลว: ' + errorMessage);
+      toast.error('บันทึกล้มเหลว: ' + errorMessage);
     }
   }, [professionalEventManager, saveStoryMapToDatabase, nodes, edges, createStateSnapshot, onDirtyChange]);
 
@@ -5579,7 +5579,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     toast.info(`Selected ${allNodeIds.length} nodes and ${allEdgeIds.length} edges`);
   }, [nodes, edges]);
 
-  // 🔥 FIGMA/CANVA STYLE: Multi-select delete using CommandContext
+  // Multi-select delete using CommandContext
   const deleteSelected = useCallback(async () => {
     const { selectedNodes, selectedEdges } = selection;
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
@@ -5587,7 +5587,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
     
-    // ✅ CRITICAL FIX: Include edges connected to deleted nodes
+    // Include edges connected to deleted nodes
     const allEdgesToDelete = [
       ...edgesToDelete,
       ...edges.filter(e => 
@@ -5598,7 +5598,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     if (nodesToDelete.length > 0) {
       const totalItemsToDelete = nodesToDelete.length + allEdgesToDelete.length;
-      const confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`;
+      const confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\nสามารถ Undo ได้ด้วย Ctrl+Z`;
       
       const ok = window.confirm(confirmMessage);
       if (!ok) return;
@@ -5609,17 +5609,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return;
     }
     
-    // ✅ ใช้ CommandContext สำหรับ batch operations
+    // ใช้ CommandContext สำหรับ batch operations
     const context = professionalEventManager.getCommandContext();
     
-        // ✅ FIGMA/CANVA STYLE: Create batch command for multiple deletions
+        // Create batch command for multiple deletions
     const batchCommand: ICommand = {
         id: `batch-delete-${Date.now()}`,
       type: 'BATCH_DELETE',
       description: `Delete ${nodesToDelete.length} nodes and ${allEdgesToDelete.length} connections`,
         timestamp: Date.now(),
         execute: () => {
-        // ✅ ใช้ CommandContext แทน local state
+        // ใช้ CommandContext แทน local state
         const currentNodes = context.getCurrentNodes();
         const currentEdges = context.getCurrentEdges();
         
@@ -5644,7 +5644,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         console.log(`[BlueprintTab] 🗑️ Batch delete executed: ${nodesToDelete.length} nodes, ${allEdgesToDelete.length} edges`);
       },
       undo: () => {
-        // ✅ ใช้ CommandContext สำหรับ restore
+        // ใช้ CommandContext สำหรับ restore
         const currentNodes = context.getCurrentNodes();
         const currentEdges = context.getCurrentEdges();
         
@@ -5667,7 +5667,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     );
   }, [selection, nodes, edges, professionalEventManager]);
 
-  // 🔥 FIGMA/CANVA STYLE: Multi-select copy using CommandContext
+  // Multi-select copy using CommandContext
   const copySelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
     const nodesToCopy = nodes.filter(n => selectedNodes.includes(n.id));
@@ -5709,13 +5709,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     professionalEventManager.executeCommand(copyCommand);
   }, [selection, nodes, edges, professionalEventManager]);
 
-  // 🔥 FIGMA/CANVA STYLE: Multi-select cut (copy + delete) using CommandContext
+  // Multi-select cut (copy + delete) using CommandContext
   const cutSelected = useCallback(() => {
     const { selectedNodes, selectedEdges } = selection;
     const nodesToCut = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToCut = edges.filter(e => selectedEdges.includes(e.id));
     
-    // ✅ CRITICAL FIX: Include edges connected to cut nodes
+    // Include edges connected to cut nodes
     const allEdgesToCut = [
       ...edgesToCut,
       ...edges.filter(e => 
@@ -5734,10 +5734,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return;
     }
     
-    // ✅ ใช้ CommandContext สำหรับ batch operations
+    // ใช้ CommandContext สำหรับ batch operations
     const context = professionalEventManager.getCommandContext();
     
-    // ✅ FIGMA/CANVA STYLE: Create batch cut command (copy to clipboard then delete)
+    // Create batch cut command (copy to clipboard then delete)
     const cutCommand: ICommand = {
       id: `batch-cut-${Date.now()}`,
       type: 'BATCH_CUT',
@@ -5803,7 +5803,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     );
   }, [selection, nodes, edges, professionalEventManager]);
 
-  // 🔥 FIGMA/CANVA STYLE: Multi-select paste using CommandContext
+  // Multi-select paste using CommandContext
   const pasteSelected = useCallback(() => {
     const { clipboard } = selection;
     if (clipboard.nodes.length === 0 && clipboard.edges.length === 0) {
@@ -5833,10 +5833,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       target: `${edge.target}-copy-${timestamp}`
     }));
     
-    // ✅ ใช้ CommandContext สำหรับ batch operations
+    // ใช้ CommandContext สำหรับ batch operations
     const context = professionalEventManager.getCommandContext();
     
-    // ✅ FIGMA/CANVA STYLE: Create batch paste command
+    // Create batch paste command
     const batchPasteCommand: ICommand = {
         id: `batch-paste-${timestamp}`,
       type: 'BATCH_PASTE',
@@ -5897,12 +5897,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // (removed older keyboard handler in favor of a single consolidated one below)
 
   // Keyboard shortcuts
-  // 🔥 CANVA STYLE: Toggle multi-select mode
+  // CANVA STYLE: Toggle multi-select mode
   const toggleMultiSelectMode = useCallback(() => {
     const currentMode = selection.multiSelectMode;
     const newMode = !currentMode;
     
-    console.log(`[BlueprintTab] 🎯 Toggling multi-select mode: ${currentMode} → ${newMode}`);
+    console.log(`[BlueprintTab] Toggling multi-select mode: ${currentMode} → ${newMode}`);
     
     setSelection(prev => ({
       ...prev,
@@ -5911,7 +5911,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       showSelectionBar: false, // ไม่แสดง confirmation bar ตอนเริ่มต้น
       selectedNodes: newMode ? [] : prev.selectedNodes, // ล้าง selection เมื่อเข้า mode, คงเก่าเมื่อออก
       selectedEdges: newMode ? [] : prev.selectedEdges,
-      isReactFlowInstantMode: false // 🎯 รีเซ็ต ReactFlow instant mode เมื่อเข้า manual mode
+      isReactFlowInstantMode: false // รีเซ็ต ReactFlow instant mode เมื่อเข้า manual mode
     }));
     
     setIsMultiSelectActive(newMode);
@@ -5936,10 +5936,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         prevNodes.map(n => ({ ...n, selected: false }))
       );
       
-      toast.info('✅ Multi-select mode deactivated.');
+      toast.info('Multi-select mode deactivated.');
     }
   }, [selection.multiSelectMode, setNodes, setEdges]);
-  // 🔥 FIGMA/CANVA STYLE: Confirm multi-selection with complete undo/redo support
+  // Confirm multi-selection with complete undo/redo support
   const confirmMultiSelection = useCallback(() => {
     const pendingNodeIds = selection.pendingSelection;
     
@@ -5948,7 +5948,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       return;
     }
     
-    // 🎯 จัดเก็บสถานะเดิมก่อนการเปลี่ยนแปลง (สำหรับ undo ที่สมบูรณ์)
+    // จัดเก็บสถานะเดิมก่อนการเปลี่ยนแปลง (สำหรับ undo ที่สมบูรณ์)
     const previousSelection = {
       nodes: [...selection.selectedNodes],
       edges: [...selection.selectedEdges],
@@ -5970,11 +5970,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           selectedEdges: [],
           pendingSelection: [],
           showSelectionBar: false,
-          multiSelectMode: true, // 🔧 FIX: ต้องเป็น true เพื่อให้ info panel แสดงผล
-          isReactFlowInstantMode: false // 🎯 ไม่ใช่ ReactFlow instant mode หลัง confirm
+          multiSelectMode: true, // ต้องเป็น true เพื่อให้ info panel แสดงผล
+          isReactFlowInstantMode: false // ไม่ใช่ ReactFlow instant mode หลัง confirm
         }));
         
-        // 🔥 FIGMA STYLE: อัปเดต ReactFlow visual selection ให้ sync สมบูรณ์
+        // อัปเดต ReactFlow visual selection ให้ sync สมบูรณ์
         setNodes(prevNodes => 
           prevNodes.map(n => ({
             ...n,
@@ -5985,7 +5985,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           prevEdges.map(e => ({ ...e, selected: false }))
         );
 
-        // 🔥 CRITICAL FIX: บังคับให้ ReactFlow instance sync selection state อย่างแน่นอน
+        // บังคับให้ ReactFlow instance sync selection state อย่างแน่นอน
         if (reactFlowInstance) {
           setTimeout(() => {
             const allNodes = reactFlowInstance.getNodes();
@@ -6005,7 +6005,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               }))
             );
             
-            console.log(`[BlueprintTab] 🔄 ReactFlow instance force synced for execute with ${pendingNodeIds.length} selected nodes`);
+            console.log(`[BlueprintTab] ReactFlow instance force synced for execute with ${pendingNodeIds.length} selected nodes`);
           }, 0);
         }
         
@@ -6014,10 +6014,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setSelectedEdge(null);
         setIsMultiSelectActive(false);
         
-        console.log(`[BlueprintTab] ✅ Multi-selection confirmed: ${pendingNodeIds.length} nodes`);
+        console.log(`[BlueprintTab] Multi-selection confirmed: ${pendingNodeIds.length} nodes`);
       },
       undo: () => {
-        // 🎯 คืนสถานะเดิมอย่างสมบูรณ์
+        // คืนสถานะเดิมอย่างสมบูรณ์
         setSelection(prev => ({
           ...prev,
           selectedNodes: previousSelection.nodes,
@@ -6027,7 +6027,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           showSelectionBar: previousSelection.showSelectionBar
         }));
         
-        // 🔥 FIGMA STYLE: ล้าง ReactFlow visual selection สมบูรณ์
+        // ล้าง ReactFlow visual selection สมบูรณ์
         setNodes(prevNodes => 
           prevNodes.map(n => ({ ...n, selected: false }))
         );
@@ -6035,7 +6035,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           prevEdges.map(e => ({ ...e, selected: false }))
         );
         
-        // 🔥 FIGMA STYLE: บังคับให้ ReactFlow instance ล้าง selection อย่างแน่นอน
+        // บังคับให้ ReactFlow instance ล้าง selection อย่างแน่นอน
         if (reactFlowInstance) {
           setTimeout(() => {
             // Force clear undo state
@@ -6061,10 +6061,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   selected: false
                 }))
               );
-              console.log(`[BlueprintTab] 🔄 Manual multi-select undo double-cleared all selections`);
+              console.log(`[BlueprintTab] Manual multi-select undo double-cleared all selections`);
             }, 50);
             
-            console.log(`[BlueprintTab] 🔄 ReactFlow instance force cleared for manual undo`);
+            console.log(`[BlueprintTab] ReactFlow instance force cleared for manual undo`);
           }, 10);
         }
         
@@ -6075,18 +6075,18 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         console.log(`[BlueprintTab] ↶ Multi-selection undone`);
       },
       redo: () => {
-        // 🔥 FIGMA STYLE: explicit redo method สำหรับความชัดเจน
+        // explicit redo method สำหรับความชัดเจน
         setSelection(prev => ({
           ...prev,
           selectedNodes: pendingNodeIds,
           selectedEdges: [],
           pendingSelection: [],
           showSelectionBar: false,
-          multiSelectMode: true, // 🔧 FIX: ต้องเป็น true เพื่อให้ info panel แสดงผล
-          isReactFlowInstantMode: false // 🎯 ไม่ใช่ ReactFlow instant mode ใน redo
+          multiSelectMode: true, // ต้องเป็น true เพื่อให้ info panel แสดงผล
+          isReactFlowInstantMode: false // ไม่ใช่ ReactFlow instant mode ใน redo
         }));
         
-        // 🔥 FIGMA STYLE: อัปเดต ReactFlow visual selection ให้ sync สมบูรณ์
+        // อัปเดต ReactFlow visual selection ให้ sync สมบูรณ์
         setNodes(prevNodes => 
           prevNodes.map(n => ({
             ...n,
@@ -6097,7 +6097,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           prevEdges.map(e => ({ ...e, selected: false }))
         );
 
-        // 🔥 FIGMA STYLE: บังคับให้ ReactFlow instance sync selection state แบบ immediate
+        // บังคับให้ ReactFlow instance sync selection state แบบ immediate
         if (reactFlowInstance) {
           // ใช้ multiple timeout เพื่อให้แน่ใจว่า sync อย่างสมบูรณ์
           setTimeout(() => {
@@ -6127,10 +6127,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   selected: pendingNodeIds.includes(node.id)
                 }))
               );
-              console.log(`[BlueprintTab] 🔄 ReactFlow redo double-synced: ${pendingNodeIds.length} selected nodes`);
+              console.log(`[BlueprintTab] ReactFlow redo double-synced: ${pendingNodeIds.length} selected nodes`);
             }, 50);
             
-            console.log(`[BlueprintTab] 🔄 ReactFlow instance force synced for redo with ${pendingNodeIds.length} selected nodes`);
+            console.log(`[BlueprintTab] ReactFlow instance force synced for redo with ${pendingNodeIds.length} selected nodes`);
           }, 10);
         }
         
@@ -6143,15 +6143,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
     };
     
-    // ✅ ใช้ EventManager สำหรับ undo/redo tracking
+    // ใช้ EventManager สำหรับ undo/redo tracking
     professionalEventManager.executeCommand(command);
-    toast.success(`✅ Selected ${pendingNodeIds.length} nodes. Use Ctrl+Z to undo.`);
+    toast.success(`Selected ${pendingNodeIds.length} nodes. Use Ctrl+Z to undo.`);
   }, [selection.pendingSelection, selection.selectedNodes, selection.selectedEdges, selection.multiSelectMode, selection.showSelectionBar, professionalEventManager, reactFlowInstance]);
-  // 🔧 FIGMA STYLE: Clear all selections with ULTRA-aggressive UI sync
+  // 🔧 Clear all selections with ULTRA-aggressive UI sync
   const clearAllSelections = useCallback(() => {
     console.log(`[BlueprintTab] 🧹 Starting clear all selections - should NOT trigger refresh protection`);
     
-    // 🚨 EMERGENCY: Force immediate ReactFlow clear BEFORE any state updates
+    // EMERGENCY: Force immediate ReactFlow clear BEFORE any state updates
     if (reactFlowInstance) {
       try {
         // Immediate synchronous clear - no delays
@@ -6162,9 +6162,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         reactFlowInstance.setNodes(currentNodes.map(n => ({ ...n, selected: false })));
         reactFlowInstance.setEdges(currentEdges.map(e => ({ ...e, selected: false })));
         
-        console.log(`[BlueprintTab] 🚨 EMERGENCY: Immediate ReactFlow clear executed FIRST`);
+        console.log(`[BlueprintTab] EMERGENCY: Immediate ReactFlow clear executed FIRST`);
       } catch (error) {
-        console.error(`[BlueprintTab] ❌ Emergency clear failed:`, error);
+        console.error(`[BlueprintTab] Emergency clear failed:`, error);
       }
     }
     console.log(`[BlueprintTab] 🧹 Starting ULTRA-aggressive clear all selections - Figma style`, {
@@ -6174,26 +6174,26 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       selectedEdgesCount: selection.selectedEdges.length
     });
     
-    // 🚨 PRIORITY 1: Force immediate ReactFlow visual clear FIRST (highest priority)
+    // PRIORITY 1: Force immediate ReactFlow visual clear FIRST (highest priority)
     if (reactFlowInstance) {
       try {
         const allNodes = reactFlowInstance.getNodes();
         const allEdges = reactFlowInstance.getEdges();
         
-        console.log(`[BlueprintTab] 🎯 Current ReactFlow state:`, {
+        console.log(`[BlueprintTab] Current ReactFlow state:`, {
           nodesCount: allNodes.length,
           edgesCount: allEdges.length,
           selectedNodesCount: allNodes.filter(n => n.selected).length,
           selectedEdgesCount: allEdges.filter(e => e.selected).length
         });
         
-        // 🎯 IMMEDIATE ReactFlow visual clear (ไม่รอ state update) - TRIPLE CLEAR
+        // IMMEDIATE ReactFlow visual clear (ไม่รอ state update) - TRIPLE CLEAR
         for (let i = 0; i < 3; i++) {
           reactFlowInstance.setNodes(
             reactFlowInstance.getNodes().map(node => ({
               ...node,
               selected: false
-              // ✅ CRITICAL FIX: ไม่แก้ไข node.data เพื่อป้องกัน false positive change detection
+              // ไม่แก้ไข node.data เพื่อป้องกัน false positive change detection
             }))
           );
           
@@ -6201,20 +6201,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             reactFlowInstance.getEdges().map(edge => ({
               ...edge,
               selected: false
-              // ✅ CRITICAL FIX: ไม่แก้ไข edge.data เพื่อป้องกัน false positive change detection
+              // ไม่แก้ไข edge.data เพื่อป้องกัน false positive change detection
             }))
           );
         }
         
-        console.log(`[BlueprintTab] 🔄 TRIPLE ReactFlow visual clear executed FIRST`);
+        console.log(`[BlueprintTab] TRIPLE ReactFlow visual clear executed FIRST`);
       } catch (error) {
-        console.error(`[BlueprintTab] ❌ Immediate visual clear failed:`, error);
+        console.error(`[BlueprintTab] Immediate visual clear failed:`, error);
       }
     } else {
       console.warn(`[BlueprintTab] ⚠️ ReactFlow instance not available for immediate clear`);
     }
     
-    // 🎯 STEP 1: ล้าง React states ทันที
+    // STEP 1: ล้าง React states ทันที
     setSelection(prev => ({ 
       ...prev, 
       selectedNodes: [], 
@@ -6225,15 +6225,15 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       showSelectionBar: false
     }));
     
-    // 🎯 STEP 2: ล้าง single selection states ทันที
+    // STEP 2: ล้าง single selection states ทันที
     setSelectedNode(null);
     setSelectedEdge(null);
     setIsMultiSelectActive(false);
     
-    // 🎯 STEP 3: ล้าง ReactFlow visual selection states
+    // STEP 3: ล้าง ReactFlow visual selection states
     setNodes(prevNodes => {
       const updatedNodes = prevNodes.map(n => ({ ...n, selected: false }));
-      console.log(`[BlueprintTab] 🔄 React nodes cleared:`, {
+      console.log(`[BlueprintTab] React nodes cleared:`, {
         totalNodes: updatedNodes.length,
         selectedNodes: updatedNodes.filter(n => n.selected).length
       });
@@ -6241,14 +6241,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     });
     setEdges(prevEdges => {
       const updatedEdges = prevEdges.map(e => ({ ...e, selected: false }));
-      console.log(`[BlueprintTab] 🔄 React edges cleared:`, {
+      console.log(`[BlueprintTab] React edges cleared:`, {
         totalEdges: updatedEdges.length,
         selectedEdges: updatedEdges.filter(e => e.selected).length
       });
       return updatedEdges;
     });
 
-    // 🔥 FIGMA STYLE: Aggressive ReactFlow instance clearing
+    // Aggressive ReactFlow instance clearing
     if (reactFlowInstance) {
       // Immediate clear - no delay
       try {
@@ -6260,7 +6260,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           allNodes.map(node => ({
             ...node,
             selected: false
-            // ✅ CRITICAL FIX: ไม่แก้ไข node.data เพื่อป้องกัน false positive change detection
+            // ไม่แก้ไข node.data เพื่อป้องกัน false positive change detection
           }))
         );
         
@@ -6268,13 +6268,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           allEdges.map(edge => ({
             ...edge,
             selected: false
-            // ✅ CRITICAL FIX: ไม่แก้ไข edge.data เพื่อป้องกัน false positive change detection
+            // ไม่แก้ไข edge.data เพื่อป้องกัน false positive change detection
           }))
         );
         
-        console.log(`[BlueprintTab] 🔄 ReactFlow immediate clear executed`);
+        console.log(`[BlueprintTab] ReactFlow immediate clear executed`);
       } catch (error) {
-        console.error(`[BlueprintTab] ❌ Immediate clear failed:`, error);
+        console.error(`[BlueprintTab] Immediate clear failed:`, error);
       }
       
       // Follow-up clears with timing
@@ -6292,9 +6292,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               selected: false
             }))
           );
-          console.log(`[BlueprintTab] 🔄 ReactFlow first follow-up clear`);
+          console.log(`[BlueprintTab] ReactFlow first follow-up clear`);
         } catch (error) {
-          console.error(`[BlueprintTab] ❌ First follow-up clear failed:`, error);
+          console.error(`[BlueprintTab] First follow-up clear failed:`, error);
         }
       }, 10);
       
@@ -6318,13 +6318,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           const viewport = reactFlowInstance.getViewport();
           reactFlowInstance.setViewport({ ...viewport });
           
-          console.log(`[BlueprintTab] 🔄 ReactFlow final clear and viewport refresh completed`);
+          console.log(`[BlueprintTab] ReactFlow final clear and viewport refresh completed`);
         } catch (error) {
-          console.error(`[BlueprintTab] ❌ Final clear failed:`, error);
+          console.error(`[BlueprintTab] Final clear failed:`, error);
         }
       }, 100);
       
-      // 🔥 FIGMA STYLE: Final verification and emergency fallback
+      // Final verification and emergency fallback
       setTimeout(() => {
         if (reactFlowInstance) {
           const remainingSelected = reactFlowInstance.getNodes().filter(n => n.selected).length +
@@ -6343,10 +6343,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               );
               console.log(`[BlueprintTab] 🆘 Emergency fallback clear applied`);
             } catch (error) {
-              console.error(`[BlueprintTab] ❌ Emergency fallback failed:`, error);
+              console.error(`[BlueprintTab] Emergency fallback failed:`, error);
             }
           } else {
-            console.log(`[BlueprintTab] ✅ Clear verification passed - no items selected`);
+            console.log(`[BlueprintTab] Clear verification passed - no items selected`);
           }
         }
       }, 200);
@@ -6354,7 +6354,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     console.log(`[BlueprintTab] 🧹 ULTRA-aggressive clear all selections completed - Figma style with emergency fallback`);
     
-    // 🔥 FIGMA STYLE: Immediate verification
+    // Immediate verification
     if (reactFlowInstance) {
       const immediateCheck = {
         nodesSelected: reactFlowInstance.getNodes().filter(n => n.selected).length,
@@ -6365,11 +6365,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       if (immediateCheck.nodesSelected > 0 || immediateCheck.edgesSelected > 0) {
         console.warn(`[BlueprintTab] ⚠️ CLEAR FAILED: Still have ${immediateCheck.nodesSelected + immediateCheck.edgesSelected} selected items`);
       } else {
-        console.log(`[BlueprintTab] ✅ CLEAR SUCCESS: No items selected`);
+        console.log(`[BlueprintTab] CLEAR SUCCESS: No items selected`);
       }
     }
     
-    // 🔥 FIGMA STYLE: Final state verification
+    // Final state verification
     setTimeout(() => {
       console.log(`[BlueprintTab] 📊 Final clear verification:`, {
         selectionState: selection,
@@ -6379,7 +6379,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           reactFlowInstance.getEdges().filter(e => e.selected).length : 'N/A'
       });
       
-      console.log(`[BlueprintTab] ✅ Clear all selections completed - should NOT cause refresh protection warning`);
+      console.log(`[BlueprintTab] Clear all selections completed - should NOT cause refresh protection warning`);
     }, 300);
   }, [reactFlowInstance, selection]);
 
@@ -6390,7 +6390,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       pendingSelection: [],
       showSelectionBar: false,
       multiSelectMode: false,
-      isReactFlowInstantMode: false // 🎯 รีเซ็ต ReactFlow instant mode เมื่อ cancel
+      isReactFlowInstantMode: false // รีเซ็ต ReactFlow instant mode เมื่อ cancel
     }));
     
     // ล้าง visual selection
@@ -6617,13 +6617,13 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
         case 'Escape':
           event.preventDefault();
-          event.stopPropagation(); // 🔥 FIGMA STYLE: ป้องกัน event bubbling
-          event.stopImmediatePropagation(); // 🔥 FIGMA STYLE: หยุด event ทันที
+          event.stopPropagation(); // ป้องกัน event bubbling
+          event.stopImmediatePropagation(); // หยุด event ทันที
           
-          // 🔥 FIGMA STYLE: Clear all selections with ESC key - SINGLE PRESS CLEAR ALL
+          // Clear all selections with ESC key - SINGLE PRESS CLEAR ALL
           console.log(`[BlueprintTab] ⌨️ ESC pressed - ULTRA-aggressive clearing ALL selections in single press (Figma-style)`);
           
-          // 🚨 PRIORITY: Force clear visual selection IMMEDIATELY
+          // PRIORITY: Force clear visual selection IMMEDIATELY
           if (reactFlowInstance) {
             try {
               const allNodes = reactFlowInstance.getNodes();
@@ -6632,9 +6632,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               reactFlowInstance.setNodes(allNodes.map(n => ({ ...n, selected: false })));
               reactFlowInstance.setEdges(allEdges.map(e => ({ ...e, selected: false })));
               
-              console.log(`[BlueprintTab] 🔄 ESC: Immediate ReactFlow visual clear executed`);
+              console.log(`[BlueprintTab] ESC: Immediate ReactFlow visual clear executed`);
             } catch (error) {
-              console.error(`[BlueprintTab] ❌ ESC: Immediate visual clear failed:`, error);
+              console.error(`[BlueprintTab] ESC: Immediate visual clear failed:`, error);
             }
           }
           
@@ -6643,7 +6643,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
           
           // Force cancel any pending multi-select mode immediately
           if (selection.multiSelectMode || selection.pendingSelection.length > 0) {
-            console.log(`[BlueprintTab] 🔄 ESC: Also force-canceling any multi-select mode`);
+            console.log(`[BlueprintTab] ESC: Also force-canceling any multi-select mode`);
             setSelection(prev => ({
               ...prev,
               multiSelectMode: false,
@@ -6670,7 +6670,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     selection, nodes, edges, createNodeCommand, executeCommand, deleteSelected,
     toggleMultiSelectMode, cancelMultiSelection, confirmMultiSelection, clearAllSelections,
     selectAllNodes, createEdgeCommand, currentBlueprintSettings.showNodeLabels, currentBlueprintSettings.showSceneThumbnails,
-    reactFlowInstance // 🔥 FIGMA STYLE: เพิ่ม reactFlowInstance สำหรับ ESC handler
+    reactFlowInstance // เพิ่ม reactFlowInstance สำหรับ ESC handler
   ]);
 
   // Handle drag from sidebar to canvas
@@ -6742,7 +6742,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   };
   const getDefaultNodeColor = (nodeType: StoryMapNodeType): string => {
     const colors: Partial<Record<StoryMapNodeType, string>> = {
-      [StoryMapNodeType.START_NODE]: '#22c55e', // 🎯 เขียวสดใส - จุดเริ่มต้น (แยกจาก SCENE_NODE)
+      [StoryMapNodeType.START_NODE]: '#22c55e', // เขียวสดใส - จุดเริ่มต้น (แยกจาก SCENE_NODE)
       [StoryMapNodeType.SCENE_NODE]: '#3b82f6',
       [StoryMapNodeType.CHOICE_NODE]: '#f59e0b',
       [StoryMapNodeType.ENDING_NODE]: '#ef4444',
@@ -6775,7 +6775,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         return { eventType: '', parameters: {} };
       case StoryMapNodeType.COMMENT_NODE:
         return { note: '', color: '#fbbf24' };
-      // ❌ REMOVED: Episode node data - Episodes ไม่ควรเป็น nodes บน canvas
+      // REMOVED: Episode node data - Episodes ไม่ควรเป็น nodes บน canvas
       // case StoryMapNodeType.EPISODE_NODE:
       //   return { episodeId: null, title: '', status: 'draft' };
       default:
@@ -6875,10 +6875,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
     }
 
-    // ❌ REMOVED: Episode node creation check - EPISODE_NODE no longer exists in enum
+    // REMOVED: Episode node creation check - EPISODE_NODE no longer exists in enum
     // Episodes are database-only entities managed through Episode Management Modal
     
-    // 🔥 PROFESSIONAL: Create node with unique ID generation and enhanced visuals
+    // PROFESSIONAL: Create node with unique ID generation and enhanced visuals
     const uniqueNodeId = generateUniqueNodeId(nodeType);
     const enhancedVisuals = getEnhancedNodeVisuals(nodeType);
     
@@ -7083,7 +7083,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     }
     
     // Log for debugging
-    console.log('✅ Edge created successfully:', {
+    console.log('Edge created successfully:', {
       id: edgeId,
       source: params.source,
       target: params.target,
@@ -7096,18 +7096,18 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
 
 
 
-  // 🔥 FIGMA/CANVA STYLE: Enhanced Selection handler with multiple selection support
+  // Enhanced Selection handler with multiple selection support
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
     const selectedNodeIds = selectedNodes.map(n => n.id);
     const selectedEdgeIds = selectedEdges.map(e => e.id);
     
-    // 🚨 PREVENT INFINITE LOOPS: Check if selection actually changed
+    // PREVENT INFINITE LOOPS: Check if selection actually changed
     const hasSelectionChanged = 
       JSON.stringify(selectedNodeIds.sort()) !== JSON.stringify(previousSelectionRef.current.nodes.sort()) ||
       JSON.stringify(selectedEdgeIds.sort()) !== JSON.stringify(previousSelectionRef.current.edges.sort());
     
     if (!hasSelectionChanged) {
-      console.log(`[BlueprintTab] 🔄 Selection unchanged, skipping onSelectionChange`);
+      console.log(`[BlueprintTab] Selection unchanged, skipping onSelectionChange`);
       return;
     }
     
@@ -7122,20 +7122,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       showSelectionBar: selection.showSelectionBar
     });
     
-    // 🚨 CRITICAL: Don't override multi-select mode when in manual multi-select mode with pending selection
+    // CRITICAL: Don't override multi-select mode when in manual multi-select mode with pending selection
     if (selection.multiSelectMode && !selection.isReactFlowInstantMode && selection.pendingSelection.length > 0) {
       console.log(`[BlueprintTab] 🔒 Preventing onSelectionChange override - in manual multi-select mode`);
       return; // Don't process ReactFlow's selection changes during manual multi-select
     }
     
-      // 🔥 ADOBE/FIGMA STYLE: Selection เป็น UI state เท่านั้น - ไม่ส่งไป EventManager
+      // ADOBE/Selection เป็น UI state เท่านั้น - ไม่ส่งไป EventManager
   const isMultiSelection = selectedNodeIds.length > 1 || selectedEdgeIds.length > 1 || 
                          (selectedNodeIds.length > 0 && selectedEdgeIds.length > 0);
   
-  // 🚫 CRITICAL FIX: Selection commands ไม่ควรส่งไป EventManager เพื่อป้องกัน dirty state
-  // ✅ เก็บเฉพาะ UI state - ไม่มีผลต่อ save button หรือ refresh protection
+  // Selection commands ไม่ควรส่งไป EventManager เพื่อป้องกัน dirty state
+  // เก็บเฉพาะ UI state - ไม่มีผลต่อ save button หรือ refresh protection
   
-  // ✅ Update selection state - pure UI state management (ไม่ trigger dirty change)
+  // Update selection state - pure UI state management (ไม่ trigger dirty change)
   setSelection(prev => ({
     ...prev,
     selectedNodes: selectedNodeIds,
@@ -7143,7 +7143,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     multiSelectMode: isMultiSelection,
     pendingSelection: [], // ล้าง pending เพราะเป็นการเลือกแบบ instant
     showSelectionBar: false, // ไม่แสดง confirmation bar สำหรับ ReactFlow selection
-    isReactFlowInstantMode: isMultiSelection // 🎯 ระบุโหมด ReactFlow instant เมื่อมี multi-selection
+    isReactFlowInstantMode: isMultiSelection // ระบุโหมด ReactFlow instant เมื่อมี multi-selection
   }));
       
     // Set single selection states only if single selection
@@ -7167,16 +7167,16 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       setSelectedEdge(null);
     }
     
-    // 🎯 ไม่สร้าง command เพื่อป้องกัน dirty state
+    // ไม่สร้าง command เพื่อป้องกัน dirty state
     console.log(`[BlueprintTab] 👆 Selection updated (UI only): ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
     
-    // ✅ Log multiple selection for debugging
+    // Log multiple selection for debugging
     if (isMultiSelection) {
-      console.log(`[BlueprintTab] 🎯 Multiple selection detected: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
+      console.log(`[BlueprintTab] Multiple selection detected: ${selectedNodeIds.length} nodes, ${selectedEdgeIds.length} edges`);
     }
   }, [selection.multiSelectMode, selection.pendingSelection.length, selection.showSelectionBar, selection.isReactFlowInstantMode]);
 
-  // 🔥 FIGMA STYLE: High-priority ESC key handler เพื่อป้องกัน ReactFlow interference
+  // High-priority ESC key handler เพื่อป้องกัน ReactFlow interference
   useEffect(() => {
     const handleEscapeKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -7184,7 +7184,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         event.stopPropagation();
         event.stopImmediatePropagation();
         
-        console.log(`[BlueprintTab] 🚨 HIGH-PRIORITY ESC handler - clearing all selections`);
+        console.log(`[BlueprintTab] HIGH-PRIORITY ESC handler - clearing all selections`);
         
         // Force immediate visual clear
         if (reactFlowInstance) {
@@ -7196,7 +7196,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               reactFlowInstance.getEdges().map(e => ({ ...e, selected: false }))
             );
           } catch (error) {
-            console.error(`[BlueprintTab] ❌ High-priority visual clear failed:`, error);
+            console.error(`[BlueprintTab] High-priority visual clear failed:`, error);
           }
         }
         
@@ -7229,7 +7229,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [handleKeyboardShortcuts]);
 
-  // 🔥 FIX 2: getReactFlowNodeType ถูกย้ายไปไว้ด้านบนของไฟล์ (นอก component)
+  // getReactFlowNodeType ถูกย้ายไปไว้ด้านบนของไฟล์ (นอก component)
   // เพื่อป้องกัน hoisting issues และให้สามารถใช้ใน useCallback ได้
 
   // Custom node and edge types - สร้าง wrapper เพื่อส่ง nodeOrientation พร้อม real-time updates
@@ -7316,12 +7316,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
   }, [onConnect, edges, createEdgeCommand, executeCommand, removeSceneConnection]);
 
-  // 🔥 FIGMA/CANVA STYLE: Bidirectional sync setup useEffect
+  // Bidirectional sync setup useEffect
   useEffect(() => {
     if (professionalEventManager && setNodes && setEdges) {
       // Register bidirectional sync
       professionalEventManager.setReactFlowUpdater((nodes: any[], edges: any[]) => {
-        console.log('[BlueprintTab] 🔄 Force updating UI from EventManager:', {
+        console.log('[BlueprintTab] Force updating UI from EventManager:', {
           nodeCount: nodes.length,
           edgeCount: edges.length
         });
@@ -7331,7 +7331,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setEdges([...edges]);
       });
       
-      console.log('[BlueprintTab] ✅ Figma/Canva style bidirectional sync registered');
+      console.log('[BlueprintTab] bidirectional sync registered');
     }
     
     return () => {
@@ -7344,8 +7344,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   
   // Handle canvas click - clear selections when clicking on empty space (Figma-style)
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
-    // 🔥 FIGMA STYLE: Clear all selections when clicking on empty canvas
-    console.log(`[BlueprintTab] 🎯 Canvas clicked - clearing all selections (Figma-style)`);
+    // Clear all selections when clicking on empty canvas
+    console.log(`[BlueprintTab] Canvas clicked - clearing all selections (Figma-style)`);
     clearAllSelections();
   }, [clearAllSelections]);
 
@@ -7389,7 +7389,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       };
     }
   }), [handleManualSave, nodes, edges, storyMap, professionalEventManager]);
-  // 🔥 FIX 3: เพิ่ม disabled state เมื่อไม่มี episode ถูกเลือก
+  // เพิ่ม disabled state เมื่อไม่มี episode ถูกเลือก
   const isCanvasDisabled = episodes.length > 0 && !currentEpisodeId;
   return (
       <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
@@ -7403,8 +7403,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               transition={{ duration: 0.12, ease: "easeOut" }}
               className="hidden md:block border-r bg-card/50 blueprint-sidebar relative"
             >
-              {/* 🔥 Sidebar Overlay Blocker - ป้องกันการลาก Node เมื่อไม่มี episode */}
-              {/* ✅ NEW STANDARD: Only show when tutorial is active */}
+              {/* Sidebar Overlay Blocker - ป้องกันการลาก Node เมื่อไม่มี episode */}
+              {/* Only show when tutorial is active */}
               {showTutorial && episodes.length > 0 && !currentEpisodeId && (
                 <div className="absolute inset-0 bg-background/40 z-[60] pointer-events-auto" />
               )}
@@ -7492,12 +7492,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         {/* Canvas Area */}
         <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlowProvider>
-            {/* 🔥 Canvas Overlay Blocker - ป้องกันการแก้ไข canvas เมื่อไม่มี episode (z-50 - ต่ำกว่า floating toolbar) */}
+            {/* Canvas Overlay Blocker - ป้องกันการแก้ไข canvas เมื่อไม่มี episode (z-50 - ต่ำกว่า floating toolbar) */}
             {isCanvasDisabled && (
               <div className="absolute inset-0 z-[50] bg-background/40 pointer-events-auto" />
             )}
             
-            {/* 🔥 FIX 2c: Episode Context Indicator - แสดงตอนที่กำลังแก้ไข */}
+            {/* Episode Context Indicator - แสดงตอนที่กำลังแก้ไข */}
             {currentEpisodeId && selectedEpisodeFromBlueprint && (
               <div className="absolute top-4 left-4 z-40 bg-primary/90 backdrop-blur-sm text-primary-foreground px-4 py-2 rounded-lg shadow-lg border border-primary/20">
                 <div className="flex items-center gap-2">
@@ -7513,7 +7513,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               </div>
             )}
             
-            {/* 🔥 ENHANCEMENT 2: Debug Panel (Dev Only) */}
+            {/* ENHANCEMENT 2: Debug Panel (Dev Only) */}
             {process.env.NODE_ENV === 'development' && currentEpisodeId && (
               <div className="absolute bottom-4 left-4 z-40 bg-black/80 text-white text-xs p-3 rounded font-mono max-w-sm">
                 <div className="mb-1 text-green-400 font-bold">🐛 DEBUG MODE</div>
@@ -7521,7 +7521,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 <div>Nodes: {nodes.length} (tagged: {nodes.filter(n => n.data?.episodeId === currentEpisodeId).length})</div>
                 <div>Edges: {edges.length} (tagged: {edges.filter(e => e.data?.episodeId === currentEpisodeId).length})</div>
                 <div className="mt-1 text-yellow-400">
-                  {nodes.length === nodes.filter(n => n.data?.episodeId === currentEpisodeId).length ? '✅ All nodes properly tagged' : '⚠️ Some nodes not tagged!'}
+                  {nodes.length === nodes.filter(n => n.data?.episodeId === currentEpisodeId).length ? 'All nodes properly tagged' : '⚠️ Some nodes not tagged!'}
                 </div>
               </div>
             )}
@@ -7530,7 +7530,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               "h-full w-full",
               isCanvasDisabled && "pointer-events-none opacity-50"
             )}>
-              {/* 🎯 REMOVED LOADING INDICATOR - Professional smooth transitions */}
+              {/* REMOVED LOADING INDICATOR - Professional smooth transitions */}
               
               <ReactFlow
                 nodes={nodes}
@@ -7542,12 +7542,12 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 onNodesChange={enhancedOnNodesChange}
                 onEdgesChange={enhancedOnEdgesChange}
                 onConnect={(connection: Connection) => {
-                  // 🔗 FIGMA/CANVA STYLE: Delegate to main onConnect function
+                  // 🔗 Delegate to main onConnect function
                   try {
                     console.log(`[BlueprintTab] 🔗 Creating new connection: ${connection.source} → ${connection.target}`);
                     onConnect(connection);
                   } catch (error) {
-                    console.error('[BlueprintTab] ❌ Failed to create edge:', error);
+                    console.error('[BlueprintTab] Failed to create edge:', error);
                     toast.error('ไม่สามารถสร้างการเชื่อมต่อได้');
                   }
                 }}
@@ -7559,7 +7559,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     currentPendingSelection: selection.pendingSelection
                   });
                   
-                  // 🔥 CANVA STYLE: Handle manual multi-select mode ONLY (ไม่ใช่ ReactFlow instant mode)
+                  // CANVA STYLE: Handle manual multi-select mode ONLY (ไม่ใช่ ReactFlow instant mode)
                   if (selection.multiSelectMode && !selection.isReactFlowInstantMode) {
                     // Toggle node in pending selection
                     const isPending = selection.pendingSelection.includes(node.id);
@@ -7567,7 +7567,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       ? selection.pendingSelection.filter(id => id !== node.id)
                       : [...selection.pendingSelection, node.id];
                     
-                    console.log(`[BlueprintTab] 🎯 Multi-select toggling node ${node.id}:`, {
+                    console.log(`[BlueprintTab] Multi-select toggling node ${node.id}:`, {
                       isPending,
                       oldPending: selection.pendingSelection,
                       newPending,
@@ -7575,17 +7575,17 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       shouldShowBar: newPending.length > 0
                     });
                     
-                    // ✅ CRITICAL FIX: Update selection state in single transaction
+                    // Update selection state in single transaction
                     setSelection(prev => {
                       const updatedState = {
                         ...prev,
                         pendingSelection: newPending,
                         showSelectionBar: newPending.length > 0,
-                        // ✅ CRITICAL: Keep multi-select mode explicitly active
+                        // Keep multi-select mode explicitly active
                         multiSelectMode: true
                       };
                       
-                      console.log(`[BlueprintTab] 🔄 Updating selection state:`, {
+                      console.log(`[BlueprintTab] Updating selection state:`, {
                         oldState: { 
                           pendingSelection: prev.pendingSelection,
                           showSelectionBar: prev.showSelectionBar,
@@ -7601,7 +7601,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       return updatedState;
                     });
                     
-                    // ✅ CANVA STYLE: Visual feedback for pending selection
+                    // CANVA STYLE: Visual feedback for pending selection
                     setNodes(prevNodes => 
                       prevNodes.map(n => ({
                         ...n,
@@ -7610,7 +7610,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                     );
                     
                     const actionText = isPending ? 'Removed from' : 'Added to';
-                    console.log(`[BlueprintTab] ✅ ${actionText} selection - Total: ${newPending.length} items, Show bar: ${newPending.length > 0}`);
+                    console.log(`[BlueprintTab] ${actionText} selection - Total: ${newPending.length} items, Show bar: ${newPending.length > 0}`);
                     toast.info(`${actionText} selection (${newPending.length} items)`);
                     } else {
                     // Normal single selection mode
@@ -7627,7 +7627,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                       pendingSelection: [],
                       showSelectionBar: false,
                       multiSelectMode: false,
-                      isReactFlowInstantMode: false // 🎯 รีเซ็ต ReactFlow instant mode เมื่อเลือก single node
+                      isReactFlowInstantMode: false // รีเซ็ต ReactFlow instant mode เมื่อเลือก single node
                     }));
                   }
                 }}
@@ -7668,7 +7668,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 multiSelectionKeyCode={selection.multiSelectMode ? null : ["Meta", "Control", "Shift"]}
                 // ปิดการลบผ่านระบบของ React Flow เพื่อให้ Command Pattern จัดการเอง (พร้อม Trash History)
                 deleteKeyCode={[]}
-                // 🔥 FIGMA STYLE: ปิด ReactFlow keyboard handlers เพื่อให้ custom handlers จัดการเอง
+                // ปิด ReactFlow keyboard handlers เพื่อให้ custom handlers จัดการเอง
                 disableKeyboardA11y={true}
                 panOnDrag={!canvasState.isLocked && !selection.isSelectionMode}
                 zoomOnScroll={!canvasState.isLocked}
@@ -7988,7 +7988,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                           size="sm"
                           onClick={() => {
                             console.log(`[BlueprintTab] 🧹 Clear button clicked - using clearAllSelections() for Figma-like behavior`);
-                            clearAllSelections(); // 🎯 ใช้ clearAllSelections() เหมือน ESC key และ Canvas click
+                            clearAllSelections(); // ใช้ clearAllSelections() เหมือน ESC key และ Canvas click
                           }}
                         >
                           <X className="w-3 h-3 mr-1" />
@@ -8263,7 +8263,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </TabsList>
                 <TabsContent value="episodes" className="overflow-y-auto flex-1 h-full">
                   <div className="pr-2 p-4">
-                    {/* 🎯 PROFESSIONAL: Episodes are now managed via modal */}
+                    {/* PROFESSIONAL: Episodes are now managed via modal */}
                     <div className="text-center space-y-4">
                       <BookOpen className="w-12 h-12 mx-auto text-gray-400" />
                       <p className="text-sm text-gray-600">จัดการตอนผ่านปุ่มด้านบน</p>
@@ -8619,7 +8619,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         </DialogContent>
       </Dialog>
 
-      {/* ✨ Professional Episode Creator Dialog */}
+      {/* Professional Episode Creator Dialog */}
       <Dialog open={isEpisodeCreatorOpen} onOpenChange={setIsEpisodeCreatorOpen}>
         <DialogContent className="sm:max-w-[500px] bg-background/95 backdrop-blur-sm">
           <DialogHeader>
@@ -8808,7 +8808,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         </DialogContent>
       </Dialog>
 
-      {/* 🆕 PHASE 2: Professional Modal System */}
+      {/* Professional Modal System */}
       <EpisodeDeleteModal
         isOpen={modalState.type === 'episode_delete' && modalState.isOpen}
         episodes={modalState.context?.selectedEpisodes || []}
@@ -8831,8 +8831,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }}
       />
 
-              {/* 🔥 SELECT EPISODE TUTORIAL - Overlay ป้องกันการแก้ไขแต่ไม่บัง floating toolbar */}
-              {/* ✅ NEW STANDARD: Only show when episodes exist but none selected and no episode in URL */}
+              {/* SELECT EPISODE TUTORIAL - Overlay ป้องกันการแก้ไขแต่ไม่บัง floating toolbar */}
+              {/* NEW STANDARD: Only show when episodes exist but none selected and no episode in URL */}
               {showTutorial && episodes.length > 0 && !currentEpisodeId && (
                 // This container just centers the modal. No background/blur. It sits above everything.
                 <div className="absolute inset-0 flex items-center justify-center z-[70] pointer-events-none">
@@ -8866,7 +8866,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         <Button 
                           onClick={() => {
                             setShowTutorial(false);
-                            // 🔥 FIX 3b: Multiple selector fallbacks for better reliability
+                            // Multiple selector fallbacks for better reliability
                             setTimeout(() => {
                               const selectors = [
                                 '[data-episode-selector]',
@@ -8885,7 +8885,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                                   (element as HTMLElement).focus();
                                   // Trigger click to open dropdown
                                   (element as HTMLElement).click();
-                                  console.log('✅ Focused episode selector:', selector);
+                                  console.log('Focused episode selector:', selector);
                                   break;
                                 }
                               }
@@ -8916,7 +8916,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                 </div>
               )}
 
-              {/* 🔥 FIX 6: Loading Overlay */}
+              {/* Loading Overlay */}
               {isLoadingStoryMap && (
                 <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-50 backdrop-blur-sm pointer-events-none">
                   <div className="text-center pointer-events-none">
@@ -8930,7 +8930,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   );
 });
 BlueprintTab.displayName = 'BlueprintTab'; 
-// 🎯 REMOVED OLD TUTORIAL OVERLAY - Now using canvas overlay instead
+// REMOVED OLD TUTORIAL OVERLAY - Now using canvas overlay instead
 /*
 const TutorialOverlay = ({ 
   step, 
@@ -8963,7 +8963,7 @@ const TutorialOverlay = ({
       position: "center"
     },
     {
-      title: "พร้อมเริ่มต้นแล้ว! ✨",
+      title: "พร้อมเริ่มต้นแล้ว!",
       content: "ตอนนี้คุณพร้อมที่จะสร้างสรรค์ Visual Novel ที่น่าตื่นเต้นแล้ว เริ่มจากการเพิ่มตอนแรกกันเลย!",
       highlight: ".floating-toolbar",
       position: "bottom"
