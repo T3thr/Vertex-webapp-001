@@ -8847,7 +8847,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         📌 กรุณาเลือกตอนก่อนเริ่มแก้ไข
                       </h3>
                       <p className="text-sm text-muted-foreground leading-relaxed">
-                        คลิกที่ <span className="font-semibold text-primary">"Select Episode"</span> ด้านบน<br/>
+                        คลิกที่ <span className="font-semibold text-primary">&quot;Select Episode&quot;</span> ด้านบน<br/>
                         เพื่อเลือกตอนที่ต้องการแก้ไข
                       </p>
                     </div>
