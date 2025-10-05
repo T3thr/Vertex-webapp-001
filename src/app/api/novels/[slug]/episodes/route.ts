@@ -193,59 +193,67 @@ export async function POST(
 
     const savedEpisode = await newEpisode.save();
 
-    // 🎯 อัปเดต StoryMap ถ้ามี storyMapData
-    if (storyMapData && storyMapData.nodeId) {
-      try {
-        const storyMap = await StoryMapModel.findOne({
-          novelId: novel._id,
-          isActive: true
-        });
-
-        if (storyMap) {
-          // ค้นหา node ใน StoryMap และอัปเดตข้อมูล
-          const nodeIndex = storyMap.nodes.findIndex(
-            node => node.nodeId === storyMapData.nodeId
-          );
-
-          if (nodeIndex !== -1) {
-            // อัปเดต node ที่มีอยู่
-            storyMap.nodes[nodeIndex] = {
-              ...storyMap.nodes[nodeIndex],
-              nodeType: 'episode_node' as any,
-              nodeSpecificData: {
-                episodeId: savedEpisode._id,
-                episodeOrder: savedEpisode.episodeOrder,
-                episodeTitle: savedEpisode.title,
-                episodeStatus: savedEpisode.status,
-                autoGenerateScenes: false
-              }
-            };
-          } else {
-            // สร้าง node ใหม่
-            storyMap.nodes.push({
-              nodeId: storyMapData.nodeId,
-              nodeType: 'episode_node' as any,
-              title: savedEpisode.title,
-              position: storyMapData.position,
-              nodeSpecificData: {
-                episodeId: savedEpisode._id,
-                episodeOrder: savedEpisode.episodeOrder,
-                episodeTitle: savedEpisode.title,
-                episodeStatus: savedEpisode.status,
-                autoGenerateScenes: false
-              },
-              editorVisuals: storyMapData.editorVisuals || {},
-              lastEdited: new Date()
-            } as any);
+    // 🎯 PROFESSIONAL: สร้าง Episode-specific StoryMap พร้อมกับ Episode (ไม่มี Start Node)
+    // เพื่อให้แต่ละ Episode มี StoryMap ของตัวเองตาม Architecture @Episode.ts และ @StoryMap.ts
+    // ✅ NEW STANDARD: ไม่สร้าง Start Node ทันที - ให้ผู้ใช้สร้างเองตามต้องการ
+    try {
+      console.log(`[POST Episode] 🎯 Creating empty Episode-specific StoryMap for episode: ${savedEpisode.title}`);
+      
+      const episodeStoryMap = new StoryMapModel({
+        novelId: novel._id,
+        episodeId: savedEpisode._id, // 🔥 CRITICAL: เชื่อมโยงกับ Episode
+        title: `${savedEpisode.title} - โครงเรื่อง`,
+        version: 1,
+        description: `แผนผังเรื่องราวสำหรับ ${savedEpisode.title}`,
+        nodes: [], // ✅ NEW STANDARD: เริ่มต้นด้วย canvas ว่างเปล่า
+        edges: [],
+        storyVariables: [],
+        startNodeId: null, // ✅ NEW STANDARD: จะถูกกำหนดเมื่อผู้ใช้สร้าง start node
+        lastModifiedByUserId: userId,
+        isActive: true,
+        editorMetadata: {
+          zoomLevel: 1,
+          viewOffsetX: 0,
+          viewOffsetY: 0,
+          gridSize: 20,
+          showGrid: true,
+          showSceneThumbnails: false,
+          showNodeLabels: true,
+          uiPreferences: {
+            nodeDefaultColor: '#3b82f6',
+            edgeDefaultColor: '#64748b',
+            connectionLineStyle: 'solid',
+            showConnectionLines: true,
+            autoSaveEnabled: false,
+            autoSaveIntervalSec: 30,
+            snapToGrid: false,
+            enableAnimations: true,
+            nodeDefaultOrientation: 'vertical',
+            edgeDefaultPathType: 'smooth',
+            showMinimap: false,
+            enableNodeThumbnails: false
           }
-
-          storyMap.lastModifiedByUserId = userId;
-          await storyMap.save();
         }
-      } catch (storyMapError) {
-        console.error('[POST Episode] StoryMap update error:', storyMapError);
-        // ไม่ throw error เพื่อไม่ให้กระทบการสร้าง Episode
-      }
+      });
+
+      const savedStoryMap = await episodeStoryMap.save();
+      
+      // เชื่อมโยง StoryMap กับ Episode
+      savedEpisode.storyMapId = savedStoryMap._id;
+      await savedEpisode.save();
+      
+      console.log(`[POST Episode] ✅ Empty Episode-specific StoryMap created successfully:`, {
+        episodeId: savedEpisode._id.toString(),
+        storyMapId: savedStoryMap._id.toString(),
+        episodeTitle: savedEpisode.title,
+        noStartNode: true
+      });
+      
+    } catch (storyMapError: any) {
+      console.error('[POST Episode] 🚨 Episode StoryMap creation error:', storyMapError);
+      // ⚠️ Warning: Episode สร้างสำเร็จแล้ว แต่ StoryMap สร้างไม่สำเร็จ
+      // ไม่ throw error เพื่อไม่ rollback การสร้าง Episode
+      // User สามารถสร้าง nodes ได้ภายหลัง และ save endpoint จะสร้าง StoryMap อัตโนมัติ
     }
 
     // Return created episode

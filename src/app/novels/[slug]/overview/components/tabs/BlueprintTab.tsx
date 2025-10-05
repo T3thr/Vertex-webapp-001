@@ -48,7 +48,7 @@ import {
 } from '@xyflow/react';
 import { toast } from 'sonner';
 import NextImage from 'next/image';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 // Blueprint Node Components
 import { 
@@ -114,6 +114,8 @@ import {
   ZoomOut, 
   Maximize2,
   Play,
+  PlayCircle,
+  Film,
   Square,
   Circle,
   GitBranch,
@@ -165,8 +167,8 @@ import {
   Target,
   Palette,
   ArrowRight,
+  ArrowUp,
   RotateCcw,
-  Film,
   Clapperboard,
   MonitorPlay,
   Scissors,
@@ -1347,19 +1349,56 @@ const NodePalette = ({
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }) => {
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['basic']);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['entryPoints', 'basic']);
 
-  // 🎯 SIMPLIFIED: เหลือเฉพาะโหนดพื้นฐานที่เว็บรองรับในปัจจุบัน
+  // 🎯 PROFESSIONAL: Enhanced node categories with clear visual distinction
   const nodeCategories = {
+    entryPoints: {
+      name: '🎯 จุดเริ่มต้น (Entry Points)',
+      icon: Play,
+      color: 'from-emerald-500 to-emerald-600',
+      description: 'จุดเริ่มต้นของแต่ละ Episode',
+      nodes: [
+        { 
+          type: StoryMapNodeType.START_NODE, 
+          name: '▶️ START NODE', 
+          desc: 'จุดเริ่มต้น Episode (วงกลมสีเขียว)', 
+          icon: PlayCircle,
+          color: 'bg-gradient-to-br from-emerald-400 to-emerald-600',
+          badge: 'Entry'
+        }
+      ]
+    },
     basic: {
       name: '📖 องค์ประกอบเรื่องราว',
       icon: BookOpen,
       color: 'from-blue-500 to-blue-600',
+      description: 'โหนดพื้นฐานสำหรับสร้างเนื้อเรื่อง',
       nodes: [
-        { type: StoryMapNodeType.START_NODE, name: '🎯 จุดเริ่มต้น', desc: 'เริ่มต้นเรื่อง (สีเขียว)', icon: Target },
-        { type: StoryMapNodeType.SCENE_NODE, name: '🎬 ฉาก', desc: 'ฉากในเรื่อง', icon: Square },
-        { type: StoryMapNodeType.CHOICE_NODE, name: '🎮 ตัวเลือก', desc: 'ให้ผู้เล่นเลือก', icon: GitBranch },
-        { type: StoryMapNodeType.ENDING_NODE, name: '🏁 จบเรื่อง', desc: 'จุดจบของเรื่อง', icon: Flag }
+        { 
+          type: StoryMapNodeType.SCENE_NODE, 
+          name: '🎬 SCENE NODE', 
+          desc: 'ฉากในเรื่อง (สี่เหลี่ยมสีน้ำเงิน)', 
+          icon: Film,
+          color: 'bg-gradient-to-br from-blue-400 to-blue-600',
+          badge: 'Content'
+        },
+        { 
+          type: StoryMapNodeType.CHOICE_NODE, 
+          name: '🎮 CHOICE NODE', 
+          desc: 'ให้ผู้เล่นเลือกทาง', 
+          icon: GitBranch,
+          color: 'bg-gradient-to-br from-amber-400 to-amber-600',
+          badge: 'Interactive'
+        },
+        { 
+          type: StoryMapNodeType.ENDING_NODE, 
+          name: '🏁 ENDING NODE', 
+          desc: 'จุดจบของเรื่อง (วงกลมสีแดง)', 
+          icon: Flag,
+          color: 'bg-gradient-to-br from-red-400 to-red-600',
+          badge: 'End'
+        }
       ]
     }
     // 🔒 HIDDEN: ซ่อนโหนดขั้นสูงไว้ก่อน จนกว่าจะพัฒนาเสร็จ
@@ -1442,40 +1481,81 @@ const NodePalette = ({
                   exit={{ height: 0, opacity: 0 }}
                   className="grid grid-cols-1 gap-2 pl-2"
                 >
-                  {category.nodes.map(node => (
-                    <motion.div
-                      key={node.type}
-                      whileHover={{ scale: 1.02, x: 4 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onAddNode(node.type)}
-                        className="w-full justify-start text-xs p-3 h-auto hover:bg-gradient-to-r hover:from-blue-500 hover:to-blue-600 hover:text-white transition-all group cursor-grab active:cursor-grabbing"
-                        draggable={true}
-                        onDragStart={(e) => {
-                          // เก็บข้อมูล node type ใน dataTransfer
-                          e.dataTransfer.setData('application/node-type', node.type);
-                          e.dataTransfer.effectAllowed = 'copy';
-                          onDragStart?.(node.type, e);
-                          // ป้องกันไม่ให้ onClick trigger
-                          e.stopPropagation();
-                        }}
+                  {category.nodes.map(node => {
+                    // 🎨 PROFESSIONAL: Enhanced visual distinction for START_NODE
+                    const isStartNode = node.type === StoryMapNodeType.START_NODE;
+                    const isEndingNode = node.type === StoryMapNodeType.ENDING_NODE;
+                    
+                    return (
+                      <motion.div
+                        key={node.type}
+                        whileHover={{ scale: 1.02, x: 4 }}
+                        whileTap={{ scale: 0.98 }}
                       >
-                        <div className="flex items-center gap-3 w-full">
-                          <node.icon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          <div className="text-left flex-1">
-                            <div className="font-medium">
-                              {node.name}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onAddNode(node.type)}
+                          className={`w-full justify-start text-xs p-4 h-auto transition-all group cursor-grab active:cursor-grabbing relative overflow-hidden ${
+                            isStartNode 
+                              ? 'border-2 border-emerald-400 dark:border-emerald-600 bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-950/30 dark:to-emerald-900/30 hover:from-emerald-100 hover:to-emerald-200 dark:hover:from-emerald-900/40 dark:hover:to-emerald-800/40' 
+                              : isEndingNode
+                              ? 'border-2 border-red-400 dark:border-red-600 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/30 hover:from-red-100 hover:to-red-200 dark:hover:from-red-900/40 dark:hover:to-red-800/40'
+                              : 'border border-border hover:bg-gradient-to-r hover:from-blue-500/10 hover:to-blue-600/10'
+                          }`}
+                          draggable={true}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('application/node-type', node.type);
+                            e.dataTransfer.effectAllowed = 'copy';
+                            onDragStart?.(node.type, e);
+                            e.stopPropagation();
+                          }}
+                        >
+                          {/* Badge for special nodes */}
+                          {(isStartNode || isEndingNode) && (
+                            <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              isStartNode 
+                                ? 'bg-emerald-500 text-white' 
+                                : 'bg-red-500 text-white'
+                            }`}>
+                              {node.badge}
                             </div>
-                            <div className="text-muted-foreground text-xs">{node.desc}</div>
+                          )}
+                          
+                          <div className="flex items-center gap-3 w-full">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              isStartNode 
+                                ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/50' 
+                                : isEndingNode
+                                ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-lg shadow-red-500/50'
+                                : 'bg-gradient-to-br from-blue-400 to-blue-600'
+                            }`}>
+                              <node.icon className={`w-5 h-5 text-white group-hover:scale-110 transition-transform ${
+                                isStartNode ? 'animate-pulse' : ''
+                              }`} />
+                            </div>
+                            <div className="text-left flex-1">
+                              <div className={`font-bold text-sm ${
+                                isStartNode 
+                                  ? 'text-emerald-700 dark:text-emerald-400' 
+                                  : isEndingNode
+                                  ? 'text-red-700 dark:text-red-400'
+                                  : 'text-foreground'
+                              }`}>
+                                {node.name}
+                              </div>
+                              <div className="text-muted-foreground text-[11px] leading-tight mt-0.5">
+                                {node.desc}
+                              </div>
+                            </div>
+                            <Plus className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity ${
+                              isStartNode ? 'text-emerald-600' : isEndingNode ? 'text-red-600' : 'text-blue-600'
+                            }`} />
                           </div>
-                          <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </Button>
-                    </motion.div>
-                  ))}
+                        </Button>
+                      </motion.div>
+                    );
+                  })}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -2061,6 +2141,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   onEpisodeDelete,
   onEpisodeSelect // 🔥 FIX: เพิ่ม onEpisodeSelect callback
 }, ref) => {
+  // 🎯 URL handling hooks (must be at top level before any callbacks that use them)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // Core ReactFlow state
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -2372,9 +2456,21 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       
       if (response.ok) {
         const episodeStoryMap = await response.json();
+        
+        // 🔥 FIX 2a: VALIDATION - ตรวจสอบว่า StoryMap ที่ได้มาตรงกับ Episode จริง
+        if (episodeStoryMap.episode?._id && episodeStoryMap.episode._id !== episodeId) {
+          console.error(`❌ StoryMap mismatch! Expected: ${episodeId}, Got: ${episodeStoryMap.episode._id}`);
+          toast.error('พบข้อผิดพลาด: โหลด StoryMap ผิดตอน');
+          setNodes([]);
+          setEdges([]);
+          setCurrentEpisodeStoryMap(null);
+          return;
+        }
+        
         setCurrentEpisodeStoryMap(episodeStoryMap);
         
         // แปลง StoryMap nodes/edges เป็น ReactFlow format
+        // 🔥 FIX 2b: เพิ่ม debug tag สำหรับ verification
         const reactFlowNodes = (episodeStoryMap.nodes || []).map((node: any) => ({
           id: node.nodeId,
           type: getReactFlowNodeType(node.nodeType),
@@ -2385,7 +2481,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             title: node.title,
             nodeSpecificData: node.nodeSpecificData,
             editorVisuals: node.editorVisuals,
-            episodeId: episodeId // 🎯 Tag node with episodeId for proper persistence
+            episodeId: episodeId, // 🎯 Tag node with episodeId for proper persistence
+            _loadedFrom: episodeId // 🔥 NEW: Debug verification tag
           }
         }));
 
@@ -2399,7 +2496,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
             label: edge.label,
             condition: edge.condition,
             editorVisuals: edge.editorVisuals,
-            episodeId: episodeId // 🎯 Tag edge with episodeId for proper persistence
+            episodeId: episodeId, // 🎯 Tag edge with episodeId for proper persistence
+            _loadedFrom: episodeId // 🔥 NEW: Debug verification tag
           },
           style: {
             stroke: edge.editorVisuals?.color || '#6B7280',
@@ -2413,7 +2511,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         console.log(`✅ โหลด StoryMap สำหรับ Episode ${episodeId} สำเร็จ:`, {
           nodes: reactFlowNodes.length,
           edges: reactFlowEdges.length,
-          episodeTitle: episodeStoryMap.episode?.title
+          episodeTitle: episodeStoryMap.episode?.title,
+          verification: `All ${reactFlowNodes.length} nodes tagged with episodeId: ${episodeId}`
         });
       } else if (response.status === 404) {
         // ถ้าไม่พบ StoryMap ให้สร้างเปล่า (ตอนใหม่ที่ยังไม่มี storymap)
@@ -2422,11 +2521,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         setEdges([]);
         setCurrentEpisodeStoryMap({ nodes: [], edges: [], storyVariables: [], version: 1 });
         
-        // 🔥 FIX: แสดง toast แจ้งผู้ใช้ว่าเป็นตอนใหม่
+        // 🔥 FIX #1: Silent loading - ไม่แสดง toast ที่ทำให้สับสนว่าเป็นการสร้างตอนใหม่
+        // ผู้ใช้จะเห็น canvas เปล่าพร้อมแก้ไขได้ทันที
         const episode = episodeList.find(ep => ep._id === episodeId);
-        if (episode) {
-          toast.info(`โหลดตอน "${episode.title}" สำเร็จ - เริ่มต้นสร้างเนื้อเรื่องได้เลย`);
-        }
+        console.log(`📝 Episode "${episode?.title || episodeId}" loaded - ready for editing (no existing StoryMap)`);
       } else {
         console.error(`❌ Failed to load StoryMap: ${response.status} ${response.statusText}`);
         toast.error('ไม่สามารถโหลด StoryMap ได้');
@@ -2448,32 +2546,53 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // 🔥 FIX 2: เอา getReactFlowNodeType ออกจาก dependencies เพราะเป็น pure function
   // ที่ไม่ได้ depend on external state และถูก declare หลัง loadStoryMapForEpisode
 
-  // 🎯 PROFESSIONAL: Realtime Episode Selection - No URL dependency
-  // 🔥 FIX 1: แก้ไข handleEpisodeSelect ไม่ให้ trigger toast ผิดพลาด
+  // 🎯 PROFESSIONAL: Realtime Episode Selection with URL persistence
+  // 🔥 FIX: Enhanced episode selection with immediate sync + URL update
   const handleEpisodeSelect = useCallback(async (episodeId: string | null) => {
     const episode = episodeId ? episodeList.find(ep => ep._id === episodeId) : null;
     
-    // 🎯 Update realtime state
-    setCurrentEpisodeId(episodeId);
-    setSelectedEpisodeFromBlueprint(episode);
+    console.log('[BlueprintTab] 🎯 Episode selection initiated:', {
+      episodeId,
+      episodeTitle: episode?.title,
+      hasEventManager: !!professionalEventManager,
+      hasCallback: !!onEpisodeSelect
+    });
     
-    // 🎯 Load StoryMap for selected Episode
-    await loadStoryMapForEpisode(episodeId);
-    
-    // 🎯 Update EventManager context for episode-specific operations
-    if (professionalEventManager && professionalEventManager.updateConfig) {
-      professionalEventManager.updateConfig({
-        selectedEpisodeId: episodeId
-      });
-    }
-
-    // ❌ REMOVED: ไม่เรียก onEpisodeCreate เมื่อแค่เลือก episode
-    // 🔥 FIX: เรียก onEpisodeSelect callback แทน (ถ้ามี)
-    if (onEpisodeSelect && episodeId) {
+    // 🎯 CRITICAL FIX: ให้ parent (NovelEditor) จัดการ state และ URL update
+    // BlueprintTab เป็นแค่ child component ไม่ควรจัดการ URL เอง
+    if (onEpisodeSelect) {
+      // ให้ parent (NovelEditor) จัดการทั้งหมด:
+      // - Update selectedEpisodeId state
+      // - Update EventManager config
+      // - Update URL
+      // - Load StoryMap
       onEpisodeSelect(episodeId);
+      
+      console.log('[BlueprintTab] ✅ Episode selection delegated to parent (NovelEditor)');
+    } else {
+      // Fallback: ถ้าไม่มี callback (ไม่ควรเกิด) ให้จัดการเอง
+      console.warn('[BlueprintTab] ⚠️ No onEpisodeSelect callback, handling locally (fallback)');
+      
+      // 🎯 Update local state
+      setCurrentEpisodeId(episodeId);
+      setSelectedEpisodeFromBlueprint(episode);
+      
+      // 🎯 Load StoryMap for selected Episode
+      await loadStoryMapForEpisode(episodeId);
+      
+      // 🎯 Update EventManager context
+      if (professionalEventManager && professionalEventManager.updateConfig) {
+        professionalEventManager.updateConfig({
+          selectedEpisodeId: episodeId
+        });
+        
+        console.log('[BlueprintTab] ✅ EventManager config updated (fallback):', {
+          selectedEpisodeId: episodeId
+        });
+      }
     }
 
-    console.log(`🎯 Episode selected (realtime): ${episode?.title || 'Main Story'}`);
+    console.log(`[BlueprintTab] ✅ Episode selected: ${episode?.title || 'Main Story'}`);
   }, [episodeList, loadStoryMapForEpisode, professionalEventManager, onEpisodeSelect]);
 
   // 🔥 FIX 6: Sync episodes prop ONLY when externally changed (not from internal updates)
@@ -2799,10 +2918,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   useEffect(() => {
     loadStoryMapForEpisodeRef.current = loadStoryMapForEpisode;
   }, [loadStoryMapForEpisode]);
-
   // 🔥 FIX 6: Track episodes prop to prevent infinite loop in sync useEffect
   const episodesRef = useRef(episodes);
-
   // ✨ Episode creation handler
   // 🎯 Professional Episode Creation Handler (Modal-based)
   // 🔥 FIX 5: แก้ไข dependencies และใช้ useRef wrapper + toast deduplication
@@ -3072,28 +3189,56 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   // Node Palette collapse state
   const [isNodePaletteCollapsed, setIsNodePaletteCollapsed] = useState(false);
   
-  // Tutorial state management
-  const searchParams = useSearchParams();
+  // Tutorial state management (router and searchParams already declared above)
+  // 🎯 PROFESSIONAL: Tutorial state - Only show SELECT EPISODE tutorial
   const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0);
   
-  // 🎯 PROFESSIONAL: Show tutorial based on episode selection state
+  // ✅ NEW: Restore episode selection from URL on initial load
   useEffect(() => {
-    // Show "Select Episode" tutorial when novel has episodes but none selected
-    if (episodes.length > 0 && !currentEpisodeId && !showTutorial) {
+    const episodeIdFromUrl = searchParams.get('episode');
+    
+    if (episodeIdFromUrl && episodeList.length > 0 && !currentEpisodeId) {
+      const episodeExists = episodeList.find(ep => ep._id === episodeIdFromUrl);
+      
+      if (episodeExists) {
+        console.log(`[BlueprintTab] 🔗 Restoring episode from URL: ${episodeIdFromUrl}`);
+        handleEpisodeSelect(episodeIdFromUrl);
+      } else {
+        console.warn(`[BlueprintTab] ⚠️ Episode from URL not found: ${episodeIdFromUrl}`);
+        // Remove invalid episode ID from URL
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete('episode');
+        router.push(`?${params.toString()}`, { scroll: false });
+      }
+    }
+  }, [searchParams, episodeList, currentEpisodeId, handleEpisodeSelect, router]);
+  
+  // 🔥 ENHANCEMENT 1: Episode Context Persistence - บันทึก episode ที่เลือกล่าสุด
+  useEffect(() => {
+    if (currentEpisodeId && novel?.slug) {
+      localStorage.setItem(`blueprint_last_episode_${novel.slug}`, currentEpisodeId);
+      console.log(`💾 Saved last episode selection: ${currentEpisodeId}`);
+    }
+  }, [currentEpisodeId, novel?.slug]);
+  
+  // 🎯 PROFESSIONAL: Show SELECT EPISODE tutorial based on state
+  // ✅ NEW STANDARD: Only show when episodes exist but none selected AND no episode in URL
+  useEffect(() => {
+    const episodeIdFromUrl = searchParams.get('episode');
+    
+    // Show "Select Episode" tutorial only when:
+    // 1. Episodes exist
+    // 2. No episode currently selected
+    // 3. No episode ID in URL (first visit to page)
+    // 4. Tutorial not dismissed
+    if (episodes.length > 0 && !currentEpisodeId && !episodeIdFromUrl && !showTutorial) {
       setShowTutorial(true);
-      setTutorialStep(1); // Different tutorial step for "select episode"
-    } 
-    // Show "Create Episode" tutorial when no episodes exist
-    else if (episodes.length === 0 && !showTutorial) {
-      setShowTutorial(true);
-      setTutorialStep(0); // Tutorial step for "create episode"
     } 
     // Hide tutorial when episode is selected
     else if (currentEpisodeId && showTutorial) {
       setShowTutorial(false);
     }
-  }, [episodes.length, currentEpisodeId, showTutorial]);
+  }, [episodes.length, currentEpisodeId, showTutorial, searchParams]);
 
   // 🎯 Listen for episode creator messages from modal
   useEffect(() => {
@@ -3593,7 +3738,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }));
     }
   }, [novel._id, autoSaveSettings.conflictResolutionStrategy, setNodes, setEdges, onStoryMapUpdate, nodes, edges, storyMap?.storyVariables]);
-
   // Manual save (PUT full document)
   const handleManualSaveClick = useCallback(async () => {
     if (saveState.isSaving) return;
@@ -3941,6 +4085,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       });
     }
   }, [storyMap, nodes, edges, initialSnapshot, createStateSnapshot, professionalEventManager, onDirtyChange, novel?.slug]);
+
+  // 🔥 CRITICAL FIX: Sync currentEpisodeId with EventManager config
+  useEffect(() => {
+    if (!professionalEventManager) return;
+
+    const configEpisodeId = professionalEventManager.getConfig().selectedEpisodeId;
+    
+    // Only update if different (prevent infinite loops)
+    if (configEpisodeId !== currentEpisodeId) {
+      console.log('[BlueprintTab] 🔄 Syncing currentEpisodeId with EventManager:', {
+        currentEpisodeId,
+        configEpisodeId,
+        needsUpdate: true
+      });
+      
+      setCurrentEpisodeId(configEpisodeId);
+    }
+  }, [professionalEventManager, currentEpisodeId]);
 
   // Professional Command Execution Listener (like Figma/Canva)
   useEffect(() => {
@@ -4378,7 +4540,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       }
     }
   }, [nodes, edges, debouncedAutoSave]);
-  
   // ฟังก์ชั่นสำหรับอัปเดต Scene's defaultNextSceneId
   const updateSceneDefaultNext = useCallback(async (sourceSceneId: string, targetSceneId: string) => {
     try {
@@ -5147,7 +5308,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     
     return command;
   }, [professionalEventManager, setDeletedItems]);
-
   // Manual save (always works regardless of auto-save setting)
   const handleManualSave = useCallback(async () => {
     // Clear auto-save timer since we're manually saving
@@ -5427,11 +5587,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     const nodesToDelete = nodes.filter(n => selectedNodes.includes(n.id));
     const edgesToDelete = edges.filter(e => selectedEdges.includes(e.id));
     
-    // ❌ REMOVED: Episode node deletion logic - Episodes ไม่ควรเป็น nodes บน canvas
-    // const episodeNodesToDelete = nodesToDelete.filter(node => 
-    //   node.data.nodeType === StoryMapNodeType.EPISODE_NODE && node.data.episodeId
-    // );
-    
     // ✅ CRITICAL FIX: Include edges connected to deleted nodes
     const allEdgesToDelete = [
       ...edgesToDelete,
@@ -5445,27 +5600,9 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       const totalItemsToDelete = nodesToDelete.length + allEdgesToDelete.length;
       const confirmMessage = `ลบ ${nodesToDelete.length} โหนดและ ${allEdgesToDelete.length} เส้นเชื่อม (รวม ${totalItemsToDelete} รายการ) หรือไม่?\n\n✅ สามารถ Undo ได้ด้วย Ctrl+Z`;
       
-      // ❌ REMOVED: Special warning for episode nodes - Episodes are database-only entities
-      // if (episodeNodesToDelete.length > 0) {
-      //   confirmMessage += `\n\n⚠️ จะลบตอนออกจาก Database ด้วย: ${episodeNodesToDelete.map(n => n.data.title).join(', ')}`;
-      // }
-      
       const ok = window.confirm(confirmMessage);
       if (!ok) return;
     }
-    
-    // ❌ REMOVED: Episode deletion from database - Episodes are managed separately
-    // if (episodeNodesToDelete.length > 0) {
-    //   try {
-    //     for (const episodeNode of episodeNodesToDelete) {
-    //       await handleDeleteEpisode(episodeNode.data.episodeId as string);
-    //     }
-    //   } catch (error) {
-    //     console.error('Failed to delete episodes from database:', error);
-    //     toast.error('ไม่สามารถลบตอนจาก Database ได้');
-    //     return;
-    //   }
-    // }
     
     if (!professionalEventManager) {
       toast.error('ระบบ Undo/Redo ไม่พร้อมใช้งาน');
@@ -5528,7 +5665,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     toast.success(
       `🗑️ Deleted ${nodesToDelete.length} nodes and ${allEdgesToDelete.length} connections. Use Ctrl+Z to undo.`
     );
-  }, [selection, nodes, edges, professionalEventManager, handleDeleteEpisode]);
+  }, [selection, nodes, edges, professionalEventManager]);
 
   // 🔥 FIGMA/CANVA STYLE: Multi-select copy using CommandContext
   const copySelected = useCallback(() => {
@@ -5802,7 +5939,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       toast.info('✅ Multi-select mode deactivated.');
     }
   }, [selection.multiSelectMode, setNodes, setEdges]);
-
   // 🔥 FIGMA/CANVA STYLE: Confirm multi-selection with complete undo/redo support
   const confirmMultiSelection = useCallback(() => {
     const pendingNodeIds = selection.pendingSelection;
@@ -6604,7 +6740,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     };
     return titles[nodeType] || 'โหนดใหม่';
   };
-  
   const getDefaultNodeColor = (nodeType: StoryMapNodeType): string => {
     const colors: Partial<Record<StoryMapNodeType, string>> = {
       [StoryMapNodeType.START_NODE]: '#22c55e', // 🎯 เขียวสดใส - จุดเริ่มต้น (แยกจาก SCENE_NODE)
@@ -6652,6 +6787,76 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     return getDefaultNodeTitle(nodeType);
   };
 
+  // 🎨 PROFESSIONAL: Enhanced Visual Design Configuration for Different Node Types
+  const getEnhancedNodeVisuals = (nodeType: StoryMapNodeType): any => {
+    switch (nodeType) {
+      case StoryMapNodeType.START_NODE:
+        // 🟢 START_NODE: Enhanced visual design matching API creation
+        return {
+          color: '#10B981', // Emerald green
+          icon: 'play-circle',
+          orientation: 'vertical',
+          borderRadius: 999, // Full circle for start nodes
+          borderStyle: 'solid',
+          gradient: {
+            from: '#10B981',
+            to: '#059669',
+            direction: 'vertical'
+          },
+          animation: {
+            enter: 'fadeIn',
+            exit: 'fadeOut'
+          },
+          zIndex: 10 // Higher priority for entry points
+        };
+      
+      case StoryMapNodeType.SCENE_NODE:
+        // 🔵 SCENE_NODE: Standard rectangular design
+        return {
+          color: '#3b82f6', // Blue
+          icon: 'film',
+          orientation: 'vertical',
+          borderRadius: 12, // Rounded rectangle
+          borderStyle: 'solid',
+          zIndex: 5
+        };
+      
+      case StoryMapNodeType.CHOICE_NODE:
+        return {
+          color: '#f59e0b', // Amber
+          icon: 'git-branch',
+          orientation: 'vertical',
+          borderRadius: 8,
+          borderStyle: 'solid',
+          zIndex: 5
+        };
+      
+      case StoryMapNodeType.ENDING_NODE:
+        return {
+          color: '#ef4444', // Red
+          icon: 'flag',
+          orientation: 'vertical',
+          borderRadius: 999, // Circle for endings
+          borderStyle: 'solid',
+          gradient: {
+            from: '#ef4444',
+            to: '#dc2626',
+            direction: 'vertical'
+          },
+          zIndex: 10
+        };
+      
+      default:
+        return {
+          color: getDefaultNodeColor(nodeType),
+          orientation: 'vertical',
+          borderRadius: 8,
+          borderStyle: 'solid',
+          zIndex: 5
+        };
+    }
+  };
+
   // Add new node with Command Pattern
   const onAddNode = useCallback(async (nodeType: StoryMapNodeType) => {
     const timestamp = Date.now();
@@ -6673,8 +6878,10 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
     // ❌ REMOVED: Episode node creation check - EPISODE_NODE no longer exists in enum
     // Episodes are database-only entities managed through Episode Management Modal
     
-    // 🔥 PROFESSIONAL: Create node with unique ID generation
+    // 🔥 PROFESSIONAL: Create node with unique ID generation and enhanced visuals
     const uniqueNodeId = generateUniqueNodeId(nodeType);
+    const enhancedVisuals = getEnhancedNodeVisuals(nodeType);
+    
     const newNode: Node = {
       id: uniqueNodeId,
       type: getReactFlowNodeType(nodeType),
@@ -6683,14 +6890,20 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         nodeId: uniqueNodeId,
         nodeType,
         title: getDefaultNodeTitle(nodeType),
-        notesForAuthor: '',
-        authorDefinedEmotionTags: [],
+        notesForAuthor: nodeType === StoryMapNodeType.START_NODE 
+          ? 'จุดเริ่มต้นของ Episode - เชื่อมต่อไปยัง Scene Node แรกของคุณ' 
+          : '',
+        authorDefinedEmotionTags: nodeType === StoryMapNodeType.START_NODE 
+          ? ['beginning', 'neutral'] 
+          : [],
         hasError: false,
         isCompleted: false,
         isFirstScene: nodeType === StoryMapNodeType.SCENE_NODE && 
           !nodes.some(n => n.data.nodeType === StoryMapNodeType.SCENE_NODE),
-        showThumbnails: currentBlueprintSettings.showSceneThumbnails, // ใช้การตั้งค่าจาก blueprintSettings
-                          showLabels: currentBlueprintSettings.showNodeLabels // ใช้การตั้งค่าจาก blueprintSettings
+        showThumbnails: currentBlueprintSettings.showSceneThumbnails,
+        showLabels: currentBlueprintSettings.showNodeLabels,
+        // 🎨 Enhanced visual configuration
+        editorVisuals: enhancedVisuals
       }
     };
 
@@ -7176,10 +7389,8 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
       };
     }
   }), [handleManualSave, nodes, edges, storyMap, professionalEventManager]);
-  
   // 🔥 FIX 3: เพิ่ม disabled state เมื่อไม่มี episode ถูกเลือก
   const isCanvasDisabled = episodes.length > 0 && !currentEpisodeId;
-  
   return (
       <div className="h-full flex flex-col md:flex-row bg-background text-foreground blueprint-canvas relative">
         {/* Enhanced Desktop/Tablet Sidebar - Scrollable */}
@@ -7190,8 +7401,14 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
               animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.12, ease: "easeOut" }}
-              className="hidden md:block border-r bg-card/50 blueprint-sidebar"
+              className="hidden md:block border-r bg-card/50 blueprint-sidebar relative"
             >
+              {/* 🔥 Sidebar Overlay Blocker - ป้องกันการลาก Node เมื่อไม่มี episode */}
+              {/* ✅ NEW STANDARD: Only show when tutorial is active */}
+              {showTutorial && episodes.length > 0 && !currentEpisodeId && (
+                <div className="absolute inset-0 bg-background/40 z-[60] pointer-events-auto" />
+              )}
+              
               <div className="flex flex-col h-full">
                 {/* Fixed Header */}
                 <div className="p-4 border-b bg-card/80 backdrop-blur-sm">
@@ -7275,9 +7492,38 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         {/* Canvas Area */}
         <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlowProvider>
-            {/* 🔥 FIX 4: เพิ่ม overlay blocker เมื่อไม่มี episode ถูกเลือก */}
+            {/* 🔥 Canvas Overlay Blocker - ป้องกันการแก้ไข canvas เมื่อไม่มี episode (z-50 - ต่ำกว่า floating toolbar) */}
             {isCanvasDisabled && (
-              <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-[2px]" />
+              <div className="absolute inset-0 z-[50] bg-background/40 pointer-events-auto" />
+            )}
+            
+            {/* 🔥 FIX 2c: Episode Context Indicator - แสดงตอนที่กำลังแก้ไข */}
+            {currentEpisodeId && selectedEpisodeFromBlueprint && (
+              <div className="absolute top-4 left-4 z-40 bg-primary/90 backdrop-blur-sm text-primary-foreground px-4 py-2 rounded-lg shadow-lg border border-primary/20">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    กำลังแก้ไข: ตอนที่ {selectedEpisodeFromBlueprint.episodeOrder} - {selectedEpisodeFromBlueprint.title}
+                  </span>
+                  <div className="ml-2 flex items-center gap-1 text-xs opacity-80">
+                    <Layers className="w-3 h-3" />
+                    <span>{nodes.length} nodes</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 🔥 ENHANCEMENT 2: Debug Panel (Dev Only) */}
+            {process.env.NODE_ENV === 'development' && currentEpisodeId && (
+              <div className="absolute bottom-4 left-4 z-40 bg-black/80 text-white text-xs p-3 rounded font-mono max-w-sm">
+                <div className="mb-1 text-green-400 font-bold">🐛 DEBUG MODE</div>
+                <div>Episode ID: {currentEpisodeId}</div>
+                <div>Nodes: {nodes.length} (tagged: {nodes.filter(n => n.data?.episodeId === currentEpisodeId).length})</div>
+                <div>Edges: {edges.length} (tagged: {edges.filter(e => e.data?.episodeId === currentEpisodeId).length})</div>
+                <div className="mt-1 text-yellow-400">
+                  {nodes.length === nodes.filter(n => n.data?.episodeId === currentEpisodeId).length ? '✅ All nodes properly tagged' : '⚠️ Some nodes not tagged!'}
+                </div>
+              </div>
             )}
             
             <div className={cn(
@@ -7527,11 +7773,11 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                   }}
                 />
               
-                {/* Enhanced Floating Toolbar */}
+                {/* Enhanced Floating Toolbar - z-[55] ให้สูงกว่า canvas overlay (z-50) */}
                 <Panel
                   position="top-left"
-                  className="floating-toolbar bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg"
-                  style={{ top: isMobile ? 56 : undefined, left: isMobile ? 0 : undefined }}
+                  className="floating-toolbar bg-background/95 backdrop-blur-sm border border-border rounded-lg p-2 shadow-lg z-[55]"
+                  style={{ top: isMobile ? 56 : undefined, left: isMobile ? 0 : undefined, zIndex: 55 }}
                 >
                   <div className={`${isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}`}>
                     {/* Enhanced Episode Selector with Add Episode - Desktop & Tablet (non-mobile) */}
@@ -8585,57 +8831,24 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
         }}
       />
 
-              {/* 🎯 CANVAS TUTORIAL OVERLAY - Shows based on episode state */}
-              {showTutorial && tutorialStep === 0 && episodes.length === 0 && (
-                <div className="absolute inset-0 bg-background/30 flex items-center justify-center z-40 pointer-events-none">
-                  <div className="text-center max-w-sm mx-auto p-6 bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl border pointer-events-auto">
-                    <div className="mb-4">
-                      <BookOpen className="w-12 h-12 mx-auto text-primary mb-3" />
-                      <h3 className="text-lg font-bold text-card-foreground mb-2">เริ่มต้นสร้างเรื่องราว</h3>
-                      <p className="text-sm text-muted-foreground">สร้างตอนแรกเพื่อเริ่มออกแบบ Visual Novel</p>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <Button 
-                        onClick={() => {
-                          setIsEpisodeCreatorOpen(true);
-                          setShowTutorial(false);
-                        }}
-                        className="w-full"
-                        size="sm"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        สร้างตอนแรก
-                      </Button>
-                      
-                      <Button 
-                        onClick={() => setShowTutorial(false)}
-                        variant="ghost"
-                        className="w-full"
-                        size="sm"
-                      >
-                        ข้ามไปก่อน
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* 🔥 FIX 5: ปรับปรุง SELECT EPISODE TUTORIAL - แสดงเมื่อมี episodes แต่ไม่มี selection */}
-              {showTutorial && tutorialStep === 1 && episodes.length > 0 && !currentEpisodeId && (
-                <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-[60] backdrop-blur-md pointer-events-none">
+              {/* 🔥 SELECT EPISODE TUTORIAL - Overlay ป้องกันการแก้ไขแต่ไม่บัง floating toolbar */}
+              {/* ✅ NEW STANDARD: Only show when episodes exist but none selected and no episode in URL */}
+              {showTutorial && episodes.length > 0 && !currentEpisodeId && (
+                // This container just centers the modal. No background/blur. It sits above everything.
+                <div className="absolute inset-0 flex items-center justify-center z-[70] pointer-events-none">
+                  {/* The actual modal dialog, which captures pointer events */}
                   <div className="text-center max-w-md mx-auto p-8 bg-card/95 backdrop-blur-sm rounded-2xl shadow-2xl border-2 border-primary/20 pointer-events-auto">
                     <div className="mb-6">
                       <div className="relative inline-block">
-                        <BookOpen className="w-16 h-16 mx-auto text-primary mb-4 animate-bounce" />
+                        <ArrowUp className="w-16 h-16 mx-auto text-primary mb-4 animate-bounce" />
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />
                       </div>
                       <h3 className="text-xl font-bold text-card-foreground mb-3">
                         📌 กรุณาเลือกตอนก่อนเริ่มแก้ไข
                       </h3>
                       <p className="text-sm text-muted-foreground leading-relaxed">
-                        แต่ละตอนจะมี <span className="font-semibold text-primary">StoryMap แยกกัน</span><br/>
-                        เพื่อให้คุณออกแบบเนื้อเรื่องแต่ละตอนได้อย่างอิสระ
+                        คลิกที่ <span className="font-semibold text-primary">"Select Episode"</span> ด้านบน<br/>
+                        เพื่อเลือกตอนที่ต้องการแก้ไข
                       </p>
                     </div>
                     
@@ -8644,7 +8857,7 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         <p className="mb-3 font-medium text-sm text-foreground">💡 ทำไมต้องเลือกตอน?</p>
                         <ul className="list-disc list-inside space-y-2">
                           <li>แต่ละตอนมี <strong>Nodes และ Edges แยกกัน</strong></li>
-                          <li>สามารถออกแบบเนื้อเรื่องแต่ละตอนได้อย่างอิสระ</li>
+                          <li>ป้องกันการแก้ไขผิดตอน</li>
                           <li>บันทึกและจัดการตอนได้ง่ายขึ้น</li>
                         </ul>
                       </div>
@@ -8653,22 +8866,36 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
                         <Button 
                           onClick={() => {
                             setShowTutorial(false);
-                            // Auto-focus on episode selector
+                            // 🔥 FIX 3b: Multiple selector fallbacks for better reliability
                             setTimeout(() => {
-                              const selector = document.querySelector('[role="combobox"]');
-                              if (selector) {
-                                selector.scrollIntoView({ 
-                                  behavior: 'smooth', 
-                                  block: 'center' 
-                                });
+                              const selectors = [
+                                '[data-episode-selector]',
+                                '[role="combobox"]',
+                                'button[type="button"][class*="episode"]',
+                                '.episode-selector'
+                              ];
+                              
+                              for (const selector of selectors) {
+                                const element = document.querySelector(selector);
+                                if (element) {
+                                  (element as HTMLElement).scrollIntoView({ 
+                                    behavior: 'smooth', 
+                                    block: 'center' 
+                                  });
+                                  (element as HTMLElement).focus();
+                                  // Trigger click to open dropdown
+                                  (element as HTMLElement).click();
+                                  console.log('✅ Focused episode selector:', selector);
+                                  break;
+                                }
                               }
-                            }, 100);
+                            }, 300);
                           }}
                           className="w-full shadow-lg hover:shadow-xl transition-all"
                           size="lg"
                         >
                           <Check className="w-4 h-4 mr-2" />
-                          เข้าใจแล้ว - เลือกตอน
+                          เข้าใจแล้ว
                         </Button>
                         
                         <Button 
@@ -8703,7 +8930,6 @@ const BlueprintTab = React.forwardRef<any, BlueprintTabProps>(({
   );
 });
 BlueprintTab.displayName = 'BlueprintTab'; 
-
 // 🎯 REMOVED OLD TUTORIAL OVERLAY - Now using canvas overlay instead
 /*
 const TutorialOverlay = ({ 

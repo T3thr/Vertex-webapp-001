@@ -584,7 +584,7 @@ const EditOperationSchema = new Schema<IEditOperation>(
  * @property {IStoryMapNode[]} nodes - รายการโหนดทั้งหมดในแผนผัง (Mongoose จะไม่สร้าง _id ให้ subdocument ถ้า schema มี _id: false)
  * @property {IStoryMapEdge[]} edges - รายการเส้นเชื่อมทั้งหมดในแผนผัง
  * @property {IStoryMapGroup[]} [groups] - (Optional) การจัดกลุ่มโหนดใน Editor
- * @property {string} startNodeId - ID ของโหนดที่เป็นจุดเริ่มต้นของเนื้อเรื่องใน StoryMap นี้
+ * @property {string | null} startNodeId - ID ของโหนดที่เป็นจุดเริ่มต้นของเนื้อเรื่องใน StoryMap นี้ (✅ NEW: Can be null - not required immediately)
  * @property {IStoryVariableDefinition[]} storyVariables - รายการตัวแปรทั้งหมดที่กำหนดไว้สำหรับใช้ในนิยาย/StoryMap นี้
  * @property {object} [editorMetadata] - ข้อมูล Meta สำหรับ StoryMap Editor (เช่น zoom level, view offset, grid settings, autoLayoutConfig)
  * @property {Types.ObjectId} lastModifiedByUserId - ID ของผู้ใช้ที่แก้ไข StoryMap นี้ล่าสุด (อ้างอิง User model)
@@ -606,7 +606,7 @@ export interface IStoryMap extends Document {
   nodes: IStoryMapNode[]; // เปลี่ยนจาก Types.DocumentArray เป็น Array ตรงๆ
   edges: IStoryMapEdge[]; // เปลี่ยนจาก Types.DocumentArray เป็น Array ตรงๆ
   groups?: IStoryMapGroup[];
-  startNodeId: string;
+  startNodeId: string | null; // ✅ NEW STANDARD: Allow null - not required immediately
   storyVariables: IStoryVariableDefinition[]; // เปลี่ยนจาก Types.DocumentArray เป็น Array ตรงๆ
   editorMetadata?: {
     zoomLevel?: number;
@@ -728,7 +728,28 @@ const StoryMapSchema = new Schema<IStoryMap>(
     nodes: { type: [StoryMapNodeSchema], default: [] }, // ใช้ schema ที่กำหนดไว้
     edges: { type: [StoryMapEdgeSchema], default: [] }, // ใช้ schema ที่กำหนดไว้
     groups: { type: [StoryMapGroupSchema], default: [] },
-    startNodeId: { type: String, required: [true, "กรุณาระบุ Node เริ่มต้น (Start Node ID is required)"], trim: true },
+    startNodeId: { 
+      type: String, 
+      required: false, // ✅ NEW STANDARD: Allow null - not required to have start node immediately
+      default: null,
+      trim: true,
+      validate: {
+        validator: function(this: any, value: string) {
+          // ✅ NEW STANDARD: Allow null/empty startNodeId (no start node yet)
+          if (!value) return true; // Allow null or empty - user can add start node later
+          
+          // If nodes array is empty but startNodeId is provided, allow it (for new storymaps)
+          if (!this.nodes || this.nodes.length === 0) {
+            return true; // Allow any startNodeId when there are no nodes yet
+          }
+          
+          // Verify that the startNodeId actually exists in the nodes array
+          const nodeExists = this.nodes.some((node: any) => node.nodeId === value);
+          return nodeExists;
+        },
+        message: 'Start Node ID must exist in the nodes array'
+      }
+    },
     storyVariables: { type: [StoryVariableDefinitionSchema], default: [] }, // ใช้ schema ที่กำหนดไว้
     editorMetadata: { type: Schema.Types.Mixed },
     lastModifiedByUserId: {
@@ -778,6 +799,25 @@ StoryMapSchema.index({ novelId: 1, version: 1 }, {
 });
 StoryMapSchema.index({ "groups.groupId": 1 }, { unique: true, sparse: true });
 
+// 🔥 CRITICAL FIX: Index สำหรับ storyVariables.variableId เพื่อป้องกัน duplicate
+// ใช้ sparse: true เพื่อไม่นับ null/undefined values และ partialFilterExpression เพื่อเฉพาะค่าที่ไม่เป็น null
+StoryMapSchema.index(
+  { "storyVariables.variableId": 1 }, 
+  { 
+    unique: true, 
+    sparse: true,
+    name: "StoryVariablesVariableIdUniqueIndex",
+    comment: "แต่ละ variableId ต้องไม่ซ้ำกันภายใน StoryMap (ยกเว้น null)",
+    partialFilterExpression: { 
+      $and: [
+        { "storyVariables.variableId": { $exists: true } },
+        { "storyVariables.variableId": { $ne: null } },
+        { "storyVariables.variableId": { $ne: "" } }
+      ]
+    }
+  }
+);
+
 // ==================================================================================================
 // SECTION: Middleware (Mongoose Hooks)
 // ==================================================================================================
@@ -786,13 +826,39 @@ StoryMapSchema.index({ "groups.groupId": 1 }, { unique: true, sparse: true });
 StoryMapSchema.pre<IStoryMap>("save", async function (next) {
   // 1. ตรวจสอบความ unique ของ nodeId, edgeId, groupId, variableId ภายใน StoryMap เดียวกัน
   const validateUniqueIds = (items: Array<{nodeId?: string; edgeId?: string; groupId?: string; variableId?: string}>, idField: "nodeId" | "edgeId" | "groupId" | "variableId", itemName: string) => {
-    if (items && items.length > 0) {
-      const ids = items.map(item => item[idField]).filter(id => id !== undefined) as string[];
-      const uniqueIds = new Set(ids);
-      if (ids.length !== uniqueIds.size) {
-        return next(new Error(`รหัส ${itemName} ID ภายใน StoryMap ต้องไม่ซ้ำกัน (${itemName} IDs must be unique within a StoryMap).`));
-      }
+    // ✅ ALLOW EMPTY ARRAYS: ถ้าเป็น array ว่าง ให้ผ่านได้เลย (สำหรับ StoryMap ใหม่)
+    if (!items || items.length === 0) {
+      console.log(`[StoryMapValidation] ✅ Empty ${itemName} array - validation passed`);
+      return;
     }
+    
+    // 🔥 CRITICAL FIX: Filter out undefined AND null values to prevent duplicate null errors
+    const ids = items.map(item => item[idField]).filter(id => id !== undefined && id !== null && id !== '') as string[];
+    
+    // 🔥 PROFESSIONAL: Additional check for null/undefined that passed through
+    const hasInvalidIds = items.some(item => {
+      const id = item[idField];
+      return id === null || id === undefined || id === '';
+    });
+    
+    if (hasInvalidIds) {
+      console.error(`[StoryMapValidation] ❌ Found invalid ${itemName} IDs (null/undefined/empty)`, {
+        items: items.map((item, idx) => ({ index: idx, id: item[idField] }))
+      });
+      return next(new Error(`${itemName} ID ต้องไม่เป็น null, undefined หรือ empty string (${itemName} IDs must not be null, undefined, or empty).`));
+    }
+    
+    const uniqueIds = new Set(ids);
+    if (ids.length !== uniqueIds.size) {
+      console.error(`[StoryMapValidation] ❌ Duplicate ${itemName} IDs found`, {
+        totalIds: ids.length,
+        uniqueIds: uniqueIds.size,
+        duplicates: ids.filter((id, index) => ids.indexOf(id) !== index)
+      });
+      return next(new Error(`รหัส ${itemName} ID ภายใน StoryMap ต้องไม่ซ้ำกัน (${itemName} IDs must be unique within a StoryMap).`));
+    }
+    
+    console.log(`[StoryMapValidation] ✅ ${itemName} IDs validation passed (${ids.length} items)`);
   };
 
   if (this.isModified("nodes")) validateUniqueIds(this.nodes, "nodeId", "Node");
@@ -817,9 +883,11 @@ StoryMapSchema.pre<IStoryMap>("save", async function (next) {
     }
   }
 
-  // 3. ตรวจสอบว่า startNodeId มีอยู่จริงใน Nodes
+  // 3. ตรวจสอบว่า startNodeId มีอยู่จริงใน Nodes (ถ้ามีการระบุ)
+  // ✅ NEW STANDARD: Allow null startNodeId
   if (this.isModified("startNodeId") || this.isModified("nodes")) {
-    if (this.startNodeId && this.nodes && !this.nodes.some(node => node.nodeId === this.startNodeId)) {
+    // Only validate if startNodeId is provided (not null/empty)
+    if (this.startNodeId && this.nodes && this.nodes.length > 0 && !this.nodes.some(node => node.nodeId === this.startNodeId)) {
       return next(new Error(`Start Node ID '${this.startNodeId}' ไม่พบในรายการ Nodes ของ StoryMap นี้`));
     }
   }

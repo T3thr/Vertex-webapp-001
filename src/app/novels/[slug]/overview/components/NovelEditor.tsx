@@ -584,10 +584,72 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   }, [novel.slug, currentEpisodes, eventManager])
 
   // 🎯 URL state management for episode selection
-  const handleEpisodeSelect = useCallback((episodeId: string | null) => {
+  // 🔥 FIX: Sync episode selection to URL and event manager IMMEDIATELY
+  const handleEpisodeSelect = useCallback(async (episodeId: string | null) => {
+    console.log('[NovelEditor] 🎯 Episode selection changed:', { episodeId, type: typeof episodeId })
+    
+    // ✅ STEP 1: Validate episodeId format (MongoDB ObjectId must be 24 hex chars)
+    if (episodeId && (
+      episodeId === 'null' || 
+      episodeId === 'undefined' ||
+      episodeId.length !== 24 ||
+      !/^[0-9a-fA-F]{24}$/.test(episodeId)
+    )) {
+      console.error('[NovelEditor] ❌ Invalid episodeId format:', {
+        episodeId,
+        length: episodeId.length,
+        isHex: /^[0-9a-fA-F]+$/.test(episodeId)
+      })
+      toast.error('รหัสตอนไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
+      return
+    }
+    
+    // ✅ STEP 2: Update local state
     setSelectedEpisodeId(episodeId)
     
-    // Update URL without page reload
+    // ✅ STEP 3: Update event manager config IMMEDIATELY before any save operations
+    eventManager.updateConfig({ selectedEpisodeId: episodeId })
+    
+    // ✅ STEP 4: Verify the update was successful
+    const currentConfig = eventManager.getConfig()
+    const currentSnapshot = eventManager.getCurrentSnapshot()
+    console.log('[NovelEditor] ✅ EventManager config verified:', { 
+      requestedEpisodeId: episodeId,
+      configuredEpisodeId: currentConfig.selectedEpisodeId,
+      isMatching: episodeId === currentConfig.selectedEpisodeId,
+      snapshotHasData: !!currentSnapshot
+    })
+    
+    // ✅ STEP 5: Load StoryMap for selected episode
+    if (episodeId) {
+      try {
+        console.log(`[NovelEditor] 📥 Loading StoryMap for episode: ${episodeId}`)
+        const response = await fetch(`/api/novels/${novel.slug}/episodes/${episodeId}/storymap`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.storyMap) {
+            setCurrentStoryMap(data.storyMap)
+            console.log('[NovelEditor] ✅ Episode StoryMap loaded successfully')
+          } else {
+            console.warn('[NovelEditor] ⚠️ No StoryMap found for episode, using empty state')
+            setCurrentStoryMap(null)
+          }
+        } else {
+          console.warn('[NovelEditor] ⚠️ Failed to load episode StoryMap:', response.status)
+          setCurrentStoryMap(null)
+        }
+      } catch (error) {
+        console.error('[NovelEditor] ❌ Error loading episode StoryMap:', error)
+        setCurrentStoryMap(null)
+      }
+    } else {
+      // Load main story StoryMap
+      console.log('[NovelEditor] 📥 Loading Main Story StoryMap')
+      setCurrentStoryMap(storyMap)
+    }
+    
+    // ✅ STEP 6: Update URL (after config is confirmed)
     const currentParams = new URLSearchParams(searchParams.toString())
     if (episodeId) {
       currentParams.set('episode', episodeId)
@@ -597,7 +659,52 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     
     const newUrl = `${window.location.pathname}?${currentParams.toString()}`
     router.replace(newUrl, { scroll: false })
-  }, [router, searchParams])
+  }, [router, searchParams, eventManager, novel.slug, storyMap])
+
+  // 🔥 CRITICAL FIX: Sync selectedEpisodeId from URL to EventManager on mount and URL changes
+  useEffect(() => {
+    const urlEpisodeId = searchParams.get('episode')
+    
+    // Validate URL episode ID format before syncing
+    if (urlEpisodeId) {
+      if (urlEpisodeId === 'null' || 
+          urlEpisodeId === 'undefined' ||
+          urlEpisodeId.length !== 24 ||
+          !/^[0-9a-fA-F]{24}$/.test(urlEpisodeId)) {
+        console.error('[NovelEditor] ❌ Invalid episodeId in URL:', {
+          urlEpisodeId,
+          length: urlEpisodeId.length
+        })
+        // Clear invalid episode from URL
+        router.replace(`/novels/${novel.slug}/overview`, { scroll: false })
+        return
+      }
+    }
+    
+    // Only update if different from current config
+    const currentConfigEpisodeId = eventManager.getConfig().selectedEpisodeId
+    if (urlEpisodeId !== currentConfigEpisodeId) {
+      console.log('[NovelEditor] 🔄 Syncing episodeId from URL to EventManager:', {
+        urlEpisodeId,
+        currentConfigEpisodeId,
+        isValid: !urlEpisodeId || /^[0-9a-fA-F]{24}$/.test(urlEpisodeId)
+      })
+      
+      // Update local state
+      setSelectedEpisodeId(urlEpisodeId)
+      
+      // Update EventManager config
+      eventManager.updateConfig({ selectedEpisodeId: urlEpisodeId })
+      
+      // Verify sync
+      const verifiedConfig = eventManager.getConfig()
+      console.log('[NovelEditor] ✅ EventManager episodeId synced:', {
+        requestedEpisodeId: urlEpisodeId,
+        configuredEpisodeId: verifiedConfig.selectedEpisodeId,
+        isMatching: urlEpisodeId === verifiedConfig.selectedEpisodeId
+      })
+    }
+  }, [searchParams, eventManager, novel.slug, router])
 
   // ✨ Handle episode creation from BlueprintTab
   const handleEpisodeCreate = useCallback((newEpisode: any, updatedEpisodes: any[]) => {
@@ -1639,7 +1746,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
           {/* Tab Contents */}
           <div className="flex-1 overflow-hidden">
-            <TabsContent value="blueprint" className="h-full m-0 p-0">
+            <TabsContent value="blueprint" className="h-full m-0 p-0" forceMount={true} hidden={activeTab !== 'blueprint'}>
               <BlueprintTab
                 ref={blueprintTabRef}
                 novel={currentNovel}
@@ -1661,6 +1768,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 onEpisodeCreate={handleEpisodeCreate}
                 onEpisodeUpdate={handleEpisodeUpdate}
                 onEpisodeDelete={handleEpisodeDelete}
+                onEpisodeSelect={handleEpisodeSelect}
                 // ✅ PROFESSIONAL SOLUTION 3: ส่ง auto-save config ไปยัง BlueprintTab
                 autoSaveConfig={{
                   enabled: isAutoSaveEnabled,
@@ -1678,7 +1786,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
               />
             </TabsContent>
 
-            <TabsContent value="director" className="h-full m-0 p-0">
+            <TabsContent value="director" className="h-full m-0 p-0" forceMount={true} hidden={activeTab !== 'director'}>
               <DirectorTab
                 novel={currentNovel}
                 scenes={currentScenes}
@@ -1689,7 +1797,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
               />
             </TabsContent>
 
-            <TabsContent value="summary" className="h-full m-0 p-0">
+            <TabsContent value="summary" className="h-full m-0 p-0" forceMount={true} hidden={activeTab !== 'summary'}>
               <SummaryTab
                 novel={currentNovel}
                 episodes={currentEpisodes}

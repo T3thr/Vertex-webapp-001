@@ -1226,20 +1226,29 @@ export class SingleUserEventManager {
       const storyVariables = this.currentSnapshot.storyVariables || [];
 
       // ทำความสะอาดข้อมูล nodes ให้ตรงกับ IStoryMapNode interface
-      const cleanedNodes = nodes.map(node => ({
-        nodeId: node.id || node.nodeId,
-        nodeType: node.type || node.nodeType || 'scene_node',
-        title: node.data?.title || node.title || 'Untitled Node',
-        position: { 
-          x: Math.round(node.position?.x || 0), 
-          y: Math.round(node.position?.y || 0)
-        },
-        nodeSpecificData: node.data?.nodeSpecificData || {},
-        editorVisuals: {
-          color: node.data?.color || '#3b82f6',
-          orientation: node.data?.orientation || 'vertical'
-        }
-      }));
+      const cleanedNodes = nodes.map(node => {
+        // 🔥 CRITICAL FIX: Extract nodeType properly from node.data.nodeType (ReactFlow format)
+        const nodeType = node.data?.nodeType || node.nodeType || node.type || 'scene_node';
+        
+        return {
+          nodeId: node.id || node.nodeId,
+          nodeType: nodeType,
+          title: node.data?.title || node.title || 'Untitled Node',
+          position: { 
+            x: Math.round(node.position?.x || 0), 
+            y: Math.round(node.position?.y || 0)
+          },
+          nodeSpecificData: node.data?.nodeSpecificData || {},
+          notesForAuthor: node.data?.notesForAuthor || '',
+          authorDefinedEmotionTags: node.data?.authorDefinedEmotionTags || [],
+          editorVisuals: {
+            color: node.data?.editorVisuals?.color || node.data?.color || '#3b82f6',
+            orientation: node.data?.editorVisuals?.orientation || node.data?.orientation || 'vertical',
+            icon: node.data?.editorVisuals?.icon || 'circle',
+            borderStyle: node.data?.editorVisuals?.borderStyle || 'solid'
+          }
+        };
+      });
 
       // ทำความสะอาดข้อมูล edges ให้ตรงกับ IStoryMapEdge interface
       const cleanedEdges = edges.map(edge => ({
@@ -1264,12 +1273,158 @@ export class SingleUserEventManager {
         sessionId
       });
       
+      // 🎯 STEP 0: If no story variables, return empty array immediately
+      if (!storyVariables || storyVariables.length === 0) {
+        console.log('[SingleUserEventManager] ✅ No story variables to clean, using empty array');
+        const saveData = {
+          nodes: cleanedNodes,
+          edges: cleanedEdges,
+          storyVariables: [], // Empty array is safe
+          version: this.state.localVersion
+        };
+
+        // Continue to save with empty variables array
+        const saveFunction = async (data: any) => {
+          const encodedSlug = encodeURIComponent(this.config.novelSlug);
+          const isEpisodeSpecific = !!this.config.selectedEpisodeId;
+          
+          // ✅ CRITICAL FIX: Comprehensive episodeId validation before constructing URL
+          if (isEpisodeSpecific) {
+            const episodeId = this.config.selectedEpisodeId;
+            
+            // Check for invalid values
+            if (!episodeId || 
+                episodeId === 'null' || 
+                episodeId === 'undefined' ||
+                episodeId.length !== 24 ||
+                !/^[0-9a-fA-F]{24}$/.test(episodeId)
+            ) {
+              console.error('[SingleUserEventManager] ❌ Invalid episodeId detected during save:', {
+                selectedEpisodeId: episodeId,
+                type: typeof episodeId,
+                length: episodeId?.length,
+                isHex: episodeId ? /^[0-9a-fA-F]+$/.test(episodeId) : false,
+                novelSlug: this.config.novelSlug,
+                isEpisodeSpecific
+              });
+              
+              throw new Error(
+                `❌ รหัสตอนไม่ถูกต้อง (${episodeId})\n\n` +
+                `กรุณา:\n` +
+                `1. เลือกตอนใหม่อีกครั้ง หรือ\n` +
+                `2. Refresh หน้าเว็บ หรือ\n` +
+                `3. สลับไปยัง Main Story Mode`
+              );
+            }
+          }
+          
+          const apiUrl = isEpisodeSpecific 
+            ? `/api/novels/${encodedSlug}/episodes/${this.config.selectedEpisodeId}/storymap/save`
+            : `/api/novels/${encodedSlug}/storymap`;
+          
+          console.log('[SingleUserEventManager] 📤 Saving to API:', {
+            url: apiUrl,
+            isEpisodeSpecific,
+            episodeId: this.config.selectedEpisodeId,
+            episodeIdValid: this.config.selectedEpisodeId ? /^[0-9a-fA-F]{24}$/.test(this.config.selectedEpisodeId) : null,
+            nodeCount: data.nodes?.length || 0,
+            edgeCount: data.edges?.length || 0,
+            variableCount: data.storyVariables?.length || 0
+          });
+          
+          const response = await fetch(apiUrl, {
+            method: isEpisodeSpecific ? 'POST' : 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': `save_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            },
+            body: JSON.stringify(data)
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('[SingleUserEventManager] ❌ Server error:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData,
+              episodeId: this.config.selectedEpisodeId,
+              url: apiUrl
+            });
+            
+            // 🔥 ENHANCED: Provide user-friendly error messages
+            let userMessage = errorData.error || 'Unknown error';
+            if (response.status === 404) {
+              userMessage = isEpisodeSpecific 
+                ? `ไม่พบตอนที่เลือก (ID: ${this.config.selectedEpisodeId}). กรุณา refresh หน้าเว็บหรือเลือกตอนใหม่`
+                : 'ไม่พบ Story Map. กรุณา refresh หน้าเว็บ';
+            } else if (response.status === 403) {
+              userMessage = 'คุณไม่มีสิทธิ์บันทึกข้อมูลนี้';
+            } else if (response.status === 409) {
+              userMessage = 'เกิด conflict ระหว่างการบันทึก กรุณาลองใหม่อีกครั้ง';
+            }
+            
+            throw new Error(`Save failed: ${response.status} - ${userMessage}`);
+          }
+
+          return response.json();
+        };
+
+        const result = await this.saveDebouncer.performSave(saveData, saveFunction);
+        const newVersion = result.newVersion || result.storyMap?.version || result.version || (this.state.serverVersion + 1);
+        
+        this.originalSnapshot = { 
+          ...this.currentSnapshot,
+          version: newVersion,
+          timestamp: Date.now()
+        };
+        
+        this.updateState({
+          isSaving: false,
+          lastSaved: new Date(),
+          isDirty: false,
+          hasUnsavedChanges: false,
+          localVersion: newVersion,
+          serverVersion: newVersion,
+          lastError: undefined
+        });
+
+        this.state.undoStack = [];
+        this.state.redoStack = [];
+        this.config.onStateChange?.(this.state);
+        this.config.onDirtyChange?.(false);
+
+        if (typeof window !== 'undefined') {
+          const now = Date.now();
+          localStorage.setItem('divwy-last-saved', now.toString());
+          localStorage.setItem('divwy-has-unsaved-changes', 'false');
+          localStorage.setItem('divwy-content-changes', 'false');
+          localStorage.setItem('divwy-command-has-changes', 'false');
+          localStorage.removeItem('divwy-last-change');
+          localStorage.removeItem('divwy-last-content-change');
+          localStorage.removeItem('divwy-auto-save-active');
+          localStorage.setItem('divwy-last-auto-save', now.toString());
+        }
+
+        console.log('[SingleUserEventManager] ✅ Save completed (empty variables array)');
+        return;
+      }
+      
       // 🎯 STEP 1: Filter out invalid variables completely
       const validVariables = storyVariables.filter(variable => {
-        if (!variable) return false;
-        if (!variable.variableName && !variable.name) return false;
+        if (!variable) {
+          console.warn('[SingleUserEventManager] 🚨 Filtered null/undefined variable');
+          return false;
+        }
+        if (!variable.variableName && !variable.name) {
+          console.warn('[SingleUserEventManager] 🚨 Filtered variable without name:', variable);
+          return false;
+        }
         // 🔥 CRITICAL: Filter out variables with null/undefined/empty variableId that cause duplicates
         if (variable.variableId === null || variable.variableId === undefined || variable.variableId === '' || variable.variableId === 'null' || variable.variableId === 'undefined') {
+          console.warn('[SingleUserEventManager] 🚨 Filtered variable with invalid ID:', {
+            id: variable.variableId,
+            name: variable.variableName || variable.name
+          });
           return false; // Skip these problematic variables entirely
         }
         return true;
@@ -1371,16 +1526,50 @@ export class SingleUserEventManager {
       // 🔥 ADOBE/FIGMA STYLE: Use SaveDebouncer to prevent duplicate saves
       const saveFunction = async (data: any) => {
         const encodedSlug = encodeURIComponent(this.config.novelSlug);
+        const isEpisodeSpecific = !!this.config.selectedEpisodeId;
         
-        // 🎯 Episode-specific API routing
-        const isEpisodeSpecific = this.config.selectedEpisodeId;
+        // ✅ CRITICAL FIX: Comprehensive episodeId validation before constructing URL
+        if (isEpisodeSpecific) {
+          const episodeId = this.config.selectedEpisodeId;
+          
+          // Check for invalid values
+          if (!episodeId || 
+              episodeId === 'null' || 
+              episodeId === 'undefined' ||
+              episodeId.length !== 24 ||
+              !/^[0-9a-fA-F]{24}$/.test(episodeId)
+          ) {
+            console.error('[SingleUserEventManager] ❌ Invalid episodeId detected during auto-save:', {
+              selectedEpisodeId: episodeId,
+              type: typeof episodeId,
+              length: episodeId?.length,
+              isHex: episodeId ? /^[0-9a-fA-F]+$/.test(episodeId) : false,
+              novelSlug: this.config.novelSlug,
+              isEpisodeSpecific
+            });
+            
+            throw new Error(
+              `❌ รหัสตอนไม่ถูกต้อง (${episodeId})\n\n` +
+              `กรุณา:\n` +
+              `1. เลือกตอนใหม่อีกครั้ง หรือ\n` +
+              `2. Refresh หน้าเว็บ หรือ\n` +
+              `3. สลับไปยัง Main Story Mode`
+            );
+          }
+        }
+        
         const apiUrl = isEpisodeSpecific 
           ? `/api/novels/${encodedSlug}/episodes/${this.config.selectedEpisodeId}/storymap/save`
           : `/api/novels/${encodedSlug}/storymap`;
         
-        console.log(`[SingleUserEventManager] 🎯 Saving to: ${apiUrl}`, {
+        console.log('[SingleUserEventManager] 📤 Saving to API (auto-save):', {
+          url: apiUrl,
           isEpisodeSpecific,
-          episodeId: this.config.selectedEpisodeId
+          episodeId: this.config.selectedEpisodeId,
+          episodeIdValid: this.config.selectedEpisodeId ? /^[0-9a-fA-F]{24}$/.test(this.config.selectedEpisodeId) : null,
+          nodeCount: data.nodes?.length || 0,
+          edgeCount: data.edges?.length || 0,
+          variableCount: data.storyVariables?.length || 0
         });
         
         const response = await fetch(apiUrl, {
@@ -1409,6 +1598,17 @@ export class SingleUserEventManager {
               errorDetail = ` - ${errorData.message}`;
             } else if (errorData.details) {
               errorDetail = ` - ${errorData.details}`;
+            }
+            
+            // 🔥 ENHANCED: Provide user-friendly error messages based on status code
+            if (response.status === 404) {
+              errorMessage = isEpisodeSpecific 
+                ? `ไม่พบตอนที่เลือก (ID: ${this.config.selectedEpisodeId}). กรุณา refresh หน้าเว็บหรือเลือกตอนใหม่`
+                : 'ไม่พบ Story Map. กรุณา refresh หน้าเว็บ';
+            } else if (response.status === 403) {
+              errorMessage = 'คุณไม่มีสิทธิ์บันทึกข้อมูลนี้';
+            } else if (response.status === 409) {
+              errorMessage = 'เกิด conflict ระหว่างการบันทึก กรุณาลองใหม่อีกครั้ง';
             }
             
             // 🔥 CRITICAL FIX: Handle specific error types with better error messages
@@ -1573,6 +1773,11 @@ export class SingleUserEventManager {
     return this.commandContext;
   }
 
+  // ✅ NEW: Get current config (for validation purposes)
+  getConfig(): Readonly<SingleUserConfig> {
+    return { ...this.config };
+  }
+
   // 🚀 NEW: Set ReactFlow UI updater for bidirectional sync
   setReactFlowUpdater(updater: (nodes: any[], edges: any[]) => void): void {
     if (this.commandContext instanceof SingleUserCommandContext) {
@@ -1620,6 +1825,34 @@ export class SingleUserEventManager {
     const oldInterval = this.config.autoSaveIntervalMs;
     const oldEpisodeId = this.config.selectedEpisodeId;
     
+    // ✅ PROFESSIONAL: Validate episodeId before updating
+    if ('selectedEpisodeId' in newConfig) {
+      const episodeId = newConfig.selectedEpisodeId;
+      
+      // Validate format (MongoDB ObjectId must be 24 hex characters)
+      if (episodeId && typeof episodeId === 'string') {
+        if (episodeId === 'null' || episodeId === 'undefined') {
+          console.error('[SingleUserEventManager] ❌ Invalid episodeId string:', episodeId);
+          throw new Error('Invalid episodeId: cannot be string "null" or "undefined"');
+        }
+        
+        if (episodeId.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(episodeId)) {
+          console.error('[SingleUserEventManager] ❌ Invalid ObjectId format:', {
+            episodeId,
+            length: episodeId.length,
+            expected: 24,
+            isHex: /^[0-9a-fA-F]+$/.test(episodeId)
+          });
+          throw new Error(`Invalid episodeId format: must be 24-character hex string (got: "${episodeId}" with ${episodeId.length} chars)`);
+        }
+      }
+      
+      console.log('[SingleUserEventManager] ✅ Valid episodeId, updating config:', {
+        oldEpisodeId,
+        newEpisodeId: episodeId
+      });
+    }
+    
     // Update configuration
     this.config = { ...this.config, ...newConfig };
     
@@ -1658,6 +1891,12 @@ export class SingleUserEventManager {
         console.log('[SingleUserEventManager] ⏹️ Auto-save disabled');
       }
     }
+    
+    console.log('[SingleUserEventManager] ✅ Config updated successfully:', {
+      novelSlug: this.config.novelSlug,
+      selectedEpisodeId: this.config.selectedEpisodeId,
+      autoSaveEnabled: this.config.autoSaveEnabled
+    });
   }
 
   private stopAutoSave(): void {

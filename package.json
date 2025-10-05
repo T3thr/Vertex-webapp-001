@@ -24,6 +24,7 @@
     "analyze": "ANALYZE=true npm run build",
     "type-check": "tsc --noEmit",
     "verify:send": "bun run src/scripts/manual-send-verification.ts",
+    "migrate:storymap-indexes": "node scripts/fix-storymap-indexes.js",
     "test": "jest --watch"
   },
   "dependencies": {

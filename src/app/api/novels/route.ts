@@ -405,8 +405,35 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    console.log('[Novel Creation] 🗺️ Creating initial StoryMap:', {
+      novelId: novel._id.toString(),
+      novelTitle: novel.title,
+      startNodeId,
+      storyVariablesCount: storyMapData.storyVariables.length
+    });
+
     const storyMap = new StoryMapModel(storyMapData);
-    await storyMap.save();
+    
+    try {
+      await storyMap.save();
+      console.log('[Novel Creation] ✅ StoryMap created successfully:', {
+        storyMapId: storyMap._id.toString(),
+        version: storyMap.version
+      });
+    } catch (storyMapError: any) {
+      console.error('[Novel Creation] ❌ Failed to create StoryMap:', storyMapError);
+      
+      // ถ้า StoryMap สร้างไม่สำเร็จ ให้ลบ Novel ที่สร้างไปแล้วด้วย
+      try {
+        await NovelModel.findByIdAndDelete(novel._id);
+        console.log('[Novel Creation] 🗑️ Rolled back Novel creation due to StoryMap error');
+      } catch (rollbackError) {
+        console.error('[Novel Creation] ❌ Failed to rollback Novel:', rollbackError);
+      }
+      
+      // ส่ง error กลับไปให้ client
+      throw storyMapError;
+    }
 
     // Return created novel with populated data
     const createdNovel = await NovelModel.findById(novel._id)
