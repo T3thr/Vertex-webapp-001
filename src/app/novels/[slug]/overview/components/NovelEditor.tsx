@@ -91,7 +91,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     autoSaveIntervalMs: autoSaveIntervalSec * 1000,
     maxHistorySize: 50,
     onStateChange: (state) => {
-      // ✅ PROFESSIONAL FIX: Use command-based detection for perfect consistency with debounce
+      // ✅  Use command-based detection for perfect consistency with debounce
       const commandBasedHasChanges = eventManager.hasChanges();
       
       const enhancedState = {
@@ -108,7 +108,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         return prev; // No change, prevent re-render
       });
       
-      // ✅ CRITICAL: Immediate localStorage sync for refresh protection
+      // ✅  Immediate localStorage sync for refresh protection
       if (typeof window !== 'undefined') {
         localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
         localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString());
@@ -120,13 +120,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           localStorage.removeItem('divwy-last-change');
           localStorage.removeItem('divwy-last-content-change');
           
-          // ✅ PROFESSIONAL: Clear settings change flags separately
+          // ✅  Clear settings change flags separately
           localStorage.setItem('divwy-settings-changes', 'false');
           
           console.log('[NovelEditor] ✅ All change flags cleared - save confirmed');
         }
         
-        // ✅ PROFESSIONAL: Update change timestamp for accurate refresh protection
+        // ✅  Update change timestamp for accurate refresh protection
         if (commandBasedHasChanges) {
           localStorage.setItem('divwy-last-change', Date.now().toString());
         } else {
@@ -135,13 +135,13 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
       }
     },
     onDirtyChange: (isDirty) => {
-      // ✅ PROFESSIONAL FIX: Use command-based detection to prevent flickering
+      // ✅  Use command-based detection to prevent flickering
       const commandBasedHasChanges = eventManager.hasChanges();
       
       // ✅ ADOBE/FIGMA STYLE: Update states only if truly changed
       setHasBlueprintChanges(prev => prev !== commandBasedHasChanges ? commandBasedHasChanges : prev);
       
-      // ✅ CRITICAL: Immediate localStorage sync with command-based state
+      // ✅  Immediate localStorage sync with command-based state
       if (typeof window !== 'undefined') {
         localStorage.setItem('divwy-content-changes', commandBasedHasChanges.toString());
         if (commandBasedHasChanges) {
@@ -198,7 +198,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
   // เทียบเท่า Adobe Premiere Pro & Canva
   // ===============================
   
-  // ✅ PROFESSIONAL FIX: Use command-based detection as single source of truth
+  // ✅  Use command-based detection as single source of truth
   const commandBasedHasChanges = eventManager?.hasChanges() || false
   const hasUnsavedChanges = commandBasedHasChanges || hasDirectorChanges || hasSummaryChanges
   
@@ -326,11 +326,11 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
             currentSettings[fieldName] = value;
             localStorage.setItem('blueprint-settings', JSON.stringify(currentSettings));
             
-            // ✅ PROFESSIONAL FIX: Settings changes ไม่ trigger refresh protection
+            // ✅  Settings changes ไม่ trigger refresh protection
             localStorage.setItem('divwy-settings-only-changes', 'true');
             localStorage.setItem('divwy-last-settings-change', Date.now().toString());
             
-            // ✅ CRITICAL: Explicitly clear content/command flags after settings save
+            // ✅  Explicitly clear content/command flags after settings save
             localStorage.setItem('divwy-content-changes', 'false');
             localStorage.setItem('divwy-command-has-changes', 'false');
             localStorage.removeItem('divwy-last-change');
@@ -349,7 +349,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           localStorage.setItem('divwy-settings-only-changes', 'true');
           localStorage.setItem('divwy-last-settings-change', Date.now().toString());
           
-          // ✅ CRITICAL: Clear content flags for critical settings too
+          // ✅  Clear content flags for critical settings too
           localStorage.setItem('divwy-content-changes', 'false');
           localStorage.setItem('divwy-command-has-changes', 'false');
           localStorage.removeItem('divwy-last-change');
@@ -661,7 +661,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
     router.replace(newUrl, { scroll: false })
   }, [router, searchParams, eventManager, novel.slug, storyMap])
 
-  // 🔥 CRITICAL FIX: Sync selectedEpisodeId from URL to EventManager on mount and URL changes
+  // 🔥  Sync selectedEpisodeId from URL to EventManager on mount and URL changes
   useEffect(() => {
     const urlEpisodeId = searchParams.get('episode')
     
@@ -1084,7 +1084,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
           if (typeof window !== 'undefined') {
             localStorage.setItem('divwy-has-unsaved-changes', commandBasedHasChanges.toString());
             
-            // 🔥 CRITICAL: Store command-based state for Refresh Protection
+            // 🔥  Store command-based state for Refresh Protection
             localStorage.setItem('divwy-command-has-changes', commandBasedHasChanges.toString());
             
             // 🔥 ADOBE/FIGMA STYLE: Update change timestamp เฉพาะ content commands
@@ -1122,7 +1122,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
 
   // อัปเดต eventManager เมื่อการตั้งค่า auto-save เปลี่ยน
   useEffect(() => {
-    // ✅ PROFESSIONAL SOLUTION 2: Real-time EventManager config update
+    // ✅ 2: Real-time EventManager config update
     if (eventManager && isSettingsLoaded) {
       eventManager.updateConfig({
         autoSaveEnabled: isAutoSaveEnabled,
@@ -1134,7 +1134,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
         autoSaveIntervalMs: autoSaveIntervalSec * 1000
       });
 
-      // ✅ PROFESSIONAL SOLUTION 7: Professional User Feedback
+      // ✅ 7: Professional User Feedback
       if (isAutoSaveEnabled) {
         console.log(`[NovelEditor] ✅ Auto-save enabled - saving every ${autoSaveIntervalSec} seconds`);
       } else {
@@ -1769,7 +1769,7 @@ const NovelEditor: React.FC<NovelEditorProps> = ({
                 onEpisodeUpdate={handleEpisodeUpdate}
                 onEpisodeDelete={handleEpisodeDelete}
                 onEpisodeSelect={handleEpisodeSelect}
-                // ✅ PROFESSIONAL SOLUTION 3: ส่ง auto-save config ไปยัง BlueprintTab
+                // ✅ 3: ส่ง auto-save config ไปยัง BlueprintTab
                 autoSaveConfig={{
                   enabled: isAutoSaveEnabled,
                   intervalSec: autoSaveIntervalSec
